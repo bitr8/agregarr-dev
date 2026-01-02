@@ -254,8 +254,7 @@
           "ghcr.io/agregarr/agregarr"
         ],
         "platforms": [
-          "linux/amd64",
-          "linux/arm64"
+          "linux/amd64"
         ]
       },
       "@semantic-release/github"
