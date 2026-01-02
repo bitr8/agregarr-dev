@@ -202,11 +202,13 @@ const LibraryConfigView: React.FC = () => {
     refreshInterval: 1000, // Poll every second for responsive progress updates
   });
 
-  // Update syncing libraries based on actual status
+  // Update syncing libraries based on actual status (only running/cancelling, not completed TTL entries)
   useEffect(() => {
     if (runningLibrariesData) {
       const runningIds = new Set(
-        runningLibrariesData.runningLibraries.map((lib) => lib.libraryId)
+        runningLibrariesData.runningLibraries
+          .filter((lib) => lib.state === 'running' || lib.state === 'cancelling')
+          .map((lib) => lib.libraryId)
       );
       setSyncingLibraries(runningIds);
     }
@@ -239,9 +241,14 @@ const LibraryConfigView: React.FC = () => {
     setResetModalOpen(false);
   };
 
-  const handleStopSync = async (libraryId: string) => {
+  const handleStopSync = async (_libraryId: string) => {
     try {
-      await axios.post(`/api/v1/overlay-library-configs/${libraryId}/stop`);
+      // Cancel via the scheduled jobs system (same as Jobs settings page)
+      await axios.post('/api/v1/settings/jobs/overlay-application/cancel');
+      addToast('Overlay job cancelled', {
+        appearance: 'success',
+        autoDismiss: true,
+      });
       mutateRunningLibraries();
     } catch (error) {
       addToast('Failed to stop overlay sync', {

@@ -25,7 +25,7 @@ const RunningJobsCard: React.FC = () => {
         return hasRunning ? 1000 : 5000; // Slow poll when idle to catch new jobs
       },
       revalidateOnFocus: false,
-      dedupingInterval: 2000,
+      dedupingInterval: 1000, // Match refreshInterval for responsive updates
     }
   );
 
@@ -39,7 +39,12 @@ const RunningJobsCard: React.FC = () => {
 
     setStoppingIds((prev) => new Set(prev).add(libraryId));
     try {
-      await axios.post(`/api/v1/overlay-library-configs/${libraryId}/stop`);
+      // Cancel via the scheduled jobs system (same as Jobs settings page)
+      await axios.post('/api/v1/settings/jobs/overlay-application/cancel');
+      addToast('Overlay job cancelled', {
+        appearance: 'success',
+        autoDismiss: true,
+      });
       await mutate();
     } catch (error) {
       addToast('Failed to stop overlay job', {
