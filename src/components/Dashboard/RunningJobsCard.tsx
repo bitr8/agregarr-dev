@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useState } from 'react';
 import useSWR from 'swr';
 import LibraryProgressCard, {
   type LibraryStatus,
@@ -9,10 +10,20 @@ interface RunningLibrariesResponse {
 }
 
 const RunningJobsCard: React.FC = () => {
+  const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
+
   const { data, mutate } = useSWR<RunningLibrariesResponse>(
     '/api/v1/overlay-library-configs/status/all',
     {
-      refreshInterval: 1000,
+      refreshInterval: (latestData) => {
+        // Only poll when there are running jobs
+        const hasRunning = latestData?.runningLibraries?.some(
+          (lib) => lib.state === 'running' || lib.state === 'stopping'
+        );
+        return hasRunning ? 1000 : 5000; // Slow poll when idle to catch new jobs
+      },
+      revalidateOnFocus: false,
+      dedupingInterval: 2000,
     }
   );
 
@@ -22,11 +33,20 @@ const RunningJobsCard: React.FC = () => {
     ) || [];
 
   const handleStop = async (libraryId: string) => {
+    if (stoppingIds.has(libraryId)) return; // Prevent double-click
+
+    setStoppingIds((prev) => new Set(prev).add(libraryId));
     try {
       await axios.post(`/api/v1/overlay-library-configs/${libraryId}/stop`);
-      mutate();
+      await mutate();
     } catch (error) {
       console.error('Failed to stop job:', error);
+    } finally {
+      setStoppingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(libraryId);
+        return next;
+      });
     }
   };
 
@@ -43,6 +63,7 @@ const RunningJobsCard: React.FC = () => {
             key={lib.libraryId}
             status={lib}
             onStop={() => handleStop(lib.libraryId)}
+            isStopping={stoppingIds.has(lib.libraryId)}
           />
         ))}
       </div>
