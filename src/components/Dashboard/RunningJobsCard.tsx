@@ -56,7 +56,7 @@ const RunningJobsCard: React.FC = () => {
 
   return (
     <div className="mb-6">
-      <h3 className="mb-4 text-lg font-semibold text-white">Running Jobs</h3>
+      <h3 className="mb-4 text-lg font-semibold text-white">Overlay Jobs</h3>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {runningJobs.map((lib) => (
           <LibraryProgressCard
