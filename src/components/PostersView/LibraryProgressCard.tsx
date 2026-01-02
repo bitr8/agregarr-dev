@@ -175,7 +175,7 @@ const LibraryProgressCard: React.FC<LibraryProgressCardProps> = ({
         <div className="rounded-md bg-stone-900 p-3">
           <div className="flex items-center gap-2">
             <ForwardIcon className="h-4 w-4 text-amber-400" />
-            <span className="text-xs text-gray-400">Skipped</span>
+            <span className="text-xs text-gray-400">Unchanged</span>
           </div>
           <p className="mt-1 text-lg font-semibold text-amber-400">
             {status.skippedCount}
