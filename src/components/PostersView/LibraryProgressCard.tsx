@@ -12,6 +12,7 @@ import { useMemo } from 'react';
 export type JobState = 'running' | 'cancelling' | 'completed' | 'cancelled' | 'failed';
 
 export interface LibraryStatus {
+  libraryId: string;
   running: boolean;
   state: JobState;
   libraryName: string;
