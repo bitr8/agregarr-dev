@@ -18,7 +18,7 @@ const RunningJobsCard: React.FC = () => {
       refreshInterval: (latestData) => {
         // Only poll when there are running jobs
         const hasRunning = latestData?.runningLibraries?.some(
-          (lib) => lib.state === 'running' || lib.state === 'stopping'
+          (lib) => lib.state === 'running' || lib.state === 'cancelling'
         );
         return hasRunning ? 1000 : 5000; // Slow poll when idle to catch new jobs
       },
@@ -29,7 +29,7 @@ const RunningJobsCard: React.FC = () => {
 
   const runningJobs =
     data?.runningLibraries.filter(
-      (lib) => lib.state === 'running' || lib.state === 'stopping'
+      (lib) => lib.state === 'running' || lib.state === 'cancelling'
     ) || [];
 
   const handleStop = async (libraryId: string) => {
