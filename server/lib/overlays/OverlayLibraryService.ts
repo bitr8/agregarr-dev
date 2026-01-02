@@ -267,12 +267,14 @@ class OverlayLibraryService {
   ): Promise<void> {
     // Check if library is already being processed (mutex check)
     // Must check AND set before any await to prevent race condition
+    // Wait for ANY in-progress job (running OR cancelling) to prevent concurrent execution
     const existing = this.runningLibraries.get(libraryId);
-    if (existing && existing.state === 'running') {
+    if (existing && (existing.state === 'running' || existing.state === 'cancelling')) {
       logger.warn('Library already being processed, waiting for completion', {
         label: 'OverlayLibrary',
         libraryId,
         libraryName: existing.libraryName,
+        state: existing.state,
         startedAt: new Date(existing.startTime).toISOString(),
         runningFor: `${Math.round((Date.now() - existing.startTime) / 1000)}s`,
       });
@@ -332,10 +334,16 @@ class OverlayLibraryService {
       await this.processLibraryOverlays(libraryId, config, combinedCheckCancelled);
 
       // Mark completed (stays in map for TTL period)
-      // Note: If cancelled, state is already set by processLibraryOverlays
+      // Set completedAt for ANY state to ensure TTL cleanup works
       const progress = this.runningLibraries.get(libraryId);
-      if (progress && progress.state === 'running') {
-        progress.state = 'completed';
+      if (progress) {
+        // If still running, mark completed. If cancelling but finished, mark cancelled.
+        if (progress.state === 'running') {
+          progress.state = 'completed';
+        } else if (progress.state === 'cancelling') {
+          progress.state = 'cancelled';
+        }
+        // Always set completedAt for TTL cleanup
         progress.completedAt = Date.now();
       }
       resolveDeferred!();
