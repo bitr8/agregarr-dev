@@ -14,6 +14,7 @@ import {
 } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { createErrorResponse } from '@server/utils/errorResponse';
 import { Router } from 'express';
 
 const overlayTestRouter = Router();
@@ -384,16 +385,12 @@ overlayTestRouter.post('/', async (req, res) => {
       context: allContext,
     });
   } catch (error) {
-    logger.error('Failed to test overlay', {
-      label: 'OverlayTest',
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-
-    return res.status(500).json({
-      error: 'Failed to test overlay',
-      message: error instanceof Error ? error.message : String(error),
-    });
+    const errorResponse = createErrorResponse(
+      error,
+      'OverlayTest',
+      'Failed to test overlay'
+    );
+    return res.status(500).json(errorResponse);
   }
 });
 

@@ -1,6 +1,7 @@
 import type { PlexLibraryItem } from '@server/api/plexapi';
 import PlexAPI from '@server/api/plexapi';
 import logger from '@server/logger';
+import { createErrorResponse } from '@server/utils/errorResponse';
 import { Router } from 'express';
 
 const searchRouter = Router();
@@ -150,16 +151,12 @@ searchRouter.get('/search', async (req, res) => {
       totalResults: filteredResults.length,
     });
   } catch (error) {
-    logger.error('Failed to search Plex', {
-      label: 'PlexSearch',
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-
-    return res.status(500).json({
-      error: 'Failed to search Plex',
-      message: error instanceof Error ? error.message : String(error),
-    });
+    const errorResponse = createErrorResponse(
+      error,
+      'PlexSearch',
+      'Failed to search Plex'
+    );
+    return res.status(500).json(errorResponse);
   }
 });
 
