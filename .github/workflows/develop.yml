@@ -40,6 +40,12 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-22.04
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghcrunner
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/swift
       - name: Checkout
         uses: actions/checkout@v4
       - name: Log in to Docker Hub
