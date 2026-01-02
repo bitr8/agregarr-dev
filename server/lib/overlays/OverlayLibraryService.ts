@@ -265,11 +265,10 @@ class OverlayLibraryService {
     libraryId: string,
     checkCancelled?: () => boolean
   ): Promise<void> {
-    // Check if library is already being processed (mutex check)
-    // Must check AND set before any await to prevent race condition
-    // Wait for ANY in-progress job (running OR cancelling) to prevent concurrent execution
-    const existing = this.runningLibraries.get(libraryId);
-    if (existing && (existing.state === 'running' || existing.state === 'cancelling')) {
+    // Mutex: wait for any in-progress job to complete before starting
+    // Loop to handle multiple waiters waking up simultaneously
+    let existing = this.runningLibraries.get(libraryId);
+    while (existing && (existing.state === 'running' || existing.state === 'cancelling')) {
       logger.warn('Library already being processed, waiting for completion', {
         label: 'OverlayLibrary',
         libraryId,
@@ -278,9 +277,10 @@ class OverlayLibraryService {
         startedAt: new Date(existing.startTime).toISOString(),
         runningFor: `${Math.round((Date.now() - existing.startTime) / 1000)}s`,
       });
-      // Wait for existing job to complete instead of running concurrently
-      await existing._promise;
-      // After waiting, run our job (the previous one is done)
+      // Wait for existing job, catch errors so retries proceed after failures
+      await existing._promise.catch(() => undefined);
+      // Re-check in case another waiter started a new job
+      existing = this.runningLibraries.get(libraryId);
     }
 
     // Clean up old completed jobs
