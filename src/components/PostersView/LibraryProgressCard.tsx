@@ -31,6 +31,7 @@ export interface LibraryStatus {
 interface LibraryProgressCardProps {
   status: LibraryStatus;
   onStop: () => void;
+  isStopping?: boolean;
 }
 
 const formatTime = (seconds: number): string => {
@@ -76,6 +77,7 @@ const getProgressBarColor = (state: JobState): string => {
 const LibraryProgressCard: React.FC<LibraryProgressCardProps> = ({
   status,
   onStop,
+  isStopping = false,
 }) => {
   const borderColor = useMemo(() => getBorderColor(status.state), [status.state]);
   const progressBarColor = useMemo(
@@ -117,11 +119,11 @@ const LibraryProgressCard: React.FC<LibraryProgressCardProps> = ({
           buttonType="danger"
           buttonSize="sm"
           onClick={onStop}
-          disabled={status.state === 'cancelling'}
+          disabled={status.state === 'cancelling' || isStopping}
           className="flex items-center gap-1.5"
         >
           <StopIcon className="h-4 w-4" />
-          Stop
+          {isStopping ? 'Stopping...' : 'Stop'}
         </Button>
       </div>
 
