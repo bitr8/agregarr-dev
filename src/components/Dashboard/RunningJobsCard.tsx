@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useState } from 'react';
+import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 import LibraryProgressCard, {
   type LibraryStatus,
@@ -11,6 +12,7 @@ interface RunningLibrariesResponse {
 
 const RunningJobsCard: React.FC = () => {
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
+  const { addToast } = useToasts();
 
   const { data, mutate } = useSWR<RunningLibrariesResponse>(
     '/api/v1/overlay-library-configs/status/all',
@@ -40,7 +42,10 @@ const RunningJobsCard: React.FC = () => {
       await axios.post(`/api/v1/overlay-library-configs/${libraryId}/stop`);
       await mutate();
     } catch (error) {
-      console.error('Failed to stop job:', error);
+      addToast('Failed to stop overlay job', {
+        appearance: 'error',
+        autoDismiss: true,
+      });
     } finally {
       setStoppingIds((prev) => {
         const next = new Set(prev);
