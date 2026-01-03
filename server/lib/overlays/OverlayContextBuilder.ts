@@ -250,10 +250,13 @@ export async function buildRenderContext(
     downloaded: !isPlaceholder, // Real items in Plex are downloaded, placeholders are not
   };
 
-  // Extract TMDb ID from GUID
+  // Extract TMDb ID and IMDb ID from Plex GUIDs
+  // Using Plex GUID for IMDb ID ensures consistency with prefetch cache
   let tmdbId: number | undefined;
+  let imdbIdFromGuid: string | undefined;
 
   if (item.Guid && Array.isArray(item.Guid)) {
+    // Extract TMDB ID
     const tmdbGuid = item.Guid.find((g) => g.id?.includes('tmdb://'));
     if (tmdbGuid) {
       const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
@@ -261,7 +264,16 @@ export async function buildRenderContext(
         tmdbId = parseInt(match[1]);
       }
     }
+
+    // Extract IMDb ID directly from Plex GUID (same as prefetch does)
+    const imdbGuid = item.Guid.find((g) => g.id?.startsWith('imdb://'));
+    if (imdbGuid) {
+      imdbIdFromGuid = imdbGuid.id.replace('imdb://', '');
+    }
   }
+
+  // Use IMDb ID from Plex GUID first, fall back to TMDB external_ids
+  let imdbId = imdbIdFromGuid;
 
   if (tmdbId) {
     try {
@@ -272,8 +284,10 @@ export async function buildRenderContext(
           ? await tmdbClient.getMovie({ movieId: tmdbId })
           : await tmdbClient.getTvShow({ tvId: tmdbId });
 
-      // Get IMDb ID
-      const imdbId = tmdbData.external_ids?.imdb_id;
+      // Only use TMDB external_ids as fallback if no IMDb ID from Plex GUID
+      if (!imdbId && tmdbData.external_ids?.imdb_id) {
+        imdbId = tmdbData.external_ids.imdb_id;
+      }
 
       // Fetch ratings
       if (imdbId) {
@@ -304,12 +318,15 @@ export async function buildRenderContext(
             // Mark as critical API failure - this prevents regenerating posters
             // with missing IMDb ratings, which would strip all rating overlays
             criticalApiFailed = true;
-            logger.warn('IMDb rating fetch failed - marking as critical failure', {
-              label: 'OverlayContextBuilder',
-              imdbId,
-              itemTitle: item.title,
-              error: error instanceof Error ? error.message : String(error),
-            });
+            logger.warn(
+              'IMDb rating fetch failed - marking as critical failure',
+              {
+                label: 'OverlayContextBuilder',
+                imdbId,
+                itemTitle: item.title,
+                error: error instanceof Error ? error.message : String(error),
+              }
+            );
           }
         }
 
@@ -553,6 +570,56 @@ export async function buildRenderContext(
       logger.debug('Failed to fetch external metadata', {
         label: 'OverlayContextBuilder',
         tmdbId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } else if (imdbId) {
+    // No TMDB ID but we have IMDb ID from Plex GUID - still fetch IMDb rating
+    const preloadedRating = preloadedImdbRatings?.get(imdbId);
+    if (preloadedRating !== undefined) {
+      if (preloadedRating !== null) {
+        context.imdbRating = preloadedRating;
+        logger.debug('Using preloaded IMDb rating (no TMDB)', {
+          label: 'OverlayContextBuilder',
+          imdbId,
+          itemTitle: item.title,
+          rating: preloadedRating,
+        });
+      }
+    } else {
+      // Fallback to individual API call
+      try {
+        const imdbApi = new ImdbRatingsAPI();
+        const imdbRatings = await imdbApi.getRatings(imdbId);
+        if (imdbRatings.length > 0 && imdbRatings[0].rating !== null) {
+          context.imdbRating = imdbRatings[0].rating;
+        }
+      } catch (error) {
+        criticalApiFailed = true;
+        logger.warn('IMDb rating fetch failed - marking as critical failure', {
+          label: 'OverlayContextBuilder',
+          imdbId,
+          itemTitle: item.title,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // IMDb Top 250 check
+    try {
+      const imdbClient = getImdbClient();
+      const imdbMediaType: 'movie' | 'tv' =
+        mediaType === 'show' ? 'tv' : 'movie';
+      const top250Result = await imdbClient.checkTop250(imdbId, imdbMediaType);
+
+      if (top250Result.isTop250) {
+        context.isImdbTop250 = true;
+        context.imdbTop250Rank = top250Result.rank;
+      }
+    } catch (error) {
+      logger.debug('Failed to check IMDb Top 250', {
+        label: 'OverlayContextBuilder',
+        imdbId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -815,7 +882,8 @@ export async function fetchReleaseDateInfo(
               // Check if dates are close (Sonarr might have slightly different date due to timezone)
               const tmdbMs = new Date(tmdbDate).getTime();
               const sonarrMs = new Date(sonarrDate).getTime();
-              const daysDiff = Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
+              const daysDiff =
+                Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
               if (daysDiff <= 2) {
                 airDate = sonarrResult.nextEpisodeAirDate;
                 logger.debug('Enhanced TMDB date with Sonarr air time', {
@@ -830,8 +898,7 @@ export async function fetchReleaseDateInfo(
         }
 
         // nextSeasonAirDate is ONLY for season premieres (episode 1)
-        const nextSeasonAirDate =
-          episodeNumber === 1 ? airDate : undefined;
+        const nextSeasonAirDate = episodeNumber === 1 ? airDate : undefined;
 
         return {
           releaseDate: showDetails.first_air_date || airDate,
@@ -861,7 +928,8 @@ export async function fetchReleaseDateInfo(
           });
 
           return {
-            releaseDate: showDetails.first_air_date || sonarrResult.nextEpisodeAirDate,
+            releaseDate:
+              showDetails.first_air_date || sonarrResult.nextEpisodeAirDate,
             nextEpisodeAirDate: sonarrResult.nextEpisodeAirDate,
             nextSeasonAirDate: sonarrResult.nextSeasonAirDate,
             seasonNumber: sonarrResult.seasonNumber,
@@ -969,9 +1037,7 @@ async function fetchNextEpisodeFromSonarr(
               const stats = matchingSeason.statistics;
               // Episode number: if no files downloaded, it's episode 1 (season premiere)
               // Otherwise, next episode is files + 1 (approximation for overlay purposes)
-              nextEpisodeNumber = stats
-                ? (stats.episodeFileCount || 0) + 1
-                : 1;
+              nextEpisodeNumber = stats ? (stats.episodeFileCount || 0) + 1 : 1;
             } else {
               // Fallback: find the latest monitored season with upcoming content
               // Sort by season number ascending to find earliest upcoming season
