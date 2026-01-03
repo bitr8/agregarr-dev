@@ -30,6 +30,87 @@ class ImdbRatingsAPI extends ExternalAPI {
   }
 
   /**
+   * Fetch a single batch with retry logic and exponential backoff
+   * @param batch - Array of IMDb IDs (max 100)
+   * @param batchNum - Current batch number (for logging)
+   * @param totalBatches - Total number of batches (for logging)
+   * @param maxRetries - Maximum retry attempts (default: 3)
+   */
+  private async fetchBatchWithRetry(
+    batch: string[],
+    batchNum: number,
+    totalBatches: number,
+    maxRetries = 3
+  ): Promise<ImdbRatingResponse[]> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Build query string with multiple id parameters
+        const queryParams = batch.map((id) => `id=${encodeURIComponent(id)}`);
+        const url = `/api/ratings?${queryParams.join('&')}`;
+
+        const response = await this.get<ImdbRatingResponse[]>(
+          url,
+          undefined,
+          30000
+        );
+
+        if (attempt > 0) {
+          logger.info(
+            `IMDb batch ${batchNum}/${totalBatches} succeeded on retry ${attempt}`,
+            { label: 'IMDb Ratings API' }
+          );
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Only retry on transient errors (5xx, rate limits, network errors)
+        const isTransient =
+          lastError.message.includes('status code 5') || // 500, 502, 503, 504, 522, etc.
+          lastError.message.includes('429') || // Rate limited
+          lastError.message.includes('ECONNRESET') ||
+          lastError.message.includes('ETIMEDOUT') ||
+          lastError.message.includes('ECONNREFUSED') ||
+          lastError.message.includes('socket hang up');
+
+        if (!isTransient || attempt === maxRetries) {
+          logger.error(
+            `IMDb batch ${batchNum}/${totalBatches} failed after ${attempt + 1} attempts`,
+            {
+              label: 'IMDb Ratings API',
+              error: lastError.message,
+              batchSize: batch.length,
+              willRetry: false,
+            }
+          );
+          throw lastError;
+        }
+
+        // Exponential backoff with jitter: 1-1.5s, 2-3s, 4-6s
+        const baseDelay = 1000 * Math.pow(2, attempt);
+        const jitter = baseDelay * (0.5 * Math.random()); // 0-50% jitter
+        const delayMs = Math.round(baseDelay + jitter);
+        logger.warn(
+          `IMDb batch ${batchNum}/${totalBatches} failed, retrying in ${delayMs}ms`,
+          {
+            label: 'IMDb Ratings API',
+            attempt: attempt + 1,
+            maxRetries,
+            error: lastError.message,
+          }
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    // Should never reach here, but TypeScript needs it
+    throw lastError || new Error('Unknown error in fetchBatchWithRetry');
+  }
+
+  /**
    * Get ratings for one or more IMDb IDs
    *
    * @param imdbIds - Single IMDb ID or array of IMDb IDs (max 100 per request)
@@ -46,11 +127,12 @@ class ImdbRatingsAPI extends ExternalAPI {
       }
 
       if (ids.length > 100) {
-        logger.warn(
-          `Requested ${ids.length} IMDb ratings, but API supports max 100 per request. Splitting into batches.`,
+        logger.info(
+          `Fetching ${ids.length} IMDb ratings in batches of 100`,
           {
             label: 'IMDb Ratings API',
             requestedCount: ids.length,
+            batchCount: Math.ceil(ids.length / 100),
           }
         );
 
@@ -60,24 +142,59 @@ class ImdbRatingsAPI extends ExternalAPI {
           batches.push(ids.slice(i, i + 100));
         }
 
-        // Fetch all batches in parallel
-        const results = await Promise.all(
-          batches.map((batch) => this.getRatings(batch))
-        );
+        // Fetch all batches with retry logic and partial success handling
+        const allResults: ImdbRatingResponse[] = [];
+        let successCount = 0;
+        let failedCount = 0;
 
-        // Flatten results
-        return results.flat();
+        // Process batches with concurrency limit to avoid overwhelming the API
+        const CONCURRENT_BATCHES = 5;
+        for (let i = 0; i < batches.length; i += CONCURRENT_BATCHES) {
+          const batchSlice = batches.slice(i, i + CONCURRENT_BATCHES);
+          const batchPromises = batchSlice.map((batch, idx) =>
+            this.fetchBatchWithRetry(batch, i + idx + 1, batches.length)
+          );
+
+          const results = await Promise.allSettled(batchPromises);
+
+          for (const result of results) {
+            if (result.status === 'fulfilled') {
+              allResults.push(...result.value);
+              successCount++;
+            } else {
+              failedCount++;
+            }
+          }
+        }
+
+        if (failedCount > 0) {
+          logger.warn(
+            `IMDb batch prefetch completed with partial success`,
+            {
+              label: 'IMDb Ratings API',
+              successfulBatches: successCount,
+              failedBatches: failedCount,
+              totalBatches: batches.length,
+              ratingsRetrieved: allResults.length,
+              ratingsRequested: ids.length,
+            }
+          );
+        } else {
+          logger.info(
+            `IMDb batch prefetch completed successfully`,
+            {
+              label: 'IMDb Ratings API',
+              batches: batches.length,
+              ratingsRetrieved: allResults.length,
+            }
+          );
+        }
+
+        return allResults;
       }
 
-      // Build query string with multiple id parameters
-      const queryParams = ids.map((id) => `id=${encodeURIComponent(id)}`);
-      const url = `/api/ratings?${queryParams.join('&')}`;
-
-      const response = await this.get<ImdbRatingResponse[]>(
-        url,
-        undefined,
-        30000
-      );
+      // Single batch (≤100 ids) - use same retry logic for consistency
+      const response = await this.fetchBatchWithRetry(ids, 1, 1);
 
       logger.debug(`Fetched ${response.length} IMDb ratings`, {
         label: 'IMDb Ratings API',
