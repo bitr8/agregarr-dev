@@ -1,76 +1,70 @@
-# Agregarr
+# Agregarr (Personal Fork)
 
-Agregarr keeps your Plex Home and Recommended fresh by frequently updating it with Collections from various sources, including Trakt, IMDb, TMDB, Letterboxd, MDBList, FlixPatrol (Networks Top 10), AniList and MyAnimeList, as well as generated Collections from Tautulli Statistics, and Overseerr Requests. It has various options for downloading missing media, including as requests through Overseerr, or directly through Radarr/Sonarr. Collections can be reordered on the Home/Recommended and Library tabs independently, and can have time periods or days set for their visibility in Plex.
+Personal fork of [Agregarr](https://github.com/agregarr/agregarr) with features and performance fixes I wanted but aren't in upstream yet. Changes are submitted as PRs when they're ready.
 
-## Features
+This is for my own use, but if you see something useful, go for it.
 
-- **Public Lists**: Add public lists from Trakt, IMDb, TMDB, Letterboxd, MDBList, FlixPatrol (Networks Top 10), AniList and MyAnimeList, with presets and custom list options.
-- **Grab Missing Items**: Missing items from lists can be added via Radarr/Sonarr or Overseerr, with various filters available including release year, season count, list position, genre, and origin country
-- **Coming Soon**: Create Coming Soon Collections based off monitored content in Radarr/Sonarr, or anticipated releases from Trakt, complete with trailers and poster overlays.
-- **Overseerr Requests**: Generate Collections either for each users requests (only visible to that user), or for All Requests
-- **Tautulli Statistics**: Generate Collections based on the Most Popular content on your server
-- **Independent Reordering**: Control the order in which Collections appear across the Home/Recommended screens and the Library tab independently
-- **Keeps Plex Updated**: Collections will be be updated on every sync (default 12 hours, custom scheduling available). Custom sync options available per-collection.
-- **Randomise Home Order**: Keep your home screen dynamic by rotating the order in which collections appear (separate scheduling available)
-- **Template System**: Easily set collection names with flexible templating and title importing from lists.
-- **Time Restrictions**: Schedule collections to be active only during specific time periods
-- **Existing Collection Integration**: Any pre-existing Collections in Plex and Default Hubs (Recently Added etc) can be managed alongside Agregarr Collections
-- **Collection Statistics**: Dashboard showing Most Popular Collections (from Tautulli), and recently added Missing Items
-- **Poster Templates**: Create your own Poster Templates which can be dynamically filled with content per-collection
-- **Preview Collections**: Preview the collection and its matching/missing items, and add them individually via Radarr/Sonarr or Overseerr, or add items to the global exclusions list.
-
-<img width="1902" height="983" alt="agregarr-promo" src="https://github.com/user-attachments/assets/1b744502-30ce-4988-93fc-4588e1207e69" />
-
-## Installation
-
-### Docker Compose
+## Docker Image
 
 ```yaml
 services:
   agregarr:
-    image: agregarr/agregarr:latest
+    image: bitr8/agregarr:develop
     container_name: agregarr
     volumes:
-      - /path/to/config:/app/config # Change /path/to/config to your actual config path
-      # Linux/Mac: - /mnt/serverdata/configs/agregarr:/app/config
-      # Windows:   - C:\serverdata\configs\agregarr:/app/config
-
-      # Optional: For Coming Soon/Placeholder feature
-      - /path/to/placeholder/movies:/data/movies
-      - /path/to/placeholder/tv:/data/tv
-      # Linux/Mac:
-      # - /mnt/media/movie-placeholders:/data/movies
-      # - /mnt/media/tv-placeholders:/data/tv
-      # Windows:
-      # - E:\media\movie-placeholders:/data/movies
-      # - E:\media\tv-placeholders:/data/tv
-
-      # And then select your root folders in Settings -> Downloads
+      - /path/to/config:/app/config
+      - /path/to/placeholder/movies:/data/movies  # Optional: Coming Soon feature
+      - /path/to/placeholder/tv:/data/tv          # Optional: Coming Soon feature
     environment:
-      - TZ=Pacific/Auckland # Set to your local timezone for accurate poster overlay release dates/countdowns - see 'TZ Identifier' column here https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+      - TZ=Australia/Sydney
     ports:
       - 7171:7171
     restart: unless-stopped
 ```
 
-Further instructions for basic setup available [**here**](https://agregarr.org/docs/installation) and Placeholder media volumes [**here**](https://agregarr.org/docs/placeholder-volumes)
+Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 
-The application will be available at `http://localhost:7171`
+## What's Different
 
-> **Note**: Your volume must be set correctly for the your settings to persist. If Agregarr is reset after restart, it is because your volume is not set correctly. The Coming Soon/Placeholder feature requires media volumes to be mounted, these folders should be added to Plex, but not added to Radarr/Sonarr. Without media mounts, Agregarr can run remotely and all other features will work normally.
+### Performance
+
+- **Batch IMDb Prefetch**: Fetches all IMDb ratings upfront in batches of 100, instead of one API call per item. Turns 2800+ calls into ~29.
+- **Adaptive TTL Caching**: IMDb ratings cached based on content age (12h for new stuff, 30 days for older content).
+- **Plex GUID Extraction**: Pulls IMDb IDs straight from Plex metadata, skips TMDB lookup for 99%+ of items.
+- **Stale Cache Fallback**: Returns cached data when APIs fail instead of breaking the whole job.
+- **TMDB Poster Caching**: Caches poster downloads for 7 days (upstream downloads fresh every run).
+
+### UX
+
+- **Job Progress**: Shows current item and percentage during overlay runs.
+- **Daily Show Filter**: Keeps soap operas out of Coming Soon (they always show as "upcoming" because of yearly seasons).
+
+### Security
+
+- **Error Sanitization**: No more internal paths or stack traces in API responses.
+- **Input Validation**: Extra checks on user input.
+
+## Open PRs
+
+| PR | What it does | Status |
+|----|--------------|--------|
+| [#277](https://github.com/agregarr/agregarr/pull/277) | TMDB caching + perf fixes | Open |
+| [#278](https://github.com/agregarr/agregarr/pull/278) | Filter daily shows from Coming Soon | Open |
+| [#280](https://github.com/agregarr/agregarr/pull/280) | Job progress feedback | Awaiting CI |
+| [#281](https://github.com/agregarr/agregarr/pull/281) | Error logging hardening | Awaiting CI |
+| [#282](https://github.com/agregarr/agregarr/pull/282) | Sanitize error responses | Awaiting CI |
+
+## What's Not Upstream Yet
+
+- Batch IMDb prefetch
+- Adaptive TTL caching
+
+These might become PRs once I've tested them more.
 
 ## License
 
-GPL-3.0 License - see [LICENSE](LICENSE) file for details.
+GPL-3.0, same as upstream.
 
 ## Credits
 
-Originally built off [**Overseerr**](https://github.com/sct/Overseerr)
-
-Inspired by [Kometa](https://github.com/Kometa-Team/Kometa)
-
-Code references for Coming Soon feature from [UMTK](https://github.com/netplexflix/Upcoming-Movies-TV-Shows-for-Kometa)
-
-Anime ID mappings file by [PlexAniBridge](https://github.com/PlexAniBridge/PlexAniBridge)
-
-A massive thanks to the developers and contributors of these projects!
+All the real work is by the [Agregarr](https://github.com/agregarr/agregarr) team.

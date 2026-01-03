@@ -113,6 +113,10 @@ class OverlayLibraryService {
   // Populated before item processing loop. Null means "checked, no rating".
   private preloadedImdbRatings?: Map<string, number | null>;
 
+  // Pre-analyzed required context fields from all enabled templates (per job)
+  // Used to skip unnecessary API calls (e.g., skip RT if no template uses RT ratings)
+  private requiredContextFields?: Set<string>;
+
   // Track running libraries with mutex-like behavior and detailed progress
   // Prevents concurrent processing of the same library
   private runningLibraries = new Map<string, LibraryProgress>();
@@ -539,6 +543,7 @@ class OverlayLibraryService {
     this.sonarrSeriesCache = new Map();
     this.maintainerrCollectionsCache = undefined;
     this.preloadedImdbRatings = undefined;
+    this.requiredContextFields = undefined;
   }
 
   /**
@@ -707,11 +712,31 @@ class OverlayLibraryService {
         return orderA - orderB;
       });
 
+      // Pre-analyze all enabled templates to determine which context fields are needed
+      // This allows skipping expensive API calls (e.g., RT ratings) if no template uses them
+      const { extractUsedContextFields } = await import(
+        '@server/utils/metadataHashing'
+      );
+      const templateDataArray = sortedTemplates.map((t) => t.getTemplateData());
+      const applicationConditions = sortedTemplates.map((t) =>
+        t.getApplicationCondition()
+      );
+      this.requiredContextFields = extractUsedContextFields(
+        templateDataArray,
+        applicationConditions
+      );
+
+      const needsRtRatings =
+        this.requiredContextFields.has('rtCriticsScore') ||
+        this.requiredContextFields.has('rtAudienceScore');
+
       logger.info('Applying overlays to library', {
         label: 'OverlayLibrary',
         libraryId,
         templateCount: sortedTemplates.length,
         templates: sortedTemplates.map((t) => t.name),
+        requiredFields: Array.from(this.requiredContextFields),
+        needsRtRatings,
       });
 
       // Fetch Maintainerr collections once for the entire job
@@ -1176,7 +1201,8 @@ class OverlayLibraryService {
         actualMediaType,
         isPlaceholder,
         this.maintainerrCollectionsCache,
-        this.preloadedImdbRatings
+        this.preloadedImdbRatings,
+        this.requiredContextFields
       );
 
       // If critical APIs failed (e.g., IMDb timeout), skip this item to avoid

@@ -180,7 +180,8 @@ export async function buildRenderContext(
   mediaType: 'movie' | 'show',
   isPlaceholder = false,
   maintainerrCollections?: MaintainerrCollection[],
-  preloadedImdbRatings?: Map<string, number | null>
+  preloadedImdbRatings?: Map<string, number | null>,
+  requiredContextFields?: Set<string>
 ): Promise<BuildRenderContextResult> {
   // Track if critical APIs failed (IMDb rating is critical for rating overlays)
   let criticalApiFailed = false;
@@ -278,39 +279,46 @@ export async function buildRenderContext(
           });
         }
 
-        // Rotten Tomatoes ratings
-        try {
-          const rtClient = new RottenTomatoes();
-          const rtRating =
-            mediaType === 'movie'
-              ? await rtClient.getMovieRatings(
-                  context.title || '',
-                  context.year || 0
-                )
-              : await rtClient.getTVRatings(context.title || '', context.year);
+        // Rotten Tomatoes ratings - skip if no template uses RT fields
+        const needsRtRatings =
+          !requiredContextFields ||
+          requiredContextFields.has('rtCriticsScore') ||
+          requiredContextFields.has('rtAudienceScore');
 
-          if (rtRating) {
-            context.rtCriticsScore = rtRating.criticsScore;
-            context.rtAudienceScore = rtRating.audienceScore;
-            logger.debug('Fetched RT ratings', {
+        if (needsRtRatings) {
+          try {
+            const rtClient = new RottenTomatoes();
+            const rtRating =
+              mediaType === 'movie'
+                ? await rtClient.getMovieRatings(
+                    context.title || '',
+                    context.year || 0
+                  )
+                : await rtClient.getTVRatings(context.title || '', context.year);
+
+            if (rtRating) {
+              context.rtCriticsScore = rtRating.criticsScore;
+              context.rtAudienceScore = rtRating.audienceScore;
+              logger.debug('Fetched RT ratings', {
+                label: 'OverlayContextBuilder',
+                title: context.title,
+                criticsScore: rtRating.criticsScore,
+                audienceScore: rtRating.audienceScore,
+              });
+            } else {
+              logger.debug('RT rating not found', {
+                label: 'OverlayContextBuilder',
+                title: context.title,
+                year: context.year,
+              });
+            }
+          } catch (error) {
+            logger.debug('Failed to fetch RT rating', {
               label: 'OverlayContextBuilder',
               title: context.title,
-              criticsScore: rtRating.criticsScore,
-              audienceScore: rtRating.audienceScore,
-            });
-          } else {
-            logger.debug('RT rating not found', {
-              label: 'OverlayContextBuilder',
-              title: context.title,
-              year: context.year,
+              error: error instanceof Error ? error.message : String(error),
             });
           }
-        } catch (error) {
-          logger.debug('Failed to fetch RT rating', {
-            label: 'OverlayContextBuilder',
-            title: context.title,
-            error: error instanceof Error ? error.message : String(error),
-          });
         }
       }
 
