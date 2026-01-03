@@ -608,14 +608,45 @@ export async function fetchReleaseDateInfo(
       if (nextEpisode?.air_date) {
         const seasonNumber = nextEpisode.season_number;
         const episodeNumber = nextEpisode.episode_number;
+        let airDate = nextEpisode.air_date;
+
+        // If TMDB returns a date-only string (no time component), try to get
+        // the precise air time from Sonarr for better timezone accuracy
+        if (!airDate.includes('T')) {
+          const tvdbId = showDetails.external_ids?.tvdb_id;
+          if (tvdbId) {
+            const sonarrResult = await fetchNextEpisodeFromSonarr(
+              tvdbId,
+              sonarrCache
+            );
+            // Use Sonarr's datetime if it matches the same date (within 2 days tolerance)
+            if (sonarrResult?.nextEpisodeAirDate?.includes('T')) {
+              const tmdbDate = airDate.split('T')[0];
+              const sonarrDate = sonarrResult.nextEpisodeAirDate.split('T')[0];
+              // Check if dates are close (Sonarr might have slightly different date due to timezone)
+              const tmdbMs = new Date(tmdbDate).getTime();
+              const sonarrMs = new Date(sonarrDate).getTime();
+              const daysDiff = Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
+              if (daysDiff <= 2) {
+                airDate = sonarrResult.nextEpisodeAirDate;
+                logger.debug('Enhanced TMDB date with Sonarr air time', {
+                  label: 'OverlayContextBuilder',
+                  tmdbId,
+                  originalDate: nextEpisode.air_date,
+                  enhancedDate: airDate,
+                });
+              }
+            }
+          }
+        }
 
         // nextSeasonAirDate is ONLY for season premieres (episode 1)
         const nextSeasonAirDate =
-          episodeNumber === 1 ? nextEpisode.air_date : undefined;
+          episodeNumber === 1 ? airDate : undefined;
 
         return {
-          releaseDate: showDetails.first_air_date || nextEpisode.air_date,
-          nextEpisodeAirDate: nextEpisode.air_date,
+          releaseDate: showDetails.first_air_date || airDate,
+          nextEpisodeAirDate: airDate,
           nextSeasonAirDate,
           seasonNumber,
         };
@@ -649,7 +680,37 @@ export async function fetchReleaseDateInfo(
         }
       }
 
-      // No next episode from either source, use first_air_date if available
+      // Third fallback: Use TMDB seasons data for shows not in Sonarr
+      // This handles shows that are in Plex but not monitored in Sonarr
+      if (showDetails.seasons && showDetails.seasons.length > 0) {
+        const { isDateInFuture } = await import('@server/utils/dateHelpers');
+
+        // Sort seasons by number to find the earliest upcoming one
+        const sortedSeasons = [...showDetails.seasons]
+          .filter((s) => s.season_number > 0) // Exclude specials
+          .sort((a, b) => a.season_number - b.season_number);
+
+        for (const season of sortedSeasons) {
+          if (season.air_date && isDateInFuture(season.air_date)) {
+            logger.debug('Using TMDB seasons fallback for next season data', {
+              label: 'OverlayContextBuilder',
+              tmdbId,
+              seasonNumber: season.season_number,
+              airDate: season.air_date,
+            });
+
+            return {
+              releaseDate: showDetails.first_air_date || season.air_date,
+              nextEpisodeAirDate: season.air_date,
+              // Season air date = episode 1 air date, so this is a premiere
+              nextSeasonAirDate: season.air_date,
+              seasonNumber: season.season_number,
+            };
+          }
+        }
+      }
+
+      // No next episode from any source, use first_air_date if available
       if (showDetails.first_air_date) {
         return {
           releaseDate: showDetails.first_air_date,
