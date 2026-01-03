@@ -48,3 +48,30 @@
 - If CI fails but local passes, check if the branch was pushed after fixes
 - Use `gh run list --repo <repo>` to see workflow run timestamps
 - Compare with local commit timestamps to verify CI ran on latest code
+
+### 2026-01-03: Always run validator before pushing
+- `~/.claude/skills/pre-commit-validator/validate.sh` catches privacy and type issues
+- Don't rely on `pnpm typecheck` alone - CI may have stricter settings
+- Rule added to CLAUDE.md but must actually follow it
+
+## Data Sources
+
+### 2026-01-03: TMDB vs Sonarr data disconnect
+- **Issue:** Coming Soon collection used Sonarr data, but overlay context used TMDB
+- **Result:** Shows appeared in collection but had no countdown overlay
+- **Root cause:** TMDB `next_episode_to_air` often missing for non-US shows
+- **Solution:** Implement fallback chain: TMDB → Sonarr → TMDB seasons
+
+### 2026-01-03: Timezone handling for air dates
+- **Issue:** Date-only strings (`YYYY-MM-DD`) parsed as UTC midnight may be wrong day locally
+- **Example:** `2026-01-08T15:30:00Z` = Jan 9 2:30am AEDT (different calendar day!)
+- **Solution:** Parse full datetime before converting to local timezone, then extract calendar date
+- **Enhancement:** If TMDB returns date-only, get precise time from Sonarr
+
+## TypeScript
+
+### 2026-01-03: Generic types need explicit parameters
+- `Record` requires two type arguments: `Record<string, string>`
+- `Set` requires one type argument: `Set<string>`
+- Local `pnpm typecheck` may pass but Docker CI fails with stricter settings
+- Use `npx tsc --project server/tsconfig.json --noEmit` for consistent checking
