@@ -1121,6 +1121,8 @@ export async function checkMonitoringStatus(
   inSonarr?: boolean;
   isMonitored?: boolean;
   hasFile?: boolean;
+  radarrTags?: string[];
+  sonarrTags?: string[];
 }> {
   try {
     const settings = getSettings();
@@ -1141,16 +1143,47 @@ export async function checkMonitoringStatus(
           const movie = movies.find((m) => m.tmdbId === tmdbId);
 
           if (movie) {
+            // Fetch tags if movie has any
+            let tagNames: string[] = [];
+            if (movie.tags && movie.tags.length > 0) {
+              try {
+                const RadarrAPI = (await import('@server/api/servarr/radarr'))
+                  .default;
+                const radarr = new RadarrAPI({
+                  url: `${radarrSettings.useSsl ? 'https' : 'http'}://${
+                    radarrSettings.hostname
+                  }:${radarrSettings.port}${
+                    radarrSettings.baseUrl || ''
+                  }/api/v3`,
+                  apiKey: radarrSettings.apiKey,
+                });
+                const allTags = await radarr.getTags();
+                tagNames = movie.tags
+                  .map((tagId) => allTags.find((t) => t.id === tagId)?.label)
+                  .filter((label): label is string => label !== undefined);
+              } catch (tagError) {
+                logger.debug('Failed to fetch Radarr tags', {
+                  label: 'OverlayContextBuilder',
+                  error:
+                    tagError instanceof Error
+                      ? tagError.message
+                      : String(tagError),
+                });
+              }
+            }
+
             logger.debug('Found movie in Radarr', {
               label: 'OverlayContextBuilder',
               tmdbId,
               monitored: movie.monitored,
               hasFile: movie.hasFile,
+              tags: tagNames,
             });
             return {
               inRadarr: true,
               isMonitored: movie.monitored,
               hasFile: movie.hasFile,
+              radarrTags: tagNames.length > 0 ? tagNames : undefined,
             };
           }
         } catch (error) {
@@ -1216,6 +1249,35 @@ export async function checkMonitoringStatus(
           if (series) {
             const hasFile = (series.statistics?.episodeFileCount || 0) > 0;
 
+            // Fetch tags if series has any
+            let tagNames: string[] = [];
+            if (series.tags && series.tags.length > 0) {
+              try {
+                const SonarrAPI = (await import('@server/api/servarr/sonarr'))
+                  .default;
+                const sonarr = new SonarrAPI({
+                  url: `${sonarrSettings.useSsl ? 'https' : 'http'}://${
+                    sonarrSettings.hostname
+                  }:${sonarrSettings.port}${
+                    sonarrSettings.baseUrl || ''
+                  }/api/v3`,
+                  apiKey: sonarrSettings.apiKey,
+                });
+                const allTags = await sonarr.getTags();
+                tagNames = series.tags
+                  .map((tagId) => allTags.find((t) => t.id === tagId)?.label)
+                  .filter((label): label is string => label !== undefined);
+              } catch (tagError) {
+                logger.debug('Failed to fetch Sonarr tags', {
+                  label: 'OverlayContextBuilder',
+                  error:
+                    tagError instanceof Error
+                      ? tagError.message
+                      : String(tagError),
+                });
+              }
+            }
+
             logger.debug('Found series in Sonarr', {
               label: 'OverlayContextBuilder',
               tmdbId,
@@ -1227,12 +1289,14 @@ export async function checkMonitoringStatus(
               monitored: series.monitored,
               episodeFileCount: series.statistics?.episodeFileCount,
               hasFile,
+              tags: tagNames,
             });
 
             return {
               inSonarr: true,
               isMonitored: series.monitored,
               hasFile,
+              sonarrTags: tagNames.length > 0 ? tagNames : undefined,
             };
           }
         } catch (error) {
