@@ -75,6 +75,7 @@ class RottenTomatoes extends ExternalAPI {
           'x-algolia-usertoken': settings.clientId,
         },
         nodeCache: cacheManager.getCache('rt').data,
+        staleCache: cacheManager.getStaleCache('rt'),
       }
     );
   }

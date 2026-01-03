@@ -25,6 +25,7 @@ class ImdbRatingsAPI extends ExternalAPI {
         Accept: 'application/json',
       },
       nodeCache: cacheManager.getCache('imdb').data,
+      staleCache: cacheManager.getStaleCache('imdb'),
     });
   }
 

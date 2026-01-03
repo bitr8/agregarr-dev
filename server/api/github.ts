@@ -72,6 +72,7 @@ class GithubAPI extends ExternalAPI {
           Accept: 'application/json',
         },
         nodeCache: cacheManager.getCache('github').data,
+        staleCache: cacheManager.getStaleCache('github'),
       }
     );
   }

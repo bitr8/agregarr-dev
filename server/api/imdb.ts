@@ -80,6 +80,7 @@ class ImdbAPI extends ExternalAPI {
           Connection: 'keep-alive',
         },
         nodeCache: cacheManager.getCache('imdb').data,
+        staleCache: cacheManager.getStaleCache('imdb'),
       }
     );
   }

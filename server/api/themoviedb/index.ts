@@ -119,6 +119,7 @@ class TheMovieDb extends ExternalAPI {
       },
       {
         nodeCache: cacheManager.getCache('tmdb').data,
+        staleCache: cacheManager.getStaleCache('tmdb'),
         rateLimit: {
           maxRequests: 9999, // High limit to effectively disable total request cap
           maxRPS: 40, // Slightly below TMDB's ~50 req/sec to be respectful

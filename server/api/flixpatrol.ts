@@ -83,6 +83,7 @@ class FlixPatrolAPI extends ExternalAPI {
         'Upgrade-Insecure-Requests': '1',
       },
       nodeCache: cacheManager.getCache('flixpatrol').data,
+      staleCache: cacheManager.getStaleCache('flixpatrol'),
     });
   }
 
