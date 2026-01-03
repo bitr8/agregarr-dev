@@ -2,10 +2,11 @@ import ImdbAPI from '@server/api/imdb';
 import ImdbRatingsAPI from '@server/api/imdbRatings';
 import type { MaintainerrCollection } from '@server/api/maintainerr';
 import type { PlexLibraryItem } from '@server/api/plexapi';
-import RottenTomatoes from '@server/api/rottentomatoes';
+import RottenTomatoes, { type RTRating } from '@server/api/rottentomatoes';
 import type { RadarrMovie } from '@server/api/servarr/radarr';
 import type { SonarrSeries } from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
+import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
@@ -162,6 +163,61 @@ export async function getTvdbIdFromTmdb(
 }
 
 /**
+ * Calculate adaptive TTL for rating caches based on content age.
+ * Older content has more stable ratings, so cache longer.
+ */
+function getAdaptiveTtl(releaseYear: number | undefined): number {
+  if (!releaseYear) {
+    return 3 * 24 * 60 * 60; // 3 days default if unknown
+  }
+
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - releaseYear;
+
+  if (age < 1) {
+    return 12 * 60 * 60; // 12 hours for new releases
+  }
+  if (age < 2) {
+    return 3 * 24 * 60 * 60; // 3 days for recent content
+  }
+  if (age < 10) {
+    return 7 * 24 * 60 * 60; // 7 days for older content
+  }
+  return 30 * 24 * 60 * 60; // 30 days for archive content
+}
+
+/**
+ * Get adaptive TTL for null (no rating) results.
+ * Shorter for new/upcoming content (ratings may appear soon),
+ * longer for old content (unlikely to get ratings now).
+ */
+function getNullRatingTtl(releaseYear: number | undefined): number {
+  if (!releaseYear) {
+    return 6 * 60 * 60; // 6 hours default
+  }
+
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - releaseYear;
+
+  if (age < 0) {
+    return 2 * 60 * 60; // 2 hours for upcoming (ratings may appear at release)
+  }
+  if (age < 1) {
+    return 4 * 60 * 60; // 4 hours for new releases
+  }
+  if (age < 2) {
+    return 12 * 60 * 60; // 12 hours for recent
+  }
+  return 24 * 60 * 60; // 24 hours for older (unlikely to get new ratings)
+}
+
+// Sentinel value to distinguish "checked, no rating" from "not yet checked"
+const RT_NULL_SENTINEL = '__RT_NULL__';
+
+// In-flight RT request deduplication to prevent thundering herd
+const rtInflightRequests = new Map<string, Promise<RTRating | null>>();
+
+/**
  * Build context for dynamic field replacement
  *
  * @param item - Plex library item to build context for
@@ -285,39 +341,113 @@ export async function buildRenderContext(
           requiredContextFields.has('rtCriticsScore') ||
           requiredContextFields.has('rtAudienceScore');
 
-        if (needsRtRatings) {
-          try {
-            const rtClient = new RottenTomatoes();
-            const rtRating =
-              mediaType === 'movie'
-                ? await rtClient.getMovieRatings(
-                    context.title || '',
-                    context.year || 0
-                  )
-                : await rtClient.getTVRatings(context.title || '', context.year);
+        if (needsRtRatings && tmdbId) {
+          // Use TMDB ID as cache key (stable, avoids title/year collision issues)
+          const rtCacheKey = `rt:${mediaType}:${tmdbId}`;
+          const rtCache = cacheManager.getCache('rt-ratings');
 
-            if (rtRating) {
-              context.rtCriticsScore = rtRating.criticsScore;
-              context.rtAudienceScore = rtRating.audienceScore;
-              logger.debug('Fetched RT ratings', {
+          // Check cache first
+          const cachedRt = rtCache.data.get<string | RTRating>(rtCacheKey);
+          if (cachedRt !== undefined) {
+            if (cachedRt === RT_NULL_SENTINEL) {
+              // Cached "no rating" - skip API call
+              logger.debug('Using cached RT null result', {
                 label: 'OverlayContextBuilder',
                 title: context.title,
+                tmdbId,
+              });
+            } else {
+              // Cached rating found
+              const rtRating = cachedRt as RTRating;
+              context.rtCriticsScore = rtRating.criticsScore;
+              context.rtAudienceScore = rtRating.audienceScore;
+              logger.debug('Using cached RT ratings', {
+                label: 'OverlayContextBuilder',
+                title: context.title,
+                tmdbId,
                 criticsScore: rtRating.criticsScore,
                 audienceScore: rtRating.audienceScore,
               });
-            } else {
-              logger.debug('RT rating not found', {
-                label: 'OverlayContextBuilder',
-                title: context.title,
-                year: context.year,
-              });
             }
-          } catch (error) {
-            logger.debug('Failed to fetch RT rating', {
-              label: 'OverlayContextBuilder',
-              title: context.title,
-              error: error instanceof Error ? error.message : String(error),
-            });
+          } else {
+            // Check for in-flight request (deduplication for parallel processing)
+            const inflightPromise = rtInflightRequests.get(rtCacheKey);
+            if (inflightPromise) {
+              // Wait for existing request
+              try {
+                const rtRating = await inflightPromise;
+                if (rtRating) {
+                  context.rtCriticsScore = rtRating.criticsScore;
+                  context.rtAudienceScore = rtRating.audienceScore;
+                }
+                logger.debug('Used in-flight RT request result', {
+                  label: 'OverlayContextBuilder',
+                  title: context.title,
+                  tmdbId,
+                  hasRating: !!rtRating,
+                });
+              } catch {
+                // In-flight request failed, we'll skip RT for this item
+              }
+            } else {
+              // Not in cache and no in-flight request - fetch from API
+              const fetchPromise = (async (): Promise<RTRating | null> => {
+                const rtClient = new RottenTomatoes();
+                return mediaType === 'movie'
+                  ? await rtClient.getMovieRatings(
+                      context.title || '',
+                      context.year || 0
+                    )
+                  : await rtClient.getTVRatings(
+                      context.title || '',
+                      context.year
+                    );
+              })();
+
+              // Register in-flight request
+              rtInflightRequests.set(rtCacheKey, fetchPromise);
+
+              try {
+                const rtRating = await fetchPromise;
+                const ttl = getAdaptiveTtl(context.year);
+                const nullTtl = getNullRatingTtl(context.year);
+
+                if (rtRating) {
+                  context.rtCriticsScore = rtRating.criticsScore;
+                  context.rtAudienceScore = rtRating.audienceScore;
+                  // Cache the rating with adaptive TTL
+                  rtCache.data.set(rtCacheKey, rtRating, ttl);
+                  logger.debug('Fetched and cached RT ratings', {
+                    label: 'OverlayContextBuilder',
+                    title: context.title,
+                    tmdbId,
+                    criticsScore: rtRating.criticsScore,
+                    audienceScore: rtRating.audienceScore,
+                    ttlHours: Math.round(ttl / 3600),
+                  });
+                } else {
+                  // Cache the null result with adaptive TTL
+                  rtCache.data.set(rtCacheKey, RT_NULL_SENTINEL, nullTtl);
+                  logger.debug('RT rating not found, cached null', {
+                    label: 'OverlayContextBuilder',
+                    title: context.title,
+                    tmdbId,
+                    year: context.year,
+                    nullTtlHours: Math.round(nullTtl / 3600),
+                  });
+                }
+              } catch (error) {
+                logger.debug('Failed to fetch RT rating', {
+                  label: 'OverlayContextBuilder',
+                  title: context.title,
+                  tmdbId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              } finally {
+                // Clean up in-flight request
+                rtInflightRequests.delete(rtCacheKey);
+              }
+            }
           }
         }
       }

@@ -204,10 +204,29 @@ class OverlayLibraryService {
   }
 
   /**
-   * TTL for caching "no rating available" results.
-   * Shorter than positive results since ratings might become available.
+   * Get adaptive TTL for null (no rating) results based on content age.
+   * Shorter for new/upcoming content (ratings may appear soon),
+   * longer for old content (unlikely to get ratings now).
    */
-  private static readonly NULL_RATING_TTL = 6 * 60 * 60; // 6 hours
+  private getNullRatingTtl(releaseYear: number | undefined): number {
+    if (!releaseYear) {
+      return 6 * 60 * 60; // 6 hours default
+    }
+
+    const currentYear = new Date().getFullYear();
+    const age = currentYear - releaseYear;
+
+    if (age < 0) {
+      return 2 * 60 * 60; // 2 hours for upcoming
+    }
+    if (age < 1) {
+      return 4 * 60 * 60; // 4 hours for new releases
+    }
+    if (age < 2) {
+      return 12 * 60 * 60; // 12 hours for recent
+    }
+    return 24 * 60 * 60; // 24 hours for older
+  }
 
   /**
    * Pre-fetch IMDb ratings for all items in the library using batch API calls
@@ -404,17 +423,19 @@ class OverlayLibraryService {
             this.preloadedImdbRatings.set(rating.imdbId, rating.rating);
             adaptiveCache.set(rating.imdbId, rating.rating, ttl);
           } else {
-            // Cache null rating to prevent fallback API calls and repeated lookups
+            // Cache null rating with adaptive TTL based on content age
+            const nullTtl = this.getNullRatingTtl(releaseYear);
             this.preloadedImdbRatings.set(rating.imdbId, null);
-            adaptiveCache.set(rating.imdbId, null, OverlayLibraryService.NULL_RATING_TTL);
+            adaptiveCache.set(rating.imdbId, null, nullTtl);
           }
         }
 
         // Cache any IDs that weren't in the response as null
         for (const item of uncachedItems) {
           if (!receivedIds.has(item.imdbId)) {
+            const nullTtl = this.getNullRatingTtl(item.releaseYear);
             this.preloadedImdbRatings.set(item.imdbId, null);
-            adaptiveCache.set(item.imdbId, null, OverlayLibraryService.NULL_RATING_TTL);
+            adaptiveCache.set(item.imdbId, null, nullTtl);
           }
         }
 

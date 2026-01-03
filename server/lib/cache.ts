@@ -7,6 +7,7 @@ export type AvailableCacheIds =
   | 'rt'
   | 'imdb'
   | 'imdb-ratings' // Per-item IMDb ratings with adaptive TTL based on content age
+  | 'rt-ratings' // Per-item RT ratings with adaptive TTL based on content age
   | 'flixpatrol'
   | 'github'
   | 'plexguid'
@@ -80,6 +81,12 @@ class CacheManager {
     // TTL is set per-item: 12h for new releases, 3 days for recent, 7 days for older
     // Using 7-day default as items are set with explicit TTL
     'imdb-ratings': new Cache('imdb-ratings', 'IMDb Ratings (Adaptive TTL)', {
+      stdTtl: 86400 * 7, // 7 day default (individual items use explicit TTL)
+      checkPeriod: 60 * 60, // Check hourly
+    }),
+    // Per-item RT ratings cache with adaptive TTL based on content age
+    // Same TTL strategy as IMDb: longer cache for older content
+    'rt-ratings': new Cache('rt-ratings', 'RT Ratings (Adaptive TTL)', {
       stdTtl: 86400 * 7, // 7 day default (individual items use explicit TTL)
       checkPeriod: 60 * 60, // Check hourly
     }),
