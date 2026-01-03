@@ -54,12 +54,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
-      - name: Set up Docker Build Cloud
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          version: "lab:latest"
-          driver: cloud
-          endpoint: "bitr8/agregarr"
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
