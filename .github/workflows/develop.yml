@@ -38,7 +38,7 @@ jobs:
   build_and_push:
     name: Build & Publish Docker Images
     if: github.event_name == 'push'
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     steps:
       - name: Free disk space
         run: |
