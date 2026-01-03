@@ -84,3 +84,11 @@
 - **Root cause:** Error caught and logged, but processing continued with incomplete context
 - **Solution:** Return `criticalApiFailed` flag from context builder, skip item if true
 - **Principle:** When external API fails, preserve existing state rather than apply incomplete update
+
+## CI / Build
+
+### 2026-01-03: Docker Build Cloud has monthly minute limits
+- **Issue:** CI builds failed with "prepaid build minutes limit of 200 reached"
+- **Solution:** Switch from `driver: cloud` to standard GitHub-hosted buildx
+- **Change:** Remove `version`, `driver`, `endpoint` from `docker/setup-buildx-action`
+- **Trade-off:** GitHub runners are slower but have no minute limits for public repos
