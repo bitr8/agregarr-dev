@@ -700,29 +700,54 @@ async function fetchNextEpisodeFromSonarr(
         const series = allSeries.find((s) => s.tvdbId === tvdbId);
 
         if (series && series.nextAiring) {
-          // Series has upcoming episode - find which season/episode it is
-          // nextAiring is the air date, we need to find the season number
-
-          // Find the next monitored season with unreleased episodes
+          // Series has upcoming episode - find which season it belongs to
+          // Match by finding the season whose statistics.nextAiring matches series.nextAiring
           let nextSeasonNumber = 1;
           let nextEpisodeNumber = 1;
 
           if (series.seasons && series.seasons.length > 0) {
-            // Sort seasons by number descending to find the latest upcoming season
-            const monitoredSeasons = series.seasons
-              .filter((s) => s.monitored && s.seasonNumber > 0)
-              .sort((a, b) => b.seasonNumber - a.seasonNumber);
+            // First, try to find season whose nextAiring matches series.nextAiring exactly
+            const matchingSeason = series.seasons.find(
+              (s) =>
+                s.monitored &&
+                s.seasonNumber > 0 &&
+                s.statistics?.nextAiring === series.nextAiring
+            );
 
-            for (const season of monitoredSeasons) {
-              const stats = season.statistics;
-              // A season is "upcoming" if it has episodes but not all are downloaded
-              if (stats && stats.totalEpisodeCount > 0 && stats.episodeFileCount < stats.totalEpisodeCount) {
-                // Check if this season has a future nextAiring date
-                if (stats.nextAiring) {
+            if (matchingSeason) {
+              nextSeasonNumber = matchingSeason.seasonNumber;
+              const stats = matchingSeason.statistics;
+              // Episode number: if no files downloaded, it's episode 1 (season premiere)
+              // Otherwise, next episode is files + 1 (approximation for overlay purposes)
+              nextEpisodeNumber = stats
+                ? (stats.episodeFileCount || 0) + 1
+                : 1;
+            } else {
+              // Fallback: find the latest monitored season with upcoming content
+              // Sort by season number ascending to find earliest upcoming season
+              const monitoredSeasons = series.seasons
+                .filter((s) => s.monitored && s.seasonNumber > 0)
+                .sort((a, b) => a.seasonNumber - b.seasonNumber);
+
+              for (const season of monitoredSeasons) {
+                const stats = season.statistics;
+                // A season is "upcoming" if it has a nextAiring date
+                // (handles both new seasons with 0 episodes and mid-season)
+                if (stats?.nextAiring) {
                   nextSeasonNumber = season.seasonNumber;
-                  // Episode number = files downloaded + 1 (next episode to air)
                   nextEpisodeNumber = (stats.episodeFileCount || 0) + 1;
                   break;
+                }
+                // Also handle new seasons without episode counts yet
+                if (
+                  stats &&
+                  stats.totalEpisodeCount === 0 &&
+                  stats.episodeFileCount === 0
+                ) {
+                  // New season with no episodes yet - assume episode 1
+                  nextSeasonNumber = season.seasonNumber;
+                  nextEpisodeNumber = 1;
+                  // Don't break - keep looking for one with nextAiring
                 }
               }
             }
