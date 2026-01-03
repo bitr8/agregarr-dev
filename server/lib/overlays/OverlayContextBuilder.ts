@@ -543,13 +543,18 @@ export async function buildRenderContext(
 }
 
 /**
- * Fetch release date information from TMDB
+ * Fetch release date information from TMDB with Sonarr fallback for TV shows
  * For movies: Gets digital/physical/theatrical release dates
- * For TV: Gets next episode air date
+ * For TV: Gets next episode air date from TMDB, falls back to Sonarr if unavailable
+ *
+ * @param tmdbId - TMDB ID of the item
+ * @param mediaType - Media type ('movie' or 'show')
+ * @param sonarrCache - Optional cache for Sonarr series data (for performance)
  */
 export async function fetchReleaseDateInfo(
   tmdbId: number,
-  mediaType: 'movie' | 'show'
+  mediaType: 'movie' | 'show',
+  sonarrCache?: Map<string, SonarrSeries[]>
 ): Promise<
   | {
       releaseDate?: string;
@@ -598,7 +603,7 @@ export async function fetchReleaseDateInfo(
       // For TV shows
       const showDetails = await tmdbClient.getTvShow({ tvId: tmdbId });
 
-      // Get next episode info
+      // Get next episode info from TMDB
       const nextEpisode = showDetails.next_episode_to_air;
       if (nextEpisode?.air_date) {
         const seasonNumber = nextEpisode.season_number;
@@ -616,7 +621,35 @@ export async function fetchReleaseDateInfo(
         };
       }
 
-      // No next episode, use first_air_date if available
+      // TMDB doesn't have next_episode_to_air - try Sonarr fallback
+      // This handles shows where TMDB data is incomplete but Sonarr has upcoming episodes
+      const tvdbId = showDetails.external_ids?.tvdb_id;
+      if (tvdbId) {
+        const sonarrResult = await fetchNextEpisodeFromSonarr(
+          tvdbId,
+          sonarrCache
+        );
+
+        if (sonarrResult) {
+          logger.debug('Using Sonarr fallback for next episode data', {
+            label: 'OverlayContextBuilder',
+            tmdbId,
+            tvdbId,
+            nextAiring: sonarrResult.nextEpisodeAirDate,
+            seasonNumber: sonarrResult.seasonNumber,
+            episodeNumber: sonarrResult.episodeNumber,
+          });
+
+          return {
+            releaseDate: showDetails.first_air_date || sonarrResult.nextEpisodeAirDate,
+            nextEpisodeAirDate: sonarrResult.nextEpisodeAirDate,
+            nextSeasonAirDate: sonarrResult.nextSeasonAirDate,
+            seasonNumber: sonarrResult.seasonNumber,
+          };
+        }
+      }
+
+      // No next episode from either source, use first_air_date if available
       if (showDetails.first_air_date) {
         return {
           releaseDate: showDetails.first_air_date,
@@ -633,6 +666,98 @@ export async function fetchReleaseDateInfo(
       error: error instanceof Error ? error.message : String(error),
     });
     return undefined;
+  }
+}
+
+/**
+ * Fetch next episode information from Sonarr as fallback when TMDB is incomplete
+ * Uses Sonarr's calendar data to find the next upcoming episode
+ */
+async function fetchNextEpisodeFromSonarr(
+  tvdbId: number,
+  cache?: Map<string, SonarrSeries[]>
+): Promise<{
+  nextEpisodeAirDate: string;
+  nextSeasonAirDate?: string;
+  seasonNumber: number;
+  episodeNumber: number;
+} | null> {
+  try {
+    const settings = getSettings();
+
+    if (!settings.sonarr || settings.sonarr.length === 0) {
+      return null;
+    }
+
+    // Check each Sonarr instance
+    for (const sonarrSettings of settings.sonarr) {
+      if (!sonarrSettings.hostname) {
+        continue;
+      }
+
+      try {
+        const allSeries = await getSonarrSeries(sonarrSettings, cache);
+        const series = allSeries.find((s) => s.tvdbId === tvdbId);
+
+        if (series && series.nextAiring) {
+          // Series has upcoming episode - find which season/episode it is
+          // nextAiring is the air date, we need to find the season number
+
+          // Find the next monitored season with unreleased episodes
+          let nextSeasonNumber = 1;
+          let nextEpisodeNumber = 1;
+
+          if (series.seasons && series.seasons.length > 0) {
+            // Sort seasons by number descending to find the latest upcoming season
+            const monitoredSeasons = series.seasons
+              .filter((s) => s.monitored && s.seasonNumber > 0)
+              .sort((a, b) => b.seasonNumber - a.seasonNumber);
+
+            for (const season of monitoredSeasons) {
+              const stats = season.statistics;
+              // A season is "upcoming" if it has episodes but not all are downloaded
+              if (stats && stats.totalEpisodeCount > 0 && stats.episodeFileCount < stats.totalEpisodeCount) {
+                // Check if this season has a future nextAiring date
+                if (stats.nextAiring) {
+                  nextSeasonNumber = season.seasonNumber;
+                  // Episode number = files downloaded + 1 (next episode to air)
+                  nextEpisodeNumber = (stats.episodeFileCount || 0) + 1;
+                  break;
+                }
+              }
+            }
+          }
+
+          // nextSeasonAirDate is ONLY for season premieres (episode 1)
+          const nextSeasonAirDate =
+            nextEpisodeNumber === 1 ? series.nextAiring : undefined;
+
+          return {
+            nextEpisodeAirDate: series.nextAiring,
+            nextSeasonAirDate,
+            seasonNumber: nextSeasonNumber,
+            episodeNumber: nextEpisodeNumber,
+          };
+        }
+      } catch (error) {
+        logger.debug('Failed to check Sonarr instance for next episode', {
+          label: 'OverlayContextBuilder',
+          hostname: sonarrSettings.hostname,
+          tvdbId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    logger.debug('Failed to fetch next episode from Sonarr', {
+      label: 'OverlayContextBuilder',
+      tvdbId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }
 

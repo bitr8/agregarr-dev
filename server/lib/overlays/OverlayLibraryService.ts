@@ -889,11 +889,13 @@ class OverlayLibraryService {
       );
 
       // Fetch fresh release date information for ALL items with TMDB ID
+      // Pass Sonarr cache for fallback when TMDB doesn't have next_episode_to_air
       let releaseDateContext: Partial<OverlayRenderContext> = {};
       if (tmdbId) {
         const releaseDateInfo = await fetchReleaseDateInfo(
           tmdbId,
-          actualMediaType
+          actualMediaType,
+          this.sonarrSeriesCache
         );
 
         if (releaseDateInfo) {
