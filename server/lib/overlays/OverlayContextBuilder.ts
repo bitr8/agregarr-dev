@@ -289,8 +289,14 @@ export async function buildRenderContext(
         imdbId = tmdbData.external_ids.imdb_id;
       }
 
-      // Fetch ratings
-      if (imdbId) {
+      // IMDb ratings - skip if no template uses IMDb fields
+      const needsImdbRatings =
+        !requiredContextFields ||
+        requiredContextFields.has('imdbRating') ||
+        requiredContextFields.has('isImdbTop250') ||
+        requiredContextFields.has('imdbTop250Rank');
+
+      if (needsImdbRatings && imdbId) {
         // IMDb rating - check preloaded cache first
         // preloadedImdbRatings contains: number (has rating), null (checked, no rating), undefined (not checked)
         const preloadedRating = preloadedImdbRatings?.get(imdbId);
@@ -313,6 +319,11 @@ export async function buildRenderContext(
             const imdbRatings = await imdbApi.getRatings(imdbId);
             if (imdbRatings.length > 0 && imdbRatings[0].rating !== null) {
               context.imdbRating = imdbRatings[0].rating;
+              // Cache the result for any duplicate IMDb IDs in this run
+              preloadedImdbRatings?.set(imdbId, imdbRatings[0].rating);
+            } else {
+              // Cache null to prevent re-fetching for duplicates
+              preloadedImdbRatings?.set(imdbId, null);
             }
           } catch (error) {
             // Mark as critical API failure - this prevents regenerating posters
@@ -351,119 +362,119 @@ export async function buildRenderContext(
             error: error instanceof Error ? error.message : String(error),
           });
         }
+      }
 
-        // Rotten Tomatoes ratings - skip if no template uses RT fields
-        const needsRtRatings =
-          !requiredContextFields ||
-          requiredContextFields.has('rtCriticsScore') ||
-          requiredContextFields.has('rtAudienceScore');
+      // Rotten Tomatoes ratings - skip if no template uses RT fields
+      const needsRtRatings =
+        !requiredContextFields ||
+        requiredContextFields.has('rtCriticsScore') ||
+        requiredContextFields.has('rtAudienceScore');
 
-        if (needsRtRatings && tmdbId) {
-          // Use TMDB ID as cache key (stable, avoids title/year collision issues)
-          const rtCacheKey = `rt:${mediaType}:${tmdbId}`;
-          const rtCache = cacheManager.getCache('rt-ratings');
+      if (needsRtRatings && tmdbId) {
+        // Use TMDB ID as cache key (stable, avoids title/year collision issues)
+        const rtCacheKey = `rt:${mediaType}:${tmdbId}`;
+        const rtCache = cacheManager.getCache('rt-ratings');
 
-          // Check cache first
-          const cachedRt = rtCache.data.get<string | RTRating>(rtCacheKey);
-          if (cachedRt !== undefined) {
-            if (cachedRt === RT_NULL_SENTINEL) {
-              // Cached "no rating" - skip API call
-              logger.debug('Using cached RT null result', {
+        // Check cache first
+        const cachedRt = rtCache.data.get<string | RTRating>(rtCacheKey);
+        if (cachedRt !== undefined) {
+          if (cachedRt === RT_NULL_SENTINEL) {
+            // Cached "no rating" - skip API call
+            logger.debug('Using cached RT null result', {
+              label: 'OverlayContextBuilder',
+              title: context.title,
+              tmdbId,
+            });
+          } else {
+            // Cached rating found
+            const rtRating = cachedRt as RTRating;
+            context.rtCriticsScore = rtRating.criticsScore;
+            context.rtAudienceScore = rtRating.audienceScore;
+            logger.debug('Using cached RT ratings', {
+              label: 'OverlayContextBuilder',
+              title: context.title,
+              tmdbId,
+              criticsScore: rtRating.criticsScore,
+              audienceScore: rtRating.audienceScore,
+            });
+          }
+        } else {
+          // Check for in-flight request (deduplication for parallel processing)
+          const inflightPromise = rtInflightRequests.get(rtCacheKey);
+          if (inflightPromise) {
+            // Wait for existing request
+            try {
+              const rtRating = await inflightPromise;
+              if (rtRating) {
+                context.rtCriticsScore = rtRating.criticsScore;
+                context.rtAudienceScore = rtRating.audienceScore;
+              }
+              logger.debug('Used in-flight RT request result', {
                 label: 'OverlayContextBuilder',
                 title: context.title,
                 tmdbId,
+                hasRating: !!rtRating,
               });
-            } else {
-              // Cached rating found
-              const rtRating = cachedRt as RTRating;
-              context.rtCriticsScore = rtRating.criticsScore;
-              context.rtAudienceScore = rtRating.audienceScore;
-              logger.debug('Using cached RT ratings', {
-                label: 'OverlayContextBuilder',
-                title: context.title,
-                tmdbId,
-                criticsScore: rtRating.criticsScore,
-                audienceScore: rtRating.audienceScore,
-              });
+            } catch {
+              // In-flight request failed, we'll skip RT for this item
             }
           } else {
-            // Check for in-flight request (deduplication for parallel processing)
-            const inflightPromise = rtInflightRequests.get(rtCacheKey);
-            if (inflightPromise) {
-              // Wait for existing request
-              try {
-                const rtRating = await inflightPromise;
-                if (rtRating) {
-                  context.rtCriticsScore = rtRating.criticsScore;
-                  context.rtAudienceScore = rtRating.audienceScore;
-                }
-                logger.debug('Used in-flight RT request result', {
+            // Not in cache and no in-flight request - fetch from API
+            const fetchPromise = (async (): Promise<RTRating | null> => {
+              const rtClient = new RottenTomatoes();
+              return mediaType === 'movie'
+                ? await rtClient.getMovieRatings(
+                    context.title || '',
+                    context.year || 0
+                  )
+                : await rtClient.getTVRatings(
+                    context.title || '',
+                    context.year
+                  );
+            })();
+
+            // Register in-flight request
+            rtInflightRequests.set(rtCacheKey, fetchPromise);
+
+            try {
+              const rtRating = await fetchPromise;
+              const ttl = getAdaptiveTtl(context.year);
+              const nullTtl = getNullRatingTtl(context.year);
+
+              if (rtRating) {
+                context.rtCriticsScore = rtRating.criticsScore;
+                context.rtAudienceScore = rtRating.audienceScore;
+                // Cache the rating with adaptive TTL
+                rtCache.data.set(rtCacheKey, rtRating, ttl);
+                logger.debug('Fetched and cached RT ratings', {
                   label: 'OverlayContextBuilder',
                   title: context.title,
                   tmdbId,
-                  hasRating: !!rtRating,
+                  criticsScore: rtRating.criticsScore,
+                  audienceScore: rtRating.audienceScore,
+                  ttlHours: Math.round(ttl / 3600),
                 });
-              } catch {
-                // In-flight request failed, we'll skip RT for this item
-              }
-            } else {
-              // Not in cache and no in-flight request - fetch from API
-              const fetchPromise = (async (): Promise<RTRating | null> => {
-                const rtClient = new RottenTomatoes();
-                return mediaType === 'movie'
-                  ? await rtClient.getMovieRatings(
-                      context.title || '',
-                      context.year || 0
-                    )
-                  : await rtClient.getTVRatings(
-                      context.title || '',
-                      context.year
-                    );
-              })();
-
-              // Register in-flight request
-              rtInflightRequests.set(rtCacheKey, fetchPromise);
-
-              try {
-                const rtRating = await fetchPromise;
-                const ttl = getAdaptiveTtl(context.year);
-                const nullTtl = getNullRatingTtl(context.year);
-
-                if (rtRating) {
-                  context.rtCriticsScore = rtRating.criticsScore;
-                  context.rtAudienceScore = rtRating.audienceScore;
-                  // Cache the rating with adaptive TTL
-                  rtCache.data.set(rtCacheKey, rtRating, ttl);
-                  logger.debug('Fetched and cached RT ratings', {
-                    label: 'OverlayContextBuilder',
-                    title: context.title,
-                    tmdbId,
-                    criticsScore: rtRating.criticsScore,
-                    audienceScore: rtRating.audienceScore,
-                    ttlHours: Math.round(ttl / 3600),
-                  });
-                } else {
-                  // Cache the null result with adaptive TTL
-                  rtCache.data.set(rtCacheKey, RT_NULL_SENTINEL, nullTtl);
-                  logger.debug('RT rating not found, cached null', {
-                    label: 'OverlayContextBuilder',
-                    title: context.title,
-                    tmdbId,
-                    year: context.year,
-                    nullTtlHours: Math.round(nullTtl / 3600),
-                  });
-                }
-              } catch (error) {
-                logger.debug('Failed to fetch RT rating', {
+              } else {
+                // Cache the null result with adaptive TTL
+                rtCache.data.set(rtCacheKey, RT_NULL_SENTINEL, nullTtl);
+                logger.debug('RT rating not found, cached null', {
                   label: 'OverlayContextBuilder',
                   title: context.title,
                   tmdbId,
-                  error: error instanceof Error ? error.message : String(error),
+                  year: context.year,
+                  nullTtlHours: Math.round(nullTtl / 3600),
                 });
-              } finally {
-                // Clean up in-flight request
-                rtInflightRequests.delete(rtCacheKey);
               }
+            } catch (error) {
+              logger.debug('Failed to fetch RT rating', {
+                label: 'OverlayContextBuilder',
+                title: context.title,
+                tmdbId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            } finally {
+              // Clean up in-flight request
+              rtInflightRequests.delete(rtCacheKey);
             }
           }
         }
@@ -574,54 +585,69 @@ export async function buildRenderContext(
       });
     }
   } else if (imdbId) {
-    // No TMDB ID but we have IMDb ID from Plex GUID - still fetch IMDb rating
-    const preloadedRating = preloadedImdbRatings?.get(imdbId);
-    if (preloadedRating !== undefined) {
-      if (preloadedRating !== null) {
-        context.imdbRating = preloadedRating;
-        logger.debug('Using preloaded IMDb rating (no TMDB)', {
-          label: 'OverlayContextBuilder',
-          imdbId,
-          itemTitle: item.title,
-          rating: preloadedRating,
-        });
+    // No TMDB ID but we have IMDb ID from Plex GUID
+    // Check if templates need IMDb ratings
+    const needsImdbRatings =
+      !requiredContextFields ||
+      requiredContextFields.has('imdbRating') ||
+      requiredContextFields.has('isImdbTop250') ||
+      requiredContextFields.has('imdbTop250Rank');
+
+    if (needsImdbRatings) {
+      // Fetch IMDb rating
+      const preloadedRating = preloadedImdbRatings?.get(imdbId);
+      if (preloadedRating !== undefined) {
+        if (preloadedRating !== null) {
+          context.imdbRating = preloadedRating;
+          logger.debug('Using preloaded IMDb rating (no TMDB)', {
+            label: 'OverlayContextBuilder',
+            imdbId,
+            itemTitle: item.title,
+            rating: preloadedRating,
+          });
+        }
+      } else {
+        // Fallback to individual API call
+        try {
+          const imdbApi = new ImdbRatingsAPI();
+          const imdbRatings = await imdbApi.getRatings(imdbId);
+          if (imdbRatings.length > 0 && imdbRatings[0].rating !== null) {
+            context.imdbRating = imdbRatings[0].rating;
+            // Cache the result for any duplicate IMDb IDs in this run
+            preloadedImdbRatings?.set(imdbId, imdbRatings[0].rating);
+          } else {
+            // Cache null to prevent re-fetching for duplicates
+            preloadedImdbRatings?.set(imdbId, null);
+          }
+        } catch (error) {
+          criticalApiFailed = true;
+          logger.warn('IMDb rating fetch failed - marking as critical failure', {
+            label: 'OverlayContextBuilder',
+            imdbId,
+            itemTitle: item.title,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
-    } else {
-      // Fallback to individual API call
+
+      // IMDb Top 250 check
       try {
-        const imdbApi = new ImdbRatingsAPI();
-        const imdbRatings = await imdbApi.getRatings(imdbId);
-        if (imdbRatings.length > 0 && imdbRatings[0].rating !== null) {
-          context.imdbRating = imdbRatings[0].rating;
+        const imdbClient = getImdbClient();
+        const imdbMediaType: 'movie' | 'tv' =
+          mediaType === 'show' ? 'tv' : 'movie';
+        const top250Result = await imdbClient.checkTop250(imdbId, imdbMediaType);
+
+        if (top250Result.isTop250) {
+          context.isImdbTop250 = true;
+          context.imdbTop250Rank = top250Result.rank;
         }
       } catch (error) {
-        criticalApiFailed = true;
-        logger.warn('IMDb rating fetch failed - marking as critical failure', {
+        logger.debug('Failed to check IMDb Top 250', {
           label: 'OverlayContextBuilder',
           imdbId,
-          itemTitle: item.title,
           error: error instanceof Error ? error.message : String(error),
         });
       }
-    }
-
-    // IMDb Top 250 check
-    try {
-      const imdbClient = getImdbClient();
-      const imdbMediaType: 'movie' | 'tv' =
-        mediaType === 'show' ? 'tv' : 'movie';
-      const top250Result = await imdbClient.checkTop250(imdbId, imdbMediaType);
-
-      if (top250Result.isTop250) {
-        context.isImdbTop250 = true;
-        context.imdbTop250Rank = top250Result.rank;
-      }
-    } catch (error) {
-      logger.debug('Failed to check IMDb Top 250', {
-        label: 'OverlayContextBuilder',
-        imdbId,
-        error: error instanceof Error ? error.message : String(error),
-      });
     }
   }
 

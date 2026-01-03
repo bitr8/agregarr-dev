@@ -747,6 +747,12 @@ class OverlayLibraryService {
         applicationConditions
       );
 
+      // Check which rating fields are needed by templates
+      const needsImdbRatings =
+        this.requiredContextFields.has('imdbRating') ||
+        this.requiredContextFields.has('isImdbTop250') ||
+        this.requiredContextFields.has('imdbTop250Rank');
+
       const needsRtRatings =
         this.requiredContextFields.has('rtCriticsScore') ||
         this.requiredContextFields.has('rtAudienceScore');
@@ -757,6 +763,7 @@ class OverlayLibraryService {
         templateCount: sortedTemplates.length,
         templates: sortedTemplates.map((t) => t.name),
         requiredFields: Array.from(this.requiredContextFields),
+        needsImdbRatings,
         needsRtRatings,
       });
 
@@ -837,10 +844,17 @@ class OverlayLibraryService {
       }
 
       // ========================================================================
-      // PHASE 1: Batch pre-fetch IMDb ratings for performance optimization
-      // This reduces IMDb API calls from N (one per item) to ~N/100 (batched)
+      // PHASE 1: Batch pre-fetch ratings for performance optimization
+      // Only prefetch if templates actually use these fields
       // ========================================================================
-      await this.prefetchImdbRatings(allItems, config.mediaType);
+      if (needsImdbRatings) {
+        await this.prefetchImdbRatings(allItems, config.mediaType);
+      } else {
+        logger.info('Skipping IMDb prefetch - no templates use IMDb ratings', {
+          label: 'OverlayLibrary',
+          libraryId,
+        });
+      }
 
       // Process each item
       for (const item of allItems) {
