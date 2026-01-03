@@ -164,6 +164,13 @@ export async function getTvdbIdFromTmdb(
 /**
  * Build context for dynamic field replacement
  *
+ * @param item - Plex library item to build context for
+ * @param mediaType - Media type ('movie' or 'show')
+ * @param isPlaceholder - Whether this is a placeholder item
+ * @param maintainerrCollections - Optional cached Maintainerr collections
+ * @param preloadedImdbRatings - Optional pre-fetched IMDb ratings map (imdbId -> rating | null)
+ *                               When provided, skips individual IMDb API calls for items in the map.
+ *                               null means "checked, no rating available" (avoids redundant API calls).
  * @returns Object containing the context and a flag indicating if critical APIs failed.
  *          When criticalApiFailed is true, callers should skip overlay application
  *          to avoid regenerating posters with incomplete data.
@@ -172,7 +179,8 @@ export async function buildRenderContext(
   item: PlexLibraryItem,
   mediaType: 'movie' | 'show',
   isPlaceholder = false,
-  maintainerrCollections?: MaintainerrCollection[]
+  maintainerrCollections?: MaintainerrCollection[],
+  preloadedImdbRatings?: Map<string, number | null>
 ): Promise<BuildRenderContextResult> {
   // Track if critical APIs failed (IMDb rating is critical for rating overlays)
   let criticalApiFailed = false;
@@ -212,23 +220,40 @@ export async function buildRenderContext(
 
       // Fetch ratings
       if (imdbId) {
-        // IMDb rating
-        try {
-          const imdbApi = new ImdbRatingsAPI();
-          const imdbRatings = await imdbApi.getRatings(imdbId);
-          if (imdbRatings.length > 0 && imdbRatings[0].rating !== null) {
-            context.imdbRating = imdbRatings[0].rating;
+        // IMDb rating - check preloaded cache first
+        // preloadedImdbRatings contains: number (has rating), null (checked, no rating), undefined (not checked)
+        const preloadedRating = preloadedImdbRatings?.get(imdbId);
+        if (preloadedRating !== undefined) {
+          if (preloadedRating !== null) {
+            // Use pre-fetched rating (batch fetched before item processing)
+            context.imdbRating = preloadedRating;
+            logger.debug('Using preloaded IMDb rating', {
+              label: 'OverlayContextBuilder',
+              imdbId,
+              itemTitle: item.title,
+              rating: preloadedRating,
+            });
           }
-        } catch (error) {
-          // Mark as critical API failure - this prevents regenerating posters
-          // with missing IMDb ratings, which would strip all rating overlays
-          criticalApiFailed = true;
-          logger.warn('IMDb rating fetch failed - marking as critical failure', {
-            label: 'OverlayContextBuilder',
-            imdbId,
-            itemTitle: item.title,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          // If preloadedRating === null, we already checked and there's no rating - skip API call
+        } else {
+          // Fallback to individual API call (for items not in preloaded batch)
+          try {
+            const imdbApi = new ImdbRatingsAPI();
+            const imdbRatings = await imdbApi.getRatings(imdbId);
+            if (imdbRatings.length > 0 && imdbRatings[0].rating !== null) {
+              context.imdbRating = imdbRatings[0].rating;
+            }
+          } catch (error) {
+            // Mark as critical API failure - this prevents regenerating posters
+            // with missing IMDb ratings, which would strip all rating overlays
+            criticalApiFailed = true;
+            logger.warn('IMDb rating fetch failed - marking as critical failure', {
+              label: 'OverlayContextBuilder',
+              imdbId,
+              itemTitle: item.title,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
 
         // IMDb Top 250 check

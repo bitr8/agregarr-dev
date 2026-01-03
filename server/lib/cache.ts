@@ -6,6 +6,7 @@ export type AvailableCacheIds =
   | 'sonarr'
   | 'rt'
   | 'imdb'
+  | 'imdb-ratings' // Per-item IMDb ratings with adaptive TTL based on content age
   | 'flixpatrol'
   | 'github'
   | 'plexguid'
@@ -74,6 +75,13 @@ class CacheManager {
     imdb: new Cache('imdb', 'IMDB Radarr Proxy', {
       stdTtl: 43200,
       checkPeriod: 60 * 30,
+    }),
+    // Per-item IMDb ratings cache with adaptive TTL based on content age
+    // TTL is set per-item: 12h for new releases, 3 days for recent, 7 days for older
+    // Using 7-day default as items are set with explicit TTL
+    'imdb-ratings': new Cache('imdb-ratings', 'IMDb Ratings (Adaptive TTL)', {
+      stdTtl: 86400 * 7, // 7 day default (individual items use explicit TTL)
+      checkPeriod: 60 * 60, // Check hourly
     }),
     flixpatrol: new Cache('flixpatrol', 'FlixPatrol API', {
       stdTtl: 3600, // 1 hour cache for streaming top 10 data

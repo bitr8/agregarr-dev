@@ -1,8 +1,11 @@
+import ImdbRatingsAPI from '@server/api/imdbRatings';
 import type { MaintainerrCollection } from '@server/api/maintainerr';
 import type { PlexLibraryItem } from '@server/api/plexapi';
 import PlexAPI from '@server/api/plexapi';
 import type { RadarrMovie } from '@server/api/servarr/radarr';
 import type { SonarrSeries } from '@server/api/servarr/sonarr';
+import TheMovieDb from '@server/api/themoviedb';
+import cacheManager from '@server/lib/cache';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
@@ -105,6 +108,11 @@ class OverlayLibraryService {
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
   private maintainerrCollectionsCache?: MaintainerrCollection[];
 
+  // Pre-fetched IMDb ratings for batch optimization (per job)
+  // Maps IMDb ID to rating number (or null if no rating available).
+  // Populated before item processing loop. Null means "checked, no rating".
+  private preloadedImdbRatings?: Map<string, number | null>;
+
   // Track running libraries with mutex-like behavior and detailed progress
   // Prevents concurrent processing of the same library
   private runningLibraries = new Map<string, LibraryProgress>();
@@ -161,6 +169,281 @@ class OverlayLibraryService {
       ) {
         this.runningLibraries.delete(id);
       }
+    }
+  }
+
+  /**
+   * Calculate adaptive TTL based on content age.
+   * Older content changes less frequently, so we cache it longer.
+   *
+   * @param releaseYear - The release year of the content
+   * @returns TTL in seconds
+   */
+  private getAdaptiveTtl(releaseYear: number | undefined): number {
+    if (!releaseYear) {
+      return 3 * 24 * 60 * 60; // 3 days default if unknown (conservative)
+    }
+
+    const currentYear = new Date().getFullYear();
+    const age = currentYear - releaseYear;
+
+    if (age < 1) {
+      return 12 * 60 * 60; // 12 hours for new releases (ratings still volatile)
+    }
+    if (age < 2) {
+      return 3 * 24 * 60 * 60; // 3 days for recent content
+    }
+    if (age < 10) {
+      return 7 * 24 * 60 * 60; // 7 days for older content
+    }
+    return 30 * 24 * 60 * 60; // 30 days for archive content (>10 years, ratings stable)
+  }
+
+  /**
+   * TTL for caching "no rating available" results.
+   * Shorter than positive results since ratings might become available.
+   */
+  private static readonly NULL_RATING_TTL = 6 * 60 * 60; // 6 hours
+
+  /**
+   * Pre-fetch IMDb ratings for all items in the library using batch API calls
+   * with adaptive TTL caching based on content age.
+   *
+   * Optimizations:
+   * 1. Extract IMDb IDs directly from Plex GUIDs (skips TMDB entirely for most items)
+   * 2. Only call TMDB as fallback for items without IMDb GUIDs
+   * 3. Deduplicate IDs before fetching
+   * 4. Check adaptive cache before API calls
+   * 5. Cache null ratings to avoid repeated lookups
+   * 6. Store results with age-appropriate TTL (12h to 30 days)
+   *
+   * @param items - All items from the library
+   * @param mediaType - Media type ('movie' or 'show')
+   */
+  private async prefetchImdbRatings(
+    items: PlexLibraryItem[],
+    mediaType: 'movie' | 'show'
+  ): Promise<void> {
+    const startTime = Date.now();
+    const adaptiveCache = cacheManager.getCache('imdb-ratings').data;
+
+    // Filter to movies/shows only (skip episodes/seasons)
+    const processableItems = items.filter(
+      (item) => item.type === 'movie' || item.type === 'show'
+    );
+
+    if (processableItems.length === 0) {
+      logger.debug('No items to prefetch IMDb ratings for', {
+        label: 'OverlayLibrary',
+      });
+      return;
+    }
+
+    // Step 1: Extract IMDb IDs from Plex GUIDs first (fast path - no API calls)
+    // Only fall back to TMDB for items without IMDb GUIDs
+    const imdbData: Map<string, { imdbId: string; releaseYear: number | undefined }> = new Map();
+    const needTmdbLookup: { tmdbId: number; itemType: 'movie' | 'show'; year?: number }[] = [];
+    let plexImdbCount = 0;
+
+    for (const item of processableItems) {
+      if (!item.Guid || !Array.isArray(item.Guid)) continue;
+
+      // Try to find IMDb ID directly in Plex GUIDs
+      const imdbGuid = item.Guid.find((g) => g.id?.startsWith('imdb://'));
+      if (imdbGuid) {
+        const imdbId = imdbGuid.id.replace('imdb://', '');
+        if (imdbId && !imdbData.has(imdbId)) {
+          imdbData.set(imdbId, { imdbId, releaseYear: item.year });
+          plexImdbCount++;
+        }
+        continue; // Got IMDb ID, no need for TMDB
+      }
+
+      // No IMDb GUID - check if we have TMDB ID for fallback lookup
+      const tmdbGuid = item.Guid.find((g) => g.id?.startsWith('tmdb://'));
+      if (tmdbGuid) {
+        const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
+        if (match) {
+          const tmdbId = parseInt(match[1], 10);
+          // Deduplicate TMDB lookups
+          if (!needTmdbLookup.some((t) => t.tmdbId === tmdbId)) {
+            const itemType = item.type === 'movie' ? 'movie' : 'show';
+            needTmdbLookup.push({ tmdbId, itemType, year: item.year });
+          }
+        }
+      }
+    }
+
+    logger.info('Pre-fetching IMDb ratings with adaptive TTL', {
+      label: 'OverlayLibrary',
+      totalItems: items.length,
+      processableItems: processableItems.length,
+      imdbFromPlex: plexImdbCount,
+      needTmdbLookup: needTmdbLookup.length,
+    });
+
+    // Step 2: Fetch TMDB data only for items without IMDb GUIDs
+    if (needTmdbLookup.length > 0) {
+      const tmdbClient = new TheMovieDb();
+      const batchSize = 20;
+      let tmdbFailures = 0;
+
+      for (let i = 0; i < needTmdbLookup.length; i += batchSize) {
+        const batch = needTmdbLookup.slice(i, i + batchSize);
+
+        const promises = batch.map(async ({ tmdbId, itemType, year }) => {
+          try {
+            const tmdbResult =
+              itemType === 'movie'
+                ? await tmdbClient.getMovie({ movieId: tmdbId })
+                : await tmdbClient.getTvShow({ tvId: tmdbId });
+
+            const imdbId = tmdbResult.external_ids?.imdb_id;
+            if (!imdbId) return undefined;
+
+            // Use TMDB release date if available, otherwise fall back to Plex year
+            let releaseYear = year;
+            if ('release_date' in tmdbResult && tmdbResult.release_date) {
+              releaseYear = parseInt(tmdbResult.release_date.substring(0, 4), 10);
+            } else if ('first_air_date' in tmdbResult && tmdbResult.first_air_date) {
+              releaseYear = parseInt(tmdbResult.first_air_date.substring(0, 4), 10);
+            }
+
+            return { imdbId, releaseYear };
+          } catch {
+            tmdbFailures++;
+            return undefined;
+          }
+        });
+
+        const results = await Promise.all(promises);
+        for (const result of results) {
+          if (result && !imdbData.has(result.imdbId)) {
+            imdbData.set(result.imdbId, result);
+          }
+        }
+      }
+
+      if (tmdbFailures > 0) {
+        logger.debug('Some TMDB lookups failed during prefetch', {
+          label: 'OverlayLibrary',
+          failures: tmdbFailures,
+          attempted: needTmdbLookup.length,
+        });
+      }
+    }
+
+    logger.debug('Collected IMDb IDs for rating lookup', {
+      label: 'OverlayLibrary',
+      totalImdbIds: imdbData.size,
+      fromPlex: plexImdbCount,
+      fromTmdb: imdbData.size - plexImdbCount,
+    });
+
+    if (imdbData.size === 0) {
+      this.preloadedImdbRatings = new Map();
+      return;
+    }
+
+    // Step 3: Check adaptive cache for existing ratings
+    this.preloadedImdbRatings = new Map();
+    const uncachedItems: { imdbId: string; releaseYear: number | undefined }[] = [];
+    let cacheHits = 0;
+    let nullCacheHits = 0;
+
+    for (const [imdbId, data] of imdbData) {
+      const cachedRating = adaptiveCache.get<number | null>(imdbId);
+      if (cachedRating !== undefined) {
+        // Store in preloadedImdbRatings (including null) to prevent fallback API calls
+        this.preloadedImdbRatings.set(imdbId, cachedRating);
+        if (cachedRating === null) {
+          nullCacheHits++;
+        }
+        cacheHits++;
+      } else {
+        // Need to fetch this one
+        uncachedItems.push(data);
+      }
+    }
+
+    logger.debug('Adaptive cache check complete', {
+      label: 'OverlayLibrary',
+      totalItems: imdbData.size,
+      cacheHits,
+      nullCacheHits,
+      cacheMisses: uncachedItems.length,
+    });
+
+    // Step 4: Batch fetch only uncached IMDb ratings
+    if (uncachedItems.length > 0) {
+      try {
+        const imdbApi = new ImdbRatingsAPI();
+        const imdbIds = uncachedItems.map((item) => item.imdbId);
+        const ratings = await imdbApi.getRatings(imdbIds);
+
+        // Create lookup map for release years
+        const releaseYearMap = new Map<string, number | undefined>();
+        for (const item of uncachedItems) {
+          releaseYearMap.set(item.imdbId, item.releaseYear);
+        }
+
+        // Track which IDs got ratings
+        const receivedIds = new Set<string>();
+
+        // Step 5: Store each rating with age-appropriate TTL
+        for (const rating of ratings) {
+          receivedIds.add(rating.imdbId);
+          const releaseYear = releaseYearMap.get(rating.imdbId);
+          const ttl = this.getAdaptiveTtl(releaseYear);
+
+          if (rating.rating !== null) {
+            this.preloadedImdbRatings.set(rating.imdbId, rating.rating);
+            adaptiveCache.set(rating.imdbId, rating.rating, ttl);
+          } else {
+            // Cache null rating to prevent fallback API calls and repeated lookups
+            this.preloadedImdbRatings.set(rating.imdbId, null);
+            adaptiveCache.set(rating.imdbId, null, OverlayLibraryService.NULL_RATING_TTL);
+          }
+        }
+
+        // Cache any IDs that weren't in the response as null
+        for (const item of uncachedItems) {
+          if (!receivedIds.has(item.imdbId)) {
+            this.preloadedImdbRatings.set(item.imdbId, null);
+            adaptiveCache.set(item.imdbId, null, OverlayLibraryService.NULL_RATING_TTL);
+          }
+        }
+
+        const elapsed = Date.now() - startTime;
+        const apiCalls = Math.ceil(uncachedItems.length / 100);
+        logger.info('Pre-fetched IMDb ratings successfully', {
+          label: 'OverlayLibrary',
+          totalImdbIds: imdbData.size,
+          fromPlexGuids: plexImdbCount,
+          fromTmdbLookup: imdbData.size - plexImdbCount,
+          cacheHits,
+          fetchedFromApi: uncachedItems.length,
+          ratingsReceived: this.preloadedImdbRatings.size,
+          batchApiCalls: apiCalls,
+          elapsedMs: elapsed,
+        });
+      } catch (error) {
+        // Don't fail the job if pre-fetch fails - items will fall back to individual calls
+        logger.warn('Failed to pre-fetch IMDb ratings, will use individual calls', {
+          label: 'OverlayLibrary',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Keep any cached ratings we found
+      }
+    } else {
+      const elapsed = Date.now() - startTime;
+      logger.info('All IMDb ratings served from cache', {
+        label: 'OverlayLibrary',
+        totalImdbIds: imdbData.size,
+        cacheHits,
+        nullCacheHits,
+        elapsedMs: elapsed,
+      });
     }
   }
 
@@ -255,6 +538,7 @@ class OverlayLibraryService {
     this.radarrMoviesCache = new Map();
     this.sonarrSeriesCache = new Map();
     this.maintainerrCollectionsCache = undefined;
+    this.preloadedImdbRatings = undefined;
   }
 
   /**
@@ -505,6 +789,12 @@ class OverlayLibraryService {
         });
         return;
       }
+
+      // ========================================================================
+      // PHASE 1: Batch pre-fetch IMDb ratings for performance optimization
+      // This reduces IMDb API calls from N (one per item) to ~N/100 (batched)
+      // ========================================================================
+      await this.prefetchImdbRatings(allItems, config.mediaType);
 
       // Process each item
       for (const item of allItems) {
@@ -885,7 +1175,8 @@ class OverlayLibraryService {
         item,
         actualMediaType,
         isPlaceholder,
-        this.maintainerrCollectionsCache
+        this.maintainerrCollectionsCache,
+        this.preloadedImdbRatings
       );
 
       // If critical APIs failed (e.g., IMDb timeout), skip this item to avoid
