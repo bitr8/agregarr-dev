@@ -881,12 +881,25 @@ class OverlayLibraryService {
       });
 
       // Build base context for dynamic fields
-      const baseContext = await buildRenderContext(
+      const contextResult = await buildRenderContext(
         item,
         actualMediaType,
         isPlaceholder,
         this.maintainerrCollectionsCache
       );
+
+      // If critical APIs failed (e.g., IMDb timeout), skip this item to avoid
+      // regenerating the poster with incomplete data (which would strip overlays)
+      if (contextResult.criticalApiFailed) {
+        logger.info('Skipping overlay application - critical API failed', {
+          label: 'OverlayLibrary',
+          itemTitle: item.title,
+          ratingKey: item.ratingKey,
+        });
+        return { skipped: true };
+      }
+
+      const baseContext = contextResult.context;
 
       // Fetch fresh release date information for ALL items with TMDB ID
       // Pass Sonarr cache for fallback when TMDB doesn't have next_episode_to_air

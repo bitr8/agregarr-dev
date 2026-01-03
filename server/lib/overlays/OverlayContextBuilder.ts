@@ -11,6 +11,20 @@ import logger from '@server/logger';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
 /**
+ * Result of building render context
+ * Includes the context and whether any critical API calls failed
+ */
+export interface BuildRenderContextResult {
+  context: OverlayRenderContext;
+  /**
+   * True if a critical API (IMDb ratings) failed with a transient error.
+   * When true, the caller should skip overlay application to avoid
+   * regenerating posters with incomplete data.
+   */
+  criticalApiFailed: boolean;
+}
+
+/**
  * Shared IMDb client for reuse across overlay operations
  */
 let sharedImdbClient: ImdbAPI | undefined;
@@ -149,13 +163,20 @@ export async function getTvdbIdFromTmdb(
 
 /**
  * Build context for dynamic field replacement
+ *
+ * @returns Object containing the context and a flag indicating if critical APIs failed.
+ *          When criticalApiFailed is true, callers should skip overlay application
+ *          to avoid regenerating posters with incomplete data.
  */
 export async function buildRenderContext(
   item: PlexLibraryItem,
   mediaType: 'movie' | 'show',
   isPlaceholder = false,
   maintainerrCollections?: MaintainerrCollection[]
-): Promise<OverlayRenderContext> {
+): Promise<BuildRenderContextResult> {
+  // Track if critical APIs failed (IMDb rating is critical for rating overlays)
+  let criticalApiFailed = false;
+
   const context: OverlayRenderContext = {
     title: item.title,
     year: item.year,
@@ -199,9 +220,14 @@ export async function buildRenderContext(
             context.imdbRating = imdbRatings[0].rating;
           }
         } catch (error) {
-          logger.debug('Failed to fetch IMDb rating', {
+          // Mark as critical API failure - this prevents regenerating posters
+          // with missing IMDb ratings, which would strip all rating overlays
+          criticalApiFailed = true;
+          logger.warn('IMDb rating fetch failed - marking as critical failure', {
             label: 'OverlayContextBuilder',
             imdbId,
+            itemTitle: item.title,
+            error: error instanceof Error ? error.message : String(error),
           });
         }
 
@@ -539,7 +565,7 @@ export async function buildRenderContext(
     }
   }
 
-  return context;
+  return { context, criticalApiFailed };
 }
 
 /**

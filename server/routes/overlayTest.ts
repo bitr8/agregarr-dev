@@ -182,11 +182,22 @@ overlayTestRouter.post('/', async (req, res) => {
     });
 
     // Build base context
-    const baseContext = await buildRenderContext(
+    const contextResult = await buildRenderContext(
       item,
       actualMediaType,
       isPlaceholder
     );
+
+    // For test endpoint, log warning but continue even if APIs failed
+    if (contextResult.criticalApiFailed) {
+      logger.warn('Critical API failed during overlay test - proceeding anyway', {
+        label: 'OverlayTest',
+        itemTitle: item.title,
+        ratingKey: item.ratingKey,
+      });
+    }
+
+    const baseContext = contextResult.context;
 
     // Fetch release date information if TMDB ID available
     let releaseDateContext: Partial<OverlayRenderContext> = {};
