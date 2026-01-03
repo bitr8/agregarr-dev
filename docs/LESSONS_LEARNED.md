@@ -75,3 +75,12 @@
 - `Set` requires one type argument: `Set<string>`
 - Local `pnpm typecheck` may pass but Docker CI fails with stricter settings
 - Use `npx tsc --project server/tsconfig.json --noEmit` for consistent checking
+
+## Error Handling
+
+### 2026-01-03: Transient API failures can corrupt state
+- **Issue:** IMDb API timeout (504) caused overlay system to proceed with missing data
+- **Result:** Poster regenerated without IMDb rating → no rating overlays matched → poster stripped
+- **Root cause:** Error caught and logged, but processing continued with incomplete context
+- **Solution:** Return `criticalApiFailed` flag from context builder, skip item if true
+- **Principle:** When external API fails, preserve existing state rather than apply incomplete update
