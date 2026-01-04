@@ -1500,9 +1500,12 @@ class OverlayLibraryService {
 
       // OPTIMIZATION: Check if overlay inputs changed BEFORE downloading poster
       // This prevents expensive poster downloads when nothing has changed
-      // Use item.thumb from library contents instead of API call to getCurrentPosterUrl
+      // Use item.thumb from library contents when available (saves API call)
+      // Fall back to API call for collection items which don't have thumb
       try {
-        const currentPosterUrl = item.thumb || null;
+        const currentPosterUrl = item.thumb
+          ? item.thumb
+          : await plexApi.getCurrentPosterUrl(item.ratingKey).catch(() => null);
 
         const overlayInputsChanged =
           metadata?.lastOverlayInputHash !== overlayInputHash;
