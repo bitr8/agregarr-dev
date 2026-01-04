@@ -1365,6 +1365,7 @@ class OverlayLibraryService {
             daysUntilNextSeason,
             daysAgoNextSeason,
             seasonNumber: releaseDateInfo.seasonNumber,
+            episodeNumber: releaseDateInfo.episodeNumber,
           };
         }
       }

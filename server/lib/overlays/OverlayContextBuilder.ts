@@ -843,6 +843,7 @@ export async function fetchReleaseDateInfo(
       nextEpisodeAirDate?: string;
       nextSeasonAirDate?: string;
       seasonNumber?: number;
+      episodeNumber?: number;
     }
   | undefined
 > {
@@ -931,6 +932,7 @@ export async function fetchReleaseDateInfo(
           nextEpisodeAirDate: airDate,
           nextSeasonAirDate,
           seasonNumber,
+          episodeNumber,
         };
       }
 

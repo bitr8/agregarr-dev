@@ -256,6 +256,7 @@ overlayTestRouter.post('/', async (req, res) => {
           daysUntilNextSeason,
           daysAgoNextSeason,
           seasonNumber: releaseDateInfo.seasonNumber,
+          episodeNumber: releaseDateInfo.episodeNumber,
         };
       }
     }
