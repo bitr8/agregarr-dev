@@ -36,7 +36,8 @@ Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 
 ### UX
 
-- **Job Progress**: Shows current item and percentage during overlay runs.
+- **Real-time Job Progress**: Dashboard card showing live overlay job status with progress bar, ETA, item counts (success/errors/unchanged/filtered), current item title, and stop button. Polls every 1s when active, 5s when idle.
+- **Configurable Rating Cache**: Settings UI to adjust how long IMDb/RT ratings are cached (7-90 days). All TTL tiers scale proportionally.
 - **Daily Show Filter**: Keeps soap operas out of Coming Soon (they always show as "upcoming" because of yearly seasons).
 
 ### Security
@@ -44,22 +45,24 @@ Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 - **Error Sanitization**: No more internal paths or stack traces in API responses.
 - **Input Validation**: Extra checks on user input.
 
-## Open PRs
+## Upstream PRs
 
 | PR | What it does | Status |
 |----|--------------|--------|
-| [#277](https://github.com/agregarr/agregarr/pull/277) | TMDB caching + perf fixes | Open |
-| [#278](https://github.com/agregarr/agregarr/pull/278) | Filter daily shows from Coming Soon | Open |
-| [#280](https://github.com/agregarr/agregarr/pull/280) | Job progress feedback | Awaiting CI |
-| [#281](https://github.com/agregarr/agregarr/pull/281) | Error logging hardening | Awaiting CI |
-| [#282](https://github.com/agregarr/agregarr/pull/282) | Sanitize error responses | Awaiting CI |
+| [#277](https://github.com/agregarr/agregarr/pull/277) | TMDB caching + perf fixes | ✅ Merged |
+| [#278](https://github.com/agregarr/agregarr/pull/278) | Filter daily shows from Coming Soon | ✅ Merged |
+| [#282](https://github.com/agregarr/agregarr/pull/282) | Sanitize error responses | ⏳ Pending |
+| [#300](https://github.com/agregarr/agregarr/pull/300) | Harden API clients and file operations | ⏳ Pending |
 
 ## What's Not Upstream Yet
 
-- Batch IMDb prefetch
-- Adaptive TTL caching
+- **Real-time Job Progress** - Dashboard shows live overlay progress with ETA, stats, stop button
+- **Configurable Rating Cache** - Settings UI for cache duration (7-90 days)
+- **Batch IMDb Prefetch** - Fetches ratings in bulk instead of per-item
+- **Adaptive TTL Caching** - Cache duration based on content age
+- **Plex GUID Extraction** - Skips TMDB lookup when IMDb ID is in Plex metadata
 
-These might become PRs once I've tested them more.
+May become PRs once tested more.
 
 ## License
 
