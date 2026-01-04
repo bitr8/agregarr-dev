@@ -809,39 +809,6 @@ class OverlayLibraryService {
         this.requiredContextFields.has('rtCriticsScore') ||
         this.requiredContextFields.has('rtAudienceScore');
 
-      // Check if templates need technical metadata (resolution, HDR, etc.)
-      // These require fetching full item metadata from Plex which is expensive
-      // Full list of fields that require Media/Part/Stream data from getMetadata()
-      const MEDIA_DEPENDENT_FIELDS = [
-        // Video properties
-        'resolution',
-        'width',
-        'height',
-        'aspectRatio',
-        'videoCodec',
-        'videoProfile',
-        'videoFrameRate',
-        'hdr',
-        'dolbyVision',
-        'dolbyVisionProfile',
-        'colorTrc',
-        'bitDepth',
-        // Audio properties
-        'audioCodec',
-        'audioChannels',
-        'audioFormat',
-        'audioChannelLayout',
-        // Container/file properties
-        'container',
-        'bitrate',
-        'filePath',
-        'fileSize',
-      ];
-      // Store locally to avoid cross-library interference in concurrent runs
-      const needsMediaMetadata = MEDIA_DEPENDENT_FIELDS.some((field) =>
-        this.requiredContextFields!.has(field)
-      );
-
       logger.info('Applying overlays to library', {
         label: 'OverlayLibrary',
         libraryId,
@@ -850,7 +817,6 @@ class OverlayLibraryService {
         requiredFields: Array.from(this.requiredContextFields),
         needsImdbRatings,
         needsRtRatings,
-        needsMediaMetadata,
       });
 
       // Fetch Maintainerr collections once for the entire job
@@ -985,16 +951,14 @@ class OverlayLibraryService {
         });
 
         try {
-          // Only fetch full metadata if templates need technical fields (HDR, resolution, etc.)
-          // This saves one API call per item when using simple templates (ratings, dates)
-          let itemWithFullMetadata = item;
-          if (needsMediaMetadata) {
-            const fullMetadata = await plexApi.getMetadata(item.ratingKey);
-            itemWithFullMetadata = {
-              ...item,
-              Media: fullMetadata.Media,
-            };
-          }
+          // Fetch full metadata including Stream details (needed for HDR, bitDepth, etc.)
+          const fullMetadata = await plexApi.getMetadata(item.ratingKey);
+
+          // Merge full metadata with library item
+          const itemWithFullMetadata = {
+            ...item,
+            Media: fullMetadata.Media,
+          };
 
           const result = await this.applyOverlaysToItem(
             plexApi,
@@ -1500,12 +1464,10 @@ class OverlayLibraryService {
 
       // OPTIMIZATION: Check if overlay inputs changed BEFORE downloading poster
       // This prevents expensive poster downloads when nothing has changed
-      // Use item.thumb from library contents when available (saves API call)
-      // Fall back to API call for collection items which don't have thumb
       try {
-        const currentPosterUrl = item.thumb
-          ? item.thumb
-          : await plexApi.getCurrentPosterUrl(item.ratingKey).catch(() => null);
+        const currentPosterUrl = await plexApi.getCurrentPosterUrl(
+          item.ratingKey
+        );
 
         const overlayInputsChanged =
           metadata?.lastOverlayInputHash !== overlayInputHash;
