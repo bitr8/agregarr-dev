@@ -151,10 +151,20 @@ class ExternalAPI {
         keyTtl - (ttl ?? DEFAULT_TTL) * 1000 <
         Date.now() - DEFAULT_ROLLING_BUFFER
       ) {
-        this.axios.get<T>(endpoint, config).then((response) => {
-          this.cache?.set(cacheKey, response.data, ttl ?? DEFAULT_TTL);
-          this.staleCache?.set(cacheKey, response.data, STALE_CACHE_TTL);
-        });
+        this.axios
+          .get<T>(endpoint, config)
+          .then((response) => {
+            this.cache?.set(cacheKey, response.data, ttl ?? DEFAULT_TTL);
+            this.staleCache?.set(cacheKey, response.data, STALE_CACHE_TTL);
+          })
+          .catch((error) => {
+            // Log but don't throw - this is a background refresh, stale cache is acceptable
+            logger.warn('Rolling cache background refresh failed', {
+              label: 'ExternalAPI',
+              endpoint,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
       }
       return cachedItem;
     }
