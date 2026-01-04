@@ -5,10 +5,10 @@ import PlexAPI from '@server/api/plexapi';
 import type { RadarrMovie } from '@server/api/servarr/radarr';
 import type { SonarrSeries } from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
-import cacheManager from '@server/lib/cache';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import fs from 'fs/promises';
@@ -131,7 +131,9 @@ class OverlayLibraryService {
    * Request cancellation of a library overlay job
    * Returns 'requested' if newly requested, 'already' if already cancelling, 'not_found' otherwise
    */
-  public requestCancellation(libraryId: string): 'requested' | 'already' | 'not_found' {
+  public requestCancellation(
+    libraryId: string
+  ): 'requested' | 'already' | 'not_found' {
     const progress = this.runningLibraries.get(libraryId);
     if (!progress) {
       return 'not_found';
@@ -156,7 +158,10 @@ class OverlayLibraryService {
     mutator: (progress: LibraryProgress) => void
   ): void {
     const progress = this.runningLibraries.get(libraryId);
-    if (progress && (progress.state === 'running' || progress.state === 'cancelling')) {
+    if (
+      progress &&
+      (progress.state === 'running' || progress.state === 'cancelling')
+    ) {
       mutator(progress);
     }
   }
@@ -179,53 +184,75 @@ class OverlayLibraryService {
   /**
    * Calculate adaptive TTL based on content age.
    * Older content changes less frequently, so we cache it longer.
+   * TTL scales proportionally based on the ratingsCacheMaxDays setting.
    *
    * @param releaseYear - The release year of the content
    * @returns TTL in seconds
    */
   private getAdaptiveTtl(releaseYear: number | undefined): number {
+    const settings = getSettings();
+    const maxDays = settings.main.ratingsCacheMaxDays ?? 30;
+    const maxSeconds = maxDays * 24 * 60 * 60;
+
     if (!releaseYear) {
-      return 3 * 24 * 60 * 60; // 3 days default if unknown (conservative)
+      // 10% of max (3 days when max is 30) for unknown content
+      return Math.round(maxSeconds * 0.1);
     }
 
     const currentYear = new Date().getFullYear();
     const age = currentYear - releaseYear;
 
     if (age < 1) {
-      return 12 * 60 * 60; // 12 hours for new releases (ratings still volatile)
+      // ~1.7% of max (12 hours when max is 30) for new releases
+      return Math.round(maxSeconds * 0.0167);
     }
     if (age < 2) {
-      return 3 * 24 * 60 * 60; // 3 days for recent content
+      // 10% of max (3 days when max is 30) for recent content
+      return Math.round(maxSeconds * 0.1);
     }
     if (age < 10) {
-      return 7 * 24 * 60 * 60; // 7 days for older content
+      // ~23% of max (7 days when max is 30) for older content
+      return Math.round(maxSeconds * 0.233);
     }
-    return 30 * 24 * 60 * 60; // 30 days for archive content (>10 years, ratings stable)
+    // 100% of max for archive content (>10 years, ratings stable)
+    return maxSeconds;
   }
 
   /**
    * Get adaptive TTL for null (no rating) results based on content age.
    * Shorter for new/upcoming content (ratings may appear soon),
    * longer for old content (unlikely to get ratings now).
+   * Scales based on ratingsCacheMaxDays setting (max 24h for null ratings).
    */
   private getNullRatingTtl(releaseYear: number | undefined): number {
+    const settings = getSettings();
+    const maxDays = settings.main.ratingsCacheMaxDays ?? 30;
+    // Null ratings max out at 24 hours regardless of setting
+    // Scale from 2h to 24h based on content age
+    const baseMaxHours = Math.min(24, maxDays * 0.8); // 24h when max=30 days
+
     if (!releaseYear) {
-      return 6 * 60 * 60; // 6 hours default
+      // 25% of base max (6 hours when max=30) for unknown
+      return Math.round(baseMaxHours * 0.25 * 60 * 60);
     }
 
     const currentYear = new Date().getFullYear();
     const age = currentYear - releaseYear;
 
     if (age < 0) {
-      return 2 * 60 * 60; // 2 hours for upcoming
+      // ~8% of base max (2 hours when max=30) for upcoming
+      return Math.round(baseMaxHours * 0.083 * 60 * 60);
     }
     if (age < 1) {
-      return 4 * 60 * 60; // 4 hours for new releases
+      // ~17% of base max (4 hours when max=30) for new releases
+      return Math.round(baseMaxHours * 0.167 * 60 * 60);
     }
     if (age < 2) {
-      return 12 * 60 * 60; // 12 hours for recent
+      // 50% of base max (12 hours when max=30) for recent
+      return Math.round(baseMaxHours * 0.5 * 60 * 60);
     }
-    return 24 * 60 * 60; // 24 hours for older
+    // 100% of base max (24 hours when max=30) for older content
+    return Math.round(baseMaxHours * 60 * 60);
   }
 
   /**
@@ -241,12 +268,8 @@ class OverlayLibraryService {
    * 6. Store results with age-appropriate TTL (12h to 30 days)
    *
    * @param items - All items from the library
-   * @param mediaType - Media type ('movie' or 'show')
    */
-  private async prefetchImdbRatings(
-    items: PlexLibraryItem[],
-    mediaType: 'movie' | 'show'
-  ): Promise<void> {
+  private async prefetchImdbRatings(items: PlexLibraryItem[]): Promise<void> {
     const startTime = Date.now();
     const adaptiveCache = cacheManager.getCache('imdb-ratings').data;
 
@@ -264,8 +287,15 @@ class OverlayLibraryService {
 
     // Step 1: Extract IMDb IDs from Plex GUIDs first (fast path - no API calls)
     // Only fall back to TMDB for items without IMDb GUIDs
-    const imdbData: Map<string, { imdbId: string; releaseYear: number | undefined }> = new Map();
-    const needTmdbLookup: { tmdbId: number; itemType: 'movie' | 'show'; year?: number }[] = [];
+    const imdbData: Map<
+      string,
+      { imdbId: string; releaseYear: number | undefined }
+    > = new Map();
+    const needTmdbLookup: {
+      tmdbId: number;
+      itemType: 'movie' | 'show';
+      year?: number;
+    }[] = [];
     let plexImdbCount = 0;
 
     for (const item of processableItems) {
@@ -327,9 +357,18 @@ class OverlayLibraryService {
             // Use TMDB release date if available, otherwise fall back to Plex year
             let releaseYear = year;
             if ('release_date' in tmdbResult && tmdbResult.release_date) {
-              releaseYear = parseInt(tmdbResult.release_date.substring(0, 4), 10);
-            } else if ('first_air_date' in tmdbResult && tmdbResult.first_air_date) {
-              releaseYear = parseInt(tmdbResult.first_air_date.substring(0, 4), 10);
+              releaseYear = parseInt(
+                tmdbResult.release_date.substring(0, 4),
+                10
+              );
+            } else if (
+              'first_air_date' in tmdbResult &&
+              tmdbResult.first_air_date
+            ) {
+              releaseYear = parseInt(
+                tmdbResult.first_air_date.substring(0, 4),
+                10
+              );
             }
 
             return { imdbId, releaseYear };
@@ -370,7 +409,8 @@ class OverlayLibraryService {
 
     // Step 3: Check adaptive cache for existing ratings
     this.preloadedImdbRatings = new Map();
-    const uncachedItems: { imdbId: string; releaseYear: number | undefined }[] = [];
+    const uncachedItems: { imdbId: string; releaseYear: number | undefined }[] =
+      [];
     let cacheHits = 0;
     let nullCacheHits = 0;
 
@@ -454,10 +494,13 @@ class OverlayLibraryService {
         });
       } catch (error) {
         // Don't fail the job if pre-fetch fails - items will fall back to individual calls
-        logger.warn('Failed to pre-fetch IMDb ratings, will use individual calls', {
-          label: 'OverlayLibrary',
-          error: error instanceof Error ? error.message : String(error),
-        });
+        logger.warn(
+          'Failed to pre-fetch IMDb ratings, will use individual calls',
+          {
+            label: 'OverlayLibrary',
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
         // Keep any cached ratings we found
       }
     } else {
@@ -499,7 +542,9 @@ class OverlayLibraryService {
   /**
    * Get status for a specific library
    */
-  public getLibraryStatus(libraryId: string): LibraryStatus | { running: false } {
+  public getLibraryStatus(
+    libraryId: string
+  ): LibraryStatus | { running: false } {
     // Clean up expired entries first
     this.cleanupCompletedJobs();
 
@@ -546,7 +591,7 @@ class OverlayLibraryService {
     this.cleanupCompletedJobs();
 
     return Array.from(this.runningLibraries.entries())
-      .map(([libraryId, _]) => {
+      .map(([libraryId]) => {
         const status = this.getLibraryStatus(libraryId);
         if ('state' in status) {
           return { libraryId, ...status };
@@ -578,7 +623,10 @@ class OverlayLibraryService {
     // Mutex: wait for any in-progress job to complete before starting
     // Loop to handle multiple waiters waking up simultaneously
     let existing = this.runningLibraries.get(libraryId);
-    while (existing && (existing.state === 'running' || existing.state === 'cancelling')) {
+    while (
+      existing &&
+      (existing.state === 'running' || existing.state === 'cancelling')
+    ) {
       logger.warn('Library already being processed, waiting for completion', {
         label: 'OverlayLibrary',
         libraryId,
@@ -598,8 +646,8 @@ class OverlayLibraryService {
 
     // Create a deferred promise to set in the map immediately
     // This prevents race conditions where two calls pass the check before either awaits
-    let resolveDeferred: () => void;
-    let rejectDeferred: (error: Error) => void;
+    let resolveDeferred!: () => void;
+    let rejectDeferred!: (error: Error) => void;
     const deferredPromise = new Promise<void>((resolve, reject) => {
       resolveDeferred = resolve;
       rejectDeferred = reject;
@@ -641,7 +689,11 @@ class OverlayLibraryService {
       });
 
       // Process the library
-      await this.processLibraryOverlays(libraryId, config, combinedCheckCancelled);
+      await this.processLibraryOverlays(
+        libraryId,
+        config,
+        combinedCheckCancelled
+      );
 
       // Mark completed (stays in map for TTL period)
       // Set completedAt for ANY state to ensure TTL cleanup works
@@ -656,7 +708,7 @@ class OverlayLibraryService {
         // Always set completedAt for TTL cleanup
         progress.completedAt = Date.now();
       }
-      resolveDeferred!();
+      resolveDeferred();
     } catch (error) {
       // Mark failed
       const progress = this.runningLibraries.get(libraryId);
@@ -664,7 +716,7 @@ class OverlayLibraryService {
         progress.state = 'failed';
         progress.completedAt = Date.now();
       }
-      rejectDeferred!(error instanceof Error ? error : new Error(String(error)));
+      rejectDeferred(error instanceof Error ? error : new Error(String(error)));
       throw error;
     } finally {
       // Clean up cancellation flag
@@ -848,7 +900,7 @@ class OverlayLibraryService {
       // Only prefetch if templates actually use these fields
       // ========================================================================
       if (needsImdbRatings) {
-        await this.prefetchImdbRatings(allItems, config.mediaType);
+        await this.prefetchImdbRatings(allItems);
       } else {
         logger.info('Skipping IMDb prefetch - no templates use IMDb ratings', {
           label: 'OverlayLibrary',
@@ -1518,7 +1570,9 @@ class OverlayLibraryService {
         // Re-throw to let caller track this as a failure
         // Previously this was silently returning, causing failed items to be counted as success
         throw new Error(
-          `Failed to get base poster for "${item.title}": ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get base poster for "${item.title}": ${
+            error instanceof Error ? error.message : String(error)
+          }`
         );
       }
 
