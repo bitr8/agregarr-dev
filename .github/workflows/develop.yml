@@ -63,6 +63,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             COMMIT_TAG=${{ github.sha }}
           tags: |
