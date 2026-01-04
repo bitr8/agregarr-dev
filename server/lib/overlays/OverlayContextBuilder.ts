@@ -895,6 +895,10 @@ export async function fetchReleaseDateInfo(
 
         // If TMDB returns a date-only string (no time component), try to get
         // the precise air time from Sonarr for better timezone accuracy
+        // Also prefer Sonarr's season/episode numbering (handles anime with absolute numbering on TMDB)
+        let effectiveSeasonNumber = seasonNumber;
+        let effectiveEpisodeNumber = episodeNumber;
+
         if (!airDate.includes('T')) {
           const tvdbId = showDetails.external_ids?.tvdb_id;
           if (tvdbId) {
@@ -913,11 +917,18 @@ export async function fetchReleaseDateInfo(
                 Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
               if (daysDiff <= 2) {
                 airDate = sonarrResult.nextEpisodeAirDate;
+                // Prefer Sonarr's season/episode numbering when dates match
+                // This handles anime where TMDB uses absolute numbering (S1E48)
+                // but Sonarr uses proper seasons (S3E1)
+                effectiveSeasonNumber = sonarrResult.seasonNumber;
+                effectiveEpisodeNumber = sonarrResult.episodeNumber;
                 logger.debug('Enhanced TMDB date with Sonarr air time', {
                   label: 'OverlayContextBuilder',
                   tmdbId,
                   originalDate: nextEpisode.air_date,
                   enhancedDate: airDate,
+                  tmdbNumbering: `S${seasonNumber}E${episodeNumber}`,
+                  sonarrNumbering: `S${effectiveSeasonNumber}E${effectiveEpisodeNumber}`,
                 });
               }
             }
@@ -925,14 +936,15 @@ export async function fetchReleaseDateInfo(
         }
 
         // nextSeasonAirDate is ONLY for season premieres (episode 1)
-        const nextSeasonAirDate = episodeNumber === 1 ? airDate : undefined;
+        const nextSeasonAirDate =
+          effectiveEpisodeNumber === 1 ? airDate : undefined;
 
         return {
           releaseDate: showDetails.first_air_date || airDate,
           nextEpisodeAirDate: airDate,
           nextSeasonAirDate,
-          seasonNumber,
-          episodeNumber,
+          seasonNumber: effectiveSeasonNumber,
+          episodeNumber: effectiveEpisodeNumber,
         };
       }
 
