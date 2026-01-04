@@ -19,6 +19,7 @@ export interface PlexLibraryItem {
   parentRatingKey?: string;
   grandparentRatingKey?: string;
   title: string;
+  thumb?: string;
   guid: string;
   parentGuid?: string;
   grandparentGuid?: string;
