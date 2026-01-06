@@ -14,3 +14,18 @@ If a sync returns an error in its result, don't call `markCollectionSynced()`. I
 
 ### 2026-01-06: Variable scope in try/catch blocks
 When adding error handling code, check that variables (like `result`) are in scope. In TypeScript, variables declared inside an `if`/`else` block aren't accessible outside. Move error checks inside the block where the variable is defined.
+
+## SVG Processing
+
+### 2026-01-06: Silent failures in SVG icon embedding
+When embedding SVG icons in poster generation, several scenarios cause silent failures:
+- Zero or NaN dimensions from malformed viewBox cause `scale = Infinity`
+- Non-SVG files uploaded as icons return null without visible warning
+- Empty `iconPath` on custom icon elements silently renders nothing
+
+**Fix:** Added dimension validation with warn-level logging before scale calculation.
+
+## Collection Features
+
+### 2026-01-06: Collection exclusion works for placeholders
+The mutual exclusion feature (`excludeFromCollections`) works for placeholder items. Placeholders have Plex rating keys like regular items, so `applyCollectionExclusions()` filters them correctly. Users configure exclusion on the TARGET collection (where they don't want items), selecting the SOURCE collection (containing placeholders) to exclude from.
