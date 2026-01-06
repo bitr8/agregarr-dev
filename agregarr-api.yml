@@ -176,16 +176,16 @@ components:
             type: string
           description: Per-library movie placeholder root folders (libraryKey -> path)
           example:
-            "1": /data/media/movies
-            "3": /data/media/movies-4k
+            '1': /data/media/movies
+            '3': /data/media/movies-4k
         placeholderTVRootFolders:
           type: object
           additionalProperties:
             type: string
           description: Per-library TV placeholder root folders (libraryKey -> path)
           example:
-            "2": /data/media/tv
-            "4": /data/media/anime
+            '2': /data/media/tv
+            '4': /data/media/anime
     PlexLibrary:
       type: object
       properties:
@@ -9179,6 +9179,18 @@ paths:
                 $ref: '#/components/schemas/OverseerrSettings'
         '500':
           description: 'Connection test failed'
+    delete:
+      summary: Delete Overseerr settings
+      description: Clears all Overseerr connection settings.
+      tags:
+        - settings-integrations
+      responses:
+        '200':
+          description: 'Settings were successfully cleared'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OverseerrSettings'
   /overseerr/test:
     post:
       summary: Test Overseerr connection
