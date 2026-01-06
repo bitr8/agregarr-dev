@@ -1292,8 +1292,6 @@ async function embedSVGIconInSVG(
   }
 ): Promise<string | null> {
   try {
-    logger.debug('embedSVGIconInSVG called', { iconPath });
-
     const urlMatch = iconPath.match(/\/api\/v1\/posters\/icons\/(\w+)\/(.+)/);
     if (!urlMatch) {
       logger.warn(`SVG icon path does not match expected format: ${iconPath}`);
@@ -1301,20 +1299,19 @@ async function embedSVGIconInSVG(
     }
 
     const [, iconType, filename] = urlMatch;
-    logger.debug('Parsed icon path', { iconType, filename });
 
     // Only process SVG files in this function
     if (!filename.toLowerCase().endsWith('.svg')) {
-      logger.debug('Icon is not an SVG file, skipping', { filename });
+      logger.warn('Icon is not an SVG file, cannot embed in poster', {
+        iconPath,
+        filename,
+        hint: 'Custom icons must be SVG format for poster templates',
+      });
       return null;
     }
 
     const buffer = await loadIconFile(filename, iconType as 'user' | 'system');
     const svgContent = buffer.toString('utf-8');
-    logger.debug('Loaded SVG icon file', {
-      filename,
-      contentLength: svgContent.length,
-    });
 
     // Extract actual SVG dimensions and viewBox from the SVG
     let svgWidth = 100; // fallback
@@ -1338,6 +1335,21 @@ async function embedSVGIconInSVG(
       const heightMatch = svgContent.match(/height=["']?([^"'\s>]+)/i);
       if (widthMatch) svgWidth = parseFloat(widthMatch[1]);
       if (heightMatch) svgHeight = parseFloat(heightMatch[1]);
+    }
+
+    // Validate SVG dimensions - prevent division by zero or NaN
+    if (
+      !Number.isFinite(svgWidth) ||
+      !Number.isFinite(svgHeight) ||
+      svgWidth <= 0 ||
+      svgHeight <= 0
+    ) {
+      logger.warn('Invalid SVG dimensions, cannot embed icon', {
+        iconPath,
+        svgWidth,
+        svgHeight,
+      });
+      return null;
     }
 
     // Calculate scale to fit the element dimensions while maintaining aspect ratio
@@ -1437,14 +1449,6 @@ async function generateSVGElements(
   const elements: string[] = [];
 
   for (const element of svgElements) {
-    // Debug logging for custom icon troubleshooting
-    logger.debug('Processing SVG element', {
-      id: element.id,
-      type: element.type,
-      iconPath: element.iconPath,
-      hasIconPath: Boolean(element.iconPath),
-    });
-
     if (element.type === 'source-logo' && collectionType) {
       // Priority: Local SVG service logo first, then dynamic logo as fallback
       let logoSvg = await loadServiceLogo(collectionType);
@@ -1480,33 +1484,15 @@ async function generateSVGElements(
       element.iconPath
     ) {
       // Handle custom SVG icons
-      logger.debug('Attempting to embed custom SVG icon', {
-        elementId: element.id,
-        iconPath: element.iconPath,
-      });
       try {
         const iconContent = await embedSVGIconInSVG(element.iconPath, element);
         if (iconContent) {
-          logger.debug('Successfully embedded SVG icon', {
-            elementId: element.id,
-          });
           const wrappedContent = `<g filter="url(#iconShadow)">${iconContent}</g>`;
           elements.push(wrappedContent);
-        } else {
-          logger.warn('embedSVGIconInSVG returned null for icon', {
-            elementId: element.id,
-            iconPath: element.iconPath,
-          });
         }
       } catch (error) {
         logger.warn(`Failed to embed SVG icon ${element.iconPath}:`, error);
       }
-    } else if (element.type === 'svg-icon' || element.type === 'custom-icon') {
-      // Log case where iconPath is missing
-      logger.debug('Custom icon element has no iconPath set', {
-        elementId: element.id,
-        type: element.type,
-      });
     }
   }
 
