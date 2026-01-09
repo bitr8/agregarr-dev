@@ -250,6 +250,11 @@ export async function buildRenderContext(
     downloaded: !isPlaceholder, // Real items in Plex are downloaded, placeholders are not
   };
 
+  // Extract Plex user rating if available
+  if (item.userRating !== undefined) {
+    context.plexUserRating = item.userRating;
+  }
+
   // Extract TMDb ID and IMDb ID from Plex GUIDs
   // Using Plex GUID for IMDb ID ensures consistency with prefetch cache
   let tmdbId: number | undefined;
@@ -750,9 +755,19 @@ export async function buildRenderContext(
   }
   if (item.lastViewedAt) {
     context.lastPlayed = new Date(item.lastViewedAt * 1000);
+    // Calculate days since last played
+    const daysSinceLastPlayed = Math.floor(
+      (Date.now() - item.lastViewedAt * 1000) / (1000 * 60 * 60 * 24)
+    );
+    context.daysSinceLastPlayed = daysSinceLastPlayed;
   }
   if (item.addedAt) {
     context.dateAdded = new Date(item.addedAt * 1000);
+    // Calculate days since added
+    const daysSinceAdded = Math.floor(
+      (Date.now() - item.addedAt * 1000) / (1000 * 60 * 60 * 24)
+    );
+    context.daysSinceAdded = daysSinceAdded;
   }
 
   // TV-specific

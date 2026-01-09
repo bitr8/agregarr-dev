@@ -185,6 +185,12 @@ function evaluateRule(
     if (rule.operator === 'neq') {
       return conditionValue !== undefined && conditionValue !== null;
     }
+    // For 'exists', we need to evaluate based on the presence/absence of value
+    if (rule.operator === 'exists') {
+      // value is null/undefined, so field does NOT exist
+      // Return true if conditionValue is false (checking for non-existence)
+      return conditionValue === false;
+    }
     // For all other operators (eq, gt, gte, lt, lte, contains, in, etc.)
     // undefined/null means the condition can't be evaluated, so false
     return false;
@@ -292,6 +298,14 @@ function evaluateRule(
         typeof conditionValue === 'string' &&
         value.toLowerCase().endsWith(conditionValue.toLowerCase())
       );
+    case 'exists':
+      // Check if field has a non-null/undefined value
+      // conditionValue should be boolean: true = exists, false = not exists
+      if (typeof conditionValue === 'boolean') {
+        const hasValue = value !== undefined && value !== null;
+        return conditionValue ? hasValue : !hasValue;
+      }
+      return false;
     default:
       return false;
   }
@@ -301,12 +315,13 @@ function evaluateRule(
  * Metadata context for dynamic field replacement
  */
 export interface OverlayRenderContext {
-  // Ratings (from IMDb API / RT API)
+  // Ratings (from IMDb API / RT API / Plex)
   imdbRating?: number;
   imdbTop250Rank?: number; // IMDb Top 250 ranking (1-250 for movies, 1-250 for TV)
   isImdbTop250?: boolean; // True if item is in IMDb Top 250 list
   rtCriticsScore?: number;
   rtAudienceScore?: number;
+  plexUserRating?: number; // Plex user rating (0-10 scale where 10 = 5 stars)
   // metacriticScore?: number; // TODO: Implement Metacritic integration
 
   // TMDB Metadata

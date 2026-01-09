@@ -139,7 +139,8 @@ export interface ConditionRule {
     | 'contains' // string contains
     | 'regex' // regex match
     | 'begins' // string begins with
-    | 'ends'; // string ends with
+    | 'ends' // string ends with
+    | 'exists'; // field exists (has non-null/undefined value)
   value: string | number | boolean | (string | number)[];
 }
 
@@ -149,12 +150,13 @@ export interface ConditionRule {
  * Matches server/lib/overlays/OverlayTemplateRenderer.ts OverlayRenderContext
  */
 export interface OverlayRenderContext {
-  // Ratings (from IMDb API / RT API)
+  // Ratings (from IMDb API / RT API / Plex)
   imdbRating?: number;
   imdbTop250Rank?: number; // IMDb Top 250 ranking (1-250 for movies, 1-250 for TV)
   isImdbTop250?: boolean; // True if item is in IMDb Top 250 list
   rtCriticsScore?: number;
   rtAudienceScore?: number;
+  plexUserRating?: number; // Plex user rating (0-10 scale where 10 = 5 stars)
   // metacriticScore?: number; // TODO: Implement Metacritic integration
 
   // TMDB Metadata
@@ -199,6 +201,8 @@ export interface OverlayRenderContext {
   viewCount?: number; // Number of times played
   lastPlayed?: Date; // Last playback date
   dateAdded?: Date; // Date added to Plex
+  daysSinceAdded?: number; // Days since item was added to Plex
+  daysSinceLastPlayed?: number; // Days since item was last played
 
   // Status fields (for Coming Soon / New Release)
   // PRIMARY RELEASE DATE - Smart calculated field
@@ -253,6 +257,7 @@ export const AVAILABLE_VARIABLES = {
     { field: 'isImdbTop250', label: 'Is IMDb Top 250', example: 'true' },
     { field: 'rtCriticsScore', label: 'RT Critics Score', example: '88' },
     { field: 'rtAudienceScore', label: 'RT Audience Score', example: '85' },
+    { field: 'plexUserRating', label: 'Plex User Rating', example: '8' },
     // { field: 'metacriticScore', label: 'Metacritic Score', example: '73' }, // TODO: Implement Metacritic integration
   ],
   metadata: [
@@ -311,6 +316,12 @@ export const AVAILABLE_VARIABLES = {
     { field: 'viewCount', label: 'View Count', example: '5' },
     { field: 'lastPlayed', label: 'Last Played', example: '2024-01-15' },
     { field: 'dateAdded', label: 'Date Added', example: '2024-01-01' },
+    { field: 'daysSinceAdded', label: 'Days Since Added', example: '14' },
+    {
+      field: 'daysSinceLastPlayed',
+      label: 'Days Since Last Played',
+      example: '7',
+    },
   ],
   'coming-soon': [
     { field: 'releaseDate', label: 'Release Date', example: 'JAN 15' },
@@ -428,6 +439,12 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'viewCount', label: 'View Count', example: '5' },
     { field: 'lastPlayed', label: 'Last Played', example: '2024-01-15' },
     { field: 'dateAdded', label: 'Date Added', example: '2024-01-01' },
+    { field: 'daysSinceAdded', label: 'Days Since Added', example: '14' },
+    {
+      field: 'daysSinceLastPlayed',
+      label: 'Days Since Last Played',
+      example: '7',
+    },
   ],
   Ratings: [
     { field: 'imdbRating', label: 'IMDb Rating', example: '8.7' },
@@ -435,6 +452,7 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'isImdbTop250', label: 'Is IMDb Top 250', example: 'true' },
     { field: 'rtCriticsScore', label: 'RT Critics Score', example: '88' },
     { field: 'rtAudienceScore', label: 'RT Audience Score', example: '85' },
+    { field: 'plexUserRating', label: 'Plex User Rating', example: '8' },
     // { field: 'metacriticScore', label: 'Metacritic Score', example: '73' }, // TODO: Implement Metacritic integration
   ],
   Status: [
@@ -541,6 +559,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     isImdbTop250: true,
     rtCriticsScore: 88,
     rtAudienceScore: 85,
+    plexUserRating: 8,
     // metacriticScore: 73, // TODO: Implement Metacritic integration
     director: 'Lana Wachowski',
     studio: 'Warner Bros.',
@@ -565,6 +584,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     bitrate: 15000,
     fileSize: 4500000000,
     viewCount: 5,
+    daysSinceAdded: 14,
+    daysSinceLastPlayed: 3,
     releaseDate: '2025-02-15', // Primary release date (digital)
     daysUntilRelease: 14,
     runtime: 136,
@@ -583,6 +604,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     isImdbTop250: true,
     rtCriticsScore: 96,
     rtAudienceScore: 98,
+    plexUserRating: 10,
     // metacriticScore: 96, // TODO: Implement Metacritic integration
     seasonNumber: 5,
     episodeNumber: 16,
@@ -606,6 +628,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     bitrate: 8000,
     fileSize: 3000000000,
     viewCount: 12,
+    daysSinceAdded: 120,
+    daysSinceLastPlayed: 7,
     releaseDate: '2008-01-20', // Series premiere (NOT next episode)
     nextEpisodeAirDate: '2025-01-22', // Next episode (any episode, including mid-season)
     daysUntilNextEpisode: 7, // Days until next episode
