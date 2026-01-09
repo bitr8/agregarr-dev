@@ -271,19 +271,33 @@ class OverlayLibraryService {
    */
   private async prefetchImdbRatings(items: PlexLibraryItem[]): Promise<void> {
     const startTime = Date.now();
-    const adaptiveCache = cacheManager.getCache('imdb-ratings').data;
 
-    // Filter to movies/shows only (skip episodes/seasons)
-    const processableItems = items.filter(
-      (item) => item.type === 'movie' || item.type === 'show'
-    );
+    // CRITICAL: Always initialize the Map first to prevent silent fallback to individual API calls
+    // If this Map is undefined, buildRenderContext will make individual calls for every item
+    this.preloadedImdbRatings = new Map();
 
-    if (processableItems.length === 0) {
-      logger.debug('No items to prefetch IMDb ratings for', {
-        label: 'OverlayLibrary',
-      });
-      return;
-    }
+    try {
+      const cacheEntry = cacheManager.getCache('imdb-ratings');
+      if (!cacheEntry?.data) {
+        logger.error('IMDb ratings cache not available - prefetch cannot proceed', {
+          label: 'OverlayLibrary',
+          cacheExists: !!cacheEntry,
+        });
+        return; // Map is empty but initialized, items will make individual calls
+      }
+      const adaptiveCache = cacheEntry.data;
+
+      // Filter to movies/shows only (skip episodes/seasons)
+      const processableItems = items.filter(
+        (item) => item.type === 'movie' || item.type === 'show'
+      );
+
+      if (processableItems.length === 0) {
+        logger.debug('No items to prefetch IMDb ratings for', {
+          label: 'OverlayLibrary',
+        });
+        return;
+      }
 
     // Step 1: Extract IMDb IDs from Plex GUIDs first (fast path - no API calls)
     // Only fall back to TMDB for items without IMDb GUIDs
@@ -403,12 +417,12 @@ class OverlayLibraryService {
     });
 
     if (imdbData.size === 0) {
-      this.preloadedImdbRatings = new Map();
+      // Map already initialized at function start
       return;
     }
 
     // Step 3: Check adaptive cache for existing ratings
-    this.preloadedImdbRatings = new Map();
+    // Map already initialized at function start, just populate it
     const uncachedItems: { imdbId: string; releaseYear: number | undefined }[] =
       [];
     let cacheHits = 0;
@@ -512,6 +526,19 @@ class OverlayLibraryService {
         nullCacheHits,
         elapsedMs: elapsed,
       });
+    }
+    } catch (error) {
+      // Outer catch: handle any unexpected errors during prefetch setup
+      // The Map is already initialized, so items can still use it (even if empty)
+      const elapsed = Date.now() - startTime;
+      logger.error('IMDb prefetch failed unexpectedly', {
+        label: 'OverlayLibrary',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        elapsedMs: elapsed,
+        preloadedCount: this.preloadedImdbRatings?.size ?? 0,
+      });
+      // Don't rethrow - job can continue with individual API calls as fallback
     }
   }
 

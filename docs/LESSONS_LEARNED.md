@@ -29,3 +29,13 @@ When embedding SVG icons in poster generation, several scenarios cause silent fa
 
 ### 2026-01-06: Collection exclusion works for placeholders
 The mutual exclusion feature (`excludeFromCollections`) works for placeholder items. Placeholders have Plex rating keys like regular items, so `applyCollectionExclusions()` filters them correctly. Users configure exclusion on the TARGET collection (where they don't want items), selecting the SOURCE collection (containing placeholders) to exclude from.
+
+## Prefetch/Caching Patterns
+
+### 2026-01-09: Always initialize cache Maps before code that can throw
+In `prefetchImdbRatings`, if an exception occurs before `this.preloadedImdbRatings = new Map()` is executed, the Map stays `undefined` and `buildRenderContext` silently falls back to individual API calls for every item (23x slower).
+
+**Fix:** Initialize the Map at the very start of the function, before any code that could throw. Then wrap the rest in try/catch. Even if prefetch fails, items will see an empty Map (not undefined) and fallback behavior is logged.
+
+### 2026-01-09: Add visibility to silent fallback paths
+When a fast path (batch prefetch) fails and falls back to a slow path (individual API calls), log a warning. Without this, jobs run 23x slower with no indication why. The warning should include diagnostic info like `preloadedMapExists` and `preloadedMapSize` to help debug.

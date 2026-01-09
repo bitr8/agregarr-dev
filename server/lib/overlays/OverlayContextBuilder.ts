@@ -314,6 +314,14 @@ export async function buildRenderContext(
           // If preloadedRating === null, we already checked and there's no rating - skip API call
         } else {
           // Fallback to individual API call (for items not in preloaded batch)
+          // This is slow and should be rare - log it for debugging
+          logger.warn('IMDb rating not in preloaded cache, making individual API call', {
+            label: 'OverlayContextBuilder',
+            imdbId,
+            itemTitle: item.title,
+            preloadedMapExists: preloadedImdbRatings !== undefined,
+            preloadedMapSize: preloadedImdbRatings?.size ?? 0,
+          });
           try {
             const imdbApi = new ImdbRatingsAPI();
             const imdbRatings = await imdbApi.getRatings(imdbId);
