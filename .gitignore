@@ -93,3 +93,4 @@ config/cache
 # Claude
 .claude
 CLAUDE.md
+docs/
