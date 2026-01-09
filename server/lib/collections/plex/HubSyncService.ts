@@ -442,18 +442,34 @@ export class HubSyncService {
         // Note: Collection sync status is already handled in CollectionSyncService
         // This is just visibility sync, so we don't update sync status here
       } catch (error) {
-        logger.error(
-          `Failed to update visibility for collection ${
-            collectionConfig.name
-          }: ${extractErrorMessage(error)}`,
-          {
-            label: 'Hub Sync Service',
-            collectionId: collectionConfig.id,
-            hubIdentifier,
-            libraryId: collectionConfig.libraryId,
-            error: extractErrorMessage(error),
-          }
-        );
+        const errorMessage = extractErrorMessage(error);
+        const is404 =
+          errorMessage.includes('404') || errorMessage.includes('not found');
+
+        if (is404) {
+          // 404 means the collection doesn't exist in Plex's hub management
+          // This is expected when collections are deleted or not yet promoted
+          logger.warn(
+            `Collection ${collectionConfig.name} not found in Plex hub management - may have been deleted`,
+            {
+              label: 'Hub Sync Service',
+              collectionId: collectionConfig.id,
+              hubIdentifier,
+              libraryId: collectionConfig.libraryId,
+            }
+          );
+        } else {
+          logger.error(
+            `Failed to update visibility for collection ${collectionConfig.name}: ${errorMessage}`,
+            {
+              label: 'Hub Sync Service',
+              collectionId: collectionConfig.id,
+              hubIdentifier,
+              libraryId: collectionConfig.libraryId,
+              error: errorMessage,
+            }
+          );
+        }
       }
     }
   }
@@ -1462,7 +1478,14 @@ export class HubSyncService {
           (lib) => lib.key === libraryId
         );
         if (!library) {
-          throw new Error(`Library ${libraryId} not found in settings`);
+          logger.warn(
+            `Library ${libraryId} not found in settings - skipping ordering (library may have been deleted)`,
+            {
+              label: 'Hub Sync Service',
+              libraryId,
+            }
+          );
+          continue;
         }
 
         // Applying unified ordering for library
