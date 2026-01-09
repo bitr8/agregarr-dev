@@ -103,19 +103,22 @@ interface OverlayApplyResult {
  * Service for applying overlay templates to Plex library items
  */
 class OverlayLibraryService {
-  // Cache for Radarr/Sonarr library data (per job)
+  // Cache for Radarr/Sonarr library data (global, keyed by instance URL)
+  // These are shared across libraries since Radarr/Sonarr data is the same regardless of Plex library
   private radarrMoviesCache?: Map<string, RadarrMovie[]>;
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
   private maintainerrCollectionsCache?: MaintainerrCollection[];
 
-  // Pre-fetched IMDb ratings for batch optimization (per job)
+  // Pre-fetched IMDb ratings for batch optimization (global, keyed by IMDb ID)
   // Maps IMDb ID to rating number (or null if no rating available).
   // Populated before item processing loop. Null means "checked, no rating".
+  // Shared across concurrent library processing since IMDb ratings are global.
   private preloadedImdbRatings?: Map<string, number | null>;
 
-  // Pre-analyzed required context fields from all enabled templates (per job)
+  // Pre-analyzed required context fields from all enabled templates (per-library)
+  // Keyed by libraryId since different libraries can have different templates enabled.
   // Used to skip unnecessary API calls (e.g., skip RT if no template uses RT ratings)
-  private requiredContextFields?: Set<string>;
+  private requiredContextFieldsByLibrary = new Map<string, Set<string>>();
 
   // Track running libraries with mutex-like behavior and detailed progress
   // Prevents concurrent processing of the same library
@@ -272,9 +275,13 @@ class OverlayLibraryService {
   private async prefetchImdbRatings(items: PlexLibraryItem[]): Promise<void> {
     const startTime = Date.now();
 
-    // CRITICAL: Always initialize the Map first to prevent silent fallback to individual API calls
+    // CRITICAL: Ensure Map exists to prevent silent fallback to individual API calls
     // If this Map is undefined, buildRenderContext will make individual calls for every item
-    this.preloadedImdbRatings = new Map();
+    // Reuse existing Map if present (from another library's concurrent prefetch) to avoid
+    // wiping another library's data while it's still processing items
+    if (!this.preloadedImdbRatings) {
+      this.preloadedImdbRatings = new Map();
+    }
 
     try {
       const cacheEntry = cacheManager.getCache('imdb-ratings');
@@ -629,14 +636,23 @@ class OverlayLibraryService {
   }
 
   /**
-   * Clear library caches (call at start of overlay job)
+   * Initialize caches if needed (call at start of overlay job)
+   * Note: We no longer clear caches here because they're either:
+   * - Global (Radarr/Sonarr/Maintainerr/IMDb data) - shared across libraries
+   * - Per-library scoped (requiredContextFields) - keyed by libraryId
+   * Clearing would wipe another concurrent library's data.
    */
-  private clearLibraryCaches() {
-    this.radarrMoviesCache = new Map();
-    this.sonarrSeriesCache = new Map();
-    this.maintainerrCollectionsCache = undefined;
-    this.preloadedImdbRatings = undefined;
-    this.requiredContextFields = undefined;
+  private initializeCachesIfNeeded() {
+    // Initialize global caches only if they don't exist
+    // These are shared across concurrent library processing
+    if (!this.radarrMoviesCache) {
+      this.radarrMoviesCache = new Map();
+    }
+    if (!this.sonarrSeriesCache) {
+      this.sonarrSeriesCache = new Map();
+    }
+    // maintainerrCollectionsCache and preloadedImdbRatings are initialized on-demand
+    // requiredContextFieldsByLibrary is already initialized as a Map
   }
 
   /**
@@ -746,8 +762,9 @@ class OverlayLibraryService {
       rejectDeferred(error instanceof Error ? error : new Error(String(error)));
       throw error;
     } finally {
-      // Clean up cancellation flag
+      // Clean up cancellation flag and per-library state
       this.cancelledLibraries.delete(libraryId);
+      this.requiredContextFieldsByLibrary.delete(libraryId);
     }
   }
 
@@ -760,8 +777,8 @@ class OverlayLibraryService {
     checkCancelled?: () => boolean
   ): Promise<void> {
     try {
-      // Clear library caches at start of job
-      this.clearLibraryCaches();
+      // Initialize caches at start of job (creates if needed, doesn't clear existing)
+      this.initializeCachesIfNeeded();
 
       // Clear TMDB URL cache to avoid stale data from previous runs
       const { plexBasePosterManager } = await import(
@@ -821,27 +838,29 @@ class OverlayLibraryService {
       const applicationConditions = sortedTemplates.map((t) =>
         t.getApplicationCondition()
       );
-      this.requiredContextFields = extractUsedContextFields(
+      const requiredContextFields = extractUsedContextFields(
         templateDataArray,
         applicationConditions
       );
+      // Store per-library to avoid concurrent library processing overwriting each other's fields
+      this.requiredContextFieldsByLibrary.set(libraryId, requiredContextFields);
 
       // Check which rating fields are needed by templates
       const needsImdbRatings =
-        this.requiredContextFields.has('imdbRating') ||
-        this.requiredContextFields.has('isImdbTop250') ||
-        this.requiredContextFields.has('imdbTop250Rank');
+        requiredContextFields.has('imdbRating') ||
+        requiredContextFields.has('isImdbTop250') ||
+        requiredContextFields.has('imdbTop250Rank');
 
       const needsRtRatings =
-        this.requiredContextFields.has('rtCriticsScore') ||
-        this.requiredContextFields.has('rtAudienceScore');
+        requiredContextFields.has('rtCriticsScore') ||
+        requiredContextFields.has('rtAudienceScore');
 
       logger.info('Applying overlays to library', {
         label: 'OverlayLibrary',
         libraryId,
         templateCount: sortedTemplates.length,
         templates: sortedTemplates.map((t) => t.name),
-        requiredFields: Array.from(this.requiredContextFields),
+        requiredFields: Array.from(requiredContextFields),
         needsImdbRatings,
         needsRtRatings,
       });
@@ -1069,8 +1088,8 @@ class OverlayLibraryService {
     libraryId: string
   ): Promise<void> {
     try {
-      // Clear library caches at start of job
-      this.clearLibraryCaches();
+      // Initialize caches at start of job (creates if needed, doesn't clear existing)
+      this.initializeCachesIfNeeded();
 
       // Normalize input to OverlayItemInput[]
       const normalizedItems: OverlayItemInput[] = items.map((item) =>
@@ -1316,7 +1335,7 @@ class OverlayLibraryService {
         isPlaceholder,
         this.maintainerrCollectionsCache,
         this.preloadedImdbRatings,
-        this.requiredContextFields
+        this.requiredContextFieldsByLibrary.get(libraryId)
       );
 
       // If critical APIs failed (e.g., IMDb timeout), skip this item to avoid
