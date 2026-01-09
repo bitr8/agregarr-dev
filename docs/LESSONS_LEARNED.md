@@ -39,3 +39,10 @@ In `prefetchImdbRatings`, if an exception occurs before `this.preloadedImdbRatin
 
 ### 2026-01-09: Add visibility to silent fallback paths
 When a fast path (batch prefetch) fails and falls back to a slow path (individual API calls), log a warning. Without this, jobs run 23x slower with no indication why. The warning should include diagnostic info like `preloadedMapExists` and `preloadedMapSize` to help debug.
+
+## UI Progress Display
+
+### 2026-01-10: Guard against off-by-one in progress counters
+When showing "Item X of Y" progress, be careful with `processedCount + 1`. If the backend increments `processedCount` after processing but before setting `running = false`, there's a brief window where `processedCount === totalCount` but `running` is still true. Showing `processedCount + 1` would display "N+1 of N".
+
+**Fix:** Add guard: `showProgress = running && processedCount < totalCount`

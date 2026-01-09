@@ -1,6 +1,7 @@
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import overlayApplication from '@server/lib/overlayApplication';
 import { overlayLibraryService } from '@server/lib/overlays/OverlayLibraryService';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -228,8 +229,6 @@ router.post('/:libraryId/apply', async (req, res, next) => {
     const { libraryId } = req.params;
 
     // Check if full overlay application is running
-    const overlayApplication = (await import('@server/lib/overlayApplication'))
-      .default;
     if (overlayApplication.running) {
       return res.status(409).json({
         error:
@@ -310,10 +309,13 @@ router.get('/:libraryId/status', (req, res) => {
   return res.status(200).json(status);
 });
 
-// GET /api/v1/overlay-library-configs/status/all - Get all running libraries
+// GET /api/v1/overlay-library-configs/status/all - Get all running libraries and job status
 router.get('/status/all', (_req, res) => {
   const runningLibraries = overlayLibraryService.getAllRunningLibraries();
-  return res.status(200).json({ runningLibraries });
+  return res.status(200).json({
+    runningLibraries,
+    jobStatus: overlayApplication.status,
+  });
 });
 
 export default router;

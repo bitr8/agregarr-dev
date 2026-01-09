@@ -1,13 +1,22 @@
+import LibraryProgressCard, {
+  type LibraryStatus,
+} from '@app/components/PostersView/LibraryProgressCard';
 import axios from 'axios';
 import { useState } from 'react';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
-import LibraryProgressCard, {
-  type LibraryStatus,
-} from '@app/components/PostersView/LibraryProgressCard';
+
+interface JobStatus {
+  running: boolean;
+  processedLibraries: number;
+  totalLibraries: number;
+  currentStage: string;
+  progress: number;
+}
 
 interface RunningLibrariesResponse {
   runningLibraries: LibraryStatus[];
+  jobStatus: JobStatus;
 }
 
 const RunningJobsCard: React.FC = () => {
@@ -64,9 +73,24 @@ const RunningJobsCard: React.FC = () => {
     return null;
   }
 
+  const jobStatus = data?.jobStatus;
+  // Show queue progress only when processing multiple libraries and not yet complete
+  const showQueueProgress =
+    jobStatus?.running &&
+    jobStatus.totalLibraries > 1 &&
+    jobStatus.processedLibraries < jobStatus.totalLibraries;
+
   return (
     <div className="mb-6">
-      <h3 className="mb-4 text-lg font-semibold text-white">Overlay Jobs</h3>
+      <div className="mb-4 flex items-baseline gap-3">
+        <h3 className="text-lg font-semibold text-white">Overlay Jobs</h3>
+        {showQueueProgress && (
+          <span className="text-sm text-gray-400">
+            Library {jobStatus.processedLibraries + 1} of{' '}
+            {jobStatus.totalLibraries}
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {runningJobs.map((lib) => (
           <LibraryProgressCard
