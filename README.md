@@ -31,10 +31,13 @@ Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 | What | Before | After |
 |------|--------|-------|
 | IMDb rating lookups | 1 API call per item | Batch fetch in groups of 100 |
+| TMDB release dates | 1 API call per item | Parallel prefetch (10 concurrent) |
 | TMDB poster downloads | Fresh download every run | 7-day file cache (now upstream) |
 | Failed API calls | Job fails or item skipped | Return cached data if available |
 
 **Batch IMDb Prefetch**: Fetches all IMDb ratings upfront in batches of 100. A 2800-item library goes from 2800+ API calls to about 28.
+
+**TMDB Release Date Prefetch**: Fetches all release dates upfront with 10 concurrent requests. A 2800-item library prefetches in ~90 seconds instead of ~500ms per item sequentially. Item processing is 6.5x faster after prefetch.
 
 **Adaptive Rating Cache**: Cache duration based on content age. New releases cache for 12 hours (ratings still settling), older content caches for 30 days. Missing ratings retry every 6-24 hours.
 
@@ -76,12 +79,14 @@ Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 | [#282](https://github.com/agregarr/agregarr/pull/282) | Sanitize error responses |
 | [#300](https://github.com/agregarr/agregarr/pull/300) | Harden API clients and file ops |
 | [#332](https://github.com/agregarr/agregarr/pull/332) | Trigger Plex scan after placeholder cleanup |
+| [#340](https://github.com/agregarr/agregarr/pull/340) | Handle Jellyfin trickplay directories in cleanup |
 
 ## Not Upstream Yet
 
 Still testing or needs more work:
 
 - **Batch IMDb Prefetch**: Works well but needs configurable batch size
+- **TMDB Release Date Prefetch**: Works well, reduces overlay job time from ~24min to ~6min
 - **Adaptive Rating Cache**: Tightly coupled to batch prefetch
 - **Job Progress UI**: Needs settings toggle per maintainer guidelines
 - **Concurrent Job Safety**: Recently added, needs more testing
