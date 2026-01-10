@@ -18,6 +18,7 @@ import {
   buildRenderContext,
   checkMonitoringStatus,
   fetchReleaseDateInfo,
+  type ReleaseDateInfo,
 } from './OverlayContextBuilder';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 import {
@@ -32,6 +33,8 @@ export interface OverlayItemInput {
   ratingKey: string;
   contextOverrides?: Partial<OverlayRenderContext>;
 }
+
+// TmdbReleaseDateInfo is now imported as ReleaseDateInfo from OverlayContextBuilder
 
 /**
  * Job state machine states
@@ -115,6 +118,12 @@ class OverlayLibraryService {
   // Shared across concurrent library processing since IMDb ratings are global.
   private preloadedImdbRatings?: Map<string, number | null>;
 
+  // Pre-fetched TMDB release date info for batch optimization (global, keyed by tmdbId:mediaType)
+  // Maps to release date info object (or null if not found).
+  // Populated before item processing loop. Null means "checked, no data".
+  // Shared across concurrent library processing since TMDB data is global.
+  private preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>;
+
   // Pre-analyzed required context fields from all enabled templates (per-library)
   // Keyed by libraryId since different libraries can have different templates enabled.
   // Used to skip unnecessary API calls (e.g., skip RT if no template uses RT ratings)
@@ -181,6 +190,35 @@ class OverlayLibraryService {
       ) {
         this.runningLibraries.delete(id);
       }
+    }
+  }
+
+  /**
+   * Clear global caches when no jobs are running to prevent memory leaks.
+   * Called after each job completes to release memory when idle.
+   */
+  private clearGlobalCachesIfIdle(): void {
+    // Check if any library is currently running or cancelling
+    const hasActiveJobs = Array.from(this.runningLibraries.values()).some(
+      (p) => p.state === 'running' || p.state === 'cancelling'
+    );
+
+    if (!hasActiveJobs) {
+      logger.debug('No active overlay jobs, clearing global caches', {
+        label: 'OverlayLibrary',
+        clearedCaches: [
+          this.radarrMoviesCache ? 'radarr' : null,
+          this.sonarrSeriesCache ? 'sonarr' : null,
+          this.preloadedImdbRatings ? 'imdb' : null,
+          this.preloadedTmdbReleaseDates ? 'tmdb' : null,
+          this.maintainerrCollectionsCache ? 'maintainerr' : null,
+        ].filter(Boolean),
+      });
+      this.radarrMoviesCache = undefined;
+      this.sonarrSeriesCache = undefined;
+      this.maintainerrCollectionsCache = undefined;
+      this.preloadedImdbRatings = undefined;
+      this.preloadedTmdbReleaseDates = undefined;
     }
   }
 
@@ -550,6 +588,244 @@ class OverlayLibraryService {
   }
 
   /**
+   * Pre-fetch TMDB release date info for all items in the library.
+   * Uses concurrency-limited parallel fetching since TMDB has no batch API.
+   * Results are cached with adaptive TTL based on content age.
+   */
+  private async prefetchTmdbReleaseDates(
+    items: PlexLibraryItem[]
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    // Reuse existing Map if present to avoid wiping another library's data
+    if (!this.preloadedTmdbReleaseDates) {
+      this.preloadedTmdbReleaseDates = new Map();
+    }
+
+    try {
+      const cacheEntry = cacheManager.getCache('tmdb-releases');
+      if (!cacheEntry?.data) {
+        logger.error(
+          'TMDB releases cache not available - prefetch cannot proceed',
+          {
+            label: 'OverlayLibrary',
+            cacheExists: !!cacheEntry,
+          }
+        );
+        return;
+      }
+      const adaptiveCache = cacheEntry.data;
+
+      // Filter to movies/shows only (skip episodes/seasons)
+      const processableItems = items.filter(
+        (item) => item.type === 'movie' || item.type === 'show'
+      );
+
+      if (processableItems.length === 0) {
+        logger.debug('No items to prefetch TMDB release dates for', {
+          label: 'OverlayLibrary',
+        });
+        return;
+      }
+
+      // Extract TMDB IDs from Plex GUIDs
+      const tmdbItems: { tmdbId: number; mediaType: 'movie' | 'show'; year?: number }[] = [];
+      const seen = new Set<string>();
+
+      for (const item of processableItems) {
+        if (!item.Guid || !Array.isArray(item.Guid)) continue;
+
+        const tmdbGuid = item.Guid.find((g) => g.id?.startsWith('tmdb://'));
+        if (tmdbGuid) {
+          const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
+          if (match) {
+            const tmdbId = parseInt(match[1], 10);
+            const mediaType = item.type === 'movie' ? 'movie' : 'show';
+            const cacheKey = `${tmdbId}:${mediaType}`;
+
+            if (!seen.has(cacheKey)) {
+              seen.add(cacheKey);
+              tmdbItems.push({ tmdbId, mediaType, year: item.year });
+            }
+          }
+        }
+      }
+
+      logger.info('Pre-fetching TMDB release dates', {
+        label: 'OverlayLibrary',
+        totalItems: items.length,
+        processableItems: processableItems.length,
+        uniqueTmdbIds: tmdbItems.length,
+      });
+
+      if (tmdbItems.length === 0) {
+        return;
+      }
+
+      // Check cache for existing entries
+      const uncachedItems: typeof tmdbItems = [];
+      let cacheHits = 0;
+      let nullCacheHits = 0;
+
+      for (const item of tmdbItems) {
+        const cacheKey = `${item.tmdbId}:${item.mediaType}`;
+        const cached = adaptiveCache.get<ReleaseDateInfo | null>(cacheKey);
+
+        if (cached !== undefined) {
+          this.preloadedTmdbReleaseDates.set(cacheKey, cached);
+          if (cached === null) {
+            nullCacheHits++;
+          }
+          cacheHits++;
+        } else {
+          uncachedItems.push(item);
+        }
+      }
+
+      logger.debug('TMDB release date cache check complete', {
+        label: 'OverlayLibrary',
+        totalItems: tmdbItems.length,
+        cacheHits,
+        nullCacheHits,
+        cacheMisses: uncachedItems.length,
+      });
+
+      // Fetch uncached items with concurrency limit
+      if (uncachedItems.length > 0) {
+        const tmdbClient = new TheMovieDb();
+        const concurrency = 10; // Parallel requests at a time
+        let fetchSuccess = 0;
+        let fetchFailures = 0;
+
+        // Capture reference for use in async callbacks (TypeScript flow analysis)
+        const preloadedMap = this.preloadedTmdbReleaseDates;
+
+        // Process in batches with concurrency limit
+        for (let i = 0; i < uncachedItems.length; i += concurrency) {
+          const batch = uncachedItems.slice(i, i + concurrency);
+
+          const promises = batch.map(async ({ tmdbId, mediaType, year }) => {
+            const cacheKey = `${tmdbId}:${mediaType}`;
+            try {
+              let releaseDateInfo: ReleaseDateInfo | null = null;
+
+              if (mediaType === 'movie') {
+                const movieDetails = await tmdbClient.getMovie({ movieId: tmdbId });
+
+                // Extract release date using the same logic as fetchReleaseDateInfo
+                if (movieDetails.release_dates?.results) {
+                  const { extractReleaseDates, determineReleaseDate } =
+                    await import('@server/utils/dateHelpers');
+                  const extracted = extractReleaseDates(
+                    movieDetails.release_dates.results
+                  );
+                  const determined = determineReleaseDate(
+                    extracted.digitalRelease,
+                    extracted.physicalRelease,
+                    extracted.inCinemas
+                  );
+                  if (determined) {
+                    releaseDateInfo = { releaseDate: determined.releaseDate };
+                  }
+                }
+
+                // Fallback to simple release_date
+                if (!releaseDateInfo && movieDetails.release_date) {
+                  releaseDateInfo = { releaseDate: movieDetails.release_date };
+                }
+              } else {
+                // TV show
+                const showDetails = await tmdbClient.getTvShow({ tvId: tmdbId });
+                const nextEpisode = showDetails.next_episode_to_air;
+
+                if (nextEpisode?.air_date) {
+                  releaseDateInfo = {
+                    // Set releaseDate from first_air_date (matches original fetchReleaseDateInfo)
+                    releaseDate: showDetails.first_air_date || nextEpisode.air_date,
+                    nextEpisodeAirDate: nextEpisode.air_date,
+                    seasonNumber: nextEpisode.season_number,
+                    episodeNumber: nextEpisode.episode_number,
+                  };
+
+                  // Check for season premiere
+                  if (nextEpisode.episode_number === 1) {
+                    releaseDateInfo.nextSeasonAirDate = nextEpisode.air_date;
+                  }
+                } else {
+                  // TMDB doesn't have next_episode_to_air
+                  // Don't cache null - let per-item call try Sonarr fallback
+                  // This avoids suppressing the Sonarr fallback logic in fetchReleaseDateInfo
+                  return; // Skip caching, will be handled per-item
+                }
+              }
+
+              // Cache the result with adaptive TTL
+              const ttl = this.getAdaptiveTtl(year);
+              if (releaseDateInfo) {
+                preloadedMap?.set(cacheKey, releaseDateInfo);
+                adaptiveCache.set(cacheKey, releaseDateInfo, ttl);
+                fetchSuccess++;
+              } else {
+                // For movies without release dates, cache null
+                const nullTtl = this.getNullRatingTtl(year);
+                preloadedMap?.set(cacheKey, null);
+                adaptiveCache.set(cacheKey, null, nullTtl);
+              }
+            } catch (error) {
+              fetchFailures++;
+              // Only cache null for movies - TV shows need Sonarr fallback opportunity
+              if (mediaType === 'movie') {
+                const nullTtl = this.getNullRatingTtl(year);
+                preloadedMap?.set(cacheKey, null);
+                adaptiveCache.set(cacheKey, null, nullTtl);
+              }
+              logger.debug('TMDB prefetch failed for item', {
+                label: 'OverlayLibrary',
+                tmdbId,
+                mediaType,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          });
+
+          await Promise.all(promises);
+        }
+
+        const elapsed = Date.now() - startTime;
+        logger.info('Pre-fetched TMDB release dates successfully', {
+          label: 'OverlayLibrary',
+          totalTmdbIds: tmdbItems.length,
+          cacheHits,
+          fetchedFromApi: uncachedItems.length,
+          fetchSuccess,
+          fetchFailures,
+          preloadedCount: this.preloadedTmdbReleaseDates.size,
+          elapsedMs: elapsed,
+        });
+      } else {
+        const elapsed = Date.now() - startTime;
+        logger.info('All TMDB release dates served from cache', {
+          label: 'OverlayLibrary',
+          totalTmdbIds: tmdbItems.length,
+          cacheHits,
+          nullCacheHits,
+          elapsedMs: elapsed,
+        });
+      }
+    } catch (error) {
+      const elapsed = Date.now() - startTime;
+      logger.error('TMDB release date prefetch failed unexpectedly', {
+        label: 'OverlayLibrary',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        elapsedMs: elapsed,
+        preloadedCount: this.preloadedTmdbReleaseDates?.size ?? 0,
+      });
+      // Don't rethrow - job can continue with individual API calls as fallback
+    }
+  }
+
+  /**
    * Calculate ETA using rolling average of recent item times
    * Returns null if not enough data, caps at 2 hours
    */
@@ -765,6 +1041,8 @@ class OverlayLibraryService {
       // Clean up cancellation flag and per-library state
       this.cancelledLibraries.delete(libraryId);
       this.requiredContextFieldsByLibrary.delete(libraryId);
+      // Clear global caches if no other jobs are running (prevents memory leak)
+      this.clearGlobalCachesIfIdle();
     }
   }
 
@@ -942,13 +1220,35 @@ class OverlayLibraryService {
       }
 
       // ========================================================================
-      // PHASE 1: Batch pre-fetch ratings for performance optimization
+      // PHASE 1: Batch pre-fetch data for performance optimization
       // Only prefetch if templates actually use these fields
       // ========================================================================
       if (needsImdbRatings) {
         await this.prefetchImdbRatings(allItems);
       } else {
         logger.info('Skipping IMDb prefetch - no templates use IMDb ratings', {
+          label: 'OverlayLibrary',
+          libraryId,
+        });
+      }
+
+      // Check if any templates need release date info
+      const needsReleaseDates =
+        requiredContextFields.has('releaseDate') ||
+        requiredContextFields.has('daysUntilRelease') ||
+        requiredContextFields.has('daysAgo') ||
+        requiredContextFields.has('nextEpisodeAirDate') ||
+        requiredContextFields.has('daysUntilNextEpisode') ||
+        requiredContextFields.has('nextSeasonAirDate') ||
+        requiredContextFields.has('daysUntilNextSeason') ||
+        requiredContextFields.has('daysAgoNextSeason') ||
+        requiredContextFields.has('seasonNumber') ||
+        requiredContextFields.has('episodeNumber');
+
+      if (needsReleaseDates) {
+        await this.prefetchTmdbReleaseDates(allItems);
+      } else {
+        logger.info('Skipping TMDB prefetch - no templates use release dates', {
           label: 'OverlayLibrary',
           libraryId,
         });
@@ -1351,14 +1651,15 @@ class OverlayLibraryService {
 
       const baseContext = contextResult.context;
 
-      // Fetch fresh release date information for ALL items with TMDB ID
-      // Pass Sonarr cache for fallback when TMDB doesn't have next_episode_to_air
+      // Fetch release date information for ALL items with TMDB ID
+      // Uses preloaded data from batch prefetch when available
       let releaseDateContext: Partial<OverlayRenderContext> = {};
       if (tmdbId) {
         const releaseDateInfo = await fetchReleaseDateInfo(
           tmdbId,
           actualMediaType,
-          this.sonarrSeriesCache
+          this.sonarrSeriesCache,
+          this.preloadedTmdbReleaseDates
         );
 
         if (releaseDateInfo) {

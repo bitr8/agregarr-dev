@@ -853,6 +853,17 @@ export async function buildRenderContext(
 }
 
 /**
+ * Release date info returned by fetchReleaseDateInfo
+ */
+export interface ReleaseDateInfo {
+  releaseDate?: string;
+  nextEpisodeAirDate?: string;
+  nextSeasonAirDate?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
+}
+
+/**
  * Fetch release date information from TMDB with Sonarr fallback for TV shows
  * For movies: Gets digital/physical/theatrical release dates
  * For TV: Gets next episode air date from TMDB, falls back to Sonarr if unavailable
@@ -860,21 +871,29 @@ export async function buildRenderContext(
  * @param tmdbId - TMDB ID of the item
  * @param mediaType - Media type ('movie' or 'show')
  * @param sonarrCache - Optional cache for Sonarr series data (for performance)
+ * @param preloadedTmdbReleaseDates - Optional preloaded release dates from batch prefetch
  */
 export async function fetchReleaseDateInfo(
   tmdbId: number,
   mediaType: 'movie' | 'show',
-  sonarrCache?: Map<string, SonarrSeries[]>
-): Promise<
-  | {
-      releaseDate?: string;
-      nextEpisodeAirDate?: string;
-      nextSeasonAirDate?: string;
-      seasonNumber?: number;
-      episodeNumber?: number;
+  sonarrCache?: Map<string, SonarrSeries[]>,
+  preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>
+): Promise<ReleaseDateInfo | undefined> {
+  // Check preloaded data first (batch prefetch optimization)
+  if (preloadedTmdbReleaseDates) {
+    const cacheKey = `${tmdbId}:${mediaType}`;
+    const preloaded = preloadedTmdbReleaseDates.get(cacheKey);
+    if (preloaded !== undefined) {
+      logger.debug('Using preloaded TMDB release date', {
+        label: 'OverlayContextBuilder',
+        tmdbId,
+        mediaType,
+        hasData: preloaded !== null,
+      });
+      return preloaded ?? undefined;
     }
-  | undefined
-> {
+  }
+
   try {
     const tmdbClient = new TheMovieDb();
 
