@@ -111,8 +111,8 @@ const customUrlValidations = {
       schema
         .required('IMDb list URL is required')
         .matches(
-          /imdb\.com\/list\/ls\d+/,
-          'Please enter a valid IMDb list URL (e.g., https://www.imdb.com/list/ls123456789/)'
+          /(imdb\.com\/list\/ls\d+|imdb\.com\/user\/ur\d+\/watchlist)/,
+          'Please enter a valid IMDb list or watchlist URL (e.g., https://www.imdb.com/list/ls123456789/ or https://www.imdb.com/user/ur12345678/watchlist)'
         ),
     otherwise: (schema) => schema,
   }),
@@ -124,8 +124,8 @@ const customUrlValidations = {
       schema
         .required('Letterboxd list URL is required')
         .matches(
-          /letterboxd\.com\/[^/]+\/list\/[^/?]+/,
-          'Please enter a valid Letterboxd list URL (e.g., https://letterboxd.com/username/list/list-name/)'
+          /letterboxd\.com\/[^/]+\/(list\/[^/?]+|films\/.*)/,
+          'Please enter a valid Letterboxd URL (e.g., https://letterboxd.com/username/list/list-name/ or https://letterboxd.com/username/films/rated/4.5-5/)'
         ),
     otherwise: (schema) =>
       schema.when(['type', 'subtype'], {

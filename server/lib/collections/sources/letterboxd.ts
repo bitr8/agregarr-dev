@@ -143,8 +143,12 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
       const maxPages = 15; // Safety limit (1001 movies ÷ 100 per page ≈ 11 pages)
 
       while (totalFetched < 9999 && currentPage <= maxPages) {
+        // Ensure URL ends with / for proper pagination
+        const normalizedUrl = listUrl.endsWith('/') ? listUrl : `${listUrl}/`;
         const pageUrl =
-          currentPage === 1 ? listUrl : `${listUrl}page/${currentPage}/`;
+          currentPage === 1
+            ? normalizedUrl
+            : `${normalizedUrl}page/${currentPage}/`;
 
         logger.debug(`Fetching Letterboxd page ${currentPage}: ${pageUrl}`, {
           label: 'Letterboxd Collections',
@@ -390,7 +394,13 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
     // Use direct Plex queries instead of Media table
     let plexLookup: Map<
       string,
-      { ratingKey: string; title: string; libraryKey: string }
+      {
+        ratingKey: string;
+        title: string;
+        libraryKey: string;
+        addedAt?: number;
+        releaseDate?: number;
+      }
     > = new Map();
 
     if (plexClient) {
@@ -422,6 +432,8 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
           title: lookup.title,
           type: lookup.mediaType,
           tmdbId: lookup.tmdbId,
+          addedAt: plexItem.addedAt,
+          releaseDate: plexItem.releaseDate,
           metadata: {
             libraryKey: plexItem.libraryKey,
           },
