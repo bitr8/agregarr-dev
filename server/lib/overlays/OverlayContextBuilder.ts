@@ -320,13 +320,16 @@ export async function buildRenderContext(
         } else {
           // Fallback to individual API call (for items not in preloaded batch)
           // This is slow and should be rare - log it for debugging
-          logger.warn('IMDb rating not in preloaded cache, making individual API call', {
-            label: 'OverlayContextBuilder',
-            imdbId,
-            itemTitle: item.title,
-            preloadedMapExists: preloadedImdbRatings !== undefined,
-            preloadedMapSize: preloadedImdbRatings?.size ?? 0,
-          });
+          logger.warn(
+            'IMDb rating not in preloaded cache, making individual API call',
+            {
+              label: 'OverlayContextBuilder',
+              imdbId,
+              itemTitle: item.title,
+              preloadedMapExists: preloadedImdbRatings !== undefined,
+              preloadedMapSize: preloadedImdbRatings?.size ?? 0,
+            }
+          );
           try {
             const imdbApi = new ImdbRatingsAPI();
             const imdbRatings = await imdbApi.getRatings(imdbId);
@@ -381,7 +384,8 @@ export async function buildRenderContext(
       const needsRtRatings =
         !requiredContextFields ||
         requiredContextFields.has('rtCriticsScore') ||
-        requiredContextFields.has('rtAudienceScore');
+        requiredContextFields.has('rtAudienceScore') ||
+        requiredContextFields.has('rtCertifiedFresh');
 
       if (needsRtRatings && tmdbId) {
         // Use TMDB ID as cache key (stable, avoids title/year collision issues)
@@ -403,12 +407,15 @@ export async function buildRenderContext(
             const rtRating = cachedRt as RTRating;
             context.rtCriticsScore = rtRating.criticsScore;
             context.rtAudienceScore = rtRating.audienceScore;
+            context.rtCertifiedFresh =
+              rtRating.criticsRating === 'Certified Fresh';
             logger.debug('Using cached RT ratings', {
               label: 'OverlayContextBuilder',
               title: context.title,
               tmdbId,
               criticsScore: rtRating.criticsScore,
               audienceScore: rtRating.audienceScore,
+              certifiedFresh: context.rtCertifiedFresh,
             });
           }
         } else {
@@ -421,6 +428,8 @@ export async function buildRenderContext(
               if (rtRating) {
                 context.rtCriticsScore = rtRating.criticsScore;
                 context.rtAudienceScore = rtRating.audienceScore;
+                context.rtCertifiedFresh =
+                  rtRating.criticsRating === 'Certified Fresh';
               }
               logger.debug('Used in-flight RT request result', {
                 label: 'OverlayContextBuilder',
@@ -457,6 +466,8 @@ export async function buildRenderContext(
               if (rtRating) {
                 context.rtCriticsScore = rtRating.criticsScore;
                 context.rtAudienceScore = rtRating.audienceScore;
+                context.rtCertifiedFresh =
+                  rtRating.criticsRating === 'Certified Fresh';
                 // Cache the rating with adaptive TTL
                 rtCache.data.set(rtCacheKey, rtRating, ttl);
                 logger.debug('Fetched and cached RT ratings', {
@@ -465,6 +476,7 @@ export async function buildRenderContext(
                   tmdbId,
                   criticsScore: rtRating.criticsScore,
                   audienceScore: rtRating.audienceScore,
+                  certifiedFresh: context.rtCertifiedFresh,
                   ttlHours: Math.round(ttl / 3600),
                 });
               } else {
@@ -530,12 +542,35 @@ export async function buildRenderContext(
       // Runtime
       if (mediaType === 'movie' && 'runtime' in tmdbData) {
         context.runtime = tmdbData.runtime;
+        // Format runtime as "2h 16m" or "47m"
+        if (tmdbData.runtime) {
+          const hours = Math.floor(tmdbData.runtime / 60);
+          const minutes = tmdbData.runtime % 60;
+          if (hours > 0) {
+            context.runtimeHHMM =
+              minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+          } else {
+            context.runtimeHHMM = `${minutes}m`;
+          }
+        }
       } else if (
         mediaType === 'show' &&
         'episode_run_time' in tmdbData &&
         tmdbData.episode_run_time?.[0]
       ) {
         context.runtime = tmdbData.episode_run_time[0];
+        // Format runtime as "2h 16m" or "47m"
+        const runtimeValue = tmdbData.episode_run_time[0];
+        if (runtimeValue) {
+          const hours = Math.floor(runtimeValue / 60);
+          const minutes = runtimeValue % 60;
+          if (hours > 0) {
+            context.runtimeHHMM =
+              minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+          } else {
+            context.runtimeHHMM = `${minutes}m`;
+          }
+        }
       }
 
       // TMDB Status (TV shows only) - using Kometa's user-friendly mapping
@@ -639,12 +674,15 @@ export async function buildRenderContext(
           }
         } catch (error) {
           criticalApiFailed = true;
-          logger.warn('IMDb rating fetch failed - marking as critical failure', {
-            label: 'OverlayContextBuilder',
-            imdbId,
-            itemTitle: item.title,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          logger.warn(
+            'IMDb rating fetch failed - marking as critical failure',
+            {
+              label: 'OverlayContextBuilder',
+              imdbId,
+              itemTitle: item.title,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
         }
       }
 
@@ -653,7 +691,10 @@ export async function buildRenderContext(
         const imdbClient = getImdbClient();
         const imdbMediaType: 'movie' | 'tv' =
           mediaType === 'show' ? 'tv' : 'movie';
-        const top250Result = await imdbClient.checkTop250(imdbId, imdbMediaType);
+        const top250Result = await imdbClient.checkTop250(
+          imdbId,
+          imdbMediaType
+        );
 
         if (top250Result.isTop250) {
           context.isImdbTop250 = true;
