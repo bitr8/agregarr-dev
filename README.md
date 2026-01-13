@@ -58,7 +58,7 @@ Live overlay job status on the dashboard with progress bar, ETA, item counts, an
 | [#358](https://github.com/agregarr/agregarr/pull/358) | IMDb Top 250 English Movies collection type |
 | [#356](https://github.com/agregarr/agregarr/pull/356) | Handle 404 gracefully when deleting hub items |
 | [#355](https://github.com/agregarr/agregarr/pull/355) | Add missing /user/{userId}/settings/main to OpenAPI spec |
-| [#354](https://github.com/agregarr/agregarr/pull/354) | Preserve placeholders for released content in non-Coming Soon collections |
+| [#354](https://github.com/agregarr/agregarr/pull/354) | Preserve placeholders + scope quick sync deletion to current library |
 | [#350](https://github.com/agregarr/agregarr/pull/350) | Validate SVG icon dimensions and file type |
 | [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates |
 | [#348](https://github.com/agregarr/agregarr/pull/348) | Fix scheduler startNow immediate sync and deadlock bugs |
@@ -92,6 +92,7 @@ Not yet submitted upstream:
 - **Configurable Rating Cache**: Settings UI for cache duration
 - **RT Certified Fresh Overlay**: Preset for Rotten Tomatoes Certified Fresh badge
 - **Stale Cache Fallback**: Returns cached data when APIs fail
+- **Quick Sync Scoping**: Placeholder deletion scoped by library and media type (in PR #354)
 
 ## License
 
