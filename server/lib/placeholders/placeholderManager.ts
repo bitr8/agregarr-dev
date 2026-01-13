@@ -538,9 +538,14 @@ export async function scanForMoviePlaceholders(
 
       // Check for placeholder files in this folder
       try {
-        const files = await fs.readdir(movieFolder);
+        const entries = await fs.readdir(movieFolder, { withFileTypes: true });
 
-        for (const file of files) {
+        for (const entry of entries) {
+          // Skip directories (e.g., Jellyfin .trickplay folders when sharing libraries)
+          if (!entry.isFile()) continue;
+
+          const file = entry.name;
+
           // Look for files with {edition-Trailer} pattern
           if (
             !file.includes('{edition-Trailer}') &&
