@@ -1,8 +1,6 @@
 # Agregarr (Personal Fork)
 
-Personal fork of [Agregarr](https://github.com/agregarr/agregarr) with features and performance fixes I wanted but aren't in upstream yet. Changes are submitted as PRs when they're ready.
-
-This is for my own use, but if you see something useful, go for it.
+Personal fork of [Agregarr](https://github.com/agregarr/agregarr) with features and fixes I wanted but aren't in upstream yet. Changes are submitted as PRs when ready.
 
 ## Docker Image
 
@@ -13,8 +11,8 @@ services:
     container_name: agregarr
     volumes:
       - /path/to/config:/app/config
-      - /path/to/placeholder/movies:/data/movies  # Optional: Coming Soon feature
-      - /path/to/placeholder/tv:/data/tv          # Optional: Coming Soon feature
+      - /path/to/placeholder/movies:/data/movies # Optional: Coming Soon
+      - /path/to/placeholder/tv:/data/tv         # Optional: Coming Soon
     environment:
       - TZ=Australia/Sydney
     ports:
@@ -26,31 +24,38 @@ Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 
 ## What's Different
 
+### Real-time Overlay Job Progress
+
+Live overlay job status on the dashboard with progress bar, ETA, item counts, and stop button.
+
+![Overlay Jobs Status](public/images/overlay-jobs-status.png)
+
 ### Performance
 
-- **Batch IMDb Prefetch**: Fetches all IMDb ratings upfront in batches of 100, instead of one API call per item. Turns 2800+ calls into ~29.
-- **Adaptive TTL Caching**: IMDb ratings cached based on content age (12h for new stuff, 30 days for older content).
-- **Plex GUID Extraction**: Pulls IMDb IDs straight from Plex metadata, skips TMDB lookup for 99%+ of items.
-- **Stale Cache Fallback**: Returns cached data when APIs fail instead of breaking the whole job.
-- **TMDB Poster Caching**: Caches poster downloads for 7 days (upstream downloads fresh every run).
+- **Batch IMDb Prefetch**: Fetches all IMDb ratings upfront in batches of 100 instead of per-item. Turns 2800+ calls into ~29.
+- **Adaptive TTL Caching**: IMDb ratings cached based on content age (12h for new, 30 days for older).
+- **Plex GUID Extraction**: Pulls IMDb IDs from Plex metadata, skips TMDB lookup for 99%+ of items.
+- **Stale Cache Fallback**: Returns cached data when APIs fail instead of breaking the job.
+- **TMDB Poster Caching**: Caches poster downloads for 7 days.
 
 ### UX
 
-- **Real-time Job Progress**: Dashboard card showing live overlay job status with progress bar, ETA, item counts (success/errors/unchanged/filtered), current item title, and stop button. Polls every 1s when active, 5s when idle.
-- **Configurable Rating Cache**: Settings UI to adjust how long IMDb/RT ratings are cached (7-90 days). All TTL tiers scale proportionally.
-- **Daily Show Filter**: Keeps soap operas out of Coming Soon (they always show as "upcoming" because of yearly seasons).
+- **Configurable Rating Cache**: Settings UI to adjust IMDb/RT cache duration (7-90 days).
+- **Daily Show Filter**: Keeps soap operas out of Coming Soon collections.
+- **IMDb Top 250 English**: Collection source for English-language movies only.
 
 ### Security
 
-- **Error Sanitization**: No more internal paths or stack traces in API responses.
+- **Error Sanitization**: No internal paths or stack traces in API responses.
 - **Input Validation**: Extra checks on user input.
 
 ## Upstream PRs
 
 ### Open
 
-| PR | What it does |
-|----|--------------|
+| PR | Description |
+|----|-------------|
+| [#358](https://github.com/agregarr/agregarr/pull/358) | IMDb Top 250 English Movies collection type |
 | [#356](https://github.com/agregarr/agregarr/pull/356) | Handle 404 gracefully when deleting hub items |
 | [#355](https://github.com/agregarr/agregarr/pull/355) | Add missing /user/{userId}/settings/main to OpenAPI spec |
 | [#354](https://github.com/agregarr/agregarr/pull/354) | Preserve placeholders for released content in non-Coming Soon collections |
@@ -60,8 +65,8 @@ Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 
 ### Merged
 
-| PR | What it does |
-|----|--------------|
+| PR | Description |
+|----|-------------|
 | [#345](https://github.com/agregarr/agregarr/pull/345) | Multi-source label regex for collection matching |
 | [#340](https://github.com/agregarr/agregarr/pull/340) | Handle Jellyfin trickplay directories during cleanup |
 | [#332](https://github.com/agregarr/agregarr/pull/332) | Trigger Plex scan after placeholder cleanup |
@@ -73,18 +78,20 @@ Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
 | [#302](https://github.com/agregarr/agregarr/pull/302) | Return episodeNumber from fetchReleaseDateInfo |
 | [#300](https://github.com/agregarr/agregarr/pull/300) | Harden API clients and file operations |
 | [#282](https://github.com/agregarr/agregarr/pull/282) | Sanitize error responses |
+| [#278](https://github.com/agregarr/agregarr/pull/278) | Filter daily shows from Coming Soon collections |
+| [#277](https://github.com/agregarr/agregarr/pull/277) | TMDB poster caching and race condition fixes |
 
-## What's Not Upstream Yet
+## Fork-Only Features
 
-- **RT Certified Fresh Overlay** - Overlay preset for Rotten Tomatoes Certified Fresh badge
-- **Stale Cache Fallback** - Returns cached data when APIs fail instead of breaking the whole job
-- **Real-time Job Progress** - Dashboard shows live overlay progress with ETA, stats, stop button
-- **Configurable Rating Cache** - Settings UI for cache duration (7-90 days)
-- **Batch IMDb Prefetch** - Fetches ratings in bulk instead of per-item
-- **Adaptive TTL Caching** - Cache duration based on content age
-- **Plex GUID Extraction** - Skips TMDB lookup when IMDb ID is in Plex metadata
+Not yet submitted upstream:
 
-May become PRs once tested more.
+- **Real-time Job Progress**: Dashboard shows live overlay progress with ETA and stop button
+- **Batch IMDb Prefetch**: Fetches ratings in bulk instead of per-item
+- **Adaptive TTL Caching**: Cache duration based on content age
+- **Plex GUID Extraction**: Skips TMDB lookup when IMDb ID is in Plex metadata
+- **Configurable Rating Cache**: Settings UI for cache duration
+- **RT Certified Fresh Overlay**: Preset for Rotten Tomatoes Certified Fresh badge
+- **Stale Cache Fallback**: Returns cached data when APIs fail
 
 ## License
 
