@@ -36,13 +36,10 @@ Live overlay job status on the dashboard with progress bar, ETA, item counts, an
 - **Adaptive TTL Caching**: IMDb ratings cached based on content age (12h for new, 30 days for older).
 - **Plex GUID Extraction**: Pulls IMDb IDs from Plex metadata, skips TMDB lookup for 99%+ of items.
 - **Stale Cache Fallback**: Returns cached data when APIs fail instead of breaking the job.
-- **TMDB Poster Caching**: Caches poster downloads for 7 days.
 
 ### UX
 
 - **Configurable Rating Cache**: Settings UI to adjust IMDb/RT cache duration (7-90 days).
-- **Daily Show Filter**: Keeps soap operas out of Coming Soon collections.
-- **IMDb Top 250 English**: Collection source for English-language movies only.
 
 ### Security
 
@@ -55,18 +52,18 @@ Live overlay job status on the dashboard with progress bar, ETA, item counts, an
 
 | PR | Description |
 |----|-------------|
-| [#358](https://github.com/agregarr/agregarr/pull/358) | IMDb Top 250 English Movies collection type |
-| [#356](https://github.com/agregarr/agregarr/pull/356) | Handle 404 gracefully when deleting hub items |
 | [#355](https://github.com/agregarr/agregarr/pull/355) | Add missing /user/{userId}/settings/main to OpenAPI spec |
 | [#354](https://github.com/agregarr/agregarr/pull/354) | Preserve placeholders + scope quick sync deletion to current library |
-| [#350](https://github.com/agregarr/agregarr/pull/350) | Validate SVG icon dimensions and file type |
 | [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates |
-| [#348](https://github.com/agregarr/agregarr/pull/348) | Fix scheduler startNow immediate sync and deadlock bugs |
 
 ### Merged
 
 | PR | Description |
 |----|-------------|
+| [#358](https://github.com/agregarr/agregarr/pull/358) | IMDb Top 250 English Movies collection type |
+| [#356](https://github.com/agregarr/agregarr/pull/356) | Handle 404 gracefully when deleting hub items |
+| [#350](https://github.com/agregarr/agregarr/pull/350) | Validate SVG icon dimensions and file type |
+| [#348](https://github.com/agregarr/agregarr/pull/348) | Fix scheduler startNow immediate sync and deadlock bugs |
 | [#345](https://github.com/agregarr/agregarr/pull/345) | Multi-source label regex for collection matching |
 | [#340](https://github.com/agregarr/agregarr/pull/340) | Handle Jellyfin trickplay directories during cleanup |
 | [#332](https://github.com/agregarr/agregarr/pull/332) | Trigger Plex scan after placeholder cleanup |
