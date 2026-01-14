@@ -52,8 +52,6 @@ Live overlay job status on the dashboard with progress bar, ETA, item counts, an
 
 | PR | Description |
 |----|-------------|
-| [#355](https://github.com/agregarr/agregarr/pull/355) | Add missing /user/{userId}/settings/main to OpenAPI spec |
-| [#354](https://github.com/agregarr/agregarr/pull/354) | Preserve placeholders + scope quick sync deletion to current library |
 | [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates |
 
 ### Merged
@@ -89,7 +87,6 @@ Not yet submitted upstream:
 - **Configurable Rating Cache**: Settings UI for cache duration
 - **RT Certified Fresh Overlay**: Preset for Rotten Tomatoes Certified Fresh badge
 - **Stale Cache Fallback**: Returns cached data when APIs fail
-- **Quick Sync Scoping**: Placeholder deletion scoped by library and media type (in PR #354)
 
 ## License
 
