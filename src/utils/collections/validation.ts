@@ -85,8 +85,8 @@ const customUrlValidations = {
       schema
         .required('Trakt list URL is required')
         .matches(
-          /trakt\.tv\/(users\/[^/]+\/lists\/[^/?]+|lists\/official\/[^/?]+)/,
-          'Please enter a valid Trakt list URL (e.g., https://trakt.tv/users/username/lists/listname or https://trakt.tv/lists/official/collection-name)'
+          /(?:app\.)?trakt\.tv\/(users\/[^/]+\/lists\/[^/?]+|lists\/official\/[^/?]+)/,
+          'Please enter a valid Trakt list URL (e.g., https://trakt.tv/users/username/lists/listname or https://app.trakt.tv/users/username/lists/listname)'
         ),
     otherwise: (schema) => schema,
   }),
@@ -271,21 +271,17 @@ const placeholderValidations = {
 
   placeholderDaysAhead: Yup.number().when('createPlaceholdersForMissing', {
     is: true,
-    then: (schema) =>
-      schema
-        .min(1, 'Days ahead must be at least 1')
-        .max(730, 'Days ahead cannot exceed 730 (2 years)'),
+    then: (schema) => schema.min(1, 'Days ahead must be at least 1'),
     otherwise: (schema) => schema,
   }),
 
   placeholderReleasedDays: Yup.number().when('createPlaceholdersForMissing', {
     is: true,
-    then: (schema) =>
-      schema
-        .min(0, 'Post-release window must be 0 or greater')
-        .max(90, 'Post-release window cannot exceed 90 days'),
+    then: (schema) => schema.min(0, 'Post-release window must be 0 or greater'),
     otherwise: (schema) => schema,
   }),
+
+  includeAllReleasedItems: Yup.boolean(),
 };
 
 // Time restriction validation
