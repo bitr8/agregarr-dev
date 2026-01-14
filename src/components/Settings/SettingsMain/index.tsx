@@ -9,7 +9,7 @@ import SettingsBadge from '@app/components/Settings/SettingsBadge';
 import type { AvailableLocale } from '@app/context/LanguageContext';
 import { availableLanguages } from '@app/context/LanguageContext';
 import useLocale from '@app/hooks/useLocale';
-import { Permission, useUser, type UserSettings } from '@app/hooks/useUser';
+import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
 import { ArrowPathIcon } from '@heroicons/react/24/solid';
@@ -36,7 +36,6 @@ const messages = defineMessages({
   toastApiKeyFailure: 'Something went wrong while generating a new API key.',
   toastSettingsSuccess: 'Settings saved successfully!',
   toastSettingsFailure: 'Something went wrong while saving settings.',
-  hideAvailable: 'Hide Available Media',
   csrfProtection: 'Enable CSRF Protection',
   csrfProtectionTip: 'Set external API access to read-only (requires HTTPS)',
   csrfProtectionHoverTip:
@@ -47,7 +46,6 @@ const messages = defineMessages({
   validationApplicationTitle: 'You must provide an application title',
   validationApplicationUrl: 'You must provide a valid URL',
   validationApplicationUrlTrailingSlash: 'URL must not end in a trailing slash',
-  partialRequestsEnabled: 'Allow Partial Series Requests',
   locale: 'Display Language',
   tmdbLanguage: 'TMDB Language',
   tmdbLanguageTip: 'Language for TMDB posters',
@@ -72,7 +70,7 @@ const messages = defineMessages({
 
 const SettingsMain = () => {
   const { addToast } = useToasts();
-  const { user: currentUser, hasPermission: userHasPermission } = useUser();
+  const { hasPermission: userHasPermission } = useUser();
   const intl = useIntl();
   const { setLocale } = useLocale();
   const [isResetting, setIsResetting] = useState(false);
@@ -81,9 +79,6 @@ const SettingsMain = () => {
     error,
     mutate: revalidate,
   } = useSWR<MainSettings>('/api/v1/settings/main');
-  const { data: userData } = useSWR<UserSettings>(
-    currentUser ? `/api/v1/user/${currentUser.id}/settings/main` : null
-  );
 
   const MainSettingsSchema = Yup.object().shape({
     applicationTitle: Yup.string().required(
@@ -184,11 +179,7 @@ const SettingsMain = () => {
               mutate('/api/v1/status');
 
               if (setLocale) {
-                setLocale(
-                  (userData?.locale
-                    ? userData.locale
-                    : values.locale) as AvailableLocale
-                );
+                setLocale(values.locale as AvailableLocale);
               }
 
               addToast(intl.formatMessage(messages.toastSettingsSuccess), {

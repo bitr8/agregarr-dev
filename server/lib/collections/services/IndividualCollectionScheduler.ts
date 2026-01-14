@@ -279,7 +279,7 @@ export class IndividualCollectionScheduler {
             intervalHours
           );
 
-          // BUG FIX: If firstSyncAt is very recent (within 60 seconds), trigger immediate sync
+          // If firstSyncAt is very recent (within 60 seconds), trigger immediate sync
           // This handles the "startNow" case where user expects immediate execution
           const firstSyncDate = new Date(firstSyncAt);
           const now = new Date();
@@ -585,9 +585,9 @@ export class IndividualCollectionScheduler {
         return;
       }
 
-      // BUG FIX: Don't acquire API lock here - it causes deadlock when scheduled sync
-      // triggers during full sync. API lock is now acquired in processLibraryQueue()
-      // just before actual execution.
+      // Note: API lock is acquired in processLibraryQueue() just before execution,
+      // not here. Acquiring it here causes deadlock when scheduled sync triggers
+      // during full sync (both waiting on same lock).
 
       const libraryId = collectionConfig.libraryId;
 
@@ -694,7 +694,7 @@ export class IndividualCollectionScheduler {
 
         libraryQueue.currentCollection = nextSync.collectionName;
 
-        // BUG FIX: Acquire API lock here, just before execution, not at queue time.
+        // Acquire API lock here, just before execution, not at queue time.
         // This prevents deadlock when scheduled sync triggers during full sync.
         const settings = getSettings();
         const collectionConfig = settings.plex.collectionConfigs?.find(
