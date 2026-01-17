@@ -46,15 +46,10 @@ Live status on the dashboard showing progress, item counts, ETA, and a stop butt
 
 ### Open
 
-| PR                                                    | Description                                 |
-| ----------------------------------------------------- | ------------------------------------------- |
-| [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates |
-
-### Pending (in develop, not yet submitted)
-
-| Issue                                                   | Description                                                          |
-| ------------------------------------------------------- | -------------------------------------------------------------------- |
-| [#336](https://github.com/agregarr/agregarr/issues/336) | Skip date filtering for non-Coming-Soon with includeAllReleasedItems |
+| PR                                                    | Description                                                          |
+| ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#387](https://github.com/agregarr/agregarr/pull/387) | Skip date filtering for non-Coming-Soon with includeAllReleasedItems |
+| [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates                          |
 
 ### Merged
 
