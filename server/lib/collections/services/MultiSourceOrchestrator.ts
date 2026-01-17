@@ -2986,6 +2986,7 @@ export class MultiSourceOrchestrator {
         favorited: 'Most Favorited',
         boxoffice: 'Box Office',
         recommendations: 'Recommendations',
+        watchlist: 'Watchlist',
       },
       tmdb: {
         trending_day: 'Trending Today',
