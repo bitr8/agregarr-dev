@@ -502,6 +502,112 @@ export class PlaceholderContextService {
   }
 
   /**
+   * Batch fetch download status from Radarr/Sonarr for multiple items
+   * Fetches libraries once and builds lookup maps for efficient querying
+   * Returns maps keyed by tmdbId (movies) and tvdbId (TV)
+   */
+  async batchCheckDownloadStatus(
+    items: {
+      tmdbId: number;
+      tvdbId?: number;
+      mediaType: 'movie' | 'tv';
+    }[]
+  ): Promise<{
+    moviesByTmdbId: Map<number, { downloaded: boolean; inRadarr: boolean }>;
+    showsByTvdbId: Map<number, { downloaded: boolean; inSonarr: boolean }>;
+  }> {
+    const settings = getSettings();
+    const moviesByTmdbId = new Map<
+      number,
+      { downloaded: boolean; inRadarr: boolean }
+    >();
+    const showsByTvdbId = new Map<
+      number,
+      { downloaded: boolean; inSonarr: boolean }
+    >();
+
+    // Check if we have any movies or TV items to look up
+    const hasMovies = items.some((i) => i.mediaType === 'movie');
+    const hasTV = items.some((i) => i.mediaType === 'tv');
+
+    // Fetch Radarr libraries once
+    if (hasMovies && settings.radarr) {
+      for (const radarrInstance of settings.radarr) {
+        try {
+          const radarrClient = new RadarrAPI({
+            url: `${radarrInstance.useSsl ? 'https' : 'http'}://${
+              radarrInstance.hostname
+            }:${radarrInstance.port}${radarrInstance.baseUrl || ''}/api/v3`,
+            apiKey: radarrInstance.apiKey,
+          });
+
+          const movies = await radarrClient.getMovies();
+
+          for (const movie of movies) {
+            if (movie.tmdbId && !moviesByTmdbId.has(movie.tmdbId)) {
+              moviesByTmdbId.set(movie.tmdbId, {
+                downloaded: movie.hasFile || false,
+                inRadarr: true,
+              });
+            }
+          }
+
+          logger.debug('Fetched Radarr library for batch download check', {
+            label: 'PlaceholderContextService',
+            instance: radarrInstance.hostname,
+            movieCount: movies.length,
+          });
+        } catch (error) {
+          logger.warn('Failed to fetch Radarr library for batch check', {
+            label: 'PlaceholderContextService',
+            instance: radarrInstance.hostname,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    // Fetch Sonarr libraries once
+    if (hasTV && settings.sonarr) {
+      for (const sonarrInstance of settings.sonarr) {
+        try {
+          const sonarrClient = new SonarrAPI({
+            url: `${sonarrInstance.useSsl ? 'https' : 'http'}://${
+              sonarrInstance.hostname
+            }:${sonarrInstance.port}${sonarrInstance.baseUrl || ''}/api/v3`,
+            apiKey: sonarrInstance.apiKey,
+          });
+
+          const shows = await sonarrClient.getSeries();
+
+          for (const show of shows) {
+            if (show.tvdbId && !showsByTvdbId.has(show.tvdbId)) {
+              showsByTvdbId.set(show.tvdbId, {
+                downloaded: (show.statistics?.episodeFileCount || 0) > 0,
+                inSonarr: true,
+              });
+            }
+          }
+
+          logger.debug('Fetched Sonarr library for batch download check', {
+            label: 'PlaceholderContextService',
+            instance: sonarrInstance.hostname,
+            showCount: shows.length,
+          });
+        } catch (error) {
+          logger.warn('Failed to fetch Sonarr library for batch check', {
+            label: 'PlaceholderContextService',
+            instance: sonarrInstance.hostname,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    return { moviesByTmdbId, showsByTvdbId };
+  }
+
+  /**
    * Check monitoring status in Radarr/Sonarr
    * Returns whether item is in *arr, monitored, and has files
    */
