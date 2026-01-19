@@ -42,6 +42,10 @@ Live status on the dashboard showing progress, item counts, ETA, and a stop butt
 
 - **Configurable Rating Cache**: Settings UI option to adjust maximum IMDb/RT cache duration (7-90 days).
 
+### Bug Fixes (Not Yet PR'd)
+
+- **Empty Plex Trash After Placeholder Cleanup**: When placeholder files are deleted (e.g., real content arrives), Plex wasn't notified, leaving ghost Season 00 entries in the library. Now calls `emptyTrash()` after scanning to remove these ghost entries automatically.
+
 ## Upstream PRs
 
 ### Open
