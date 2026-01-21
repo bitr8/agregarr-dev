@@ -53,6 +53,7 @@ const messages = defineMessages({
   opLessThan: 'less than',
   opLessOrEqual: 'less than or equal',
   opContains: 'contains',
+  opNotContains: 'does not contain',
   opRegex: 'regex',
   opBegins: 'begins with',
   opEnds: 'ends with',
@@ -105,6 +106,7 @@ const BOOLEAN_FIELDS = [
   'dolbyVision',
   'isImdbTop250',
   'rtCertifiedFresh',
+  'hasSubtitles',
 ];
 
 // ============================================================================
@@ -287,6 +289,9 @@ const RuleItem: React.FC<RuleItemProps> = ({
             <option value="in">{intl.formatMessage(messages.opIn)}</option>
             <option value="contains">
               {intl.formatMessage(messages.opContains)}
+            </option>
+            <option value="notContains">
+              {intl.formatMessage(messages.opNotContains)}
             </option>
             <option value="regex">
               {intl.formatMessage(messages.opRegex)}

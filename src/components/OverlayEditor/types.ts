@@ -137,6 +137,7 @@ export interface ConditionRule {
     | 'lte' // less than or equal
     | 'in' // value in array
     | 'contains' // string contains
+    | 'notContains' // string does not contain
     | 'regex' // regex match
     | 'begins' // string begins with
     | 'ends' // string ends with
@@ -192,6 +193,17 @@ export interface OverlayRenderContext {
   audioChannels?: number; // 2, 6, 8
   audioChannelLayout?: string; // '5.1', '7.1', 'atmos'
   audioFormat?: string; // Full display title (e.g., 'English (Dolby TrueHD Atmos 7.1)')
+
+  // Audio language info
+  audioLanguage?: string; // Primary audio track language name (e.g., 'English', 'German')
+  audioLanguageCode?: string; // Primary audio track language code (e.g., 'en', 'de')
+  audioLanguages?: string[]; // Array of all audio track languages
+  audioLanguageCodes?: string[]; // Array of all audio track language codes
+
+  // Subtitle info
+  subtitleLanguages?: string[]; // Array of all subtitle languages
+  subtitleLanguageCodes?: string[]; // Array of all subtitle language codes
+  hasSubtitles?: boolean; // Whether any subtitle tracks are present
 
   // File info
   container?: string; // 'mkv', 'mp4'
@@ -309,6 +321,39 @@ export const AVAILABLE_VARIABLES = {
     { field: 'audioCodec', label: 'Audio Codec', example: 'truehd' },
     { field: 'audioChannels', label: 'Audio Channels', example: '8' },
     { field: 'audioChannelLayout', label: 'Channel Layout', example: '7.1' },
+  ],
+  language: [
+    {
+      field: 'audioLanguage',
+      label: 'Audio Language (Primary)',
+      example: 'English',
+    },
+    {
+      field: 'audioLanguageCode',
+      label: 'Audio Language Code (Primary)',
+      example: 'en',
+    },
+    {
+      field: 'audioLanguages',
+      label: 'Audio Languages (All)',
+      example: 'English, German',
+    },
+    {
+      field: 'audioLanguageCodes',
+      label: 'Audio Language Codes (All)',
+      example: 'en, de',
+    },
+    {
+      field: 'subtitleLanguages',
+      label: 'Subtitle Languages',
+      example: 'English, German, French',
+    },
+    {
+      field: 'subtitleLanguageCodes',
+      label: 'Subtitle Language Codes',
+      example: 'en, de, fr',
+    },
+    { field: 'hasSubtitles', label: 'Has Subtitles', example: 'true' },
   ],
   file: [
     { field: 'container', label: 'Container', example: 'mkv' },
@@ -437,6 +482,37 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'audioCodec', label: 'Audio Codec', example: 'truehd' },
     { field: 'audioChannels', label: 'Audio Channels', example: '8' },
     { field: 'audioChannelLayout', label: 'Channel Layout', example: '7.1' },
+    {
+      field: 'audioLanguage',
+      label: 'Audio Language (Primary)',
+      example: 'English',
+    },
+    {
+      field: 'audioLanguageCode',
+      label: 'Audio Language Code (Primary)',
+      example: 'en',
+    },
+    {
+      field: 'audioLanguages',
+      label: 'Audio Languages (All)',
+      example: 'English, German',
+    },
+    {
+      field: 'audioLanguageCodes',
+      label: 'Audio Language Codes (All)',
+      example: 'en, de',
+    },
+    {
+      field: 'subtitleLanguages',
+      label: 'Subtitle Languages',
+      example: 'English, German, French',
+    },
+    {
+      field: 'subtitleLanguageCodes',
+      label: 'Subtitle Language Codes',
+      example: 'en, de, fr',
+    },
+    { field: 'hasSubtitles', label: 'Has Subtitles', example: 'true' },
     { field: 'container', label: 'Container', example: 'mkv' },
     { field: 'bitrate', label: 'Bitrate (kbps)', example: '15000' },
     { field: 'fileSize', label: 'File Size (bytes)', example: '4500000000' },
@@ -587,6 +663,13 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     audioCodec: 'truehd',
     audioChannels: 8,
     audioChannelLayout: '7.1',
+    audioLanguage: 'English',
+    audioLanguageCode: 'en',
+    audioLanguages: ['English', 'German'],
+    audioLanguageCodes: ['en', 'de'],
+    subtitleLanguages: ['English', 'German', 'French'],
+    subtitleLanguageCodes: ['en', 'de', 'fr'],
+    hasSubtitles: true,
     container: 'mkv',
     bitrate: 15000,
     fileSize: 4500000000,
@@ -635,6 +718,13 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     audioCodec: 'dts',
     audioChannels: 6,
     audioChannelLayout: '5.1',
+    audioLanguage: 'English',
+    audioLanguageCode: 'en',
+    audioLanguages: ['English'],
+    audioLanguageCodes: ['en'],
+    subtitleLanguages: ['English', 'Spanish'],
+    subtitleLanguageCodes: ['en', 'es'],
+    hasSubtitles: true,
     container: 'mkv',
     bitrate: 8000,
     fileSize: 3000000000,

@@ -185,6 +185,11 @@ function evaluateRule(
     if (rule.operator === 'neq') {
       return conditionValue !== undefined && conditionValue !== null;
     }
+    // For 'notContains', missing/null doesn't contain anything, so return true
+    // e.g., "filePath does not contain '2005'" should match when filePath is undefined
+    if (rule.operator === 'notContains') {
+      return true;
+    }
     // For 'exists', we need to evaluate based on the presence/absence of value
     if (rule.operator === 'exists') {
       // value is null/undefined, so field does NOT exist
@@ -276,6 +281,20 @@ function evaluateRule(
         typeof conditionValue === 'string' &&
         value.toLowerCase().includes(conditionValue.toLowerCase())
       );
+    case 'notContains':
+      // For array fields, check if array does NOT contain the value
+      if (Array.isArray(value) && typeof conditionValue === 'string') {
+        return !value.some(
+          (item) =>
+            typeof item === 'string' &&
+            item.toLowerCase().includes(conditionValue.toLowerCase())
+        );
+      }
+      return (
+        typeof value === 'string' &&
+        typeof conditionValue === 'string' &&
+        !value.toLowerCase().includes(conditionValue.toLowerCase())
+      );
     case 'regex':
       if (typeof value === 'string' && typeof conditionValue === 'string') {
         try {
@@ -357,6 +376,17 @@ export interface OverlayRenderContext {
   audioChannels?: number; // 2, 6, 8
   audioChannelLayout?: string; // '5.1', '7.1', 'atmos'
   audioFormat?: string; // Full display title (e.g., 'English (Dolby TrueHD Atmos 7.1)')
+
+  // Audio language info
+  audioLanguage?: string; // Primary audio track language name (e.g., 'English', 'German')
+  audioLanguageCode?: string; // Primary audio track language code (e.g., 'en', 'de')
+  audioLanguages?: string[]; // Array of all audio track languages
+  audioLanguageCodes?: string[]; // Array of all audio track language codes
+
+  // Subtitle info
+  subtitleLanguages?: string[]; // Array of all subtitle languages
+  subtitleLanguageCodes?: string[]; // Array of all subtitle language codes
+  hasSubtitles?: boolean; // Whether any subtitle tracks are present
 
   // File info
   container?: string; // 'mkv', 'mp4'
