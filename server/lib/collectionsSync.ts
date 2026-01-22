@@ -397,7 +397,16 @@ class CollectionsSync {
 
       // Clean up orphaned placeholder records and files
       this.setStage('Cleaning up orphaned placeholders...');
-      let filesWereRemoved = false;
+      let cleanupResult: {
+        filesRemoved: number;
+        deletedPaths: {
+          fullPath: string;
+          relativePath: string;
+          libraryKey: string;
+          mediaType: 'movie' | 'tv';
+        }[];
+      } = { filesRemoved: 0, deletedPaths: [] };
+
       try {
         const {
           cleanupOrphanedPlaceholderRecords,
@@ -410,11 +419,11 @@ class CollectionsSync {
         await cleanupOrphanedPlaceholderRecords();
 
         // Step 2: Remove orphaned files (where no DB records reference them)
-        const filesRemoved = await cleanupOrphanedPlaceholderFiles();
-        filesWereRemoved = filesRemoved > 0;
+        cleanupResult = await cleanupOrphanedPlaceholderFiles();
 
         logger.info('Orphaned placeholder cleanup completed', {
           label: 'Collections Sync',
+          filesRemoved: cleanupResult.filesRemoved,
         });
       } catch (error) {
         logger.warn('Orphaned placeholder cleanup failed - continuing', {
@@ -423,79 +432,121 @@ class CollectionsSync {
         });
       }
 
-      // Trigger Plex scan and empty trash if we deleted placeholder files
-      // Note: emptyTrash removes ALL missing items in the library, not just placeholders.
-      // This is acceptable because placeholder folders are dedicated library paths.
-      if (filesWereRemoved) {
-        this.setStage('Scanning Plex libraries for removed placeholders...');
-        const scannedLibraryKeys: string[] = [];
-
-        const libraries = await plexClient.getLibraries();
-        const { getPlaceholderRootFolder } = await import(
-          '@server/lib/placeholders/helpers/placeholderPathHelpers'
+      // Remove stale Plex entries for deleted placeholder files
+      // Uses direct API deletion instead of scan+emptyTrash, which fails when
+      // directories are empty (Plex ignores empty directories during scans)
+      if (cleanupResult.deletedPaths.length > 0) {
+        this.setStage(
+          'Removing stale Plex entries for deleted placeholders...'
         );
 
-        // Scan libraries that have placeholder folders configured
-        for (const lib of libraries) {
-          if (lib.type !== 'movie' && lib.type !== 'show') continue;
+        // Group deleted paths by library for efficient processing (scan once per library)
+        const pathsByLibrary = new Map<string, Set<string>>();
+        for (const deleted of cleanupResult.deletedPaths) {
+          const paths = pathsByLibrary.get(deleted.libraryKey) || new Set();
+          paths.add(deleted.fullPath);
+          pathsByLibrary.set(deleted.libraryKey, paths);
+        }
 
-          const mediaType: 'movie' | 'tv' =
-            lib.type === 'movie' ? 'movie' : 'tv';
-          const placeholderPath = getPlaceholderRootFolder(lib.key, mediaType);
-          if (!placeholderPath) continue;
+        const deletedRatingKeys = new Set<string>();
+        const librariesWithMisses = new Set<string>();
 
+        // For each library, scan once and find all stale Plex items
+        for (const [libraryKey, deletedPaths] of pathsByLibrary) {
           try {
-            await plexClient.scanLibrary(lib.key);
-            scannedLibraryKeys.push(lib.key);
-            logger.info(
-              'Triggered scan for library after placeholder cleanup',
-              {
-                label: 'Collections Sync',
-                libraryKey: lib.key,
-                libraryTitle: lib.title,
-                mediaType: lib.type,
-              }
+            // Single scan per library - find all items matching any deleted path
+            const pathToRatingKeys = await plexClient.findItemsByFilePaths(
+              libraryKey,
+              deletedPaths
             );
-          } catch (scanError) {
-            logger.warn('Failed to scan library after placeholder cleanup', {
+
+            // Track which paths had no matches (need fallback)
+            const matchedPaths = new Set(pathToRatingKeys.keys());
+            for (const path of deletedPaths) {
+              if (!matchedPaths.has(path)) {
+                librariesWithMisses.add(libraryKey);
+              }
+            }
+
+            // Delete each stale item directly from Plex
+            for (const [deletedPath, ratingKeys] of pathToRatingKeys) {
+              for (const ratingKey of ratingKeys) {
+                // Skip if already deleted (same item could match multiple paths)
+                if (deletedRatingKeys.has(ratingKey)) continue;
+
+                try {
+                  await plexClient.deleteItem(ratingKey);
+                  deletedRatingKeys.add(ratingKey);
+                  logger.info(
+                    'Deleted stale Plex item for removed placeholder',
+                    {
+                      label: 'Collections Sync',
+                      ratingKey,
+                      deletedPath,
+                      libraryKey,
+                    }
+                  );
+                } catch (deleteError) {
+                  logger.warn('Failed to delete stale Plex item', {
+                    label: 'Collections Sync',
+                    ratingKey,
+                    deletedPath,
+                    error:
+                      deleteError instanceof Error
+                        ? deleteError.message
+                        : String(deleteError),
+                  });
+                }
+              }
+            }
+          } catch (findError) {
+            // Library scan failed - mark for fallback
+            librariesWithMisses.add(libraryKey);
+            logger.warn('Failed to find stale Plex items for library', {
               label: 'Collections Sync',
-              libraryKey: lib.key,
-              libraryTitle: lib.title,
+              libraryKey,
+              pathCount: deletedPaths.size,
               error:
-                scanError instanceof Error
-                  ? scanError.message
-                  : String(scanError),
+                findError instanceof Error
+                  ? findError.message
+                  : String(findError),
             });
           }
         }
 
-        // Wait briefly for scans to detect missing files, then empty trash
-        // Note: Plex scan's file existence check is fast; the delay allows it to
-        // mark files as unavailable before we empty trash. Media analysis takes
-        // longer but isn't needed for trash cleanup.
-        if (scannedLibraryKeys.length > 0) {
-          this.setStage('Cleaning up Plex trash after placeholder removal...');
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+        // Fallback: Run scan+emptyTrash only for libraries where direct deletion missed items
+        // This handles edge cases like path format mismatches between filesystem and Plex
+        if (librariesWithMisses.size > 0) {
+          this.setStage('Running fallback Plex cleanup...');
 
-          for (const libraryKey of scannedLibraryKeys) {
+          for (const libraryKey of librariesWithMisses) {
             try {
+              await plexClient.scanLibrary(libraryKey);
+              await new Promise((resolve) => setTimeout(resolve, 2000));
               await plexClient.emptyTrash(libraryKey);
-              logger.info('Emptied Plex trash after placeholder cleanup', {
+              logger.debug('Ran fallback cleanup for library', {
                 label: 'Collections Sync',
                 libraryKey,
               });
-            } catch (trashError) {
-              logger.warn('Failed to empty Plex trash for library', {
+            } catch (fallbackError) {
+              logger.debug('Fallback Plex cleanup failed for library', {
                 label: 'Collections Sync',
                 libraryKey,
                 error:
-                  trashError instanceof Error
-                    ? trashError.message
-                    : String(trashError),
+                  fallbackError instanceof Error
+                    ? fallbackError.message
+                    : String(fallbackError),
               });
             }
           }
         }
+
+        logger.info('Plex cleanup completed', {
+          label: 'Collections Sync',
+          filesRemoved: cleanupResult.filesRemoved,
+          directlyDeleted: deletedRatingKeys.size,
+          librariesNeedingFallback: librariesWithMisses.size,
+        });
       }
 
       const duration = Date.now() - startTime;

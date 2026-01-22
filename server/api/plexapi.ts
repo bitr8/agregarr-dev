@@ -2143,6 +2143,117 @@ class PlexAPI {
     }
   }
 
+  /**
+   * Delete a media item from Plex by its rating key
+   * Use this for direct deletion when scan/emptyTrash won't work (e.g., empty directories)
+   * @param ratingKey - The rating key of the item to delete
+   */
+  public async deleteItem(ratingKey: string): Promise<void> {
+    try {
+      logger.debug('Deleting Plex item', {
+        label: 'Plex API',
+        ratingKey,
+      });
+
+      await this.safeDeleteQuery(`/library/metadata/${ratingKey}`);
+
+      logger.info('Plex item deleted', {
+        label: 'Plex API',
+        ratingKey,
+      });
+    } catch (error) {
+      logger.error('Failed to delete Plex item', {
+        label: 'Plex API',
+        ratingKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Find Plex items that reference any of the given file paths
+   * Scans the library once and matches against all paths for efficiency
+   * @param libraryId - The library section ID to search in
+   * @param filePaths - Set of exact file paths to search for
+   * @returns Map of file path to rating keys for items referencing that path
+   */
+  public async findItemsByFilePaths(
+    libraryId: string,
+    filePaths: Set<string>
+  ): Promise<Map<string, string[]>> {
+    const results = new Map<string, string[]>();
+
+    if (filePaths.size === 0) {
+      return results;
+    }
+
+    try {
+      // Get all items in the library with their file paths
+      // Using a larger page size to minimize API calls
+      let offset = 0;
+      const pageSize = 500;
+      let totalSize = 0;
+
+      do {
+        const response = await this.plexClient.query<{
+          MediaContainer: {
+            totalSize: number;
+            Metadata?: {
+              ratingKey: string;
+              Media?: {
+                Part?: {
+                  file: string;
+                }[];
+              }[];
+            }[];
+          };
+        }>({
+          uri: `/library/sections/${libraryId}/all?includeGuids=1`,
+          extraHeaders: {
+            'X-Plex-Container-Start': `${offset}`,
+            'X-Plex-Container-Size': `${pageSize}`,
+          },
+        });
+
+        totalSize = response.MediaContainer.totalSize;
+        const items = response.MediaContainer.Metadata ?? [];
+
+        for (const item of items) {
+          if (!item.Media) continue;
+
+          for (const media of item.Media) {
+            if (!media.Part) continue;
+
+            for (const part of media.Part) {
+              // Use exact path match to avoid deleting wrong items
+              if (part.file && filePaths.has(part.file)) {
+                const existing = results.get(part.file) || [];
+                // Avoid duplicate rating keys for same path
+                if (!existing.includes(item.ratingKey)) {
+                  existing.push(item.ratingKey);
+                  results.set(part.file, existing);
+                }
+              }
+            }
+          }
+        }
+
+        offset += pageSize;
+      } while (offset < totalSize);
+
+      return results;
+    } catch (error) {
+      logger.error('Failed to find Plex items by file paths', {
+        label: 'Plex API',
+        libraryId,
+        pathCount: filePaths.size,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error; // Re-throw so caller can handle appropriately
+    }
+  }
+
   // PLEX.TV METHODS - Delegated to PlexTvAPI
 
   /**

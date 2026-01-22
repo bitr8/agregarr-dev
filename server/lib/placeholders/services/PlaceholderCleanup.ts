@@ -240,12 +240,22 @@ export async function cleanupOrphanedPlaceholderRecords(): Promise<void> {
   }
 }
 
+export interface OrphanedFileCleanupResult {
+  filesRemoved: number;
+  deletedPaths: {
+    fullPath: string;
+    relativePath: string;
+    libraryKey: string;
+    mediaType: 'movie' | 'tv';
+  }[];
+}
+
 /**
  * Cleanup orphaned placeholder files where no DB records reference them
  * This runs after record cleanup to remove files that are no longer tracked
- * @returns Number of files removed
+ * @returns Cleanup result with count and paths of deleted files
  */
-export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
+export async function cleanupOrphanedPlaceholderFiles(): Promise<OrphanedFileCleanupResult> {
   try {
     const repository = getRepository(ComingSoonItem);
     const settings = getSettings();
@@ -282,7 +292,7 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
           label: 'PlaceholderService',
         }
       );
-      return 0;
+      return { filesRemoved: 0, deletedPaths: [] };
     }
 
     // Get all placeholder file paths from database
@@ -297,6 +307,7 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
     const trackedPaths = new Set(allRecords.map((r) => r.placeholderPath));
 
     let filesRemoved = 0;
+    const deletedPaths: OrphanedFileCleanupResult['deletedPaths'] = [];
 
     // Scan each library's placeholder folder for orphaned files
     for (const libraryInfo of libraryPaths) {
@@ -337,6 +348,12 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
                     );
                     await removePlaceholder(filePath, 'movie');
                     filesRemoved++;
+                    deletedPaths.push({
+                      fullPath: filePath,
+                      relativePath,
+                      libraryKey: libraryInfo.libraryKey,
+                      mediaType: 'movie',
+                    });
                     logger.info('Removed orphaned placeholder file', {
                       label: 'PlaceholderService',
                       path: relativePath,
@@ -398,6 +415,12 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
                       );
                       await removePlaceholder(filePath, 'tv');
                       filesRemoved++;
+                      deletedPaths.push({
+                        fullPath: filePath,
+                        relativePath,
+                        libraryKey: libraryInfo.libraryKey,
+                        mediaType: 'tv',
+                      });
                       logger.info('Removed orphaned placeholder file', {
                         label: 'PlaceholderService',
                         path: relativePath,
@@ -441,16 +464,17 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
       logger.info('Orphaned placeholder files cleaned up', {
         label: 'PlaceholderService',
         filesRemoved,
+        deletedPaths: deletedPaths.map((p) => p.relativePath),
       });
     }
 
-    return filesRemoved;
+    return { filesRemoved, deletedPaths };
   } catch (error) {
     logger.error('Failed to cleanup orphaned placeholder files', {
       label: 'PlaceholderService',
       error: error instanceof Error ? error.message : String(error),
     });
-    return 0;
+    return { filesRemoved: 0, deletedPaths: [] };
   }
 }
 
