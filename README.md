@@ -42,6 +42,33 @@ Live status on the dashboard showing progress, item counts, ETA, and a stop butt
 
 - **Configurable Rating Cache**: Settings UI option to adjust maximum IMDb/RT cache duration (7-90 days).
 
+### Direct Plex Deletion for Placeholder Cleanup
+
+Improves placeholder cleanup reliability when Plex's built-in trash mechanism fails.
+
+**Problem:** Plex ignores empty directories during library scans (protection against accidental removal). When a placeholder file is deleted and its directory becomes empty, `scanLibrary()` + `emptyTrash()` won't remove the stale database entry.
+
+**Solution:** Directly delete stale Plex items via API instead of relying on scan/trash:
+
+1. Tracks which placeholder file paths were deleted during cleanup
+2. Queries Plex once per library for items referencing those exact paths
+3. Deletes stale items directly via `DELETE /library/metadata/{ratingKey}`
+4. Falls back to scan+emptyTrash only for libraries where direct deletion couldn't find matches
+
+**Safeguards:**
+- Only tracks paths of successfully deleted placeholder files
+- Exact path matching only (no partial/fuzzy matching)
+- Deduplicates rating keys to prevent double-deletion
+- Only files matching placeholder patterns are ever considered
+
+### Sonarr Folder Naming for TV Placeholders
+
+TV placeholders now use Sonarr's folder naming convention when the show exists in Sonarr.
+
+**Problem:** Agregarr created TV placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrived, Plex saw them as different shows, leaving orphaned placeholder entries.
+
+**Solution:** Extract the folder name from Sonarr's series path and use it for placeholder creation. Falls back to standard naming if the show isn't in Sonarr.
+
 ## Upstream PRs
 
 ### Open
@@ -51,15 +78,16 @@ Live status on the dashboard showing progress, item counts, ETA, and a stop butt
 | [#405](https://github.com/agregarr/agregarr/pull/405) | Fix Letterboxd title extraction from data-item-name   | -          |
 | [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle | -          |
 
-### Draft (Blocked)
+### Pending Submission
 
-| Commit    | Description                                  | Blocked By |
-| --------- | -------------------------------------------- | ---------- |
-| `db5e56d` | Use Sonarr folder naming for TV placeholders | #404       |
+| Commit    | Description                                      | Blocked By |
+| --------- | ------------------------------------------------ | ---------- |
+| `15a8496` | Direct Plex API deletion for stale placeholders  | -          |
+| `db5e56d` | Use Sonarr folder naming for TV placeholders     | #404       |
 
-> **Note:** The Sonarr folder naming fix extends `batchCheckDownloadStatus()` from #404. It adds `folderName` to the `showsByTvdbId` map. Cannot submit until #404 merges.
+> **Note:** The Sonarr folder naming fix extends `batchCheckDownloadStatus()` from #404. It adds `folderName` to the `showsByTvdbId` map. Cannot submit until #404 merges. The direct Plex deletion fix can be submitted independently.
 
-> **Legacy Placeholder Cleanup:** TV placeholders created before this fix use simplified folder names (e.g., `Show Name (2024)`) that may not match Sonarr's naming (e.g., `Show Name (2024) [imdbid-tt1234567]`). When the real content arrives, this mismatch can cause orphaned placeholder files. To fix existing placeholders, delete the placeholder folder and let the next sync recreate it with the correct naming.
+> **Legacy Placeholder Cleanup:** TV placeholders created before the Sonarr folder naming fix use simplified folder names (e.g., `Show Name (2024)`) that may not match Sonarr's naming (e.g., `Show Name (2024) [imdbid-tt1234567]`). When real content arrives, this mismatch can cause orphaned placeholder files. To fix: delete the placeholder folder and let the next sync recreate it with the correct naming.
 
 ### Merged
 
