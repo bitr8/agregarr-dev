@@ -514,7 +514,10 @@ export class PlaceholderContextService {
     }[]
   ): Promise<{
     moviesByTmdbId: Map<number, { downloaded: boolean; inRadarr: boolean }>;
-    showsByTvdbId: Map<number, { downloaded: boolean; inSonarr: boolean }>;
+    showsByTvdbId: Map<
+      number,
+      { downloaded: boolean; inSonarr: boolean; folderName?: string }
+    >;
   }> {
     const settings = getSettings();
     const moviesByTmdbId = new Map<
@@ -523,7 +526,7 @@ export class PlaceholderContextService {
     >();
     const showsByTvdbId = new Map<
       number,
-      { downloaded: boolean; inSonarr: boolean }
+      { downloaded: boolean; inSonarr: boolean; folderName?: string }
     >();
 
     // Check if we have any movies or TV items to look up
@@ -581,10 +584,24 @@ export class PlaceholderContextService {
           const shows = await sonarrClient.getSeries();
 
           for (const show of shows) {
-            if (show.tvdbId && !showsByTvdbId.has(show.tvdbId)) {
+            if (show.tvdbId) {
+              const existing = showsByTvdbId.get(show.tvdbId);
+              // Extract folder name from Sonarr path (e.g., "/tv/Show Name (2024) [imdb-xxx]" -> "Show Name (2024) [imdb-xxx]")
+              // Handle both Unix and Windows paths, and strip trailing slashes
+              const folderName = show.path
+                ? show.path
+                    .replace(/[\\/]+$/, '')
+                    .split(/[\\/]/)
+                    .pop() || undefined
+                : undefined;
+              // Keep the first folder name we find (don't overwrite with undefined)
+              // OR downloaded status across instances - if ANY instance has it, it's downloaded
               showsByTvdbId.set(show.tvdbId, {
-                downloaded: (show.statistics?.episodeFileCount || 0) > 0,
+                downloaded:
+                  existing?.downloaded ||
+                  (show.statistics?.episodeFileCount || 0) > 0,
                 inSonarr: true,
+                folderName: existing?.folderName || folderName,
               });
             }
           }

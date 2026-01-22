@@ -263,12 +263,24 @@ export async function processPlaceholdersForMissingItems(
     remainingTmdbIds.has(s.tmdbId)
   );
 
+  // Build a map of TVDB ID -> Sonarr folder name for TV shows
+  const sonarrFolderNames = new Map<number, string>();
+  for (const item of itemsNotDownloaded) {
+    if (item.mediaType === 'tv' && item.tvdbId) {
+      const sonarrStatus = showsByTvdbId.get(item.tvdbId);
+      if (sonarrStatus?.folderName) {
+        sonarrFolderNames.set(item.tvdbId, sonarrStatus.folderName);
+      }
+    }
+  }
+
   // Call the internal placeholder creation logic
   return createPlaceholders(
     itemsNotDownloaded,
     remainingSourceData,
     config,
-    plexClient
+    plexClient,
+    sonarrFolderNames
   );
 }
 
@@ -349,7 +361,8 @@ function missingItemsToPlaceholderSourceData(
  */
 async function createPlaceholderFile(
   sourceItem: ComingSoonSourceData,
-  libraryKey: string
+  libraryKey: string,
+  sonarrFolderName?: string
 ): Promise<string> {
   const { downloadTrailer } = await import(
     '@server/lib/placeholders/trailerDownload'
@@ -407,6 +420,7 @@ async function createPlaceholderFile(
     mediaType: sourceItem.mediaType,
     libraryPath,
     trailerPath,
+    sonarrFolderName,
   });
 
   return result.placeholderPath;
@@ -993,7 +1007,8 @@ async function createPlaceholders(
   missingItems: MissingItem[],
   sourceData: ComingSoonSourceData[],
   config: CollectionConfig,
-  plexClient: PlexAPI
+  plexClient: PlexAPI,
+  sonarrFolderNames?: Map<number, string>
 ): Promise<CollectionItem[]> {
   if (missingItems.length === 0) {
     return [];
@@ -1553,9 +1568,16 @@ async function createPlaceholders(
     }
 
     try {
+      // Get Sonarr folder name if available (for TV shows)
+      const sonarrFolderName =
+        sourceItem.mediaType === 'tv' && sourceItem.tvdbId
+          ? sonarrFolderNames?.get(sourceItem.tvdbId)
+          : undefined;
+
       const placeholderPath = await createPlaceholderFile(
         sourceItem,
-        config.libraryId
+        config.libraryId,
+        sonarrFolderName
       );
 
       createdPlaceholders.push({ sourceItem, placeholderPath });
