@@ -59,6 +59,8 @@ Live status on the dashboard showing progress, item counts, ETA, and a stop butt
 
 > **Note:** The Sonarr folder naming fix extends `batchCheckDownloadStatus()` from #404. It adds `folderName` to the `showsByTvdbId` map. Cannot submit until #404 merges.
 
+> **Legacy Placeholder Cleanup:** TV placeholders created before this fix use simplified folder names (e.g., `Show Name (2024)`) that may not match Sonarr's naming (e.g., `Show Name (2024) [imdbid-tt1234567]`). When the real content arrives, this mismatch can cause orphaned placeholder files. To fix existing placeholders, delete the placeholder folder and let the next sync recreate it with the correct naming.
+
 ### Merged
 
 | PR                                                    | Description                                                          |
