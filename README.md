@@ -75,7 +75,6 @@ TV placeholders now use Sonarr's folder naming convention when the show exists i
 
 | PR                                                    | Description                                           | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------- | ---------- |
-| [#405](https://github.com/agregarr/agregarr/pull/405) | Fix Letterboxd title extraction from data-item-name   | -          |
 | [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle | -          |
 
 ### Pending Submission
@@ -93,6 +92,7 @@ TV placeholders now use Sonarr's folder naming convention when the show exists i
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#405](https://github.com/agregarr/agregarr/pull/405) | Fix Letterboxd title extraction from data-item-name                  |
 | [#400](https://github.com/agregarr/agregarr/pull/400) | Empty Plex trash after placeholder cleanup                           |
 | [#387](https://github.com/agregarr/agregarr/pull/387) | Skip date filtering for non-Coming-Soon with includeAllReleasedItems |
 | [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates                          |
