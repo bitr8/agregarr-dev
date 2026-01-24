@@ -19,14 +19,18 @@ export interface ImdbRatingResponse {
  */
 class ImdbRatingsAPI extends ExternalAPI {
   constructor() {
-    super('https://api.agregarr.org', {
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      nodeCache: cacheManager.getCache('imdb').data,
-      staleCache: cacheManager.getStaleCache('imdb'),
-    });
+    super(
+      'https://api.agregarr.org',
+      {}, // URL params
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        nodeCache: cacheManager.getCache('imdb').data,
+        staleCache: cacheManager.getStaleCache('imdb'),
+      }
+    );
   }
 
   /**
@@ -78,7 +82,9 @@ class ImdbRatingsAPI extends ExternalAPI {
 
         if (!isTransient || attempt === maxRetries) {
           logger.error(
-            `IMDb batch ${batchNum}/${totalBatches} failed after ${attempt + 1} attempts`,
+            `IMDb batch ${batchNum}/${totalBatches} failed after ${
+              attempt + 1
+            } attempts`,
             {
               label: 'IMDb Ratings API',
               error: lastError.message,
@@ -127,14 +133,11 @@ class ImdbRatingsAPI extends ExternalAPI {
       }
 
       if (ids.length > 100) {
-        logger.info(
-          `Fetching ${ids.length} IMDb ratings in batches of 100`,
-          {
-            label: 'IMDb Ratings API',
-            requestedCount: ids.length,
-            batchCount: Math.ceil(ids.length / 100),
-          }
-        );
+        logger.info(`Fetching ${ids.length} IMDb ratings in batches of 100`, {
+          label: 'IMDb Ratings API',
+          requestedCount: ids.length,
+          batchCount: Math.ceil(ids.length / 100),
+        });
 
         // Split into batches of 100
         const batches: string[][] = [];
@@ -168,26 +171,20 @@ class ImdbRatingsAPI extends ExternalAPI {
         }
 
         if (failedCount > 0) {
-          logger.warn(
-            `IMDb batch prefetch completed with partial success`,
-            {
-              label: 'IMDb Ratings API',
-              successfulBatches: successCount,
-              failedBatches: failedCount,
-              totalBatches: batches.length,
-              ratingsRetrieved: allResults.length,
-              ratingsRequested: ids.length,
-            }
-          );
+          logger.warn(`IMDb batch prefetch completed with partial success`, {
+            label: 'IMDb Ratings API',
+            successfulBatches: successCount,
+            failedBatches: failedCount,
+            totalBatches: batches.length,
+            ratingsRetrieved: allResults.length,
+            ratingsRequested: ids.length,
+          });
         } else {
-          logger.info(
-            `IMDb batch prefetch completed successfully`,
-            {
-              label: 'IMDb Ratings API',
-              batches: batches.length,
-              ratingsRetrieved: allResults.length,
-            }
-          );
+          logger.info(`IMDb batch prefetch completed successfully`, {
+            label: 'IMDb Ratings API',
+            batches: batches.length,
+            ratingsRetrieved: allResults.length,
+          });
         }
 
         return allResults;
