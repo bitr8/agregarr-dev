@@ -28,46 +28,39 @@ Features not yet submitted upstream:
 
 ### Real-time Overlay Job Progress
 
-Live status on the dashboard showing progress, item counts, ETA, and a stop button for each library.
+Live dashboard status showing progress, item counts, ETA, and a stop button for each library.
 
 ![Overlay Jobs Status](public/images/overlay-jobs-status.png)
 
 ### Performance Optimizations
 
-- **Batch IMDb Prefetch**: Fetches all IMDb ratings upfront in batches of 20 via TMDB lookup, then queries IMDb in bulk. Reduces thousands of individual API calls to tens.
-- **Adaptive TTL Caching**: Cache duration based on content age. New releases: 12 hours. Older content: up to 30 days.
+- **Batch IMDb Prefetch**: Fetches IMDb ratings upfront in batches of 20 via TMDB lookup, then queries IMDb in bulk. Reduces thousands of API calls to tens.
+- **Adaptive TTL Caching**: Cache duration based on content age. New releases cache for 12 hours, older content up to 30 days.
 - **Stale Cache Fallback**: Returns cached ratings when external APIs fail instead of breaking the overlay job.
-
-### Settings
-
 - **Configurable Rating Cache**: Settings UI option to adjust maximum IMDb/RT cache duration (7-90 days).
 
 ### Direct Plex Deletion for Placeholder Cleanup
 
 Improves placeholder cleanup reliability when Plex's built-in trash mechanism fails.
 
-**Problem:** Plex ignores empty directories during library scans (protection against accidental removal). When a placeholder file is deleted and its directory becomes empty, `scanLibrary()` + `emptyTrash()` won't remove the stale database entry.
+**Problem:** Plex ignores empty directories during library scans. When a placeholder file is deleted and its directory becomes empty, `scanLibrary()` + `emptyTrash()` won't remove the stale database entry.
 
-**Solution:** Directly delete stale Plex items via API instead of relying on scan/trash:
+**Solution:** Delete stale Plex items directly via API:
 
-1. Tracks which placeholder file paths were deleted during cleanup
-2. Queries Plex once per library for items referencing those exact paths
-3. Deletes stale items directly via `DELETE /library/metadata/{ratingKey}`
-4. Falls back to scan+emptyTrash only for libraries where direct deletion couldn't find matches
+1. Track which placeholder file paths were deleted during cleanup
+2. Query Plex once per library for items referencing those exact paths
+3. Delete stale items via `DELETE /library/metadata/{ratingKey}`
+4. Fall back to scan+emptyTrash only when direct deletion can't find matches
 
-**Safeguards:**
-- Only tracks paths of successfully deleted placeholder files
-- Exact path matching only (no partial/fuzzy matching)
-- Deduplicates rating keys to prevent double-deletion
-- Only files matching placeholder patterns are ever considered
+**Safeguards:** Only tracks successfully deleted placeholder files, uses exact path matching, deduplicates rating keys, and only considers files matching placeholder patterns.
 
 ### Sonarr Folder Naming for TV Placeholders
 
-TV placeholders now use Sonarr's folder naming convention when the show exists in Sonarr.
+TV placeholders use Sonarr's folder naming convention when the show exists in Sonarr.
 
-**Problem:** Agregarr created TV placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrived, Plex saw them as different shows, leaving orphaned placeholder entries.
+**Problem:** Agregarr created placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrived, Plex saw them as different shows, leaving orphaned entries.
 
-**Solution:** Extract the folder name from Sonarr's series path and use it for placeholder creation. Falls back to standard naming if the show isn't in Sonarr.
+**Solution:** Extract the folder name from Sonarr's series path for placeholder creation. Falls back to standard naming if the show isn't in Sonarr.
 
 ## Upstream PRs
 
@@ -79,26 +72,27 @@ TV placeholders now use Sonarr's folder naming convention when the show exists i
 
 ### Pending Submission
 
-| Commit    | Description                                      | Blocked By |
-| --------- | ------------------------------------------------ | ---------- |
-| `15a8496` | Direct Plex API deletion for stale placeholders  | -          |
-| `db5e56d` | Use Sonarr folder naming for TV placeholders     | #404       |
+| Feature                                         | Blocked By |
+| ----------------------------------------------- | ---------- |
+| Direct Plex API deletion for stale placeholders | -          |
+| Use Sonarr folder naming for TV placeholders    | #404       |
 
-> **Note:** The Sonarr folder naming fix extends `batchCheckDownloadStatus()` from #404. It adds `folderName` to the `showsByTvdbId` map. Cannot submit until #404 merges. The direct Plex deletion fix can be submitted independently.
+> **Note:** Sonarr folder naming extends `batchCheckDownloadStatus()` from #404, adding `folderName` to the `showsByTvdbId` map. Cannot submit until #404 merges.
 
-> **Legacy Placeholder Cleanup:** TV placeholders created before the Sonarr folder naming fix use simplified folder names (e.g., `Show Name (2024)`) that may not match Sonarr's naming (e.g., `Show Name (2024) [imdbid-tt1234567]`). When real content arrives, this mismatch can cause orphaned placeholder files. To fix: delete the placeholder folder and let the next sync recreate it with the correct naming.
+> **Legacy Cleanup:** TV placeholders created before the Sonarr folder naming fix may not match Sonarr's naming convention. If orphaned placeholders appear after real content arrives, delete the placeholder folder and let the next sync recreate it correctly.
 
 ### Merged
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#413](https://github.com/agregarr/agregarr/pull/413) | Pass options to ExternalAPI constructor correctly                    |
 | [#405](https://github.com/agregarr/agregarr/pull/405) | Fix Letterboxd title extraction from data-item-name                  |
 | [#400](https://github.com/agregarr/agregarr/pull/400) | Empty Plex trash after placeholder cleanup                           |
 | [#387](https://github.com/agregarr/agregarr/pull/387) | Skip date filtering for non-Coming-Soon with includeAllReleasedItems |
-| [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates                          |
 | [#358](https://github.com/agregarr/agregarr/pull/358) | IMDb Top 250 English Movies collection type                          |
 | [#356](https://github.com/agregarr/agregarr/pull/356) | Handle 404 gracefully when deleting hub items                        |
 | [#350](https://github.com/agregarr/agregarr/pull/350) | Validate SVG icon dimensions and file type                           |
+| [#349](https://github.com/agregarr/agregarr/pull/349) | Don't double-estimate digital release dates                          |
 | [#348](https://github.com/agregarr/agregarr/pull/348) | Fix scheduler startNow immediate sync and deadlock bugs              |
 | [#345](https://github.com/agregarr/agregarr/pull/345) | Multi-source label regex for collection matching                     |
 | [#340](https://github.com/agregarr/agregarr/pull/340) | Handle Jellyfin trickplay directories during cleanup                 |
