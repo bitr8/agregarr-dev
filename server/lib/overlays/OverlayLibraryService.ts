@@ -14,6 +14,7 @@ import logger from '@server/logger';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import type sharp from 'sharp';
 import {
   buildRenderContext,
   checkMonitoringStatus,
@@ -1927,9 +1928,15 @@ class OverlayLibraryService {
 
       const posterBuffer = basePosterResult.posterBuffer;
 
-      // Apply each template in order
-      let currentBuffer = posterBuffer;
+      // Batch render: collect overlay elements from all matching templates,
+      // then composite everything in a single sharp operation.
+      // This avoids repeated lossy WebP decode/encode cycles between templates.
       let templatesApplied = 0;
+      const allOverlays: sharp.OverlayOptions[] = [];
+
+      // Get poster dimensions once (shared across all templates)
+      const { width: posterWidth, height: posterHeight } =
+        await overlayTemplateRenderer.getPosterDimensions(posterBuffer);
 
       for (const template of templates) {
         // Check if application condition is met
@@ -1939,13 +1946,25 @@ class OverlayLibraryService {
         }
 
         const templateData = template.getTemplateData();
-        currentBuffer = await overlayTemplateRenderer.renderOverlay(
-          currentBuffer,
-          templateData,
-          context
-        );
-        templatesApplied++;
+        const templateOverlays =
+          await overlayTemplateRenderer.renderOverlayElements(
+            posterWidth,
+            posterHeight,
+            templateData,
+            context
+          );
+
+        if (templateOverlays) {
+          allOverlays.push(...templateOverlays);
+          templatesApplied++;
+        }
       }
+
+      // Single composite + WebP encode for all templates
+      const currentBuffer = await overlayTemplateRenderer.compositeOverlays(
+        posterBuffer,
+        allOverlays
+      );
 
       // Save to temporary file
       const tempDir = os.tmpdir();
