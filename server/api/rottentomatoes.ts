@@ -33,6 +33,7 @@ interface RTAlgoliaHit {
     audienceIconUrl: string;
     scoreSentiment: string;
     certifiedFresh: boolean;
+    verifiedHot: boolean;
     criticsScore: number;
   };
 }
@@ -44,6 +45,7 @@ export interface RTRating {
   criticsScore: number;
   audienceRating?: 'Upright' | 'Spilled';
   audienceScore?: number;
+  verifiedHot?: boolean;
   url: string;
 }
 
@@ -270,6 +272,7 @@ class RottenTomatoes extends ExternalAPI {
         audienceRating:
           movie.rottenTomatoes.audienceScore >= 60 ? 'Upright' : 'Spilled',
         audienceScore: movie.rottenTomatoes.audienceScore,
+        verifiedHot: movie.rottenTomatoes.verifiedHot ?? false,
         year: Number(movie.releaseYear),
       };
     } catch (e) {
@@ -408,6 +411,7 @@ class RottenTomatoes extends ExternalAPI {
         audienceRating:
           tvshow.rottenTomatoes.audienceScore >= 60 ? 'Upright' : 'Spilled',
         audienceScore: tvshow.rottenTomatoes.audienceScore,
+        verifiedHot: tvshow.rottenTomatoes.verifiedHot ?? false,
         year: Number(tvshow.releaseYear),
       };
     } catch (e) {

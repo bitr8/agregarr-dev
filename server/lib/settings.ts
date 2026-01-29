@@ -508,6 +508,7 @@ export interface DVRSettings {
   searchOnAdd?: boolean; // Whether to immediately search for items when added (defaults to true)
   tagRequests?: boolean;
   tagRequestsMode?: TagRequestsMode;
+  tagExistingItems?: boolean; // Apply collection tags to items that already exist in Radarr/Sonarr
 }
 
 export interface RadarrSettings extends DVRSettings {
@@ -536,6 +537,7 @@ export interface WatchlistSyncSettings {
     profileId?: number; // Quality profile override
     rootFolder?: string; // Root folder override
     tags?: number[]; // Tags override
+    tagWithUsername?: boolean; // Tag media with the user's Plex username
     monitor?: boolean; // Monitor by default override
     searchOnAdd?: boolean; // Search on add override
   };
@@ -545,6 +547,7 @@ export interface WatchlistSyncSettings {
     profileId?: number; // Quality profile override
     rootFolder?: string; // Root folder override
     tags?: number[]; // Tags override
+    tagWithUsername?: boolean; // Tag media with the user's Plex username
     monitor?: boolean; // Monitor by default override
     searchOnAdd?: boolean; // Search on add override
     seasonFolder?: boolean; // Season folder override

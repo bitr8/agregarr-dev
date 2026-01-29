@@ -391,6 +391,28 @@ export class MultiSourceOrchestrator {
         }
       );
 
+      // Tag existing items in Radarr/Sonarr (if enabled)
+      try {
+        const { existingItemTagService } = await import(
+          './ExistingItemTagService'
+        );
+        await existingItemTagService.tagExistingItems(
+          finalItems,
+          configForSync as unknown as CollectionConfig,
+          'multi-source'
+        );
+      } catch (tagError) {
+        // Log but don't fail the sync if tagging fails
+        logger.warn(
+          `Failed to tag existing items in Radarr/Sonarr for multi-source collection: ${collectionNameForSync}`,
+          {
+            label: 'Multi-Source Orchestrator',
+            error:
+              tagError instanceof Error ? tagError.message : String(tagError),
+          }
+        );
+      }
+
       // Handle placeholder cleanup for multi-source collection
       // If createPlaceholdersForMissing enabled: cleans up released/orphaned/stale items
       // If createPlaceholdersForMissing disabled: deletes all placeholder records
@@ -1705,7 +1727,7 @@ export class MultiSourceOrchestrator {
             );
 
             collectionRatingKey = existingCollection.ratingKey;
-            await plexClient.updateCollectionContents(
+            const updateResult = await plexClient.updateCollectionContents(
               collectionRatingKey,
               plexItems
             );
@@ -1726,6 +1748,56 @@ export class MultiSourceOrchestrator {
                   newTitle: collectionName,
                 }
               );
+            }
+
+            // Label items that fell out of the collection as stale
+            if (updateResult.removedKeys.length > 0) {
+              for (const removedKey of updateResult.removedKeys) {
+                try {
+                  await plexClient.addLabelToItem(removedKey, 'agregarr-stale');
+                } catch (error) {
+                  logger.warn(
+                    `Failed to add agregarr-stale label to item ${removedKey}`,
+                    {
+                      label: 'Multi-Source Orchestrator',
+                      error:
+                        error instanceof Error ? error.message : String(error),
+                    }
+                  );
+                }
+              }
+              logger.info(
+                `Labeled ${updateResult.removedKeys.length} removed items as agregarr-stale in collection ${collectionName}`,
+                { label: 'Multi-Source Orchestrator' }
+              );
+            }
+
+            // Clean up stale labels for items still in this collection
+            const currentPlexKeys = new Set(
+              plexItems.map((item) => item.ratingKey)
+            );
+            const staleItems = await plexClient.getItemsWithLabel(
+              options.libraryKey,
+              'agregarr-stale'
+            );
+            for (const staleKey of staleItems) {
+              if (currentPlexKeys.has(staleKey)) {
+                try {
+                  await plexClient.removeLabelFromItem(
+                    staleKey,
+                    'agregarr-stale'
+                  );
+                } catch (error) {
+                  logger.warn(
+                    `Failed to remove agregarr-stale label from item ${staleKey}`,
+                    {
+                      label: 'Multi-Source Orchestrator',
+                      error:
+                        error instanceof Error ? error.message : String(error),
+                    }
+                  );
+                }
+              }
             }
 
             updated = 1;

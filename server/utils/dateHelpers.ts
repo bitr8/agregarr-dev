@@ -35,28 +35,17 @@ function getCalendarDateInTimezone(date: Date): Date {
 }
 
 /**
- * Parse ISO date string (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:MM:SSZ) and convert to server timezone calendar date
- *
- * For date-only strings (YYYY-MM-DD): treated as UTC midnight
- * - "2025-12-03" = Dec 3 midnight UTC = Dec 3 in Sydney (11am) but Dec 2 in LA (4pm)
- *
- * For full datetime strings: uses actual time to determine correct calendar day
- * - "2025-12-03T15:30:00Z" in Sydney (UTC+11) = Dec 4 at 2:30am → calendar date is Dec 4
- * - "2025-12-03T15:30:00Z" in LA (UTC-8) = Dec 3 at 7:30am → calendar date is Dec 3
- *
- * This ensures countdowns show the correct local calendar day for the user's timezone.
+ * Parse ISO date string (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:MM:SSZ) as UTC noon, then convert to server timezone
+ * Using noon UTC ensures the calendar date is preserved for timezones UTC-12 through UTC+11.
+ * For UTC+12/+13 (NZ, Fiji) it shifts to the next day.
+ * Example: "2025-12-03" = Dec 3 noon UTC = Dec 4 1AM in NZ = Dec 3 4AM in LA
+ * Example: "2025-12-03T15:30:00Z" = Dec 3 noon UTC (time component stripped)
  */
 function parseDate(isoString: string): Date {
-  // Check if this is a full datetime string (has 'T' separator)
-  if (isoString.includes('T')) {
-    // Parse the full datetime to get the actual moment
-    const fullDate = new Date(isoString);
-    // Convert to calendar date in server timezone
-    return getCalendarDateInTimezone(fullDate);
-  }
-
-  // Date-only string (YYYY-MM-DD) - treat as UTC midnight
-  const utcDate = new Date(isoString + 'T00:00:00.000Z');
+  // Extract just the date part (YYYY-MM-DD) if a datetime string is provided
+  const dateOnly = isoString.split('T')[0];
+  // Parse as UTC noon to prevent timezone conversion from shifting the calendar date
+  const utcDate = new Date(dateOnly + 'T12:00:00.000Z');
   // Convert to calendar date in server timezone
   return getCalendarDateInTimezone(utcDate);
 }
