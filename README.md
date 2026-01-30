@@ -68,6 +68,7 @@ TV placeholders use Sonarr's folder naming convention when the show exists in So
 
 | PR                                                    | Description                                           | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------- | ---------- |
+| [#431](https://github.com/agregarr/agregarr/pull/431) | Respect Radarr/Sonarr exclusion lists in watchlist sync | -          |
 | [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle | -          |
 
 ### Pending Submission
