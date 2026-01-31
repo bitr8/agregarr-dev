@@ -97,3 +97,4 @@ config/cache
 .claude
 CLAUDE.md
 docs/
+LESSONS_LEARNED.md
