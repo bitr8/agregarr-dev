@@ -112,6 +112,8 @@ class OverlayLibraryService {
   private radarrMoviesCache?: Map<string, RadarrMovie[]>;
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
   private maintainerrCollectionsCache?: MaintainerrCollection[];
+  // Maps item ratingKey → array of collection IDs the item belongs to
+  private collectionMembershipCache?: Map<string, string[]>;
 
   // Pre-fetched IMDb ratings for batch optimization (global, keyed by IMDb ID)
   // Maps IMDb ID to rating number (or null if no rating available).
@@ -325,10 +327,13 @@ class OverlayLibraryService {
     try {
       const cacheEntry = cacheManager.getCache('imdb-ratings');
       if (!cacheEntry?.data) {
-        logger.error('IMDb ratings cache not available - prefetch cannot proceed', {
-          label: 'OverlayLibrary',
-          cacheExists: !!cacheEntry,
-        });
+        logger.error(
+          'IMDb ratings cache not available - prefetch cannot proceed',
+          {
+            label: 'OverlayLibrary',
+            cacheExists: !!cacheEntry,
+          }
+        );
         return; // Map is empty but initialized, items will make individual calls
       }
       const adaptiveCache = cacheEntry.data;
@@ -345,234 +350,236 @@ class OverlayLibraryService {
         return;
       }
 
-    // Step 1: Extract IMDb IDs from Plex GUIDs first (fast path - no API calls)
-    // Only fall back to TMDB for items without IMDb GUIDs
-    const imdbData: Map<
-      string,
-      { imdbId: string; releaseYear: number | undefined }
-    > = new Map();
-    const needTmdbLookup: {
-      tmdbId: number;
-      itemType: 'movie' | 'show';
-      year?: number;
-    }[] = [];
-    let plexImdbCount = 0;
+      // Step 1: Extract IMDb IDs from Plex GUIDs first (fast path - no API calls)
+      // Only fall back to TMDB for items without IMDb GUIDs
+      const imdbData: Map<
+        string,
+        { imdbId: string; releaseYear: number | undefined }
+      > = new Map();
+      const needTmdbLookup: {
+        tmdbId: number;
+        itemType: 'movie' | 'show';
+        year?: number;
+      }[] = [];
+      let plexImdbCount = 0;
 
-    for (const item of processableItems) {
-      if (!item.Guid || !Array.isArray(item.Guid)) continue;
+      for (const item of processableItems) {
+        if (!item.Guid || !Array.isArray(item.Guid)) continue;
 
-      // Try to find IMDb ID directly in Plex GUIDs
-      const imdbGuid = item.Guid.find((g) => g.id?.startsWith('imdb://'));
-      if (imdbGuid) {
-        const imdbId = imdbGuid.id.replace('imdb://', '');
-        if (imdbId && !imdbData.has(imdbId)) {
-          imdbData.set(imdbId, { imdbId, releaseYear: item.year });
-          plexImdbCount++;
-        }
-        continue; // Got IMDb ID, no need for TMDB
-      }
-
-      // No IMDb GUID - check if we have TMDB ID for fallback lookup
-      const tmdbGuid = item.Guid.find((g) => g.id?.startsWith('tmdb://'));
-      if (tmdbGuid) {
-        const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
-        if (match) {
-          const tmdbId = parseInt(match[1], 10);
-          // Deduplicate TMDB lookups
-          if (!needTmdbLookup.some((t) => t.tmdbId === tmdbId)) {
-            const itemType = item.type === 'movie' ? 'movie' : 'show';
-            needTmdbLookup.push({ tmdbId, itemType, year: item.year });
+        // Try to find IMDb ID directly in Plex GUIDs
+        const imdbGuid = item.Guid.find((g) => g.id?.startsWith('imdb://'));
+        if (imdbGuid) {
+          const imdbId = imdbGuid.id.replace('imdb://', '');
+          if (imdbId && !imdbData.has(imdbId)) {
+            imdbData.set(imdbId, { imdbId, releaseYear: item.year });
+            plexImdbCount++;
           }
+          continue; // Got IMDb ID, no need for TMDB
         }
-      }
-    }
 
-    logger.info('Pre-fetching IMDb ratings with adaptive TTL', {
-      label: 'OverlayLibrary',
-      totalItems: items.length,
-      processableItems: processableItems.length,
-      imdbFromPlex: plexImdbCount,
-      needTmdbLookup: needTmdbLookup.length,
-    });
-
-    // Step 2: Fetch TMDB data only for items without IMDb GUIDs
-    if (needTmdbLookup.length > 0) {
-      const tmdbClient = new TheMovieDb();
-      const batchSize = 20;
-      let tmdbFailures = 0;
-
-      for (let i = 0; i < needTmdbLookup.length; i += batchSize) {
-        const batch = needTmdbLookup.slice(i, i + batchSize);
-
-        const promises = batch.map(async ({ tmdbId, itemType, year }) => {
-          try {
-            const tmdbResult =
-              itemType === 'movie'
-                ? await tmdbClient.getMovie({ movieId: tmdbId })
-                : await tmdbClient.getTvShow({ tvId: tmdbId });
-
-            const imdbId = tmdbResult.external_ids?.imdb_id;
-            if (!imdbId) return undefined;
-
-            // Use TMDB release date if available, otherwise fall back to Plex year
-            let releaseYear = year;
-            if ('release_date' in tmdbResult && tmdbResult.release_date) {
-              releaseYear = parseInt(
-                tmdbResult.release_date.substring(0, 4),
-                10
-              );
-            } else if (
-              'first_air_date' in tmdbResult &&
-              tmdbResult.first_air_date
-            ) {
-              releaseYear = parseInt(
-                tmdbResult.first_air_date.substring(0, 4),
-                10
-              );
+        // No IMDb GUID - check if we have TMDB ID for fallback lookup
+        const tmdbGuid = item.Guid.find((g) => g.id?.startsWith('tmdb://'));
+        if (tmdbGuid) {
+          const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
+          if (match) {
+            const tmdbId = parseInt(match[1], 10);
+            // Deduplicate TMDB lookups
+            if (!needTmdbLookup.some((t) => t.tmdbId === tmdbId)) {
+              const itemType = item.type === 'movie' ? 'movie' : 'show';
+              needTmdbLookup.push({ tmdbId, itemType, year: item.year });
             }
-
-            return { imdbId, releaseYear };
-          } catch {
-            tmdbFailures++;
-            return undefined;
-          }
-        });
-
-        const results = await Promise.all(promises);
-        for (const result of results) {
-          if (result && !imdbData.has(result.imdbId)) {
-            imdbData.set(result.imdbId, result);
           }
         }
       }
 
-      if (tmdbFailures > 0) {
-        logger.debug('Some TMDB lookups failed during prefetch', {
-          label: 'OverlayLibrary',
-          failures: tmdbFailures,
-          attempted: needTmdbLookup.length,
-        });
-      }
-    }
+      logger.info('Pre-fetching IMDb ratings with adaptive TTL', {
+        label: 'OverlayLibrary',
+        totalItems: items.length,
+        processableItems: processableItems.length,
+        imdbFromPlex: plexImdbCount,
+        needTmdbLookup: needTmdbLookup.length,
+      });
 
-    logger.debug('Collected IMDb IDs for rating lookup', {
-      label: 'OverlayLibrary',
-      totalImdbIds: imdbData.size,
-      fromPlex: plexImdbCount,
-      fromTmdb: imdbData.size - plexImdbCount,
-    });
+      // Step 2: Fetch TMDB data only for items without IMDb GUIDs
+      if (needTmdbLookup.length > 0) {
+        const tmdbClient = new TheMovieDb();
+        const batchSize = 20;
+        let tmdbFailures = 0;
 
-    if (imdbData.size === 0) {
-      // Map already initialized at function start
-      return;
-    }
+        for (let i = 0; i < needTmdbLookup.length; i += batchSize) {
+          const batch = needTmdbLookup.slice(i, i + batchSize);
 
-    // Step 3: Check adaptive cache for existing ratings
-    // Map already initialized at function start, just populate it
-    const uncachedItems: { imdbId: string; releaseYear: number | undefined }[] =
-      [];
-    let cacheHits = 0;
-    let nullCacheHits = 0;
+          const promises = batch.map(async ({ tmdbId, itemType, year }) => {
+            try {
+              const tmdbResult =
+                itemType === 'movie'
+                  ? await tmdbClient.getMovie({ movieId: tmdbId })
+                  : await tmdbClient.getTvShow({ tvId: tmdbId });
 
-    for (const [imdbId, data] of imdbData) {
-      const cachedRating = adaptiveCache.get<number | null>(imdbId);
-      if (cachedRating !== undefined) {
-        // Store in preloadedImdbRatings (including null) to prevent fallback API calls
-        this.preloadedImdbRatings.set(imdbId, cachedRating);
-        if (cachedRating === null) {
-          nullCacheHits++;
-        }
-        cacheHits++;
-      } else {
-        // Need to fetch this one
-        uncachedItems.push(data);
-      }
-    }
+              const imdbId = tmdbResult.external_ids?.imdb_id;
+              if (!imdbId) return undefined;
 
-    logger.debug('Adaptive cache check complete', {
-      label: 'OverlayLibrary',
-      totalItems: imdbData.size,
-      cacheHits,
-      nullCacheHits,
-      cacheMisses: uncachedItems.length,
-    });
+              // Use TMDB release date if available, otherwise fall back to Plex year
+              let releaseYear = year;
+              if ('release_date' in tmdbResult && tmdbResult.release_date) {
+                releaseYear = parseInt(
+                  tmdbResult.release_date.substring(0, 4),
+                  10
+                );
+              } else if (
+                'first_air_date' in tmdbResult &&
+                tmdbResult.first_air_date
+              ) {
+                releaseYear = parseInt(
+                  tmdbResult.first_air_date.substring(0, 4),
+                  10
+                );
+              }
 
-    // Step 4: Batch fetch only uncached IMDb ratings
-    if (uncachedItems.length > 0) {
-      try {
-        const imdbApi = new ImdbRatingsAPI();
-        const imdbIds = uncachedItems.map((item) => item.imdbId);
-        const ratings = await imdbApi.getRatings(imdbIds);
+              return { imdbId, releaseYear };
+            } catch {
+              tmdbFailures++;
+              return undefined;
+            }
+          });
 
-        // Create lookup map for release years
-        const releaseYearMap = new Map<string, number | undefined>();
-        for (const item of uncachedItems) {
-          releaseYearMap.set(item.imdbId, item.releaseYear);
-        }
-
-        // Track which IDs got ratings
-        const receivedIds = new Set<string>();
-
-        // Step 5: Store each rating with age-appropriate TTL
-        for (const rating of ratings) {
-          receivedIds.add(rating.imdbId);
-          const releaseYear = releaseYearMap.get(rating.imdbId);
-          const ttl = this.getAdaptiveTtl(releaseYear);
-
-          if (rating.rating !== null) {
-            this.preloadedImdbRatings.set(rating.imdbId, rating.rating);
-            adaptiveCache.set(rating.imdbId, rating.rating, ttl);
-          } else {
-            // Cache null rating with adaptive TTL based on content age
-            const nullTtl = this.getNullRatingTtl(releaseYear);
-            this.preloadedImdbRatings.set(rating.imdbId, null);
-            adaptiveCache.set(rating.imdbId, null, nullTtl);
+          const results = await Promise.all(promises);
+          for (const result of results) {
+            if (result && !imdbData.has(result.imdbId)) {
+              imdbData.set(result.imdbId, result);
+            }
           }
         }
 
-        // Cache any IDs that weren't in the response as null
-        for (const item of uncachedItems) {
-          if (!receivedIds.has(item.imdbId)) {
-            const nullTtl = this.getNullRatingTtl(item.releaseYear);
-            this.preloadedImdbRatings.set(item.imdbId, null);
-            adaptiveCache.set(item.imdbId, null, nullTtl);
-          }
-        }
-
-        const elapsed = Date.now() - startTime;
-        const apiCalls = Math.ceil(uncachedItems.length / 100);
-        logger.info('Pre-fetched IMDb ratings successfully', {
-          label: 'OverlayLibrary',
-          totalImdbIds: imdbData.size,
-          fromPlexGuids: plexImdbCount,
-          fromTmdbLookup: imdbData.size - plexImdbCount,
-          cacheHits,
-          fetchedFromApi: uncachedItems.length,
-          ratingsReceived: this.preloadedImdbRatings.size,
-          batchApiCalls: apiCalls,
-          elapsedMs: elapsed,
-        });
-      } catch (error) {
-        // Don't fail the job if pre-fetch fails - items will fall back to individual calls
-        logger.warn(
-          'Failed to pre-fetch IMDb ratings, will use individual calls',
-          {
+        if (tmdbFailures > 0) {
+          logger.debug('Some TMDB lookups failed during prefetch', {
             label: 'OverlayLibrary',
-            error: error instanceof Error ? error.message : String(error),
-          }
-        );
-        // Keep any cached ratings we found
+            failures: tmdbFailures,
+            attempted: needTmdbLookup.length,
+          });
+        }
       }
-    } else {
-      const elapsed = Date.now() - startTime;
-      logger.info('All IMDb ratings served from cache', {
+
+      logger.debug('Collected IMDb IDs for rating lookup', {
         label: 'OverlayLibrary',
         totalImdbIds: imdbData.size,
+        fromPlex: plexImdbCount,
+        fromTmdb: imdbData.size - plexImdbCount,
+      });
+
+      if (imdbData.size === 0) {
+        // Map already initialized at function start
+        return;
+      }
+
+      // Step 3: Check adaptive cache for existing ratings
+      // Map already initialized at function start, just populate it
+      const uncachedItems: {
+        imdbId: string;
+        releaseYear: number | undefined;
+      }[] = [];
+      let cacheHits = 0;
+      let nullCacheHits = 0;
+
+      for (const [imdbId, data] of imdbData) {
+        const cachedRating = adaptiveCache.get<number | null>(imdbId);
+        if (cachedRating !== undefined) {
+          // Store in preloadedImdbRatings (including null) to prevent fallback API calls
+          this.preloadedImdbRatings.set(imdbId, cachedRating);
+          if (cachedRating === null) {
+            nullCacheHits++;
+          }
+          cacheHits++;
+        } else {
+          // Need to fetch this one
+          uncachedItems.push(data);
+        }
+      }
+
+      logger.debug('Adaptive cache check complete', {
+        label: 'OverlayLibrary',
+        totalItems: imdbData.size,
         cacheHits,
         nullCacheHits,
-        elapsedMs: elapsed,
+        cacheMisses: uncachedItems.length,
       });
-    }
+
+      // Step 4: Batch fetch only uncached IMDb ratings
+      if (uncachedItems.length > 0) {
+        try {
+          const imdbApi = new ImdbRatingsAPI();
+          const imdbIds = uncachedItems.map((item) => item.imdbId);
+          const ratings = await imdbApi.getRatings(imdbIds);
+
+          // Create lookup map for release years
+          const releaseYearMap = new Map<string, number | undefined>();
+          for (const item of uncachedItems) {
+            releaseYearMap.set(item.imdbId, item.releaseYear);
+          }
+
+          // Track which IDs got ratings
+          const receivedIds = new Set<string>();
+
+          // Step 5: Store each rating with age-appropriate TTL
+          for (const rating of ratings) {
+            receivedIds.add(rating.imdbId);
+            const releaseYear = releaseYearMap.get(rating.imdbId);
+            const ttl = this.getAdaptiveTtl(releaseYear);
+
+            if (rating.rating !== null) {
+              this.preloadedImdbRatings.set(rating.imdbId, rating.rating);
+              adaptiveCache.set(rating.imdbId, rating.rating, ttl);
+            } else {
+              // Cache null rating with adaptive TTL based on content age
+              const nullTtl = this.getNullRatingTtl(releaseYear);
+              this.preloadedImdbRatings.set(rating.imdbId, null);
+              adaptiveCache.set(rating.imdbId, null, nullTtl);
+            }
+          }
+
+          // Cache any IDs that weren't in the response as null
+          for (const item of uncachedItems) {
+            if (!receivedIds.has(item.imdbId)) {
+              const nullTtl = this.getNullRatingTtl(item.releaseYear);
+              this.preloadedImdbRatings.set(item.imdbId, null);
+              adaptiveCache.set(item.imdbId, null, nullTtl);
+            }
+          }
+
+          const elapsed = Date.now() - startTime;
+          const apiCalls = Math.ceil(uncachedItems.length / 100);
+          logger.info('Pre-fetched IMDb ratings successfully', {
+            label: 'OverlayLibrary',
+            totalImdbIds: imdbData.size,
+            fromPlexGuids: plexImdbCount,
+            fromTmdbLookup: imdbData.size - plexImdbCount,
+            cacheHits,
+            fetchedFromApi: uncachedItems.length,
+            ratingsReceived: this.preloadedImdbRatings.size,
+            batchApiCalls: apiCalls,
+            elapsedMs: elapsed,
+          });
+        } catch (error) {
+          // Don't fail the job if pre-fetch fails - items will fall back to individual calls
+          logger.warn(
+            'Failed to pre-fetch IMDb ratings, will use individual calls',
+            {
+              label: 'OverlayLibrary',
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+          // Keep any cached ratings we found
+        }
+      } else {
+        const elapsed = Date.now() - startTime;
+        logger.info('All IMDb ratings served from cache', {
+          label: 'OverlayLibrary',
+          totalImdbIds: imdbData.size,
+          cacheHits,
+          nullCacheHits,
+          elapsedMs: elapsed,
+        });
+      }
     } catch (error) {
       // Outer catch: handle any unexpected errors during prefetch setup
       // The Map is already initialized, so items can still use it (even if empty)
@@ -630,7 +637,11 @@ class OverlayLibraryService {
       }
 
       // Extract TMDB IDs from Plex GUIDs
-      const tmdbItems: { tmdbId: number; mediaType: 'movie' | 'show'; year?: number }[] = [];
+      const tmdbItems: {
+        tmdbId: number;
+        mediaType: 'movie' | 'show';
+        year?: number;
+      }[] = [];
       const seen = new Set<string>();
 
       for (const item of processableItems) {
@@ -711,7 +722,9 @@ class OverlayLibraryService {
               let releaseDateInfo: ReleaseDateInfo | null = null;
 
               if (mediaType === 'movie') {
-                const movieDetails = await tmdbClient.getMovie({ movieId: tmdbId });
+                const movieDetails = await tmdbClient.getMovie({
+                  movieId: tmdbId,
+                });
 
                 // Extract release date using the same logic as fetchReleaseDateInfo
                 if (movieDetails.release_dates?.results) {
@@ -736,13 +749,16 @@ class OverlayLibraryService {
                 }
               } else {
                 // TV show
-                const showDetails = await tmdbClient.getTvShow({ tvId: tmdbId });
+                const showDetails = await tmdbClient.getTvShow({
+                  tvId: tmdbId,
+                });
                 const nextEpisode = showDetails.next_episode_to_air;
 
                 if (nextEpisode?.air_date) {
                   releaseDateInfo = {
                     // Set releaseDate from first_air_date (matches original fetchReleaseDateInfo)
-                    releaseDate: showDetails.first_air_date || nextEpisode.air_date,
+                    releaseDate:
+                      showDetails.first_air_date || nextEpisode.air_date,
                     nextEpisodeAirDate: nextEpisode.air_date,
                     seasonNumber: nextEpisode.season_number,
                     episodeNumber: nextEpisode.episode_number,
@@ -928,8 +944,79 @@ class OverlayLibraryService {
     if (!this.sonarrSeriesCache) {
       this.sonarrSeriesCache = new Map();
     }
-    // maintainerrCollectionsCache and preloadedImdbRatings are initialized on-demand
+    // maintainerrCollectionsCache, collectionMembershipCache and preloadedImdbRatings are initialized on-demand
     // requiredContextFieldsByLibrary is already initialized as a Map
+  }
+
+  /**
+   * Build a map of item ratingKey → collection IDs for all agregarr and pre-existing collections.
+   * Called once at the start of an overlay job for efficient per-item lookups.
+   */
+  private async buildCollectionMembershipMap(
+    plexApi: PlexAPI
+  ): Promise<Map<string, string[]>> {
+    const membershipMap = new Map<string, string[]>();
+    const settings = getSettings();
+
+    // Gather all collections with ratingKeys: agregarr-created + pre-existing
+    const collectionsToCheck: { id: string; ratingKey: string }[] = [];
+
+    const agregarrConfigs = settings.plex.collectionConfigs || [];
+    for (const config of agregarrConfigs) {
+      if (config.collectionRatingKey) {
+        collectionsToCheck.push({
+          id: config.id,
+          ratingKey: config.collectionRatingKey,
+        });
+      }
+    }
+
+    const { preExistingCollectionConfigService } = await import(
+      '@server/lib/collections/services/PreExistingCollectionConfigService'
+    );
+    const preExistingConfigs = preExistingCollectionConfigService.getConfigs();
+    for (const config of preExistingConfigs) {
+      if (config.collectionRatingKey) {
+        collectionsToCheck.push({
+          id: config.id,
+          ratingKey: config.collectionRatingKey,
+        });
+      }
+    }
+
+    logger.info('Building collection membership map for overlay conditions', {
+      label: 'OverlayLibrary',
+      totalCollections: collectionsToCheck.length,
+    });
+
+    for (const { id, ratingKey } of collectionsToCheck) {
+      try {
+        const itemRatingKeys = await plexApi.getCollectionItems(ratingKey);
+        for (const itemKey of itemRatingKeys) {
+          const existing = membershipMap.get(itemKey);
+          if (existing) {
+            existing.push(id);
+          } else {
+            membershipMap.set(itemKey, [id]);
+          }
+        }
+      } catch (error) {
+        logger.debug('Failed to fetch items for collection', {
+          label: 'OverlayLibrary',
+          collectionId: id,
+          collectionRatingKey: ratingKey,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    logger.info('Collection membership map built', {
+      label: 'OverlayLibrary',
+      collectionsChecked: collectionsToCheck.length,
+      itemsWithMembership: membershipMap.size,
+    });
+
+    return membershipMap;
   }
 
   /**
@@ -1178,6 +1265,20 @@ class OverlayLibraryService {
 
       const plexApi = new PlexAPI({ plexToken: admin.plexToken });
 
+      // Build collection membership map for condition evaluation
+      // Only build if any enabled template uses a 'collection' condition field
+      const hasCollectionConditions = sortedTemplates.some((template) => {
+        const condition = template.getApplicationCondition();
+        return condition?.sections?.some((s) =>
+          s.rules.some((r) => r.field === 'collection')
+        );
+      });
+
+      if (hasCollectionConditions) {
+        this.collectionMembershipCache =
+          await this.buildCollectionMembershipMap(plexApi);
+      }
+
       // Fetch all items (handle pagination)
       let allItems: PlexLibraryItem[] = [];
       let offset = 0;
@@ -1305,6 +1406,7 @@ class OverlayLibraryService {
           const itemWithFullMetadata = {
             ...item,
             Media: fullMetadata.Media,
+            Label: fullMetadata.Label,
           };
 
           const result = await this.applyOverlaysToItem(
@@ -1463,6 +1565,19 @@ class OverlayLibraryService {
 
       const plexApi = new PlexAPI({ plexToken: admin.plexToken });
 
+      // Build collection membership map if any template uses collection conditions
+      const hasCollectionConditions = sortedTemplates.some((template) => {
+        const condition = template.getApplicationCondition();
+        return condition?.sections?.some((s) =>
+          s.rules.some((r) => r.field === 'collection')
+        );
+      });
+
+      if (hasCollectionConditions) {
+        this.collectionMembershipCache =
+          await this.buildCollectionMembershipMap(plexApi);
+      }
+
       // Determine media type from library config
       const mediaType = config.mediaType || 'movie';
 
@@ -1493,6 +1608,7 @@ class OverlayLibraryService {
               guid: itemMetadata.guid || '',
               Guid: itemMetadata.Guid,
               Media: itemMetadata.Media,
+              Label: itemMetadata.Label,
               parentIndex: itemMetadata.parentIndex,
               index: itemMetadata.index,
               addedAt: itemMetadata.addedAt || 0,
@@ -1749,6 +1865,9 @@ class OverlayLibraryService {
         downloaded = true; // Real items not in *arr are assumed downloaded (they exist in Plex)
       }
 
+      // Collection membership for condition evaluation
+      const collection = this.collectionMembershipCache?.get(item.ratingKey);
+
       const context: OverlayRenderContext = {
         ...baseContext,
         isPlaceholder: actualIsPlaceholder,
@@ -1756,6 +1875,7 @@ class OverlayLibraryService {
         ...contextOverrides,
         ...releaseDateContext,
         ...monitoringContext,
+        ...(collection ? { collection } : {}),
       };
 
       // Filter templates by conditions to get only templates that will actually be applied
