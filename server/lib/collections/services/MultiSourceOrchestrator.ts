@@ -81,6 +81,7 @@ interface MetadataUpdateOptions {
   isLibraryPromoted?: boolean;
   customPoster?: string | Record<string, string>;
   config: MultiSourceCollectionConfig;
+  libraryKey: string;
 }
 
 /**
@@ -1573,7 +1574,8 @@ export class MultiSourceOrchestrator {
           if (existingCollection.title !== collectionName) {
             await plexClient.updateCollectionTitle(
               collectionRatingKey,
-              collectionName
+              collectionName,
+              options.libraryKey
             );
             logger.debug(
               `Updated title for smart multi-source collection: ${existingCollection.title} -> ${collectionName}`,
@@ -1736,7 +1738,8 @@ export class MultiSourceOrchestrator {
             if (existingCollection.title !== collectionName) {
               await plexClient.updateCollectionTitle(
                 collectionRatingKey,
-                collectionName
+                collectionName,
+                options.libraryKey
               );
               logger.debug(
                 `Updated title for multi-source collection: ${existingCollection.title} -> ${collectionName}`,
@@ -1953,7 +1956,8 @@ export class MultiSourceOrchestrator {
     if (options.config.name) {
       await plexClient.updateCollectionTitle(
         collectionRatingKey,
-        options.config.name
+        options.config.name,
+        options.libraryKey
       );
     }
 
