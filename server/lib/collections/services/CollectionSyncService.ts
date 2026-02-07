@@ -498,8 +498,8 @@ export class CollectionSyncService {
     let processedCount = 0;
 
     // Cache getAllCollections() across loop iterations to avoid redundant Plex API calls.
-    // Re-fetched only when a previous iteration created or updated collections (which may
-    // have mutated labels, titles, or the collection list itself).
+    // Re-fetched only when a collection is created or deleted (structural changes to the list).
+    // Item-level updates (adding/removing items) don't change collection metadata.
     let cachedAllCollections: Awaited<
       ReturnType<PlexAPI['getAllCollections']>
     > | null = null;
@@ -546,6 +546,10 @@ export class CollectionSyncService {
         } else {
           // Use cached collections list, re-fetching only when stale
           if (!cachedAllCollections) {
+            logger.debug('Fetching getAllCollections from Plex API', {
+              label: 'Collection Sync Service',
+              reason: processedCount === 0 ? 'initial' : 'cache-invalidated',
+            });
             cachedAllCollections = await plexClient.getAllCollections();
           }
           const allCollections = cachedAllCollections;
@@ -664,10 +668,13 @@ export class CollectionSyncService {
           created += result.created || 0;
           updated += result.updated || 0;
 
-          // Invalidate cache if sync mutated Plex (includes deletions not
-          // tracked by created/updated counters)
+          // Invalidate cache if sync mutated Plex (created or deleted collections)
           if (result.mutated) {
             cachedAllCollections = null;
+            logger.debug(
+              `getAllCollections cache invalidated after ${config.name}`,
+              { label: 'Collection Sync Service' }
+            );
           }
 
           // Check if the sync returned an error (e.g., from multi-source orchestrator)

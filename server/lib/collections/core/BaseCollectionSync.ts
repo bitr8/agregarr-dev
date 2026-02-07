@@ -393,7 +393,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       return {
         created,
         updated,
-        mutated: mutated || created > 0 || updated > 0,
+        mutated: mutated || created > 0,
         details: {
           processingTime: Date.now() - startTime,
           errors: errors.length,
