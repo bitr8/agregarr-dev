@@ -66,9 +66,12 @@ TV placeholders use Sonarr's folder naming convention when the show exists in So
 
 ### Open
 
-| PR                                                    | Description                                           | Depends On |
-| ----------------------------------------------------- | ----------------------------------------------------- | ---------- |
-| [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle | -          |
+| PR                                                    | Description                                                    | Depends On |
+| ----------------------------------------------------- | -------------------------------------------------------------- | ---------- |
+| [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight            | -          |
+| [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs     | -          |
+| [#444](https://github.com/agregarr/agregarr/pull/444) | Use correct Plex API endpoint for collection title updates      | -          |
+| [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle           | -          |
 
 ### Pending Submission
 
@@ -85,6 +88,8 @@ TV placeholders use Sonarr's folder naming convention when the show exists in So
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#446](https://github.com/agregarr/agregarr/pull/446) | Add date format options for US and UK/AU locales                     |
+| [#445](https://github.com/agregarr/agregarr/pull/445) | Persist applyOverlaysDuringSync for pre-existing collections         |
 | [#413](https://github.com/agregarr/agregarr/pull/413) | Pass options to ExternalAPI constructor correctly                    |
 | [#405](https://github.com/agregarr/agregarr/pull/405) | Fix Letterboxd title extraction from data-item-name                  |
 | [#400](https://github.com/agregarr/agregarr/pull/400) | Empty Plex trash after placeholder cleanup                           |
