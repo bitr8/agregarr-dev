@@ -4,6 +4,7 @@ import type {
   TmdbMovieResult,
   TmdbTvResult,
 } from '@server/api/themoviedb/interfaces';
+import type { TmdbResolutionCache } from '@server/entity/TmdbResolutionCache';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   findPlexItemsByTmdbIds,
@@ -21,6 +22,10 @@ import type {
   PlexLookupResult,
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
+import tmdbResolutionCacheService, {
+  TmdbResolutionCacheService,
+  type ResolutionToStore,
+} from '@server/lib/collections/services/TmdbResolutionCacheService';
 import { RandomListManager } from '@server/lib/collections/utils/RandomListManager';
 import type { CollectionConfig } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -231,6 +236,14 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
         }
       );
 
+      // Persistent TMDB resolution cache — avoids re-resolving on subsequent syncs
+      await tmdbResolutionCacheService.cleanup();
+      const cacheMap = await tmdbResolutionCacheService.lookupBatch(
+        letterboxdData
+      );
+      const newResolutions: ResolutionToStore[] = [];
+      let cacheHits = 0;
+
       const sourceData: LetterboxdSourceData[] = [];
       const batchSize = 20; // Process 20 items concurrently (well under 40 req/sec limit)
 
@@ -260,6 +273,26 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
         // Process batch concurrently
         const batchPromises = batch.map(async (item) => {
           try {
+            // Check persistent cache first
+            const cacheKey = TmdbResolutionCacheService.makeLookupKey(
+              item.title,
+              item.year
+            );
+            const cached = cacheMap.get(cacheKey);
+            if (cached) {
+              cacheHits++;
+              if (cached.tmdbId !== null && cached.mediaType !== null) {
+                return {
+                  title: item.title,
+                  year: item.year,
+                  letterboxdUrl: item.letterboxdUrl,
+                  tmdbId: cached.tmdbId,
+                  mediaType: cached.mediaType,
+                };
+              }
+              return null; // negative cache hit
+            }
+
             // Search movies and TV separately with year, year-1, and year+1
             // TMDB's year param is a hard filter so we search ±1 to handle
             // festival vs theatrical release date differences
@@ -326,19 +359,31 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
             }
 
             if (mediaResults.length > 0) {
-              const bestMatch = this.findBestTmdbMatch(
+              const match = this.findBestTmdbMatch(
                 mediaResults,
                 item.title,
                 item.year
               );
 
-              if (bestMatch) {
+              if (match) {
+                newResolutions.push({
+                  title: item.title,
+                  year: item.year,
+                  tmdbId: match.result.id,
+                  mediaType: match.result.media_type,
+                  matchScore: match.score,
+                });
+                // Populate in-flight cache so duplicates within this run skip API calls
+                cacheMap.set(cacheKey, {
+                  tmdbId: match.result.id,
+                  mediaType: match.result.media_type,
+                } as TmdbResolutionCache);
                 return {
                   title: item.title,
                   year: item.year,
                   letterboxdUrl: item.letterboxdUrl,
-                  tmdbId: bestMatch.id,
-                  mediaType: bestMatch.media_type,
+                  tmdbId: match.result.id,
+                  mediaType: match.result.media_type,
                 };
               }
             }
@@ -352,6 +397,18 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
                 itemYear: item.year,
               }
             );
+            newResolutions.push({
+              title: item.title,
+              year: item.year,
+              tmdbId: null,
+              mediaType: null,
+              matchScore: null,
+            });
+            // Populate in-flight negative cache
+            cacheMap.set(cacheKey, {
+              tmdbId: null,
+              mediaType: null,
+            } as TmdbResolutionCache);
             return null;
           } catch (error) {
             logger.warn(`Error resolving TMDB ID for ${item.title}:`, {
@@ -372,6 +429,10 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
         sourceData.push(...validResults);
       }
 
+      if (newResolutions.length > 0) {
+        await tmdbResolutionCacheService.storeBatch(newResolutions);
+      }
+
       logger.info(
         `TMDB ID resolution complete: ${sourceData.length}/${letterboxdData.length} items resolved`,
         {
@@ -379,6 +440,8 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
           configName: config.name,
           resolvedItems: sourceData.length,
           totalItems: letterboxdData.length,
+          cacheHits,
+          apiResolved: letterboxdData.length - cacheHits,
         }
       );
 
@@ -993,11 +1056,8 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
     results: (TmdbMovieResult | TmdbTvResult)[],
     targetTitle: string,
     targetYear: number
-  ): TmdbMovieResult | TmdbTvResult | null {
+  ): { result: TmdbMovieResult | TmdbTvResult; score: number } | null {
     if (!results || results.length === 0) return null;
-
-    let bestMatch: TmdbMovieResult | TmdbTvResult | null = null;
-    let bestScore = -1;
 
     // Calculate scores for all candidates
     const candidateScores = results.map((result) => ({
@@ -1024,29 +1084,23 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
       }
     );
 
-    // Best match is the first one
-    if (topCandidates.length > 0) {
-      bestMatch = topCandidates[0].result;
-      bestScore = topCandidates[0].score;
-    }
+    const best = topCandidates[0];
 
     // Only return a match if it meets a minimum threshold
-    if (bestScore >= 0.4) {
+    if (best && best.score >= 0.4) {
       logger.debug(`Best TMDB match found`, {
         label: 'Letterboxd Collections',
         targetTitle,
         targetYear,
-        matchedTitle: bestMatch ? this.getResultTitle(bestMatch) : undefined,
-        matchedMediaType: bestMatch?.media_type,
-        matchedYear: bestMatch
-          ? this.extractYearFromResult(bestMatch)
-          : undefined,
-        score: bestScore,
+        matchedTitle: this.getResultTitle(best.result),
+        matchedMediaType: best.result.media_type,
+        matchedYear: this.extractYearFromResult(best.result),
+        score: best.score,
       });
-      return bestMatch;
+      return best;
     }
 
-    logger.warn(`No good TMDB match found (best score: ${bestScore})`, {
+    logger.warn(`No good TMDB match found (best score: ${best?.score ?? -1})`, {
       label: 'Letterboxd Collections',
       targetTitle,
       targetYear,

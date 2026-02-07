@@ -54,6 +54,7 @@ Live dashboard status showing progress, item counts, ETA, and a stop button for 
 - **Collection Sync Cache**: Caches `getAllCollections()` across loop iterations during collection sync. Invalidates on mutations (create, update, delete). Saves ~25-30s on full sync jobs.
 - **Batch Overlay Metadata**: Fetches metadata for multiple items per Plex API call using `/library/metadata/{key1,key2,...}`. Chunks into batches of 200. Falls back to individual fetch on failure.
 - **AniList Retry Cap**: Caps rate-limit retries at 5 attempts. Fixes pre-existing `parseInt` NaN bug that caused tight loops on non-numeric Retry-After headers.
+- **Persistent TMDB Resolution Cache**: SQLite cache of Letterboxd title-to-TMDB-ID mappings with adaptive TTL. Reduces subsequent full syncs from ~45 min to ~10-15 min by avoiding 33,000+ redundant TMDB API calls.
 
 ### Direct Plex Deletion for Placeholder Cleanup
 
