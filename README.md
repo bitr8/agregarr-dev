@@ -4,6 +4,19 @@ Personal fork of [Agregarr](https://github.com/agregarr/agregarr) for testing ch
 
 ## Docker Image
 
+Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agregarr). Both `develop` and `latest` tags track the develop branch and include all fork-only features plus open upstream PRs. The image rebuilds automatically on every push to develop.
+
+**amd64 only** — no arm64/Apple Silicon builds.
+
+**Switching from upstream?** Replace the image line in your existing compose file — config volumes are compatible:
+
+```diff
+-    image: agregarr/agregarr:latest
++    image: bitr8/agregarr:develop
+```
+
+### Compose example
+
 ```yaml
 services:
   agregarr:
@@ -20,7 +33,7 @@ services:
     restart: unless-stopped
 ```
 
-Full setup docs at [agregarr.org](https://agregarr.org/docs/installation).
+For general Agregarr configuration (services, collections, overlays etc.), see the [upstream docs](https://agregarr.org/docs/installation) — note that they reference the upstream image, not this fork.
 
 ## Fork-Only Features
 
@@ -66,12 +79,12 @@ TV placeholders use Sonarr's folder naming convention when the show exists in So
 
 ### Open
 
-| PR                                                    | Description                                                    | Depends On |
-| ----------------------------------------------------- | -------------------------------------------------------------- | ---------- |
-| [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight            | -          |
-| [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs     | -          |
-| [#444](https://github.com/agregarr/agregarr/pull/444) | Use correct Plex API endpoint for collection title updates      | -          |
-| [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle           | -          |
+| PR                                                    | Description                                                 | Depends On |
+| ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight        | -          |
+| [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs | -          |
+| [#444](https://github.com/agregarr/agregarr/pull/444) | Use correct Plex API endpoint for collection title updates  | -          |
+| [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle       | -          |
 
 ### Pending Submission
 
