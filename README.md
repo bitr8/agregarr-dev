@@ -51,6 +51,9 @@ Live dashboard status showing progress, item counts, ETA, and a stop button for 
 - **Adaptive TTL Caching**: Cache duration based on content age. New releases cache for 12 hours, older content up to 30 days.
 - **Stale Cache Fallback**: Returns cached ratings when external APIs fail instead of breaking the overlay job.
 - **Configurable Rating Cache**: Settings UI option to adjust maximum IMDb/RT cache duration (7-90 days).
+- **Collection Sync Cache**: Caches `getAllCollections()` across loop iterations during collection sync. Invalidates on mutations (create, update, delete). Saves ~25-30s on full sync jobs.
+- **Batch Overlay Metadata**: Fetches metadata for multiple items per Plex API call using `/library/metadata/{key1,key2,...}`. Chunks into batches of 200. Falls back to individual fetch on failure.
+- **AniList Retry Cap**: Caps rate-limit retries at 5 attempts. Fixes pre-existing `parseInt` NaN bug that caused tight loops on non-numeric Retry-After headers.
 
 ### Direct Plex Deletion for Placeholder Cleanup
 
@@ -81,6 +84,7 @@ TV placeholders use Sonarr's folder naming convention when the show exists in So
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#453](https://github.com/agregarr/agregarr/pull/453) | Re-apply placeholder markers during global discovery (#414) | -          |
 | [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight        | -          |
 | [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs | -          |
 | [#444](https://github.com/agregarr/agregarr/pull/444) | Use correct Plex API endpoint for collection title updates  | -          |
