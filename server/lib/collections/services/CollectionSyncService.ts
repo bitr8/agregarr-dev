@@ -497,6 +497,13 @@ export class CollectionSyncService {
     const processedCollectionKeys = new Set<string>();
     let processedCount = 0;
 
+    // Cache getAllCollections() across loop iterations to avoid redundant Plex API calls.
+    // Re-fetched only when a previous iteration created or updated collections (which may
+    // have mutated labels, titles, or the collection list itself).
+    let cachedAllCollections: Awaited<
+      ReturnType<PlexAPI['getAllCollections']>
+    > | null = null;
+
     // Process each collection config directly
     for (const config of collectionConfigs) {
       if (this.cancelled) break;
@@ -537,8 +544,11 @@ export class CollectionSyncService {
             }
           );
         } else {
-          // Get the sync service for this config type and process it normally
-          const allCollections = await plexClient.getAllCollections();
+          // Use cached collections list, re-fetching only when stale
+          if (!cachedAllCollections) {
+            cachedAllCollections = await plexClient.getAllCollections();
+          }
+          const allCollections = cachedAllCollections;
 
           let result: SyncResult;
           if (config.type === 'multi-source') {
@@ -675,6 +685,10 @@ export class CollectionSyncService {
         totalUpdated += updated;
 
         if (created > 0 || updated > 0) {
+          // Invalidate cached collections — mutations may have changed labels,
+          // titles, or the collection list itself
+          cachedAllCollections = null;
+
           logger.info(
             `Collection processed: ${config.name} (created: ${created}, updated: ${updated})`,
             {

@@ -413,6 +413,45 @@ class PlexAPI {
     return response.MediaContainer.Metadata[0];
   }
 
+  /**
+   * Fetch metadata for multiple items in a single Plex API call.
+   * Returns a Map keyed by ratingKey for O(1) lookups.
+   * Chunks requests to avoid Plex URL length limits (~8KB).
+   */
+  public async getMetadataBatch(
+    ratingKeys: string[]
+  ): Promise<Map<string, PlexMetadata>> {
+    const result = new Map<string, PlexMetadata>();
+    if (ratingKeys.length === 0) return result;
+
+    // Chunk to avoid URL length limits (ratingKeys are ~5 digits + comma each)
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < ratingKeys.length; i += CHUNK_SIZE) {
+      const chunk = ratingKeys.slice(i, i + CHUNK_SIZE);
+      try {
+        const response = await this.plexClient.query<PlexMetadataResponse>(
+          `/library/metadata/${chunk.join(',')}`
+        );
+
+        for (const item of response.MediaContainer.Metadata) {
+          result.set(item.ratingKey, item);
+        }
+      } catch (error) {
+        logger.error(
+          'Batch metadata fetch failed, items will fall back to individual fetch',
+          {
+            label: 'Plex API',
+            chunkSize: chunk.length,
+            totalRequested: ratingKeys.length,
+            error,
+          }
+        );
+      }
+    }
+
+    return result;
+  }
+
   public async getChildrenMetadata(key: string): Promise<PlexMetadata[]> {
     const response = await this.plexClient.query<PlexMetadataResponse>(
       `/library/metadata/${key}/children`

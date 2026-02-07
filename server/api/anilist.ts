@@ -90,7 +90,8 @@ async function fetchAniListData<T>(
   variables: Record<
     string,
     string | number | boolean | string[] | null | undefined
-  > = {}
+  > = {},
+  retryCount = 0
 ): Promise<T> {
   const res = await fetch(ANILIST_API_URL, {
     method: 'POST',
@@ -104,14 +105,20 @@ async function fetchAniListData<T>(
 
   // Handle rate limiting (429 status)
   if (res.status === 429) {
+    if (retryCount >= 5) {
+      throw new Error('AniList API rate limit exceeded after 5 retries');
+    }
+
     // Check for Retry-After header, otherwise default to 1 second
     const retryAfter = res.headers.get('Retry-After');
-    const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 1000;
+    const parsed = retryAfter ? parseInt(retryAfter, 10) : NaN;
+    const waitTime =
+      Number.isFinite(parsed) && parsed > 0 ? parsed * 1000 : 1000;
 
     await new Promise((resolve) => setTimeout(resolve, waitTime));
 
     // Retry the request after waiting
-    return fetchAniListData(query, variables);
+    return fetchAniListData(query, variables, retryCount + 1);
   }
 
   if (!res.ok) {

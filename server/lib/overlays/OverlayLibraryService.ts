@@ -1356,6 +1356,13 @@ class OverlayLibraryService {
         });
       }
 
+      // Batch-fetch full metadata for all applicable items in a single Plex call.
+      // This replaces N sequential getMetadata() calls (~200ms each) with 1 bulk request.
+      const overlayRatingKeys = allItems
+        .filter((i) => i.type !== 'episode' && i.type !== 'season')
+        .map((i) => i.ratingKey);
+      const batchMetadata = await plexApi.getMetadataBatch(overlayRatingKeys);
+
       // Process each item
       for (const item of allItems) {
         // CRITICAL: Skip episodes and seasons - overlays only apply to movies and shows
@@ -1399,8 +1406,10 @@ class OverlayLibraryService {
         });
 
         try {
-          // Fetch full metadata including Stream details (needed for HDR, bitDepth, etc.)
-          const fullMetadata = await plexApi.getMetadata(item.ratingKey);
+          // Use batch-prefetched metadata, falling back to individual fetch on miss
+          const fullMetadata =
+            batchMetadata.get(item.ratingKey) ??
+            (await plexApi.getMetadata(item.ratingKey));
 
           // Merge full metadata with library item
           const itemWithFullMetadata = {
@@ -1581,14 +1590,19 @@ class OverlayLibraryService {
       // Determine media type from library config
       const mediaType = config.mediaType || 'movie';
 
+      // Batch-fetch metadata for all items in a single Plex call
+      const itemRatingKeys = normalizedItems.map((i) => i.ratingKey);
+      const batchMeta = await plexApi.getMetadataBatch(itemRatingKeys);
+
       // Process each item
       let successCount = 0;
       let errorCount = 0;
 
       for (const { ratingKey, contextOverrides } of normalizedItems) {
         try {
-          // Fetch item metadata
-          const itemMetadata = await plexApi.getMetadata(ratingKey);
+          // Use batch-prefetched metadata, falling back to individual fetch on miss
+          const itemMetadata =
+            batchMeta.get(ratingKey) ?? (await plexApi.getMetadata(ratingKey));
 
           if (itemMetadata) {
             // CRITICAL: Skip episodes and seasons - overlays only apply to movies and shows
