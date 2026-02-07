@@ -105,6 +105,8 @@ export interface SyncResult {
   created: number;
   /** Number of collections updated */
   updated: number;
+  /** Whether Plex collections were mutated (created, updated, or deleted) */
+  mutated?: boolean;
   /** Optional error information */
   error?: string;
   /** Optional additional details */

@@ -664,6 +664,12 @@ export class CollectionSyncService {
           created += result.created || 0;
           updated += result.updated || 0;
 
+          // Invalidate cache if sync mutated Plex (includes deletions not
+          // tracked by created/updated counters)
+          if (result.mutated) {
+            cachedAllCollections = null;
+          }
+
           // Check if the sync returned an error (e.g., from multi-source orchestrator)
           if (result.error) {
             logger.warn(
@@ -685,10 +691,6 @@ export class CollectionSyncService {
         totalUpdated += updated;
 
         if (created > 0 || updated > 0) {
-          // Invalidate cached collections — mutations may have changed labels,
-          // titles, or the collection list itself
-          cachedAllCollections = null;
-
           logger.info(
             `Collection processed: ${config.name} (created: ${created}, updated: ${updated})`,
             {

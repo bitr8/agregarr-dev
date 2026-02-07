@@ -6,6 +6,7 @@ import type {
   CollectionSyncOptions,
   MissingItem,
   PlexCollection,
+  SyncResult,
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 // getCollectionMediaType removed - using items[0]?.type instead
@@ -116,7 +117,7 @@ export class MultiSourceOrchestrator {
     processedCollectionKeys?: Set<string>,
     libraryCache?: LibraryItemsCache,
     options?: CollectionSyncOptions
-  ): Promise<{ created: number; updated: number; error?: string }> {
+  ): Promise<SyncResult> {
     let configForSync: MultiSourceCollectionConfig = config;
     let collectionNameForSync = config.name;
 
@@ -139,13 +140,13 @@ export class MultiSourceOrchestrator {
           }
         );
 
-        await this.handleInactiveCollection(
+        const wasDeleted = await this.handleInactiveCollection(
           config,
           plexClient,
           allCollections,
           processedCollectionKeys
         );
-        return { created: 0, updated: 0 };
+        return { created: 0, updated: 0, mutated: wasDeleted };
       }
 
       logger.info(`Processing multi-source collection: ${config.name}`, {
@@ -2610,7 +2611,7 @@ export class MultiSourceOrchestrator {
     plexClient: PlexAPI,
     allCollections: PlexCollection[],
     processedCollectionKeys?: Set<string>
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Find existing collection
     const existingCollection = allCollections.find(
       (c) => c.title === config.name && c.libraryKey === config.libraryId
@@ -2659,6 +2660,7 @@ export class MultiSourceOrchestrator {
       if (processedCollectionKeys) {
         processedCollectionKeys.add(existingCollection.ratingKey);
       }
+      return true;
     } else {
       logger.debug(
         `No existing collection found to remove for inactive multi-source collection: ${config.name}`,
@@ -2668,6 +2670,7 @@ export class MultiSourceOrchestrator {
         }
       );
     }
+    return false;
   }
 
   /**

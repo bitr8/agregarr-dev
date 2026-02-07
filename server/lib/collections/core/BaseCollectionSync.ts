@@ -201,6 +201,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     const startTime = Date.now();
     let created = 0;
     let updated = 0;
+    let mutated = false;
     const errors: CollectionSyncError[] = [];
 
     // Filter configs for this source
@@ -276,12 +277,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             );
 
             // If collection is time-restricted and inactive, try to remove it from Plex
-            await this.handleInactiveCollection(
+            const wasDeleted = await this.handleInactiveCollection(
               config,
               plexClient,
               allCollections,
               processedCollectionKeys
             );
+            if (wasDeleted) mutated = true;
             continue;
           }
 
@@ -391,6 +393,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       return {
         created,
         updated,
+        mutated: mutated || created > 0 || updated > 0,
         details: {
           processingTime: Date.now() - startTime,
           errors: errors.length,
@@ -3167,7 +3170,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     plexClient: PlexAPI,
     allCollections: PlexCollection[],
     processedCollectionKeys?: Set<string>
-  ): Promise<void> {
+  ): Promise<boolean> {
+    let deleted = false;
     try {
       // Find the collection by stored rating key
       const existingCollections = config.collectionRatingKey
@@ -3192,6 +3196,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
           // Remove the collection from Plex
           await plexClient.deleteCollection(collection.ratingKey);
+          deleted = true;
 
           // Also remove from hub management to prevent stale hub entries
           if (collection.libraryKey) {
@@ -3262,6 +3267,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         }
       );
     }
+    return deleted;
   }
 
   /**
