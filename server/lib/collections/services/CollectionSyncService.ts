@@ -156,6 +156,7 @@ export class CollectionSyncService {
 
         let cleanedUp = 0;
         let titlesFixes = 0;
+        let titleFixFailures = 0;
 
         for (const { plexItem, needsTitleFix, marker } of tv) {
           // Cleanup triggers when needsTitleFix is false (real content detected via Plex OR *arr)
@@ -170,12 +171,24 @@ export class CollectionSyncService {
             cleanedUp++;
           } else if (needsTitleFix && plexItem) {
             // Still a placeholder with Plex item - fix episode title
-            await ensurePlaceholderEpisodeTitle(
+            const fixed = await ensurePlaceholderEpisodeTitle(
               plexClient,
               plexItem.ratingKey,
               marker.title
             );
-            titlesFixes++;
+            if (fixed) {
+              titlesFixes++;
+            } else {
+              titleFixFailures++;
+              logger.warn(
+                'Failed to fix placeholder episode title during global discovery - may appear in filtered hubs',
+                {
+                  label: 'Collection Sync Service',
+                  title: marker.title,
+                  ratingKey: plexItem.ratingKey,
+                }
+              );
+            }
           }
           // Items with needsTitleFix but no plexItem are orphaned - skip for now
         }
@@ -184,6 +197,7 @@ export class CollectionSyncService {
           label: 'Collection Sync Service',
           cleanedUp,
           titlesFixes,
+          titleFixFailures,
         });
 
         // Trigger Plex library scan + empty trash to remove ghost entries (fire-and-forget)
@@ -267,8 +281,9 @@ export class CollectionSyncService {
         );
 
         let moviesCleanedUp = 0;
+        let labelsFixed = 0;
 
-        for (const { needsCleanup, movie } of movies) {
+        for (const { needsCleanup, movie, plexItem } of movies) {
           // Cleanup triggers when needsCleanup is true (real content detected via Plex OR *arr)
           // This works even without a plexItem (content downloaded to different library)
           if (needsCleanup) {
@@ -279,12 +294,20 @@ export class CollectionSyncService {
               'movie'
             );
             moviesCleanedUp++;
+          } else if (plexItem) {
+            // Still a placeholder - ensure label for filtered hub exclusion
+            await plexClient.addLabelToItem(
+              plexItem.ratingKey,
+              'trailer-placeholder'
+            );
+            labelsFixed++;
           }
         }
 
         logger.info('Global movie placeholder processing complete', {
           label: 'Collection Sync Service',
           cleanedUp: moviesCleanedUp,
+          labelsFixed,
         });
 
         // Trigger Plex library scan + empty trash to remove ghost entries (fire-and-forget)
