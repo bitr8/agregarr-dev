@@ -1137,18 +1137,25 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
   private async fetchTmdbIdFromFilmPage(
     letterboxdUrl: string
   ): Promise<{ tmdbId: number; mediaType: 'movie' | 'tv' } | null> {
+    if (
+      !letterboxdUrl ||
+      !letterboxdUrl.startsWith('https://letterboxd.com/')
+    ) {
+      return null;
+    }
+
     try {
       const { LetterboxdHttpClient } = await import(
         '@server/lib/collections/utils/LetterboxdHttpClient'
       );
       const html = await LetterboxdHttpClient.fetchPage(letterboxdUrl);
 
-      // Match: <a ... data-track-action="TMDb" href="https://www.themoviedb.org/movie/496243/">
-      // or: href first, then data-track-action
+      // Match: <a href="https://www.themoviedb.org/movie/412579/" ... data-track-action="TMDB">
+      // Letterboxd uses uppercase "TMDB" and href before data-track-action
       const tmdbLinkPattern =
-        /<a[^>]*data-track-action="TMDb"[^>]*href="[^"]*themoviedb\.org\/(movie|tv)\/(\d+)\/?"/;
+        /<a[^>]*href="[^"]*themoviedb\.org\/(movie|tv)\/(\d+)\/?[^"]*"[^>]*data-track-action="TMDB"/;
       const tmdbLinkPatternAlt =
-        /<a[^>]*href="[^"]*themoviedb\.org\/(movie|tv)\/(\d+)\/?"[^>]*data-track-action="TMDb"/;
+        /<a[^>]*data-track-action="TMDB"[^>]*href="[^"]*themoviedb\.org\/(movie|tv)\/(\d+)\/?[^"]*"/;
 
       const match =
         html.match(tmdbLinkPattern) || html.match(tmdbLinkPatternAlt);
