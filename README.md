@@ -37,65 +37,63 @@ For general Agregarr configuration (services, collections, overlays etc.), see t
 
 ## Fork-Only Features
 
-Features not yet submitted upstream:
+Features not yet submitted upstream. These exist because upstream Agregarr has scaling pain points when running many collections, and placeholder lifecycle has gaps that leave orphaned entries in Plex.
 
 ### Real-time Overlay Job Progress
 
-Live dashboard status showing progress, item counts, ETA, and a stop button for each library.
+Overlay jobs on large libraries can run 30+ minutes with no feedback. This adds live dashboard status showing progress, item counts, ETA, and a stop button for each library.
 
 ![Overlay Jobs Status](public/images/overlay-jobs-status.png)
 
-### Performance Optimizations
+### Performance
 
-- **Batch IMDb Prefetch**: Fetches IMDb ratings upfront in batches of 20 via TMDB lookup, then queries IMDb in bulk. Reduces thousands of API calls to tens.
-- **Adaptive TTL Caching**: Cache duration based on content age. New releases cache for 12 hours, older content up to 30 days.
-- **Stale Cache Fallback**: Returns cached ratings when external APIs fail instead of breaking the overlay job.
-- **Configurable Rating Cache**: Settings UI option to adjust maximum IMDb/RT cache duration (7-90 days).
-- **Collection Sync Cache**: Caches `getAllCollections()` across loop iterations during collection sync. Invalidates on mutations (create, update, delete). Saves ~25-30s on full sync jobs.
-- **Batch Overlay Metadata**: Fetches metadata for multiple items per Plex API call using `/library/metadata/{key1,key2,...}`. Chunks into batches of 200. Falls back to individual fetch on failure.
-- **AniList Retry Cap**: Caps rate-limit retries at 5 attempts. Fixes pre-existing `parseInt` NaN bug that caused tight loops on non-numeric Retry-After headers.
-- **Persistent TMDB Resolution Cache**: SQLite cache of Letterboxd title-to-TMDB-ID mappings with adaptive TTL (score-based: 1-30 days). Includes negative caching for unresolved titles. Real-world results with 29 Letterboxd collections (~5,600 items):
+Upstream Agregarr makes individual API calls per item, per rating source, per cache miss. With 40+ collections and 10k+ items, syncs take hours and hammer external APIs. These changes reduce that to minutes.
 
-  | Metric          | First Sync (cold cache)     | Second Sync (warm cache) |
-  | --------------- | --------------------------- | ------------------------ |
-  | TMDB API calls  | ~33,000                     | 0                        |
-  | Resolution time | ~42 min                     | < 1 sec (all cache hits) |
-  | Cache entries   | 5,656 created (53 negative) | 5,656 served             |
+| Fix                           | Why                                                  | Impact                                                 |
+| ----------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| **Batch IMDb Prefetch**       | Upstream fetches IMDb ratings one item at a time     | Thousands of API calls reduced to tens                 |
+| **Adaptive TTL Caching**      | All cached ratings expire at the same fixed interval | New releases: 12h, older content: up to 30 days        |
+| **Stale Cache Fallback**      | External API failure breaks the entire overlay job   | Returns stale cached value instead of failing          |
+| **Configurable Rating Cache** | No way to tune cache duration                        | Settings UI option (7-90 days)                         |
+| **Collection Sync Cache**     | `getAllCollections()` called on every loop iteration | Cached with mutation-based invalidation. Saves ~25-30s |
+| **Batch Overlay Metadata**    | Plex metadata fetched one item at a time             | Batches of 200 per API call. Falls back on failure     |
+| **AniList Retry Cap**         | `parseInt` NaN bug causes infinite tight retry loops | Capped at 5 attempts                                   |
 
-- **Plain HTTP for Letterboxd** (`letterboxdUsePlainHttp`): Upstream uses Playwright (headless Chromium) for Letterboxd page fetching, launching a browser instance for every page load. This was originally added to bypass Cloudflare, but Letterboxd list pages return full HTML without JavaScript rendering, making the browser unnecessary. This fork adds a setting to use plain HTTP (axios) instead. In testing with 42 Letterboxd collections (142 pages total), plain HTTP averaged ~280ms/page vs ~10,500ms/page with Playwright, a ~37x speedup that saves several minutes per sync. Zero Cloudflare blocks observed. To enable, add to `settings.json`:
+**Persistent TMDB Resolution Cache** -- Letterboxd collections require resolving titles to TMDB IDs. Upstream re-resolves every item on every sync (6 TMDB API calls each). This caches results in SQLite with adaptive TTL.
 
-  ```json
-  {
-    "main": {
-      "letterboxdUsePlainHttp": true
-    }
+| Metric          | First Sync (cold cache)     | Second Sync (warm cache) |
+| --------------- | --------------------------- | ------------------------ |
+| TMDB API calls  | ~33,000                     | 0                        |
+| Resolution time | ~42 min                     | < 1 sec (all cache hits) |
+| Cache entries   | 5,656 created (53 negative) | 5,656 served             |
+
+**Plain HTTP for Letterboxd** (`letterboxdUsePlainHttp`) -- Upstream launches headless Chromium (Playwright) for every Letterboxd page fetch. This was added to bypass Cloudflare, but Letterboxd list pages return full HTML without JS rendering. Plain HTTP (axios) is sufficient.
+
+|                   | Playwright | Plain HTTP |
+| ----------------- | ---------- | ---------- |
+| Per page          | ~10,500ms  | ~280ms     |
+| 142 pages         | ~25 min    | ~40 sec    |
+| Cloudflare blocks | 0          | 0          |
+
+To enable, add to `settings.json`:
+
+```json
+{
+  "main": {
+    "letterboxdUsePlainHttp": true
   }
-  ```
+}
+```
 
-  Defaults to `false` (Playwright) for safety. If Cloudflare starts actively blocking, flip back to `false`.
+Defaults to `false` (Playwright) for safety. Flip back if Cloudflare starts blocking.
 
-### Direct Plex Deletion for Placeholder Cleanup
+### Placeholder Lifecycle Fixes
 
-Improves placeholder cleanup reliability when Plex's built-in trash mechanism fails.
+Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
-**Problem:** Plex ignores empty directories during library scans. When a placeholder file is deleted and its directory becomes empty, `scanLibrary()` + `emptyTrash()` won't remove the stale database entry.
+**Direct Plex Deletion** -- Plex ignores empty directories during library scans. When a placeholder file is deleted and its folder becomes empty, `scanLibrary()` + `emptyTrash()` won't remove the stale database entry. This fork deletes stale items directly via `DELETE /library/metadata/{ratingKey}`, matching by exact file path. Falls back to scan+trash when direct deletion can't find matches.
 
-**Solution:** Delete stale Plex items directly via API:
-
-1. Track which placeholder file paths were deleted during cleanup
-2. Query Plex once per library for items referencing those exact paths
-3. Delete stale items via `DELETE /library/metadata/{ratingKey}`
-4. Fall back to scan+emptyTrash only when direct deletion can't find matches
-
-**Safeguards:** Only tracks successfully deleted placeholder files, uses exact path matching, deduplicates rating keys, and only considers files matching placeholder patterns.
-
-### Sonarr Folder Naming for TV Placeholders
-
-TV placeholders use Sonarr's folder naming convention when the show exists in Sonarr.
-
-**Problem:** Agregarr created placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrived, Plex saw them as different shows, leaving orphaned entries.
-
-**Solution:** Extract the folder name from Sonarr's series path for placeholder creation. Falls back to standard naming if the show isn't in Sonarr.
+**Sonarr Folder Naming** -- Agregarr creates placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrives, Plex sees them as different shows, leaving orphaned entries. This fork extracts the folder name from Sonarr's series path. Falls back to standard naming if the show isn't in Sonarr.
 
 ## Upstream PRs
 
@@ -103,6 +101,7 @@ TV placeholders use Sonarr's folder naming convention when the show exists in So
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#454](https://github.com/agregarr/agregarr/pull/454) | Resolve Letterboxd items via film page TMDB links (#448)    | -          |
 | [#453](https://github.com/agregarr/agregarr/pull/453) | Re-apply placeholder markers during global discovery (#414) | -          |
 | [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight        | -          |
 | [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs | -          |
