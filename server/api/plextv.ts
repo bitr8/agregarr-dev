@@ -162,7 +162,6 @@ class PlexTvAPI extends ExternalAPI {
           Accept: 'application/json',
         },
         nodeCache: cacheManager.getCache('plextv').data,
-        staleCache: cacheManager.getStaleCache('plextv'),
       }
     );
 

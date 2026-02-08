@@ -52,10 +52,6 @@ const messages = defineMessages({
   enableTmdbPosterCache: 'Enable TMDB Poster Cache',
   enableTmdbPosterCacheTip:
     'Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)',
-  ratingsCacheMaxDays: 'Ratings Cache Duration',
-  ratingsCacheMaxDaysTip:
-    'Maximum time to cache IMDb and Rotten Tomatoes ratings. Older content is cached longer (up to this value), newer content refreshes more frequently.',
-  ratingsCacheMaxDaysSuffix: '{days} days',
   resetAgregarr: 'Reset',
   resetAgregarrDescription:
     'Remove all Agregarr collections from Plex and clear all user labels.',
@@ -158,7 +154,6 @@ const SettingsMain = () => {
             locale: data?.locale ?? 'en',
             tmdbLanguage: data?.tmdbLanguage ?? 'en',
             enableTmdbPosterCache: data?.enableTmdbPosterCache ?? true,
-            ratingsCacheMaxDays: data?.ratingsCacheMaxDays ?? 30,
             trustProxy: data?.trustProxy,
           }}
           enableReinitialize
@@ -172,7 +167,6 @@ const SettingsMain = () => {
                 locale: values.locale,
                 tmdbLanguage: values.tmdbLanguage,
                 enableTmdbPosterCache: values.enableTmdbPosterCache,
-                ratingsCacheMaxDays: values.ratingsCacheMaxDays,
                 trustProxy: values.trustProxy,
               });
               mutate('/api/v1/settings/public');
@@ -343,33 +337,6 @@ const SettingsMain = () => {
                         );
                       }}
                     />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <label htmlFor="ratingsCacheMaxDays" className="text-label">
-                    {intl.formatMessage(messages.ratingsCacheMaxDays)}
-                    <span className="label-tip">
-                      {intl.formatMessage(messages.ratingsCacheMaxDaysTip)}
-                    </span>
-                  </label>
-                  <div className="form-input-area">
-                    <div className="form-input-field">
-                      <Field
-                        as="select"
-                        id="ratingsCacheMaxDays"
-                        name="ratingsCacheMaxDays"
-                        className="short"
-                      >
-                        {[7, 14, 30, 60, 90].map((days) => (
-                          <option key={days} value={days}>
-                            {intl.formatMessage(
-                              messages.ratingsCacheMaxDaysSuffix,
-                              { days }
-                            )}
-                          </option>
-                        ))}
-                      </Field>
-                    </div>
                   </div>
                 </div>
                 <div className="form-row">

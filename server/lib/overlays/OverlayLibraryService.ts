@@ -15,6 +15,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type sharp from 'sharp';
+import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import {
   buildRenderContext,
   checkMonitoringStatus,
@@ -223,80 +224,6 @@ class OverlayLibraryService {
       this.preloadedImdbRatings = undefined;
       this.preloadedTmdbReleaseDates = undefined;
     }
-  }
-
-  /**
-   * Calculate adaptive TTL based on content age.
-   * Older content changes less frequently, so we cache it longer.
-   * TTL scales proportionally based on the ratingsCacheMaxDays setting.
-   *
-   * @param releaseYear - The release year of the content
-   * @returns TTL in seconds
-   */
-  private getAdaptiveTtl(releaseYear: number | undefined): number {
-    const settings = getSettings();
-    const maxDays = settings.main.ratingsCacheMaxDays ?? 30;
-    const maxSeconds = maxDays * 24 * 60 * 60;
-
-    if (!releaseYear) {
-      // 10% of max (3 days when max is 30) for unknown content
-      return Math.round(maxSeconds * 0.1);
-    }
-
-    const currentYear = new Date().getFullYear();
-    const age = currentYear - releaseYear;
-
-    if (age < 1) {
-      // ~1.7% of max (12 hours when max is 30) for new releases
-      return Math.round(maxSeconds * 0.0167);
-    }
-    if (age < 2) {
-      // 10% of max (3 days when max is 30) for recent content
-      return Math.round(maxSeconds * 0.1);
-    }
-    if (age < 10) {
-      // ~23% of max (7 days when max is 30) for older content
-      return Math.round(maxSeconds * 0.233);
-    }
-    // 100% of max for archive content (>10 years, ratings stable)
-    return maxSeconds;
-  }
-
-  /**
-   * Get adaptive TTL for null (no rating) results based on content age.
-   * Shorter for new/upcoming content (ratings may appear soon),
-   * longer for old content (unlikely to get ratings now).
-   * Scales based on ratingsCacheMaxDays setting (max 24h for null ratings).
-   */
-  private getNullRatingTtl(releaseYear: number | undefined): number {
-    const settings = getSettings();
-    const maxDays = settings.main.ratingsCacheMaxDays ?? 30;
-    // Null ratings max out at 24 hours regardless of setting
-    // Scale from 2h to 24h based on content age
-    const baseMaxHours = Math.min(24, maxDays * 0.8); // 24h when max=30 days
-
-    if (!releaseYear) {
-      // 25% of base max (6 hours when max=30) for unknown
-      return Math.round(baseMaxHours * 0.25 * 60 * 60);
-    }
-
-    const currentYear = new Date().getFullYear();
-    const age = currentYear - releaseYear;
-
-    if (age < 0) {
-      // ~8% of base max (2 hours when max=30) for upcoming
-      return Math.round(baseMaxHours * 0.083 * 60 * 60);
-    }
-    if (age < 1) {
-      // ~17% of base max (4 hours when max=30) for new releases
-      return Math.round(baseMaxHours * 0.167 * 60 * 60);
-    }
-    if (age < 2) {
-      // 50% of base max (12 hours when max=30) for recent
-      return Math.round(baseMaxHours * 0.5 * 60 * 60);
-    }
-    // 100% of base max (24 hours when max=30) for older content
-    return Math.round(baseMaxHours * 60 * 60);
   }
 
   /**
@@ -524,14 +451,14 @@ class OverlayLibraryService {
           for (const rating of ratings) {
             receivedIds.add(rating.imdbId);
             const releaseYear = releaseYearMap.get(rating.imdbId);
-            const ttl = this.getAdaptiveTtl(releaseYear);
+            const ttl = getAdaptiveTtl(releaseYear);
 
             if (rating.rating !== null) {
               this.preloadedImdbRatings.set(rating.imdbId, rating.rating);
               adaptiveCache.set(rating.imdbId, rating.rating, ttl);
             } else {
               // Cache null rating with adaptive TTL based on content age
-              const nullTtl = this.getNullRatingTtl(releaseYear);
+              const nullTtl = getNullRatingTtl(releaseYear);
               this.preloadedImdbRatings.set(rating.imdbId, null);
               adaptiveCache.set(rating.imdbId, null, nullTtl);
             }
@@ -540,7 +467,7 @@ class OverlayLibraryService {
           // Cache any IDs that weren't in the response as null
           for (const item of uncachedItems) {
             if (!receivedIds.has(item.imdbId)) {
-              const nullTtl = this.getNullRatingTtl(item.releaseYear);
+              const nullTtl = getNullRatingTtl(item.releaseYear);
               this.preloadedImdbRatings.set(item.imdbId, null);
               adaptiveCache.set(item.imdbId, null, nullTtl);
             }
@@ -777,14 +704,14 @@ class OverlayLibraryService {
               }
 
               // Cache the result with adaptive TTL
-              const ttl = this.getAdaptiveTtl(year);
+              const ttl = getAdaptiveTtl(year);
               if (releaseDateInfo) {
                 preloadedMap?.set(cacheKey, releaseDateInfo);
                 adaptiveCache.set(cacheKey, releaseDateInfo, ttl);
                 fetchSuccess++;
               } else {
                 // For movies without release dates, cache null
-                const nullTtl = this.getNullRatingTtl(year);
+                const nullTtl = getNullRatingTtl(year);
                 preloadedMap?.set(cacheKey, null);
                 adaptiveCache.set(cacheKey, null, nullTtl);
               }
@@ -792,7 +719,7 @@ class OverlayLibraryService {
               fetchFailures++;
               // Only cache null for movies - TV shows need Sonarr fallback opportunity
               if (mediaType === 'movie') {
-                const nullTtl = this.getNullRatingTtl(year);
+                const nullTtl = getNullRatingTtl(year);
                 preloadedMap?.set(cacheKey, null);
                 adaptiveCache.set(cacheKey, null, nullTtl);
               }

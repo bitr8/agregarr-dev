@@ -28,9 +28,6 @@ export type AvailableCacheIds =
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
-// 7 day TTL for stale cache fallback (in seconds)
-const STALE_CACHE_TTL = 86400 * 7;
-const STALE_CHECK_PERIOD = 60 * 60; // Check hourly
 
 class Cache {
   public id: AvailableCacheIds;
@@ -60,9 +57,6 @@ class Cache {
 }
 
 class CacheManager {
-  // Stale caches for fallback when APIs fail (7 day TTL)
-  private staleCaches: Map<AvailableCacheIds, NodeCache> = new Map();
-
   private availableCaches: Record<AvailableCacheIds, Cache> = {
     tmdb: new Cache('tmdb', 'The Movie Database API', {
       stdTtl: 21600,
@@ -93,10 +87,14 @@ class CacheManager {
     }),
     // Per-item TMDB release date info cache with adaptive TTL
     // Release dates change infrequently; cache longer for older content
-    'tmdb-releases': new Cache('tmdb-releases', 'TMDB Release Dates (Adaptive TTL)', {
-      stdTtl: 86400 * 7, // 7 day default (individual items use explicit TTL)
-      checkPeriod: 60 * 60, // Check hourly
-    }),
+    'tmdb-releases': new Cache(
+      'tmdb-releases',
+      'TMDB Release Dates (Adaptive TTL)',
+      {
+        stdTtl: 86400 * 7, // 7 day default (individual items use explicit TTL)
+        checkPeriod: 60 * 60, // Check hourly
+      }
+    ),
     flixpatrol: new Cache('flixpatrol', 'FlixPatrol API', {
       stdTtl: 3600, // 1 hour cache for streaming top 10 data
       checkPeriod: 60 * 15,
@@ -164,22 +162,6 @@ class CacheManager {
 
   public getCache(id: AvailableCacheIds): Cache {
     return this.availableCaches[id];
-  }
-
-  /**
-   * Get the stale cache for an API, creating it if needed.
-   * Stale caches have a 7-day TTL and are used as fallback when APIs fail.
-   */
-  public getStaleCache(id: AvailableCacheIds): NodeCache {
-    let staleCache = this.staleCaches.get(id);
-    if (!staleCache) {
-      staleCache = new NodeCache({
-        stdTTL: STALE_CACHE_TTL,
-        checkperiod: STALE_CHECK_PERIOD,
-      });
-      this.staleCaches.set(id, staleCache);
-    }
-    return staleCache;
   }
 
   public getAllCaches(): Record<string, Cache> {

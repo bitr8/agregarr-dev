@@ -9,6 +9,7 @@ import TheMovieDb from '@server/api/themoviedb';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
 /**
@@ -160,55 +161,6 @@ export async function getTvdbIdFromTmdb(
     });
     return undefined;
   }
-}
-
-/**
- * Calculate adaptive TTL for rating caches based on content age.
- * Older content has more stable ratings, so cache longer.
- */
-function getAdaptiveTtl(releaseYear: number | undefined): number {
-  if (!releaseYear) {
-    return 3 * 24 * 60 * 60; // 3 days default if unknown
-  }
-
-  const currentYear = new Date().getFullYear();
-  const age = currentYear - releaseYear;
-
-  if (age < 1) {
-    return 12 * 60 * 60; // 12 hours for new releases
-  }
-  if (age < 2) {
-    return 3 * 24 * 60 * 60; // 3 days for recent content
-  }
-  if (age < 10) {
-    return 7 * 24 * 60 * 60; // 7 days for older content
-  }
-  return 30 * 24 * 60 * 60; // 30 days for archive content
-}
-
-/**
- * Get adaptive TTL for null (no rating) results.
- * Shorter for new/upcoming content (ratings may appear soon),
- * longer for old content (unlikely to get ratings now).
- */
-function getNullRatingTtl(releaseYear: number | undefined): number {
-  if (!releaseYear) {
-    return 6 * 60 * 60; // 6 hours default
-  }
-
-  const currentYear = new Date().getFullYear();
-  const age = currentYear - releaseYear;
-
-  if (age < 0) {
-    return 2 * 60 * 60; // 2 hours for upcoming (ratings may appear at release)
-  }
-  if (age < 1) {
-    return 4 * 60 * 60; // 4 hours for new releases
-  }
-  if (age < 2) {
-    return 12 * 60 * 60; // 12 hours for recent
-  }
-  return 24 * 60 * 60; // 24 hours for older (unlikely to get new ratings)
 }
 
 // Sentinel value to distinguish "checked, no rating" from "not yet checked"

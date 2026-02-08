@@ -240,6 +240,118 @@ export async function cleanupOrphanedPlaceholderRecords(): Promise<void> {
   }
 }
 
+/**
+ * Remove stale Plex entries for deleted placeholder files using direct API deletion.
+ * Falls back to scan+emptyTrash for libraries where direct deletion missed items.
+ *
+ * @param plexClient - Plex API client
+ * @param deletedPaths - Paths of deleted placeholder files with library metadata
+ * @returns Count of directly deleted Plex items
+ */
+export async function cleanupStalePlexEntries(
+  plexClient: PlexAPI,
+  deletedPaths: OrphanedFileCleanupResult['deletedPaths']
+): Promise<number> {
+  // Group deleted paths by library for efficient processing (scan once per library)
+  const pathsByLibrary = new Map<string, Set<string>>();
+  for (const deleted of deletedPaths) {
+    const paths = pathsByLibrary.get(deleted.libraryKey) || new Set();
+    paths.add(deleted.fullPath);
+    pathsByLibrary.set(deleted.libraryKey, paths);
+  }
+
+  const deletedRatingKeys = new Set<string>();
+  const librariesWithMisses = new Set<string>();
+
+  // For each library, scan once and find all stale Plex items
+  for (const [libraryKey, libDeletedPaths] of pathsByLibrary) {
+    try {
+      const pathToRatingKeys = await plexClient.findItemsByFilePaths(
+        libraryKey,
+        libDeletedPaths
+      );
+
+      // Track which paths had no matches (need fallback)
+      const matchedPaths = new Set(pathToRatingKeys.keys());
+      for (const p of libDeletedPaths) {
+        if (!matchedPaths.has(p)) {
+          librariesWithMisses.add(libraryKey);
+        }
+      }
+
+      // Delete each stale item directly from Plex
+      for (const [deletedPath, ratingKeys] of pathToRatingKeys) {
+        for (const ratingKey of ratingKeys) {
+          if (deletedRatingKeys.has(ratingKey)) continue;
+
+          try {
+            await plexClient.deleteItem(ratingKey);
+            deletedRatingKeys.add(ratingKey);
+            logger.info('Deleted stale Plex item for removed placeholder', {
+              label: 'PlaceholderCleanup',
+              ratingKey,
+              deletedPath,
+              libraryKey,
+            });
+          } catch (deleteError) {
+            logger.warn('Failed to delete stale Plex item', {
+              label: 'PlaceholderCleanup',
+              ratingKey,
+              deletedPath,
+              error:
+                deleteError instanceof Error
+                  ? deleteError.message
+                  : String(deleteError),
+            });
+          }
+        }
+      }
+    } catch (findError) {
+      librariesWithMisses.add(libraryKey);
+      logger.warn('Failed to find stale Plex items for library', {
+        label: 'PlaceholderCleanup',
+        libraryKey,
+        pathCount: libDeletedPaths.size,
+        error:
+          findError instanceof Error ? findError.message : String(findError),
+      });
+    }
+  }
+
+  // Fallback: Run scan+emptyTrash only for libraries where direct deletion missed items
+  if (librariesWithMisses.size > 0) {
+    for (const libraryKey of librariesWithMisses) {
+      try {
+        await plexClient.scanLibrary(libraryKey);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await plexClient.emptyTrash(libraryKey);
+        logger.debug('Ran fallback cleanup for library', {
+          label: 'PlaceholderCleanup',
+          libraryKey,
+        });
+      } catch (fallbackError) {
+        logger.debug('Fallback Plex cleanup failed for library', {
+          label: 'PlaceholderCleanup',
+          libraryKey,
+          error:
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : String(fallbackError),
+        });
+      }
+    }
+  }
+
+  logger.info('Plex cleanup completed', {
+    label: 'PlaceholderCleanup',
+    deletedPaths: deletedPaths.length,
+    directlyDeleted: deletedRatingKeys.size,
+    librariesNeedingFallback: librariesWithMisses.size,
+  });
+
+  return deletedRatingKeys.size;
+}
+
 export interface OrphanedFileCleanupResult {
   filesRemoved: number;
   deletedPaths: {
