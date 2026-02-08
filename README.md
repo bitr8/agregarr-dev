@@ -53,8 +53,7 @@ Upstream Agregarr makes individual API calls per item, per rating source, per ca
 | ----------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
 | **Batch IMDb Prefetch**       | Upstream fetches IMDb ratings one item at a time     | Thousands of API calls reduced to tens                 |
 | **Adaptive TTL Caching**      | All cached ratings expire at the same fixed interval | New releases: 12h, older content: up to 30 days        |
-| **Stale Cache Fallback**      | External API failure breaks the entire overlay job   | Returns stale cached value instead of failing          |
-| **Configurable Rating Cache** | No way to tune cache duration                        | Settings UI option (7-90 days)                         |
+| **Configurable Rating Cache** | No way to tune cache duration                        | `ratingsCacheMaxDays` in settings.json (default: 30)   |
 | **Collection Sync Cache**     | `getAllCollections()` called on every loop iteration | Cached with mutation-based invalidation. Saves ~25-30s |
 | **Batch Overlay Metadata**    | Plex metadata fetched one item at a time             | Batches of 200 per API call. Falls back on failure     |
 | **AniList Retry Cap**         | `parseInt` NaN bug causes infinite tight retry loops | Capped at 5 attempts                                   |
@@ -101,10 +100,7 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
-| [#454](https://github.com/agregarr/agregarr/pull/454) | Resolve Letterboxd items via film page TMDB links (#448)    | -          |
 | [#453](https://github.com/agregarr/agregarr/pull/453) | Re-apply placeholder markers during global discovery (#414) | -          |
-| [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight        | -          |
-| [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs | -          |
 | [#444](https://github.com/agregarr/agregarr/pull/444) | Use correct Plex API endpoint for collection title updates  | -          |
 | [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle       | -          |
 
@@ -123,6 +119,9 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#454](https://github.com/agregarr/agregarr/pull/454) | Resolve Letterboxd items via film page TMDB links (#448)             |
+| [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight                 |
+| [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs          |
 | [#446](https://github.com/agregarr/agregarr/pull/446) | Add date format options for US and UK/AU locales                     |
 | [#445](https://github.com/agregarr/agregarr/pull/445) | Persist applyOverlaysDuringSync for pre-existing collections         |
 | [#413](https://github.com/agregarr/agregarr/pull/413) | Pass options to ExternalAPI constructor correctly                    |
