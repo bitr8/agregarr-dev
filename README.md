@@ -62,6 +62,18 @@ Live dashboard status showing progress, item counts, ETA, and a stop button for 
   | Resolution time | ~42 min                     | < 1 sec (all cache hits) |
   | Cache entries   | 5,656 created (53 negative) | 5,656 served             |
 
+- **Plain HTTP for Letterboxd** (`letterboxdUsePlainHttp`): Upstream uses Playwright (headless Chromium) for Letterboxd page fetching, launching a browser instance for every page load. This was originally added to bypass Cloudflare, but Letterboxd list pages return full HTML without JavaScript rendering, making the browser unnecessary. This fork adds a setting to use plain HTTP (axios) instead. In testing with 42 Letterboxd collections (142 pages total), plain HTTP averaged ~280ms/page vs ~10,500ms/page with Playwright, a ~37x speedup that saves several minutes per sync. Zero Cloudflare blocks observed. To enable, add to `settings.json`:
+
+  ```json
+  {
+    "main": {
+      "letterboxdUsePlainHttp": true
+    }
+  }
+  ```
+
+  Defaults to `false` (Playwright) for safety. If Cloudflare starts actively blocking, flip back to `false`.
+
 ### Direct Plex Deletion for Placeholder Cleanup
 
 Improves placeholder cleanup reliability when Plex's built-in trash mechanism fails.
