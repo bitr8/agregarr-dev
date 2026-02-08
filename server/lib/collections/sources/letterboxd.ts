@@ -28,6 +28,7 @@ import tmdbResolutionCacheService, {
 } from '@server/lib/collections/services/TmdbResolutionCacheService';
 import { RandomListManager } from '@server/lib/collections/utils/RandomListManager';
 import type { CollectionConfig } from '@server/lib/settings';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 
 interface LetterboxdListItem {
@@ -135,16 +136,15 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
         listUrl = config.letterboxdCustomListUrl;
       }
 
-      // Use Playwright to bypass Cloudflare protection
-      const { CloudflareSolver } = await import(
-        '@server/lib/collections/utils/CloudflareSolver'
-      );
+      // Choose fetcher based on setting
+      const usePlainHttp = getSettings().main.letterboxdUsePlainHttp ?? false;
 
       logger.debug(`Fetching Letterboxd list: ${listUrl}`, {
         label: 'Letterboxd Collections',
         configName: config.name,
         url: listUrl,
         subtype: config.subtype,
+        method: usePlainHttp ? 'http' : 'playwright',
       });
 
       // Fetch all pages to get the complete list
@@ -168,8 +168,28 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
           totalFetched,
         });
 
-        // Use Playwright to bypass Cloudflare and get page content
-        const html = await CloudflareSolver.fetchPage(pageUrl);
+        // Fetch page content using configured method
+        const fetchStart = Date.now();
+        let html: string;
+        if (usePlainHttp) {
+          const { LetterboxdHttpClient } = await import(
+            '@server/lib/collections/utils/LetterboxdHttpClient'
+          );
+          html = await LetterboxdHttpClient.fetchPage(pageUrl);
+        } else {
+          const { CloudflareSolver } = await import(
+            '@server/lib/collections/utils/CloudflareSolver'
+          );
+          html = await CloudflareSolver.fetchPage(pageUrl);
+        }
+        const fetchMs = Date.now() - fetchStart;
+        logger.info(`Letterboxd page fetched`, {
+          label: 'Letterboxd Collections',
+          configName: config.name,
+          page: currentPage,
+          fetchMs,
+          method: usePlainHttp ? 'http' : 'playwright',
+        });
 
         // Store HTML from first page for later title extraction
         if (currentPage === 1) {
