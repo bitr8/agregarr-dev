@@ -30,6 +30,8 @@
 #
 
 .husky export-ignore
+.husky/prepare-commit-msg merge=ours
+README.md merge=ours
 .vscode export-ignore
 docs export-ignore
 
