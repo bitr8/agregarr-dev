@@ -678,6 +678,18 @@ export class MultiSourceOrchestrator {
         );
 
         try {
+          // Apply missing item filters (rating, year, genre, etc.) before creating placeholders
+          const { missingItemFilterService } = await import(
+            './MissingItemFilterService'
+          );
+          const { filteredItems } =
+            await missingItemFilterService.filterMissingItems(
+              missingItems,
+              tempConfig,
+              'Multi-Source Placeholder Filter',
+              { skipMediaTypeCheck: true }
+            );
+
           // Use PlaceholderCreation service for unified placeholder creation
           // This works for any source type, not just Coming Soon
           const { processPlaceholdersForMissingItems } = await import(
@@ -685,7 +697,7 @@ export class MultiSourceOrchestrator {
           );
 
           const newPlaceholderItems = await processPlaceholdersForMissingItems(
-            missingItems,
+            filteredItems,
             tempConfig,
             plexClient
           );

@@ -66,12 +66,14 @@ export class MissingItemFilterService {
    * @param missingItems - Items to filter
    * @param config - Collection configuration with filter settings
    * @param serviceLabel - Label for logging (e.g., 'Auto Request Service', 'Direct Download Service')
+   * @param options - Optional flags to control filtering behavior
    * @returns Filtered items with tracking arrays for logging
    */
   public async filterMissingItems(
     missingItems: MissingItem[],
     config: CollectionConfig,
-    serviceLabel: string
+    serviceLabel: string,
+    options?: { skipMediaTypeCheck?: boolean }
   ): Promise<FilteredMissingItemsResult> {
     // Track filtered items for summary logging
     const yearFilteredItems: string[] = [];
@@ -89,10 +91,12 @@ export class MissingItemFilterService {
 
     // Step 1: Filter by media type and minimum year
     const yearFilteredMissingItems = missingItems.filter((item) => {
-      // Check media type
-      if (item.mediaType === 'movie' && !config.searchMissingMovies)
-        return false;
-      if (item.mediaType === 'tv' && !config.searchMissingTV) return false;
+      // Check media type (skipped for placeholder filtering where these toggles don't apply)
+      if (!options?.skipMediaTypeCheck) {
+        if (item.mediaType === 'movie' && !config.searchMissingMovies)
+          return false;
+        if (item.mediaType === 'tv' && !config.searchMissingTV) return false;
+      }
       if (item.mediaType !== 'movie' && item.mediaType !== 'tv') return false;
 
       // Check minimum year filter

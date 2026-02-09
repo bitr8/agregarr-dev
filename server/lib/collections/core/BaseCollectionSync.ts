@@ -751,6 +751,18 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
     // Create placeholders if enabled
     if (config.createPlaceholdersForMissing) {
+      // Apply missing item filters (rating, year, genre, etc.) before creating placeholders
+      const { missingItemFilterService } = await import(
+        '../services/MissingItemFilterService'
+      );
+      const { filteredItems } =
+        await missingItemFilterService.filterMissingItems(
+          missingItems,
+          config,
+          `${this.source} Placeholder Filter`,
+          { skipMediaTypeCheck: true }
+        );
+
       // Import and use the PlaceholderCreation service
       const { processPlaceholdersForMissingItems } = await import(
         '@server/lib/placeholders/services/PlaceholderCreation'
@@ -759,11 +771,14 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       logger.info('Creating placeholders for missing items', {
         label: `${this.source} Collections`,
         configName: config.name,
-        missingCount: missingItems.length,
+        missingCount: filteredItems.length,
+        ...(filteredItems.length !== missingItems.length && {
+          filteredOut: missingItems.length - filteredItems.length,
+        }),
       });
 
       placeholderItems = await processPlaceholdersForMissingItems(
-        missingItems,
+        filteredItems,
         config,
         plexClient
       );
