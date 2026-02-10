@@ -612,6 +612,11 @@ class OverlayLibraryService {
 
         if (cached !== undefined) {
           this.preloadedTmdbReleaseDates.set(cacheKey, cached);
+          logger.debug('Prefetch: cache HIT', {
+            label: 'OverlayLibrary',
+            cacheKey,
+            releaseDate: cached?.releaseDate ?? 'null',
+          });
           if (cached === null) {
             nullCacheHits++;
           }
@@ -667,6 +672,15 @@ class OverlayLibraryService {
                   );
                   if (determined) {
                     releaseDateInfo = { releaseDate: determined.releaseDate };
+                    logger.debug('Prefetch: determined release date', {
+                      label: 'OverlayLibrary',
+                      tmdbId,
+                      releaseDate: determined.releaseDate,
+                      isEstimated: determined.isEstimated,
+                      digitalRelease: extracted.digitalRelease,
+                      physicalRelease: extracted.physicalRelease,
+                      inCinemas: extracted.inCinemas,
+                    });
                   }
                 }
 
@@ -1738,6 +1752,16 @@ class OverlayLibraryService {
             } else {
               daysAgo = daysSince;
             }
+            logger.debug('Release date calculation', {
+              label: 'OverlayLibrary',
+              itemTitle: item.title,
+              ratingKey: item.ratingKey,
+              releaseDate: releaseDateInfo.releaseDate,
+              computedDaysAgo: daysAgo,
+              computedDaysUntilRelease: daysUntilRelease,
+              serverTimezone: process.env.TZ,
+              nowUtc: new Date().toISOString(),
+            });
           }
 
           if (releaseDateInfo.nextEpisodeAirDate) {
