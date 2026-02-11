@@ -42,6 +42,37 @@ export function getAdaptiveTtl(
 }
 
 /**
+ * Cap TTL for items with release dates near today.
+ * TMDB release dates can shift, so items releasing within ±7 days
+ * should refresh more frequently to avoid stale overlay text.
+ *
+ * @param releaseDate - ISO date string (YYYY-MM-DD) of the release
+ * @param baseTtl - The TTL from getAdaptiveTtl (based on year)
+ * @returns Capped TTL in seconds (2h within ±3 days, 4h within ±7 days)
+ */
+export function capTtlForRecentRelease(
+  releaseDate: string | undefined,
+  baseTtl: number
+): number {
+  if (!releaseDate) return baseTtl;
+
+  const now = new Date();
+  const dateOnly = releaseDate.split('T')[0];
+  const release = new Date(dateOnly + 'T12:00:00.000Z');
+  const daysDiff = Math.floor(
+    Math.abs(now.getTime() - release.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (daysDiff <= 3) {
+    return Math.min(baseTtl, 2 * 60 * 60); // 2 hours
+  }
+  if (daysDiff <= 7) {
+    return Math.min(baseTtl, 4 * 60 * 60); // 4 hours
+  }
+  return baseTtl;
+}
+
+/**
  * Get adaptive TTL for null (no data) results based on content age.
  * Shorter for new/upcoming content (data may appear soon),
  * longer for old content (unlikely to get new data now).

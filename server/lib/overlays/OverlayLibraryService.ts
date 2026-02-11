@@ -15,7 +15,11 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type sharp from 'sharp';
-import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
+import {
+  capTtlForRecentRelease,
+  getAdaptiveTtl,
+  getNullRatingTtl,
+} from './adaptiveTtl';
 import {
   buildRenderContext,
   checkMonitoringStatus,
@@ -717,8 +721,12 @@ class OverlayLibraryService {
                 }
               }
 
-              // Cache the result with adaptive TTL
-              const ttl = getAdaptiveTtl(year);
+              // Cache the result with adaptive TTL, capped for recent releases
+              const baseTtl = getAdaptiveTtl(year);
+              const ttl = capTtlForRecentRelease(
+                releaseDateInfo?.releaseDate,
+                baseTtl
+              );
               if (releaseDateInfo) {
                 preloadedMap?.set(cacheKey, releaseDateInfo);
                 adaptiveCache.set(cacheKey, releaseDateInfo, ttl);

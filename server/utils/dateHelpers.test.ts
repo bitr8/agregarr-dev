@@ -165,3 +165,72 @@ describe('dateHelpers with TZ=Australia/Sydney', () => {
     });
   });
 });
+
+// capTtlForRecentRelease doesn't use getSettings, but the module imports it.
+// Mock the settings dependency to avoid TypeORM decorator errors.
+vi.mock('@server/lib/settings', () => ({
+  getSettings: () => ({ main: { ratingsCacheMaxDays: 30 } }),
+}));
+
+describe('capTtlForRecentRelease', () => {
+  let capTtlForRecentRelease: (
+    releaseDate: string | undefined,
+    baseTtl: number
+  ) => number;
+  const THREE_DAYS = 3 * 24 * 60 * 60;
+
+  beforeAll(async () => {
+    const mod = await import('../lib/overlays/adaptiveTtl');
+    capTtlForRecentRelease = mod.capTtlForRecentRelease;
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns baseTtl when releaseDate is undefined', () => {
+    expect(capTtlForRecentRelease(undefined, THREE_DAYS)).toBe(THREE_DAYS);
+  });
+
+  it('caps to 2h when release is today', () => {
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+    expect(capTtlForRecentRelease('2026-02-10', THREE_DAYS)).toBe(2 * 60 * 60);
+  });
+
+  it('caps to 2h when release is 1 day ago', () => {
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+    expect(capTtlForRecentRelease('2026-02-09', THREE_DAYS)).toBe(2 * 60 * 60);
+  });
+
+  it('caps to 2h when release is 3 days away', () => {
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+    expect(capTtlForRecentRelease('2026-02-13', THREE_DAYS)).toBe(2 * 60 * 60);
+  });
+
+  it('caps to 4h when release is 5 days away', () => {
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+    expect(capTtlForRecentRelease('2026-02-15', THREE_DAYS)).toBe(4 * 60 * 60);
+  });
+
+  it('returns baseTtl when release is 30 days ago', () => {
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+    expect(capTtlForRecentRelease('2026-01-11', THREE_DAYS)).toBe(THREE_DAYS);
+  });
+
+  it('does not increase baseTtl when baseTtl is already small', () => {
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+    const oneHour = 60 * 60;
+    expect(capTtlForRecentRelease('2026-02-10', oneHour)).toBe(oneHour);
+  });
+
+  it('strips time component from datetime strings', () => {
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+    expect(capTtlForRecentRelease('2026-02-10T00:00:00.000Z', THREE_DAYS)).toBe(
+      2 * 60 * 60
+    );
+  });
+});
