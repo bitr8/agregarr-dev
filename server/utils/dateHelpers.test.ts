@@ -6,7 +6,15 @@
  * TMDB date "2026-02-10", server TZ=Australia/Sydney (AEDT, UTC+11),
  * overlay run at various UTC times on Feb 10.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 import {
   calculateDaysSince,
