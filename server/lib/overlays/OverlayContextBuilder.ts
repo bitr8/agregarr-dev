@@ -13,6 +13,19 @@ import logger from '@server/logger';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
+const _langDisplayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+
+/**
+ * Convert an ISO 639-2 language code to its English display name.
+ */
+function resolveLanguageName(code: string, fallback: string): string {
+  try {
+    return _langDisplayNames.of(code) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Result of building render context
  * Includes the context and whether any critical API calls failed
@@ -873,20 +886,29 @@ export async function buildRenderContext(
         }
 
         // Primary audio language
-        if (primaryAudio.language) {
-          context.audioLanguage = primaryAudio.language;
-        }
         if (primaryAudio.languageCode) {
           context.audioLanguageCode = primaryAudio.languageCode;
+          context.audioLanguage = resolveLanguageName(
+            primaryAudio.languageCode,
+            primaryAudio.language ?? primaryAudio.languageCode
+          );
+        } else if (primaryAudio.language) {
+          context.audioLanguage = primaryAudio.language;
         }
 
         // Collect all audio track languages (unique values only)
-        const allAudioLanguages = audioStreams
-          .map((s) => s.language)
-          .filter((lang): lang is string => !!lang);
         const allAudioLanguageCodes = audioStreams
           .map((s) => s.languageCode)
           .filter((code): code is string => !!code);
+
+        const allAudioLanguages =
+          allAudioLanguageCodes.length > 0
+            ? allAudioLanguageCodes.map((code) =>
+                resolveLanguageName(code, code)
+              )
+            : audioStreams
+                .map((s) => s.language)
+                .filter((lang): lang is string => !!lang);
 
         if (allAudioLanguages.length > 0) {
           context.audioLanguages = [...new Set(allAudioLanguages)];
@@ -902,12 +924,18 @@ export async function buildRenderContext(
 
       if (subtitleStreams.length > 0) {
         // Collect all subtitle languages (unique values only)
-        const allSubtitleLanguages = subtitleStreams
-          .map((s) => s.language)
-          .filter((lang): lang is string => !!lang);
         const allSubtitleLanguageCodes = subtitleStreams
           .map((s) => s.languageCode)
           .filter((code): code is string => !!code);
+
+        const allSubtitleLanguages =
+          allSubtitleLanguageCodes.length > 0
+            ? allSubtitleLanguageCodes.map((code) =>
+                resolveLanguageName(code, code)
+              )
+            : subtitleStreams
+                .map((s) => s.language)
+                .filter((lang): lang is string => !!lang);
 
         if (allSubtitleLanguages.length > 0) {
           context.subtitleLanguages = [...new Set(allSubtitleLanguages)];
