@@ -679,13 +679,14 @@ export class MultiSourceOrchestrator {
 
         try {
           // Apply missing item filters (rating, year, genre, etc.) before creating placeholders
-          const { missingItemFilterService } = await import(
-            './MissingItemFilterService'
-          );
+          const { missingItemFilterService, buildPlaceholderFilterConfig } =
+            await import('./MissingItemFilterService');
+          const placeholderFilterConfig =
+            buildPlaceholderFilterConfig(tempConfig);
           const { filteredItems } =
             await missingItemFilterService.filterMissingItems(
               missingItems,
-              tempConfig,
+              placeholderFilterConfig,
               'Multi-Source Placeholder Filter',
               { skipMediaTypeCheck: true }
             );

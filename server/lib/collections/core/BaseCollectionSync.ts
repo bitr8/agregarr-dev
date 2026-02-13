@@ -752,13 +752,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     // Create placeholders if enabled
     if (config.createPlaceholdersForMissing) {
       // Apply missing item filters (rating, year, genre, etc.) before creating placeholders
-      const { missingItemFilterService } = await import(
-        '../services/MissingItemFilterService'
-      );
+      const { missingItemFilterService, buildPlaceholderFilterConfig } =
+        await import('../services/MissingItemFilterService');
+      const placeholderFilterConfig = buildPlaceholderFilterConfig(config);
       const { filteredItems } =
         await missingItemFilterService.filterMissingItems(
           missingItems,
-          config,
+          placeholderFilterConfig,
           `${this.source} Placeholder Filter`,
           { skipMediaTypeCheck: true }
         );
