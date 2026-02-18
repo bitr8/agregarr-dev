@@ -1,6 +1,6 @@
 #!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-if [ -t 0 ] && [ -r /dev/tty ]; then
-  npx cz --hook < /dev/tty || true
+if [ -t 0 ]; then
+  exec < /dev/tty && npx cz --hook || true
 fi

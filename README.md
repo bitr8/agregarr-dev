@@ -57,6 +57,7 @@ Upstream Agregarr makes individual API calls per item, per rating source, per ca
 | **Collection Sync Cache**     | `getAllCollections()` called on every loop iteration | Cached with mutation-based invalidation. Saves ~25-30s |
 | **Batch Overlay Metadata**    | Plex metadata fetched one item at a time             | Batches of 200 per API call. Falls back on failure     |
 | **AniList Retry Cap**         | `parseInt` NaN bug causes infinite tight retry loops | Capped at 5 attempts                                   |
+| **Release Date TTL Cap**      | Stale cache shows wrong overlay for new releases     | Items within 3 days of release: max 2h TTL             |
 
 **Persistent TMDB Resolution Cache** -- Letterboxd collections require resolving titles to TMDB IDs. Upstream re-resolves every item on every sync (6 TMDB API calls each). This caches results in SQLite with adaptive TTL.
 
@@ -98,12 +99,11 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 ### Open
 
-| PR                                                    | Description                                                 | Depends On |
-| ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
-| [#456](https://github.com/agregarr/agregarr/pull/456) | Apply missing item filters to placeholder creation (#440)   | -          |
-| [#453](https://github.com/agregarr/agregarr/pull/453) | Re-apply placeholder markers during global discovery (#414) | -          |
-| [#444](https://github.com/agregarr/agregarr/pull/444) | Use correct Plex API endpoint for collection title updates  | -          |
-| [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle       | -          |
+| PR                                                    | Description                                                      | Depends On |
+| ----------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| [#467](https://github.com/agregarr/agregarr/pull/467) | Scan all placeholder-enabled libraries for discovery             | -          |
+| [#456](https://github.com/agregarr/agregarr/pull/456) | Separate placeholder filters independent of auto-request filters | -          |
+| [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle            | -          |
 
 ### Pending Submission
 
@@ -120,11 +120,14 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#459](https://github.com/agregarr/agregarr/pull/459) | Pass rating filters and seasonGrabOrder to multi-source collections  |
 | [#454](https://github.com/agregarr/agregarr/pull/454) | Resolve Letterboxd items via film page TMDB links (#448)             |
+| [#453](https://github.com/agregarr/agregarr/pull/453) | Re-apply placeholder markers during global discovery (#414)          |
 | [#452](https://github.com/agregarr/agregarr/pull/452) | Disambiguate TMDB person search for person spotlight                 |
 | [#450](https://github.com/agregarr/agregarr/pull/450) | Use episode air date for TV recently released filtered hubs          |
 | [#446](https://github.com/agregarr/agregarr/pull/446) | Add date format options for US and UK/AU locales                     |
 | [#445](https://github.com/agregarr/agregarr/pull/445) | Persist applyOverlaysDuringSync for pre-existing collections         |
+| [#444](https://github.com/agregarr/agregarr/pull/444) | Use correct Plex API endpoint for collection title updates           |
 | [#413](https://github.com/agregarr/agregarr/pull/413) | Pass options to ExternalAPI constructor correctly                    |
 | [#405](https://github.com/agregarr/agregarr/pull/405) | Fix Letterboxd title extraction from data-item-name                  |
 | [#400](https://github.com/agregarr/agregarr/pull/400) | Empty Plex trash after placeholder cleanup                           |

@@ -29,6 +29,11 @@
 ## Theses files/directories should be excluded from git archives
 #
 
+# Fork-only files: keep ours during upstream merges
+.gitattributes merge=ours
+.husky/prepare-commit-msg merge=ours
+README.md merge=ours
+
 .husky export-ignore
 .husky/prepare-commit-msg merge=ours
 README.md merge=ours
