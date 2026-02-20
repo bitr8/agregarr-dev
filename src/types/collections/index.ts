@@ -436,7 +436,7 @@ export interface CollectionFormConfig {
   readonly autoPoster?: boolean; // Auto-generate poster during sync (only available for Overseerr user collections)
   readonly autoPosterTemplate?: number | null; // Template ID for auto-generated posters (null for default template)
   readonly useTmdbFranchisePoster?: boolean; // Use TMDB franchise poster instead of auto-generated poster (only for TMDB auto_franchise collections)
-  readonly hideIndividualItems?: boolean; // Hide individual items, show collection (collectionMode = 1, only for TMDB auto_franchise collections)
+  readonly hideIndividualItems?: boolean; // Hide individual items, show collection (collectionMode = 1, supported for Coming Soon and TMDB auto_franchise collections)
   // Wallpaper, summary, and theme settings
   readonly customWallpaper?: string | Record<string, string>; // Path to custom wallpaper (art) image file, or per-library wallpaper mapping
   readonly customSummary?: string; // Custom summary/description text for the collection
@@ -521,6 +521,28 @@ export interface CollectionConfigCreateRequest {
   readonly createPlaceholdersForMissing?: boolean;
   readonly placeholderReleasedDays?: number;
   readonly placeholderDaysAhead?: number;
+  readonly placeholderMinimumYear?: number;
+  readonly placeholderMinimumImdbRating?: number;
+  readonly placeholderMinimumRottenTomatoesRating?: number;
+  readonly placeholderMinimumRottenTomatoesAudienceRating?: number;
+  readonly placeholderFilterSettings?: {
+    readonly genres?: {
+      readonly mode: 'exclude' | 'include';
+      readonly values: number[];
+    };
+    readonly countries?: {
+      readonly mode: 'exclude' | 'include';
+      readonly values: string[];
+    };
+    readonly languages?: {
+      readonly mode: 'exclude' | 'include';
+      readonly values: string[];
+    };
+    readonly keywords?: {
+      readonly mode: 'exclude' | 'include';
+      readonly values: number[];
+    };
+  };
   readonly includeAllReleasedItems?: boolean;
   readonly applyOverlaysDuringSync?: boolean;
   // Download mode settings
@@ -631,7 +653,7 @@ export interface CollectionConfigCreateRequest {
   readonly autoPoster?: boolean; // Auto-generate poster during sync (only available for Overseerr user collections)
   readonly autoPosterTemplate?: number | null; // Template ID for auto-generated posters (null for default template)
   readonly useTmdbFranchisePoster?: boolean; // Use TMDB franchise poster instead of auto-generated poster (only for TMDB auto_franchise collections)
-  readonly hideIndividualItems?: boolean; // Hide individual items, show collection (collectionMode = 1, only for TMDB auto_franchise collections)
+  readonly hideIndividualItems?: boolean; // Hide individual items, show collection (collectionMode = 1, supported for Coming Soon and TMDB auto_franchise collections)
   // Wallpaper, summary, and theme settings
   readonly customWallpaper?: string | Record<string, string>; // Path to custom wallpaper (art) image file, or per-library wallpaper mapping
   readonly customSummary?: string; // Custom summary/description text for the collection
@@ -679,6 +701,13 @@ export const toCollectionCreateRequest = (
     createPlaceholdersForMissing: config.createPlaceholdersForMissing,
     placeholderReleasedDays: config.placeholderReleasedDays,
     placeholderDaysAhead: config.placeholderDaysAhead,
+    placeholderMinimumYear: config.placeholderMinimumYear,
+    placeholderMinimumImdbRating: config.placeholderMinimumImdbRating,
+    placeholderMinimumRottenTomatoesRating:
+      config.placeholderMinimumRottenTomatoesRating,
+    placeholderMinimumRottenTomatoesAudienceRating:
+      config.placeholderMinimumRottenTomatoesAudienceRating,
+    placeholderFilterSettings: config.placeholderFilterSettings,
     includeAllReleasedItems: config.includeAllReleasedItems,
     applyOverlaysDuringSync: config.applyOverlaysDuringSync,
     downloadMode: config.downloadMode,
