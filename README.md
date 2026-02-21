@@ -101,6 +101,8 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                      | Depends On |
 | ----------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| [#483](https://github.com/agregarr/agregarr/pull/483) | Parallelise collection membership check in overlay test          | -          |
+| [#482](https://github.com/agregarr/agregarr/pull/482) | Index MAL IDs for constant-time lookups                          | -          |
 | [#481](https://github.com/agregarr/agregarr/pull/481) | Guard splice in arrangeCollectionItemsInOrder                    | -          |
 | [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle            | -          |
 
