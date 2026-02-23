@@ -93,6 +93,8 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 **Direct Plex Deletion** -- Plex ignores empty directories during library scans. When a placeholder file is deleted and its folder becomes empty, `scanLibrary()` + `emptyTrash()` won't remove the stale database entry. This fork deletes stale items directly via `DELETE /library/metadata/{ratingKey}`, matching by exact file path. Falls back to scan+trash when direct deletion can't find matches.
 
+**TV Episode Cleanup** -- TV placeholders create an S00E00 episode that persists in Plex after the placeholder file and DB record are cleaned up. Upstream's `findItemsByFilePaths` queries shows (not episodes), so TV paths never match. Config cleanup also never explicitly deletes the Plex episode. This fork pre-resolves episode ratingKeys (type=4) before file deletion, and navigates show > Season 00 > Episode 0 to delete stale episodes during config cleanup.
+
 **Sonarr Folder Naming** -- Agregarr creates placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrives, Plex sees them as different shows, leaving orphaned entries. This fork extracts the folder name from Sonarr's series path. Falls back to standard naming if the show isn't in Sonarr.
 
 ## Upstream PRs
