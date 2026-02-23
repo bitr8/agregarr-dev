@@ -263,17 +263,51 @@ export async function cleanupStalePlexEntries(
   const deletedRatingKeys = new Set<string>();
   const librariesWithMisses = new Set<string>();
 
+  // Delete pre-resolved ratingKeys directly (TV episodes resolved before file deletion)
+  const preResolvedPaths = new Set<string>();
+  for (const deleted of deletedPaths) {
+    if (deleted.plexRatingKey) {
+      try {
+        await plexClient.deleteItem(deleted.plexRatingKey);
+        deletedRatingKeys.add(deleted.plexRatingKey);
+        preResolvedPaths.add(deleted.fullPath);
+        logger.info(
+          'Deleted pre-resolved stale Plex episode for removed placeholder',
+          {
+            label: 'PlaceholderCleanup',
+            ratingKey: deleted.plexRatingKey,
+            deletedPath: deleted.fullPath,
+            libraryKey: deleted.libraryKey,
+          }
+        );
+      } catch (error) {
+        logger.warn('Failed to delete pre-resolved Plex episode', {
+          label: 'PlaceholderCleanup',
+          ratingKey: deleted.plexRatingKey,
+          deletedPath: deleted.fullPath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
   // For each library, scan once and find all stale Plex items
   for (const [libraryKey, libDeletedPaths] of pathsByLibrary) {
+    // Filter out paths already handled by pre-resolved ratingKeys
+    const remainingPaths = new Set(
+      [...libDeletedPaths].filter((p) => !preResolvedPaths.has(p))
+    );
+    if (remainingPaths.size === 0) continue;
+
     try {
       const pathToRatingKeys = await plexClient.findItemsByFilePaths(
         libraryKey,
-        libDeletedPaths
+        remainingPaths
       );
 
       // Track which paths had no matches (need fallback)
       const matchedPaths = new Set(pathToRatingKeys.keys());
-      for (const p of libDeletedPaths) {
+      for (const p of remainingPaths) {
         if (!matchedPaths.has(p)) {
           librariesWithMisses.add(libraryKey);
         }
@@ -359,6 +393,7 @@ export interface OrphanedFileCleanupResult {
     relativePath: string;
     libraryKey: string;
     mediaType: 'movie' | 'tv';
+    plexRatingKey?: string;
   }[];
 }
 
@@ -367,7 +402,9 @@ export interface OrphanedFileCleanupResult {
  * This runs after record cleanup to remove files that are no longer tracked
  * @returns Cleanup result with count and paths of deleted files
  */
-export async function cleanupOrphanedPlaceholderFiles(): Promise<OrphanedFileCleanupResult> {
+export async function cleanupOrphanedPlaceholderFiles(
+  plexClient?: PlexAPI
+): Promise<OrphanedFileCleanupResult> {
   try {
     const repository = getRepository(ComingSoonItem);
     const settings = getSettings();
@@ -488,7 +525,12 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<OrphanedFileCle
             }
           }
         } else if (libraryInfo.type === 'tv') {
-          // Scan TV library for orphaned files
+          // Phase 1: Scan and collect orphaned TV paths
+          const orphanedTvFiles: {
+            filePath: string;
+            relativePath: string;
+          }[] = [];
+
           const showFolders = await fs.readdir(libraryInfo.path);
 
           for (const showFolder of showFolders) {
@@ -500,7 +542,7 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<OrphanedFileCle
 
               const seasonFolders = await fs.readdir(showPath);
               for (const seasonFolder of seasonFolders) {
-                if (seasonFolder !== 'Season 00') continue; // Only check Season 00
+                if (seasonFolder !== 'Season 00') continue;
 
                 const seasonPath = path.join(showPath, seasonFolder);
                 const seasonStats = await fs.stat(seasonPath);
@@ -508,7 +550,6 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<OrphanedFileCle
 
                 const files = await fs.readdir(seasonPath);
                 for (const file of files) {
-                  // Check if this is a placeholder file (S00E00.Trailer.mp4)
                   if (file !== 'S00E00.Trailer.mp4') continue;
 
                   const filePath = path.join(seasonPath, file);
@@ -518,46 +559,76 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<OrphanedFileCle
                     file
                   );
 
-                  // Check if any DB record references this file
                   if (!trackedPaths.has(relativePath)) {
-                    // Orphaned file - delete it
-                    try {
-                      const { removePlaceholder } = await import(
-                        '@server/lib/placeholders/placeholderManager'
-                      );
-                      await removePlaceholder(filePath, 'tv');
-                      filesRemoved++;
-                      deletedPaths.push({
-                        fullPath: filePath,
-                        relativePath,
-                        libraryKey: libraryInfo.libraryKey,
-                        mediaType: 'tv',
-                      });
-                      logger.info('Removed orphaned placeholder file', {
-                        label: 'PlaceholderService',
-                        path: relativePath,
-                        mediaType: 'tv',
-                        libraryKey: libraryInfo.libraryKey,
-                      });
-                    } catch (error) {
-                      logger.warn(
-                        'Failed to remove orphaned placeholder file',
-                        {
-                          label: 'PlaceholderService',
-                          path: relativePath,
-                          error:
-                            error instanceof Error
-                              ? error.message
-                              : String(error),
-                        }
-                      );
-                    }
+                    orphanedTvFiles.push({ filePath, relativePath });
                   }
                 }
               }
             } catch (error) {
-              // Folder access error, skip
               continue;
+            }
+          }
+
+          // Phase 2: Pre-resolve episode ratingKeys while files still exist
+          const resolvedRatingKeys = new Map<string, string>();
+          if (plexClient && orphanedTvFiles.length > 0) {
+            try {
+              const tvPaths = new Set(orphanedTvFiles.map((f) => f.filePath));
+              const pathToKeys = await plexClient.findItemsByFilePaths(
+                libraryInfo.libraryKey,
+                tvPaths,
+                4 // type=4 for episodes
+              );
+              for (const [filePath, keys] of pathToKeys) {
+                if (keys.length > 0) {
+                  resolvedRatingKeys.set(filePath, keys[0]);
+                }
+              }
+              if (resolvedRatingKeys.size > 0) {
+                logger.debug(
+                  'Pre-resolved Plex episode ratingKeys for orphaned TV placeholders',
+                  {
+                    label: 'PlaceholderService',
+                    resolved: resolvedRatingKeys.size,
+                    total: orphanedTvFiles.length,
+                  }
+                );
+              }
+            } catch (error) {
+              logger.warn('Failed to pre-resolve TV episode ratingKeys', {
+                label: 'PlaceholderService',
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+
+          // Phase 3: Delete files and include resolved ratingKeys in result
+          for (const { filePath, relativePath } of orphanedTvFiles) {
+            try {
+              const { removePlaceholder } = await import(
+                '@server/lib/placeholders/placeholderManager'
+              );
+              await removePlaceholder(filePath, 'tv');
+              filesRemoved++;
+              deletedPaths.push({
+                fullPath: filePath,
+                relativePath,
+                libraryKey: libraryInfo.libraryKey,
+                mediaType: 'tv',
+                plexRatingKey: resolvedRatingKeys.get(filePath),
+              });
+              logger.info('Removed orphaned placeholder file', {
+                label: 'PlaceholderService',
+                path: relativePath,
+                mediaType: 'tv',
+                libraryKey: libraryInfo.libraryKey,
+              });
+            } catch (error) {
+              logger.warn('Failed to remove orphaned placeholder file', {
+                label: 'PlaceholderService',
+                path: relativePath,
+                error: error instanceof Error ? error.message : String(error),
+              });
             }
           }
         }
@@ -587,6 +658,42 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<OrphanedFileCle
       error: error instanceof Error ? error.message : String(error),
     });
     return { filesRemoved: 0, deletedPaths: [] };
+  }
+}
+
+/**
+ * Delete the stale Plex episode entry for a TV placeholder.
+ * Navigates show → Season 00 → Episode 0 and deletes the episode.
+ * Non-fatal: logs warnings on failure.
+ */
+async function deletePlexPlaceholderEpisode(
+  plexClient: PlexAPI,
+  showRatingKey: string,
+  title: string
+): Promise<void> {
+  try {
+    const seasons = await plexClient.getChildrenMetadata(showRatingKey);
+    const season00 = seasons.find((s) => s.index === 0);
+    if (!season00) return;
+
+    const episodes = await plexClient.getChildrenMetadata(season00.ratingKey);
+    const placeholderEp = episodes.find((ep) => ep.index === 0);
+    if (!placeholderEp) return;
+
+    await plexClient.deleteItem(placeholderEp.ratingKey);
+    logger.info('Deleted stale Plex placeholder episode', {
+      label: 'PlaceholderCleanup',
+      title,
+      showRatingKey,
+      episodeRatingKey: placeholderEp.ratingKey,
+    });
+  } catch (error) {
+    logger.warn('Failed to delete Plex placeholder episode', {
+      label: 'PlaceholderCleanup',
+      title,
+      showRatingKey,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -821,6 +928,15 @@ export async function cleanupPlaceholdersForConfig(
 
             // Remove from database if file removal succeeded
             if (fileRemovalSucceeded) {
+              // Delete stale Plex episode entry for TV placeholders
+              if (placeholder.mediaType === 'tv' && placeholder.plexRatingKey) {
+                await deletePlexPlaceholderEpisode(
+                  plexClient,
+                  placeholder.plexRatingKey,
+                  placeholder.title
+                );
+              }
+
               await repository.remove(placeholder);
               removedCount++;
               orphanedCount++;
@@ -952,6 +1068,15 @@ export async function cleanupPlaceholdersForConfig(
 
           // Remove from database if file removal succeeded
           if (fileRemovalSucceeded) {
+            // Delete stale Plex episode entry for TV placeholders
+            if (placeholder.mediaType === 'tv' && placeholder.plexRatingKey) {
+              await deletePlexPlaceholderEpisode(
+                plexClient,
+                placeholder.plexRatingKey,
+                placeholder.title
+              );
+            }
+
             await repository.remove(placeholder);
             removedCount++;
             staleCount++;

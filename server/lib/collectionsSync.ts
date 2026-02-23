@@ -404,6 +404,7 @@ class CollectionsSync {
           relativePath: string;
           libraryKey: string;
           mediaType: 'movie' | 'tv';
+          plexRatingKey?: string;
         }[];
       } = { filesRemoved: 0, deletedPaths: [] };
 
@@ -419,7 +420,7 @@ class CollectionsSync {
         await cleanupOrphanedPlaceholderRecords();
 
         // Step 2: Remove orphaned files (where no DB records reference them)
-        cleanupResult = await cleanupOrphanedPlaceholderFiles();
+        cleanupResult = await cleanupOrphanedPlaceholderFiles(plexClient);
 
         logger.info('Orphaned placeholder cleanup completed', {
           label: 'Collections Sync',

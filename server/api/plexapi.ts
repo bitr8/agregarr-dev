@@ -2258,7 +2258,8 @@ class PlexAPI {
    */
   public async findItemsByFilePaths(
     libraryId: string,
-    filePaths: Set<string>
+    filePaths: Set<string>,
+    type?: number
   ): Promise<Map<string, string[]>> {
     const results = new Map<string, string[]>();
 
@@ -2287,7 +2288,9 @@ class PlexAPI {
             }[];
           };
         }>({
-          uri: `/library/sections/${libraryId}/all?includeGuids=1`,
+          uri: `/library/sections/${libraryId}/all?includeGuids=1${
+            type ? `&type=${type}` : ''
+          }`,
           extraHeaders: {
             'X-Plex-Container-Start': `${offset}`,
             'X-Plex-Container-Size': `${pageSize}`,
