@@ -1677,7 +1677,7 @@ class OverlayLibraryService {
         editionTitle?: string;
         Guid?: { id: string }[];
         childCount?: number;
-        Children?: { Metadata?: unknown[] };
+        Children?: { Metadata?: unknown[]; Directory?: unknown[] };
         seasonCount?: number;
         leafCount?: number;
         ratingKey?: string;
