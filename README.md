@@ -103,6 +103,7 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                      | Depends On |
 | ----------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures      | -          |
 | [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID             | #491       |
 | [#491](https://github.com/agregarr/agregarr/pull/491) | Handle Plex returning TV seasons as Children.Directory           | -          |
 | [#483](https://github.com/agregarr/agregarr/pull/483) | Parallelise collection membership check in overlay test          | -          |
