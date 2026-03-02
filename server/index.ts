@@ -11,6 +11,7 @@ import { User } from '@server/entity/User';
 import { startJobs } from '@server/job/schedule';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import routes from '@server/routes';
 import { sanitizeErrorMessage } from '@server/utils/errorResponse';
 import restartFlag from '@server/utils/restartFlag';
@@ -26,6 +27,7 @@ import * as OpenApiValidator from 'express-openapi-validator';
 import type { Store } from 'express-session';
 import session from 'express-session';
 import fs from 'fs';
+import helmet from 'helmet';
 import next from 'next';
 import path from 'path';
 import swaggerUi from 'swagger-ui-express';
@@ -83,10 +85,12 @@ app
 
     // Seed default source colors and poster template (one-time setup)
     try {
-      const { seedSourceColors } =
-        await import('@server/scripts/seedSourceColors');
-      const { seedDefaultTemplate } =
-        await import('@server/scripts/seedDefaultTemplate');
+      const { seedSourceColors } = await import(
+        '@server/scripts/seedSourceColors'
+      );
+      const { seedDefaultTemplate } = await import(
+        '@server/scripts/seedDefaultTemplate'
+      );
 
       await seedSourceColors();
       await seedDefaultTemplate();
@@ -96,8 +100,9 @@ app
 
     // Seed preset overlay templates (one-time setup)
     try {
-      const { presetTemplateService } =
-        await import('@server/lib/overlays/PresetTemplates');
+      const { presetTemplateService } = await import(
+        '@server/lib/overlays/PresetTemplates'
+      );
 
       await presetTemplateService.createPresetTemplates();
     } catch (error) {
@@ -106,8 +111,9 @@ app
 
     // Initialize IndividualCollectionScheduler for custom sync schedules
     try {
-      const { IndividualCollectionScheduler } =
-        await import('@server/lib/collections/services/IndividualCollectionScheduler');
+      const { IndividualCollectionScheduler } = await import(
+        '@server/lib/collections/services/IndividualCollectionScheduler'
+      );
       await IndividualCollectionScheduler.initialize();
     } catch (error) {
       logger.error(
@@ -118,8 +124,9 @@ app
 
     // Initialize poster storage directory
     try {
-      const { initializePosterStorage } =
-        await import('@server/lib/posterStorage');
+      const { initializePosterStorage } = await import(
+        '@server/lib/posterStorage'
+      );
       await initializePosterStorage();
       logger.info('Poster storage initialized successfully');
     } catch (error) {
@@ -128,8 +135,9 @@ app
 
     // Initialize wallpaper storage directory
     try {
-      const { initializeWallpaperStorage } =
-        await import('@server/lib/wallpaperStorage');
+      const { initializeWallpaperStorage } = await import(
+        '@server/lib/wallpaperStorage'
+      );
       initializeWallpaperStorage();
       logger.info('Wallpaper storage initialized successfully');
     } catch (error) {
@@ -138,8 +146,9 @@ app
 
     // Initialize theme storage directory
     try {
-      const { initializeThemeStorage } =
-        await import('@server/lib/themeStorage');
+      const { initializeThemeStorage } = await import(
+        '@server/lib/themeStorage'
+      );
       initializeThemeStorage();
       logger.info('Theme storage initialized successfully');
     } catch (error) {
@@ -168,8 +177,9 @@ app
 
     // Initialize base poster storage directory
     try {
-      const { plexBasePosterManager } =
-        await import('@server/lib/overlays/PlexBasePosterManager');
+      const { plexBasePosterManager } = await import(
+        '@server/lib/overlays/PlexBasePosterManager'
+      );
       await plexBasePosterManager.initialize();
       logger.info('Base poster storage initialized successfully');
     } catch (error) {
@@ -178,8 +188,9 @@ app
 
     // Initialize RandomListManager for multi-source collections
     try {
-      const { RandomListManager } =
-        await import('@server/lib/collections/utils/RandomListManager');
+      const { RandomListManager } = await import(
+        '@server/lib/collections/utils/RandomListManager'
+      );
       const configDir =
         process.env.CONFIG_DIRECTORY || path.join(__dirname, '../config');
       RandomListManager.initialize(configDir);
@@ -216,6 +227,25 @@ app
     if (settings.main.trustProxy) {
       server.enable('trust proxy');
     }
+
+    // Security headers
+    server.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", 'data:', 'blob:', 'https://image.tmdb.org', '*'],
+            fontSrc: ["'self'", 'data:'],
+            connectSrc: ["'self'", '*'],
+            mediaSrc: ["'self'", '*'],
+          },
+        },
+        crossOriginEmbedderPolicy: false,
+      })
+    );
+
     server.use(cookieParser());
     server.use(express.json({ limit: '10mb' }));
     server.use(express.urlencoded({ extended: true }));
@@ -255,25 +285,26 @@ app
 
     // Set up sessions
     const sessionRespository = getRepository(Session);
-    server.use(
-      '/api',
-      session({
-        name: 'agregarr.sid', // Unique cookie name to prevent conflicts with Overseerr
-        secret: settings.clientId,
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-          maxAge: 1000 * 60 * 60 * 24 * 30,
-          httpOnly: true,
-          sameSite: settings.main.csrfProtection ? 'strict' : 'lax',
-          secure: 'auto',
-        },
-        store: new TypeormStore({
-          cleanupLimit: 2,
-          ttl: 60 * 60 * 24 * 30,
-        }).connect(sessionRespository) as Store,
-      })
-    );
+    const sessionMiddleware = session({
+      name: 'agregarr.sid', // Unique cookie name to prevent conflicts with Overseerr
+      secret: settings.clientId,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        maxAge: 1000 * 60 * 60 * 24 * 30,
+        httpOnly: true,
+        sameSite: settings.main.csrfProtection ? 'strict' : 'lax',
+        secure: 'auto',
+      },
+      store: new TypeormStore({
+        cleanupLimit: 2,
+        ttl: 60 * 60 * 24 * 30,
+      }).connect(sessionRespository) as Store,
+    });
+    server.use('/api', sessionMiddleware);
+
+    // Auth middleware for non-API endpoints (uploads, exports, imports)
+    const requireAuth = [sessionMiddleware, checkUser, isAuthenticated()];
     const apiDocs = YAML.load(API_SPEC_PATH);
     server.use('/api-docs', swaggerUi.serve, swaggerUi.setup(apiDocs));
     server.use(
@@ -359,7 +390,7 @@ app
     );
 
     // Simple poster upload endpoint (bypasses complex API routing)
-    server.post('/upload-poster', async (req, res) => {
+    server.post('/upload-poster', ...requireAuth, async (req, res) => {
       try {
         const multer = (await import('multer')).default;
         const { savePosterFile } = await import('@server/lib/posterStorage');
@@ -405,11 +436,12 @@ app
     });
 
     // Simple wallpaper upload endpoint (bypasses complex API routing)
-    server.post('/upload-wallpaper', async (req, res) => {
+    server.post('/upload-wallpaper', ...requireAuth, async (req, res) => {
       try {
         const multer = (await import('multer')).default;
-        const { saveWallpaperFile, initializeWallpaperStorage } =
-          await import('@server/lib/wallpaperStorage');
+        const { saveWallpaperFile, initializeWallpaperStorage } = await import(
+          '@server/lib/wallpaperStorage'
+        );
 
         // Initialize storage
         initializeWallpaperStorage();
@@ -455,11 +487,12 @@ app
     });
 
     // Simple theme upload endpoint (bypasses complex API routing)
-    server.post('/upload-theme', async (req, res) => {
+    server.post('/upload-theme', ...requireAuth, async (req, res) => {
       try {
         const multer = (await import('multer')).default;
-        const { saveThemeFile, initializeThemeStorage } =
-          await import('@server/lib/themeStorage');
+        const { saveThemeFile, initializeThemeStorage } = await import(
+          '@server/lib/themeStorage'
+        );
 
         // Initialize storage
         initializeThemeStorage();
@@ -539,11 +572,12 @@ app
       })
     );
 
-    server.post('/upload-icon', async (req, res) => {
+    server.post('/upload-icon', ...requireAuth, async (req, res) => {
       try {
         const multer = (await import('multer')).default;
-        const { uploadIcon, initializeIconStorage } =
-          await import('@server/lib/iconManager');
+        const { uploadIcon, initializeIconStorage } = await import(
+          '@server/lib/iconManager'
+        );
 
         // Initialize storage
         initializeIconStorage();
@@ -610,7 +644,7 @@ app
       }
     });
 
-    server.post('/template-import', async (req, res) => {
+    server.post('/template-import', ...requireAuth, async (req, res) => {
       try {
         const multer = (await import('multer')).default;
 
@@ -646,10 +680,12 @@ app
 
           try {
             const { getRepository } = await import('@server/datasource');
-            const { PosterTemplate } =
-              await import('@server/entity/PosterTemplate');
-            const { sanitizeTemplateData, validateTemplateData } =
-              await import('@server/lib/posterTemplates');
+            const { PosterTemplate } = await import(
+              '@server/entity/PosterTemplate'
+            );
+            const { sanitizeTemplateData, validateTemplateData } = await import(
+              '@server/lib/posterTemplates'
+            );
             const fs = await import('fs');
             const path = await import('path');
 
@@ -690,8 +726,9 @@ app
                   const entryData = await zip.entryData(entryName);
 
                   if (entryName.startsWith('assets/icons/')) {
-                    const { uploadIcon } =
-                      await import('@server/lib/iconManager');
+                    const { uploadIcon } = await import(
+                      '@server/lib/iconManager'
+                    );
                     const originalFilename = path.basename(entryName);
                     const fileExtension = path
                       .extname(originalFilename)
@@ -877,432 +914,460 @@ app
       }
     });
 
-    server.get('/overlay-template-export/:id', async (req, res) => {
-      try {
-        const templateId = parseInt(req.params.id);
+    server.get(
+      '/overlay-template-export/:id',
+      ...requireAuth,
+      async (req, res) => {
+        try {
+          const templateId = parseInt(req.params.id);
 
-        if (isNaN(templateId)) {
-          return res.status(400).json({
-            error: 'Invalid template ID',
-          });
-        }
-
-        const { getRepository } = await import('@server/datasource');
-        const { OverlayTemplate } =
-          await import('@server/entity/OverlayTemplate');
-        const fs = await import('fs');
-        const path = await import('path');
-
-        const templateRepository = getRepository(OverlayTemplate);
-        const template = await templateRepository.findOne({
-          where: { id: templateId, isActive: true },
-        });
-
-        if (!template) {
-          return res.status(404).json({
-            error: 'Template not found',
-          });
-        }
-
-        const templateData = template.getTemplateData();
-
-        // Collect all asset paths that need to be included
-        const assetPaths = new Set<string>();
-
-        // Check elements for custom assets
-        templateData.elements?.forEach((element) => {
-          if (element.type === 'svg') {
-            const svgProps = element.properties as {
-              iconPath?: string;
-            };
-            if (svgProps.iconPath) {
-              assetPaths.add(svgProps.iconPath);
-            }
-          } else if (element.type === 'raster') {
-            const rasterProps = element.properties as {
-              imagePath?: string;
-            };
-            if (rasterProps.imagePath) {
-              assetPaths.add(rasterProps.imagePath);
-            }
-          }
-        });
-
-        const archiver = (await import('archiver')).default;
-        const archive = archiver('zip', {
-          zlib: { level: 9 }, // Maximum compression
-        });
-
-        // Set headers for ZIP download
-        const filename = `${template.name.replace(
-          /[^a-zA-Z0-9]/g,
-          '_'
-        )}_overlay_template.zip`;
-        res.set({
-          'Content-Type': 'application/zip',
-          'Content-Disposition': `attachment; filename="${filename}"`,
-        });
-
-        // Handle archiver events
-        archive.on('error', (err) => {
-          logger.error('Archive error:', err);
-          if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to create archive' });
-          }
-        });
-
-        // Pipe archive to response
-        archive.pipe(res);
-
-        // Add template JSON to the archive
-        const exportData = {
-          name: template.name,
-          description: template.description,
-          type: template.type,
-          templateData: templateData,
-          applicationCondition: template.getApplicationCondition(),
-          exportedAt: new Date().toISOString(),
-          version: '1.0',
-        };
-
-        archive.append(JSON.stringify(exportData, null, 2), {
-          name: 'template.json',
-        });
-
-        // Add asset files to the archive
-        for (const assetPath of assetPaths) {
-          try {
-            // Check if this is an icon URL path (format: /api/v1/posters/icons/{type}/{filename})
-            const iconUrlMatch = assetPath.match(
-              /\/api\/v1\/posters\/icons\/(\w+)\/(.+)/
-            );
-
-            if (iconUrlMatch) {
-              const [, iconType, filename] = iconUrlMatch;
-
-              // Only bundle user-uploaded icons, skip system icons
-              if (iconType === 'user') {
-                const iconFilePath = path.join(
-                  process.cwd(),
-                  'config',
-                  'icons',
-                  filename
-                );
-
-                if (fs.existsSync(iconFilePath)) {
-                  archive.file(iconFilePath, {
-                    name: `assets/icons/${filename}`,
-                  });
-                  logger.debug(`Added user icon to archive: ${filename}`);
-                }
-              }
-            } else {
-              // This might be a raster image path - check in different possible locations
-              const possiblePaths = [
-                path.join(process.cwd(), 'config', 'uploads', assetPath),
-                path.join(process.cwd(), 'config', 'posters', assetPath),
-                path.join(process.cwd(), assetPath),
-              ];
-
-              for (const possiblePath of possiblePaths) {
-                if (fs.existsSync(possiblePath)) {
-                  const relativeName = `assets/images/${path.basename(
-                    assetPath
-                  )}`;
-                  archive.file(possiblePath, { name: relativeName });
-                  logger.debug(
-                    `Added raster image to archive: ${relativeName}`
-                  );
-                  break;
-                }
-              }
-            }
-          } catch (error) {
-            logger.warn(`Failed to add asset to archive: ${assetPath}`, error);
-          }
-        }
-
-        // Finalize the archive
-        archive.finalize();
-
-        logger.info('Exported overlay template as ZIP with assets', {
-          templateId: template.id,
-          name: template.name,
-          assetCount: assetPaths.size,
-        });
-      } catch (error) {
-        logger.error('Failed to export overlay template:', error);
-        return res.status(500).json({
-          error: 'Failed to export overlay template',
-          message: error instanceof Error ? error.message : 'Unknown error',
-        });
-      }
-    });
-
-    server.post('/overlay-template-import', async (req, res) => {
-      try {
-        const multer = (await import('multer')).default;
-
-        const upload = multer({
-          storage: multer.memoryStorage(),
-          limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-          fileFilter: (_req, file, cb) => {
-            if (
-              file.mimetype === 'application/zip' ||
-              file.originalname.endsWith('.zip')
-            ) {
-              cb(null, true);
-            } else {
-              cb(new Error('Only ZIP files are allowed'));
-            }
-          },
-        }).single('file');
-
-        upload(req, res, async (uploadError) => {
-          if (uploadError) {
-            logger.error('Overlay template import upload error:', uploadError);
+          if (isNaN(templateId)) {
             return res.status(400).json({
-              error: 'File upload failed',
-              details: uploadError.message,
+              error: 'Invalid template ID',
             });
           }
 
-          if (!req.file) {
-            return res.status(400).json({
-              error: 'ZIP file is required',
+          const { getRepository } = await import('@server/datasource');
+          const { OverlayTemplate } = await import(
+            '@server/entity/OverlayTemplate'
+          );
+          const fs = await import('fs');
+          const path = await import('path');
+
+          const templateRepository = getRepository(OverlayTemplate);
+          const template = await templateRepository.findOne({
+            where: { id: templateId, isActive: true },
+          });
+
+          if (!template) {
+            return res.status(404).json({
+              error: 'Template not found',
             });
           }
 
-          try {
-            const { getRepository } = await import('@server/datasource');
-            const { OverlayTemplate } =
-              await import('@server/entity/OverlayTemplate');
-            const fs = await import('fs');
-            const path = await import('path');
+          const templateData = template.getTemplateData();
 
-            let templateData: OverlayTemplateData;
-            let name: string;
-            let description: string;
-            let type: OverlayTemplateType;
-            let applicationCondition: ApplicationCondition | undefined;
-            let version: string;
-            const assetMapping = new Map();
+          // Collect all asset paths that need to be included
+          const assetPaths = new Set<string>();
 
-            const StreamZip = (await import('node-stream-zip')).default;
-            const os = await import('os');
+          // Check elements for custom assets
+          templateData.elements?.forEach((element) => {
+            if (element.type === 'svg') {
+              const svgProps = element.properties as {
+                iconPath?: string;
+              };
+              if (svgProps.iconPath) {
+                assetPaths.add(svgProps.iconPath);
+              }
+            } else if (element.type === 'raster') {
+              const rasterProps = element.properties as {
+                imagePath?: string;
+              };
+              if (rasterProps.imagePath) {
+                assetPaths.add(rasterProps.imagePath);
+              }
+            }
+          });
 
-            // Write buffer to temporary file
-            const tempPath = path.join(
-              os.tmpdir(),
-              `agregarr-overlay-import-${Date.now()}-${Math.random()
-                .toString(36)
-                .substring(7)}.zip`
-            );
-            await fs.promises.writeFile(tempPath, req.file.buffer);
-            const zip = new StreamZip.async({ file: tempPath });
+          const archiver = (await import('archiver')).default;
+          const archive = archiver('zip', {
+            zlib: { level: 9 }, // Maximum compression
+          });
 
+          // Set headers for ZIP download
+          const filename = `${template.name.replace(
+            /[^a-zA-Z0-9]/g,
+            '_'
+          )}_overlay_template.zip`;
+          res.set({
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          });
+
+          // Handle archiver events
+          archive.on('error', (err) => {
+            logger.error('Archive error:', err);
+            if (!res.headersSent) {
+              res.status(500).json({ error: 'Failed to create archive' });
+            }
+          });
+
+          // Pipe archive to response
+          archive.pipe(res);
+
+          // Add template JSON to the archive
+          const exportData = {
+            name: template.name,
+            description: template.description,
+            type: template.type,
+            templateData: templateData,
+            applicationCondition: template.getApplicationCondition(),
+            exportedAt: new Date().toISOString(),
+            version: '1.0',
+          };
+
+          archive.append(JSON.stringify(exportData, null, 2), {
+            name: 'template.json',
+          });
+
+          // Add asset files to the archive
+          for (const assetPath of assetPaths) {
             try {
-              const templateJsonData = await zip.entryData('template.json');
-              const templateJson = JSON.parse(
-                templateJsonData.toString('utf8')
+              // Check if this is an icon URL path (format: /api/v1/posters/icons/{type}/{filename})
+              const iconUrlMatch = assetPath.match(
+                /\/api\/v1\/posters\/icons\/(\w+)\/(.+)/
               );
 
-              name = templateJson.name;
-              description = templateJson.description;
-              type = templateJson.type || 'generic';
-              templateData = templateJson.templateData;
-              applicationCondition = templateJson.applicationCondition;
-              version = templateJson.version;
+              if (iconUrlMatch) {
+                const [, iconType, filename] = iconUrlMatch;
 
-              // Extract and save asset files
-              const entries = await zip.entries();
-              for (const entryName of Object.keys(entries)) {
-                if (entryName.startsWith('assets/')) {
-                  const entryData = await zip.entryData(entryName);
+                // Only bundle user-uploaded icons, skip system icons
+                if (iconType === 'user') {
+                  const iconFilePath = path.join(
+                    process.cwd(),
+                    'config',
+                    'icons',
+                    filename
+                  );
 
-                  if (entryName.startsWith('assets/icons/')) {
-                    const { uploadIcon } =
-                      await import('@server/lib/iconManager');
-                    const originalFilename = path.basename(entryName);
-                    const fileExtension = path
-                      .extname(originalFilename)
-                      .toLowerCase();
+                  if (fs.existsSync(iconFilePath)) {
+                    archive.file(iconFilePath, {
+                      name: `assets/icons/${filename}`,
+                    });
+                    logger.debug(`Added user icon to archive: ${filename}`);
+                  }
+                }
+              } else {
+                // This might be a raster image path - check in allowed directories only
+                const allowedDirs = [
+                  path.join(process.cwd(), 'config', 'uploads'),
+                  path.join(process.cwd(), 'config', 'posters'),
+                ];
+                const possiblePaths = allowedDirs.map((dir) =>
+                  path.join(dir, assetPath)
+                );
 
-                    // Determine MIME type
-                    const mimeTypeMap: Record<string, string> = {
-                      '.svg': 'image/svg+xml',
-                      '.png': 'image/png',
-                      '.jpg': 'image/jpeg',
-                      '.jpeg': 'image/jpeg',
-                      '.webp': 'image/webp',
-                    };
-                    const mimeType = mimeTypeMap[fileExtension] || 'image/png';
+                for (const possiblePath of possiblePaths) {
+                  const resolvedPath = path.resolve(possiblePath);
+                  const isContained = allowedDirs.some(
+                    (dir) =>
+                      resolvedPath.startsWith(path.resolve(dir) + path.sep) ||
+                      resolvedPath === path.resolve(dir)
+                  );
 
-                    const iconMetadata = await uploadIcon(
-                      entryData,
-                      mimeType,
-                      originalFilename,
-                      {
-                        name: path.parse(originalFilename).name,
-                        category: 'imported',
-                        tags: ['imported'],
-                        description: 'Imported with overlay template',
-                      }
-                    );
-
-                    // Map old filename to new icon ID
-                    assetMapping.set(originalFilename, iconMetadata.id);
+                  if (isContained && fs.existsSync(resolvedPath)) {
+                    const relativeName = `assets/images/${path.basename(
+                      assetPath
+                    )}`;
+                    archive.file(resolvedPath, { name: relativeName });
                     logger.debug(
-                      `Imported icon: ${originalFilename} -> ${iconMetadata.id}`
+                      `Added raster image to archive: ${relativeName}`
                     );
-                  } else if (entryName.startsWith('assets/images/')) {
-                    // Import raster image - save to uploads directory
-                    const originalFilename = path.basename(entryName);
-                    const { randomUUID } = await import('crypto');
-                    const newFilename = `${randomUUID()}_${originalFilename}`;
-                    const uploadsDir = path.join(
-                      process.cwd(),
-                      'config',
-                      'uploads'
-                    );
-
-                    // Ensure uploads directory exists
-                    if (!fs.existsSync(uploadsDir)) {
-                      fs.mkdirSync(uploadsDir, { recursive: true });
-                    }
-
-                    const newFilePath = path.join(uploadsDir, newFilename);
-                    await fs.promises.writeFile(newFilePath, entryData);
-
-                    // Map old filename to new filename
-                    assetMapping.set(originalFilename, newFilename);
-                    logger.debug(
-                      `Imported raster image: ${originalFilename} -> ${newFilename}`
-                    );
+                    break;
                   }
                 }
               }
-
-              await zip.close();
-            } catch (zipError) {
-              logger.error('Failed to process ZIP file:', zipError);
-              return res.status(400).json({
-                error: 'Invalid ZIP file or missing template.json',
-                details:
-                  zipError instanceof Error
-                    ? zipError.message
-                    : 'Unknown error',
-              });
-            } finally {
-              // Clean up temporary file
-              if (fs.existsSync(tempPath)) {
-                await fs.promises.unlink(tempPath);
-              }
+            } catch (error) {
+              logger.warn(
+                `Failed to add asset to archive: ${assetPath}`,
+                error
+              );
             }
-
-            if (!name || !templateData) {
-              return res.status(400).json({
-                error: 'Template name and data are required',
-              });
-            }
-
-            // Validate version compatibility
-            if (version && version !== '1.0') {
-              return res.status(400).json({
-                error: `Unsupported overlay template version: ${version}. This version of Agregarr only supports version 1.0.`,
-              });
-            }
-
-            // Update asset paths in template data to use new imported asset IDs/paths
-            if (assetMapping.size > 0) {
-              // Update elements
-              templateData.elements?.forEach((element) => {
-                if (element.type === 'svg') {
-                  const svgProps = element.properties as {
-                    iconPath?: string;
-                  };
-                  if (svgProps.iconPath) {
-                    const filename = path.basename(svgProps.iconPath);
-                    const newPath = assetMapping.get(filename);
-                    if (newPath) {
-                      svgProps.iconPath = newPath;
-                    }
-                  }
-                } else if (element.type === 'raster') {
-                  const rasterProps = element.properties as {
-                    imagePath?: string;
-                  };
-                  if (rasterProps.imagePath) {
-                    const filename = path.basename(rasterProps.imagePath);
-                    const newPath = assetMapping.get(filename);
-                    if (newPath) {
-                      rasterProps.imagePath = newPath;
-                    }
-                  }
-                }
-              });
-            }
-
-            const templateRepository = getRepository(OverlayTemplate);
-
-            // Check for duplicate names and append suffix if needed
-            let finalName = name;
-            let counter = 1;
-            while (
-              await templateRepository.findOne({
-                where: { name: finalName, isActive: true },
-              })
-            ) {
-              finalName = `${name} (${counter})`;
-              counter++;
-            }
-
-            const newTemplate = new OverlayTemplate({
-              name: finalName,
-              description: description || 'Imported overlay template',
-              type: type,
-              isDefault: false,
-              isActive: true,
-            });
-
-            newTemplate.setTemplateData(templateData);
-            newTemplate.setApplicationCondition(applicationCondition);
-
-            const savedTemplate = await templateRepository.save(newTemplate);
-
-            logger.info('Imported overlay template', {
-              templateId: savedTemplate.id,
-              originalName: name,
-              finalName: savedTemplate.name,
-              assetCount: assetMapping.size,
-            });
-
-            return res.status(201).json({
-              id: savedTemplate.id,
-              name: savedTemplate.name,
-              description: savedTemplate.description,
-              type: savedTemplate.type,
-              isDefault: savedTemplate.isDefault,
-              templateData: savedTemplate.getTemplateData(),
-              applicationCondition: savedTemplate.getApplicationCondition(),
-              createdAt: savedTemplate.createdAt,
-              updatedAt: savedTemplate.updatedAt,
-            });
-          } catch (error) {
-            logger.error('Failed to import overlay template:', error);
-            return res.status(500).json({
-              error: 'Failed to import overlay template',
-              message: error instanceof Error ? error.message : 'Unknown error',
-            });
           }
-        });
-      } catch (error) {
-        logger.error('Overlay template import setup error:', error);
-        return res.status(500).json({
-          error: 'Failed to setup upload',
-        });
+
+          // Finalize the archive
+          archive.finalize();
+
+          logger.info('Exported overlay template as ZIP with assets', {
+            templateId: template.id,
+            name: template.name,
+            assetCount: assetPaths.size,
+          });
+        } catch (error) {
+          logger.error('Failed to export overlay template:', error);
+          return res.status(500).json({
+            error: 'Failed to export overlay template',
+            message: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
       }
-    });
+    );
+
+    server.post(
+      '/overlay-template-import',
+      ...requireAuth,
+      async (req, res) => {
+        try {
+          const multer = (await import('multer')).default;
+
+          const upload = multer({
+            storage: multer.memoryStorage(),
+            limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+            fileFilter: (_req, file, cb) => {
+              if (
+                file.mimetype === 'application/zip' ||
+                file.originalname.endsWith('.zip')
+              ) {
+                cb(null, true);
+              } else {
+                cb(new Error('Only ZIP files are allowed'));
+              }
+            },
+          }).single('file');
+
+          upload(req, res, async (uploadError) => {
+            if (uploadError) {
+              logger.error(
+                'Overlay template import upload error:',
+                uploadError
+              );
+              return res.status(400).json({
+                error: 'File upload failed',
+                details: uploadError.message,
+              });
+            }
+
+            if (!req.file) {
+              return res.status(400).json({
+                error: 'ZIP file is required',
+              });
+            }
+
+            try {
+              const { getRepository } = await import('@server/datasource');
+              const { OverlayTemplate } = await import(
+                '@server/entity/OverlayTemplate'
+              );
+              const fs = await import('fs');
+              const path = await import('path');
+
+              let templateData: OverlayTemplateData;
+              let name: string;
+              let description: string;
+              let type: OverlayTemplateType;
+              let applicationCondition: ApplicationCondition | undefined;
+              let version: string;
+              const assetMapping = new Map();
+
+              const StreamZip = (await import('node-stream-zip')).default;
+              const os = await import('os');
+
+              // Write buffer to temporary file
+              const tempPath = path.join(
+                os.tmpdir(),
+                `agregarr-overlay-import-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substring(7)}.zip`
+              );
+              await fs.promises.writeFile(tempPath, req.file.buffer);
+              const zip = new StreamZip.async({ file: tempPath });
+
+              try {
+                const templateJsonData = await zip.entryData('template.json');
+                const templateJson = JSON.parse(
+                  templateJsonData.toString('utf8')
+                );
+
+                name = templateJson.name;
+                description = templateJson.description;
+                type = templateJson.type || 'generic';
+                templateData = templateJson.templateData;
+                applicationCondition = templateJson.applicationCondition;
+                version = templateJson.version;
+
+                // Extract and save asset files
+                const entries = await zip.entries();
+                for (const entryName of Object.keys(entries)) {
+                  if (entryName.startsWith('assets/')) {
+                    const entryData = await zip.entryData(entryName);
+
+                    if (entryName.startsWith('assets/icons/')) {
+                      const { uploadIcon } = await import(
+                        '@server/lib/iconManager'
+                      );
+                      const originalFilename = path.basename(entryName);
+                      const fileExtension = path
+                        .extname(originalFilename)
+                        .toLowerCase();
+
+                      // Determine MIME type
+                      const mimeTypeMap: Record<string, string> = {
+                        '.svg': 'image/svg+xml',
+                        '.png': 'image/png',
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.webp': 'image/webp',
+                      };
+                      const mimeType =
+                        mimeTypeMap[fileExtension] || 'image/png';
+
+                      const iconMetadata = await uploadIcon(
+                        entryData,
+                        mimeType,
+                        originalFilename,
+                        {
+                          name: path.parse(originalFilename).name,
+                          category: 'imported',
+                          tags: ['imported'],
+                          description: 'Imported with overlay template',
+                        }
+                      );
+
+                      // Map old filename to new icon ID
+                      assetMapping.set(originalFilename, iconMetadata.id);
+                      logger.debug(
+                        `Imported icon: ${originalFilename} -> ${iconMetadata.id}`
+                      );
+                    } else if (entryName.startsWith('assets/images/')) {
+                      // Import raster image - save to uploads directory
+                      const originalFilename = path.basename(entryName);
+                      const { randomUUID } = await import('crypto');
+                      const newFilename = `${randomUUID()}_${originalFilename}`;
+                      const uploadsDir = path.join(
+                        process.cwd(),
+                        'config',
+                        'uploads'
+                      );
+
+                      // Ensure uploads directory exists
+                      if (!fs.existsSync(uploadsDir)) {
+                        fs.mkdirSync(uploadsDir, { recursive: true });
+                      }
+
+                      const newFilePath = path.join(uploadsDir, newFilename);
+                      await fs.promises.writeFile(newFilePath, entryData);
+
+                      // Map old filename to new filename
+                      assetMapping.set(originalFilename, newFilename);
+                      logger.debug(
+                        `Imported raster image: ${originalFilename} -> ${newFilename}`
+                      );
+                    }
+                  }
+                }
+
+                await zip.close();
+              } catch (zipError) {
+                logger.error('Failed to process ZIP file:', zipError);
+                return res.status(400).json({
+                  error: 'Invalid ZIP file or missing template.json',
+                  details:
+                    zipError instanceof Error
+                      ? zipError.message
+                      : 'Unknown error',
+                });
+              } finally {
+                // Clean up temporary file
+                if (fs.existsSync(tempPath)) {
+                  await fs.promises.unlink(tempPath);
+                }
+              }
+
+              if (!name || !templateData) {
+                return res.status(400).json({
+                  error: 'Template name and data are required',
+                });
+              }
+
+              // Validate version compatibility
+              if (version && version !== '1.0') {
+                return res.status(400).json({
+                  error: `Unsupported overlay template version: ${version}. This version of Agregarr only supports version 1.0.`,
+                });
+              }
+
+              // Update asset paths in template data to use new imported asset IDs/paths
+              if (assetMapping.size > 0) {
+                // Update elements
+                templateData.elements?.forEach((element) => {
+                  if (element.type === 'svg') {
+                    const svgProps = element.properties as {
+                      iconPath?: string;
+                    };
+                    if (svgProps.iconPath) {
+                      const filename = path.basename(svgProps.iconPath);
+                      const newPath = assetMapping.get(filename);
+                      if (newPath) {
+                        svgProps.iconPath = newPath;
+                      }
+                    }
+                  } else if (element.type === 'raster') {
+                    const rasterProps = element.properties as {
+                      imagePath?: string;
+                    };
+                    if (rasterProps.imagePath) {
+                      const filename = path.basename(rasterProps.imagePath);
+                      const newPath = assetMapping.get(filename);
+                      if (newPath) {
+                        rasterProps.imagePath = newPath;
+                      }
+                    }
+                  }
+                });
+              }
+
+              const templateRepository = getRepository(OverlayTemplate);
+
+              // Check for duplicate names and append suffix if needed
+              let finalName = name;
+              let counter = 1;
+              while (
+                await templateRepository.findOne({
+                  where: { name: finalName, isActive: true },
+                })
+              ) {
+                finalName = `${name} (${counter})`;
+                counter++;
+              }
+
+              const newTemplate = new OverlayTemplate({
+                name: finalName,
+                description: description || 'Imported overlay template',
+                type: type,
+                isDefault: false,
+                isActive: true,
+              });
+
+              newTemplate.setTemplateData(templateData);
+              newTemplate.setApplicationCondition(applicationCondition);
+
+              const savedTemplate = await templateRepository.save(newTemplate);
+
+              logger.info('Imported overlay template', {
+                templateId: savedTemplate.id,
+                originalName: name,
+                finalName: savedTemplate.name,
+                assetCount: assetMapping.size,
+              });
+
+              return res.status(201).json({
+                id: savedTemplate.id,
+                name: savedTemplate.name,
+                description: savedTemplate.description,
+                type: savedTemplate.type,
+                isDefault: savedTemplate.isDefault,
+                templateData: savedTemplate.getTemplateData(),
+                applicationCondition: savedTemplate.getApplicationCondition(),
+                createdAt: savedTemplate.createdAt,
+                updatedAt: savedTemplate.updatedAt,
+              });
+            } catch (error) {
+              logger.error('Failed to import overlay template:', error);
+              return res.status(500).json({
+                error: 'Failed to import overlay template',
+                message:
+                  error instanceof Error ? error.message : 'Unknown error',
+              });
+            }
+          });
+        } catch (error) {
+          logger.error('Overlay template import setup error:', error);
+          return res.status(500).json({
+            error: 'Failed to setup upload',
+          });
+        }
+      }
+    );
 
     server.use('/api/v1', routes);
 

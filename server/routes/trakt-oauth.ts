@@ -1,5 +1,6 @@
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isAuthenticated } from '@server/middleware/auth';
 import { TRAKT_OOB_REDIRECT_URI } from '@server/utils/traktAuth';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
@@ -261,7 +262,7 @@ async function callbackTraktOauth(
 
 traktOAuthRoutes.get('/oauth/proxy', proxyTraktOauth);
 traktOAuthRoutes.get('/oauth/callback', callbackTraktOauth);
-traktOAuthRoutes.post('/oauth/exchange', exchangeTraktOauth);
-traktOAuthRoutes.get('/oauth/start', startTraktOauth);
+traktOAuthRoutes.post('/oauth/exchange', isAuthenticated(), exchangeTraktOauth);
+traktOAuthRoutes.get('/oauth/start', isAuthenticated(), startTraktOauth);
 
 export default traktOAuthRoutes;
