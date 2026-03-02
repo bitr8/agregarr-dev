@@ -460,7 +460,6 @@ class PlexAPI {
         Directory?: PlexMetadata[];
       };
     }>(`/library/metadata/${key}/children`);
-
     return (
       response.MediaContainer.Metadata ||
       response.MediaContainer.Directory ||
@@ -1736,7 +1735,9 @@ class PlexAPI {
           moveCount++;
           // Update in-memory tracking: remove from old position and insert at new position
           const oldIndex = currentOrder.indexOf(itemToMove);
-          currentOrder.splice(oldIndex, 1);
+          if (oldIndex !== -1) {
+            currentOrder.splice(oldIndex, 1);
+          }
           currentOrder.splice(i, 0, itemToMove);
         } else {
           failCount++;

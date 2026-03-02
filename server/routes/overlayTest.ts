@@ -258,7 +258,7 @@ overlayTestRouter.post('/', async (req, res) => {
           const daysSince = calculateDaysSince(
             releaseDateInfo.nextEpisodeAirDate
           );
-          if (daysSince < 0) {
+          if (daysSince <= 0) {
             daysUntilNextEpisode = -daysSince;
           }
         }
@@ -267,7 +267,7 @@ overlayTestRouter.post('/', async (req, res) => {
           const daysSince = calculateDaysSince(
             releaseDateInfo.nextSeasonAirDate
           );
-          if (daysSince < 0) {
+          if (daysSince <= 0) {
             daysUntilNextSeason = -daysSince;
           } else {
             daysAgoNextSeason = daysSince;
@@ -326,7 +326,8 @@ overlayTestRouter.post('/', async (req, res) => {
     allConfigs.push(...preExistingCollectionConfigService.getConfigs());
 
     const collectionsWithKeys = allConfigs.filter(
-      (cfg) => cfg.collectionRatingKey
+      (cfg): cfg is typeof cfg & { collectionRatingKey: string } =>
+        !!cfg.collectionRatingKey
     );
     const collectionIds: string[] = [];
     const concurrency = 10;
@@ -337,7 +338,7 @@ overlayTestRouter.post('/', async (req, res) => {
         batch.map(async (cfg) => {
           try {
             const itemKeys = await plexApi.getCollectionItems(
-              cfg.collectionRatingKey!
+              cfg.collectionRatingKey
             );
             return itemKeys.includes(ratingKey) ? cfg.id : null;
           } catch {

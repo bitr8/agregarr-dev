@@ -260,8 +260,8 @@ async function callbackTraktOauth(
   }
 }
 
-traktOAuthRoutes.get('/oauth/proxy', proxyTraktOauth);
-traktOAuthRoutes.get('/oauth/callback', callbackTraktOauth);
+traktOAuthRoutes.get('/oauth/proxy', isAuthenticated(), proxyTraktOauth);
+traktOAuthRoutes.get('/oauth/callback', callbackTraktOauth); // must remain open: Trakt redirects here
 traktOAuthRoutes.post('/oauth/exchange', isAuthenticated(), exchangeTraktOauth);
 traktOAuthRoutes.get('/oauth/start', isAuthenticated(), startTraktOauth);
 
