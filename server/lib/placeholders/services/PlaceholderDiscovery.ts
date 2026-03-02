@@ -199,25 +199,15 @@ export async function discoverPlaceholdersFromMarkers(
         : undefined;
       const isDownloadedInArr = arrStatus?.downloaded === true;
 
-      // Verify it's still a placeholder (check if real content was added)
+      // Marker file on disk proves this is an Agregarr-created placeholder.
+      // Don't re-verify via isPlaceholderItem — returns false for TV shows
+      // when Children metadata is missing from the Plex API response.
+      // Only *arr download status determines cleanup vs title-fix.
       let needsTitleFix = false;
       if (plexItem) {
-        const plexMetadata = await plexClient.getMetadata(
-          plexItem.ratingKey.toString(),
-          { includeChildren: true }
-        );
-        const isStillPlaceholder =
-          placeholderContextService.isPlaceholderItem(plexMetadata);
-        // Only needs title fix if Plex still shows placeholder AND *arr hasn't downloaded
-        needsTitleFix = isStillPlaceholder && !isDownloadedInArr;
+        needsTitleFix = !isDownloadedInArr;
 
-        if (!isStillPlaceholder) {
-          logger.info('Placeholder has real content now - skipping title fix', {
-            label: 'PlaceholderService',
-            title: marker.title,
-            ratingKey: plexItem.ratingKey,
-          });
-        } else if (isDownloadedInArr) {
+        if (isDownloadedInArr) {
           logger.info(
             'Placeholder has content downloaded in Sonarr - triggering cleanup',
             {
@@ -336,28 +326,15 @@ export async function discoverPlaceholdersFromMarkers(
           : undefined;
         const isDownloadedInArr = arrStatus?.downloaded === true;
 
-        // Verify it's still a placeholder (check if real content was added)
+        // Marker file on disk proves this is an Agregarr-created placeholder.
+        // Don't re-verify via isPlaceholderItem — returns false for TV shows
+        // when Children metadata is missing from the Plex API response.
+        // Only *arr download status determines cleanup vs title-fix.
         let needsTitleFix = false;
         if (plexItem) {
-          const plexMetadata = await plexClient.getMetadata(
-            plexItem.ratingKey.toString(),
-            { includeChildren: true }
-          );
-          const isStillPlaceholder =
-            placeholderContextService.isPlaceholderItem(plexMetadata);
-          // Only needs title fix if Plex still shows placeholder AND *arr hasn't downloaded
-          needsTitleFix = isStillPlaceholder && !isDownloadedInArr;
+          needsTitleFix = !isDownloadedInArr;
 
-          if (!isStillPlaceholder) {
-            logger.info(
-              'Placeholder has real content now - skipping title fix',
-              {
-                label: 'PlaceholderService',
-                title: marker.title,
-                ratingKey: plexItem.ratingKey,
-              }
-            );
-          } else if (isDownloadedInArr) {
+          if (isDownloadedInArr) {
             logger.info(
               'Tier 2: Content downloaded in Sonarr - triggering cleanup',
               {
