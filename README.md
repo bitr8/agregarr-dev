@@ -103,10 +103,11 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                      | Depends On |
 | ----------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| [#504](https://github.com/agregarr/agregarr/pull/504) | Support Maintainerr v3 API (mediaServerId rename)                | -          |
+| [#503](https://github.com/agregarr/agregarr/pull/503) | Fix TV placeholders leaking into filtered hubs                   | -          |
 | [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures      | -          |
 | [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID             | #491       |
 | [#491](https://github.com/agregarr/agregarr/pull/491) | Handle Plex returning TV seasons as Children.Directory           | -          |
-| [#483](https://github.com/agregarr/agregarr/pull/483) | Parallelise collection membership check in overlay test          | -          |
 | [#481](https://github.com/agregarr/agregarr/pull/481) | Guard splice in arrangeCollectionItemsInOrder                    | -          |
 | [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle            | -          |
 
@@ -125,6 +126,7 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#483](https://github.com/agregarr/agregarr/pull/483) | Parallelise collection membership check in overlay test              |
 | [#482](https://github.com/agregarr/agregarr/pull/482) | Index MAL IDs for constant-time lookups                              |
 | [#467](https://github.com/agregarr/agregarr/pull/467) | Scan all placeholder-enabled libraries for discovery                 |
 | [#459](https://github.com/agregarr/agregarr/pull/459) | Pass rating filters and seasonGrabOrder to multi-source collections  |
