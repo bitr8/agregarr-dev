@@ -2740,15 +2740,9 @@ class PlexAPI {
       const mediaType = library?.type === 'show' ? 'tv' : 'movie';
       const type = mediaType === 'movie' ? 1 : 2;
 
-      // Build query with placeholder exclusions (same as smart collections)
-      let queryUri: string;
-      if (mediaType === 'tv') {
-        const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-        queryUri = `/library/sections/${libraryId}/all?type=${type}&episode.title!=${titleFilter}`;
-      } else {
-        const labelFilter = encodeURIComponent('trailer-placeholder');
-        queryUri = `/library/sections/${libraryId}/all?type=${type}&label!=${labelFilter}`;
-      }
+      // Build query with placeholder exclusions via label (same as smart collections)
+      const labelFilter = encodeURIComponent('trailer-placeholder');
+      const queryUri = `/library/sections/${libraryId}/all?type=${type}&label!=${labelFilter}`;
 
       const response = await this.plexClient.query<{
         MediaContainer: {
@@ -2831,15 +2825,9 @@ class PlexAPI {
       const mediaType = library?.type === 'show' ? 'tv' : 'movie';
       const type = mediaType === 'movie' ? 1 : 2;
 
-      // Build query with placeholder exclusions (same as smart collections)
-      let queryUri: string;
-      if (mediaType === 'tv') {
-        const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-        queryUri = `/library/sections/${libraryId}/all?type=${type}&episode.title!=${titleFilter}`;
-      } else {
-        const labelFilter = encodeURIComponent('trailer-placeholder');
-        queryUri = `/library/sections/${libraryId}/all?type=${type}&label!=${labelFilter}`;
-      }
+      // Build query with placeholder exclusions via label (same as smart collections)
+      const labelFilter = encodeURIComponent('trailer-placeholder');
+      const queryUri = `/library/sections/${libraryId}/all?type=${type}&label!=${labelFilter}`;
 
       const response = await this.plexClient.query<{
         MediaContainer: {
@@ -2912,12 +2900,9 @@ class PlexAPI {
   ): Promise<PlexLibraryItem[]> {
     const type = mediaType === 'movie' ? 1 : 2;
     const directorFilter = encodeURIComponent(directorName);
-    const filterParams =
-      mediaType === 'tv'
-        ? `episode.title!=${encodeURIComponent('Trailer (Placeholder)')}`
-        : `label!=${encodeURIComponent('trailer-placeholder')}`;
+    const labelFilter = encodeURIComponent('trailer-placeholder');
 
-    let uri = `/library/sections/${libraryId}/all?type=${type}&director=${directorFilter}&${filterParams}&includeGuids=1`;
+    let uri = `/library/sections/${libraryId}/all?type=${type}&director=${directorFilter}&label!=${labelFilter}&includeGuids=1`;
     if (limit && limit > 0) {
       uri += `&limit=${limit}`;
     }
@@ -2962,12 +2947,9 @@ class PlexAPI {
   ): Promise<PlexLibraryItem[]> {
     const type = mediaType === 'movie' ? 1 : 2;
     const actorFilter = encodeURIComponent(actorName);
-    const filterParams =
-      mediaType === 'tv'
-        ? `episode.title!=${encodeURIComponent('Trailer (Placeholder)')}`
-        : `label!=${encodeURIComponent('trailer-placeholder')}`;
+    const labelFilter = encodeURIComponent('trailer-placeholder');
 
-    let uri = `/library/sections/${libraryId}/all?type=${type}&actor=${actorFilter}&${filterParams}&includeGuids=1`;
+    let uri = `/library/sections/${libraryId}/all?type=${type}&actor=${actorFilter}&label!=${labelFilter}&includeGuids=1`;
     if (limit && limit > 0) {
       uri += `&limit=${limit}`;
     }

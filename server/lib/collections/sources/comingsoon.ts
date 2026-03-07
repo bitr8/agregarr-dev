@@ -723,28 +723,26 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
 
         // Ensure placeholder has the correct label for Recently Added filtering
         // This fixes placeholders that may have been created without the label
-        if (sourceItem.mediaType === 'movie') {
-          try {
-            await plexClient.addLabelToItem(
-              itemData.ratingKey,
-              'trailer-placeholder'
-            );
-            logger.debug('Ensured placeholder label exists', {
-              label: 'Coming Soon Collections',
-              title: sourceItem.title,
-              ratingKey: itemData.ratingKey,
-            });
-          } catch (labelError) {
-            logger.warn('Failed to ensure placeholder label', {
-              label: 'Coming Soon Collections',
-              title: sourceItem.title,
-              ratingKey: itemData.ratingKey,
-              error:
-                labelError instanceof Error
-                  ? labelError.message
-                  : String(labelError),
-            });
-          }
+        try {
+          await plexClient.addLabelToItem(
+            itemData.ratingKey,
+            'trailer-placeholder'
+          );
+          logger.debug('Ensured placeholder label exists', {
+            label: 'Coming Soon Collections',
+            title: sourceItem.title,
+            ratingKey: itemData.ratingKey,
+          });
+        } catch (labelError) {
+          logger.warn('Failed to ensure placeholder label', {
+            label: 'Coming Soon Collections',
+            title: sourceItem.title,
+            ratingKey: itemData.ratingKey,
+            error:
+              labelError instanceof Error
+                ? labelError.message
+                : String(labelError),
+          });
         }
       }
 

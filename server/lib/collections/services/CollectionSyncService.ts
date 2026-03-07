@@ -169,8 +169,9 @@ export class CollectionSyncService {
 
           tv.push(...discovered);
 
-          // Process discovered placeholders: fix titles, cleanup real content
+          // Process discovered placeholders: apply labels, fix titles, cleanup real content
           let cleanedUp = 0;
+          let labelsFixed = 0;
           let titlesFixes = 0;
           let titleFixFailures = 0;
 
@@ -186,7 +187,14 @@ export class CollectionSyncService {
               );
               cleanedUp++;
             } else if (needsTitleFix && plexItem) {
-              // Still a placeholder with Plex item - fix episode title
+              // Still a placeholder - ensure label for filtered hub exclusion
+              await plexClient.addLabelToItem(
+                plexItem.ratingKey,
+                'trailer-placeholder'
+              );
+              labelsFixed++;
+
+              // Also fix episode title as secondary marker (overlay system)
               const fixed = await ensurePlaceholderEpisodeTitle(
                 plexClient,
                 plexItem.ratingKey,
@@ -197,7 +205,7 @@ export class CollectionSyncService {
               } else {
                 titleFixFailures++;
                 logger.warn(
-                  'Failed to fix placeholder episode title during global discovery - may appear in filtered hubs',
+                  'Failed to fix placeholder episode title (label still applied)',
                   {
                     label: 'Collection Sync Service',
                     title: marker.title,
@@ -213,6 +221,7 @@ export class CollectionSyncService {
             label: 'Collection Sync Service',
             libraryId: tvLibraryId,
             cleanedUp,
+            labelsFixed,
             titlesFixes,
             titleFixFailures,
           });

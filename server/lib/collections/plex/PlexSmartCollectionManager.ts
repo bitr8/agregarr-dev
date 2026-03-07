@@ -310,51 +310,27 @@ class PlexSmartCollectionManager {
 
       const type = mediaType === 'movie' ? 1 : 2;
 
-      // Build filter URI based on media type and subtype
+      // All filtered hubs use label-based exclusion (same mechanism for movies and TV)
+      const labelFilter = encodeURIComponent('trailer-placeholder');
       let filterUri: string;
 
       if (subtype === 'recently_added') {
-        // Recently Added: Sort by Date Added (addedAt), exclude placeholders
-        if (mediaType === 'tv') {
-          // TV Shows: Filter out "Trailer (Placeholder)" episode titles
-          const sortParam = 'addedAt:desc';
-          const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&episode.title!=${titleFilter}`;
-        } else {
-          // Movies: Filter out "trailer-placeholder" label
-          const sortParam = 'addedAt:desc';
-          const labelFilter = 'trailer-placeholder';
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${encodeURIComponent(
-            labelFilter
-          )}`;
-        }
+        const sortParam = 'addedAt:desc';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else if (subtype === 'recently_released') {
-        // Recently Released: Sort by Release Date, exclude placeholders
-        if (mediaType === 'tv') {
-          // TV Shows: Sort by most recent episode air date, filter out "Trailer (Placeholder)"
-          const sortParam = 'episode.originallyAvailableAt:desc';
-          const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&episode.title!=${titleFilter}`;
-        } else {
-          // Movies: Sort by release date, filter out "trailer-placeholder" label
-          const sortParam = 'originallyAvailableAt:desc';
-          const labelFilter = 'trailer-placeholder';
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${encodeURIComponent(
-            labelFilter
-          )}`;
-        }
+        const sortParam =
+          mediaType === 'tv'
+            ? 'episode.originallyAvailableAt:desc'
+            : 'originallyAvailableAt:desc';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else if (subtype === 'recently_released_episodes') {
-        // Last Episode Added: Sort by most recent episode added date (TV only)
-        if (mediaType === 'tv') {
-          // TV Shows: Sort by last episode added date, filter out "Trailer (Placeholder)"
-          const sortParam = 'episode.addedAt:desc';
-          const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&episode.title!=${titleFilter}`;
-        } else {
+        if (mediaType !== 'tv') {
           throw new Error(
             `recently_released_episodes subtype is only supported for TV libraries`
           );
         }
+        const sortParam = 'episode.addedAt:desc';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else {
         throw new Error(`Unsupported filtered hub subtype: ${subtype}`);
       }
@@ -461,16 +437,10 @@ class PlexSmartCollectionManager {
 
       const type = mediaType === 'movie' ? 1 : 2;
 
-      // Build filter URI: director filter + exclude placeholders
+      // Build filter URI: director filter + exclude placeholders via label
       const directorFilter = encodeURIComponent(directorName);
-      let filterUri: string;
-      if (mediaType === 'tv') {
-        const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&director=${directorFilter}&episode.title!=${titleFilter}`;
-      } else {
-        const labelFilter = encodeURIComponent('trailer-placeholder');
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&director=${directorFilter}&label!=${labelFilter}`;
-      }
+      const labelFilter = encodeURIComponent('trailer-placeholder');
+      let filterUri = `/library/sections/${libraryKey}/all?type=${type}&director=${directorFilter}&label!=${labelFilter}`;
 
       if (limit && limit > 0) {
         filterUri += `&limit=${limit}`;
@@ -569,16 +539,10 @@ class PlexSmartCollectionManager {
 
       const type = mediaType === 'movie' ? 1 : 2;
 
-      // Build filter URI: actor filter + exclude placeholders
+      // Build filter URI: actor filter + exclude placeholders via label
       const actorFilter = encodeURIComponent(actorName);
-      let filterUri: string;
-      if (mediaType === 'tv') {
-        const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&actor=${actorFilter}&episode.title!=${titleFilter}`;
-      } else {
-        const labelFilter = encodeURIComponent('trailer-placeholder');
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&actor=${actorFilter}&label!=${labelFilter}`;
-      }
+      const labelFilter = encodeURIComponent('trailer-placeholder');
+      let filterUri = `/library/sections/${libraryKey}/all?type=${type}&actor=${actorFilter}&label!=${labelFilter}`;
 
       if (limit && limit > 0) {
         filterUri += `&limit=${limit}`;
@@ -684,51 +648,27 @@ class PlexSmartCollectionManager {
 
       const type = mediaType === 'movie' ? 1 : 2;
 
-      // Build filter URI based on media type and subtype (same logic as createFilteredHub)
+      // All filtered hubs use label-based exclusion (same logic as createFilteredHub)
+      const labelFilter = encodeURIComponent('trailer-placeholder');
       let filterUri: string;
 
       if (subtype === 'recently_added') {
-        // Recently Added: Sort by Date Added (addedAt), exclude placeholders
-        if (mediaType === 'tv') {
-          // TV Shows: Filter out "Trailer (Placeholder)" episode titles
-          const sortParam = 'addedAt:desc';
-          const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&episode.title!=${titleFilter}`;
-        } else {
-          // Movies: Filter out "trailer-placeholder" label
-          const sortParam = 'addedAt:desc';
-          const labelFilter = 'trailer-placeholder';
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${encodeURIComponent(
-            labelFilter
-          )}`;
-        }
+        const sortParam = 'addedAt:desc';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else if (subtype === 'recently_released') {
-        // Recently Released: Sort by Release Date, exclude placeholders
-        if (mediaType === 'tv') {
-          // TV Shows: Sort by most recent episode air date, filter out "Trailer (Placeholder)"
-          const sortParam = 'episode.originallyAvailableAt:desc';
-          const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&episode.title!=${titleFilter}`;
-        } else {
-          // Movies: Sort by release date, filter out "trailer-placeholder" label
-          const sortParam = 'originallyAvailableAt:desc';
-          const labelFilter = 'trailer-placeholder';
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${encodeURIComponent(
-            labelFilter
-          )}`;
-        }
+        const sortParam =
+          mediaType === 'tv'
+            ? 'episode.originallyAvailableAt:desc'
+            : 'originallyAvailableAt:desc';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else if (subtype === 'recently_released_episodes') {
-        // Last Episode Added: Sort by most recent episode added date (TV only)
-        if (mediaType === 'tv') {
-          // TV Shows: Sort by last episode added date, filter out "Trailer (Placeholder)"
-          const sortParam = 'episode.addedAt:desc';
-          const titleFilter = encodeURIComponent('Trailer (Placeholder)');
-          filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&episode.title!=${titleFilter}`;
-        } else {
+        if (mediaType !== 'tv') {
           throw new Error(
             `recently_released_episodes subtype is only supported for TV libraries`
           );
         }
+        const sortParam = 'episode.addedAt:desc';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else {
         throw new Error(`Unsupported filtered hub subtype: ${subtype}`);
       }

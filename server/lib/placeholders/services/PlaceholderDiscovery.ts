@@ -160,6 +160,9 @@ export async function discoverPlaceholdersFromMarkers(
         plexMatches.get(`${marker.tmdbId}-tv`);
 
       // Title fallback for items without TMDB GUID in Plex
+      // Marker file on disk proves this is an Agregarr-created placeholder —
+      // don't gate on isPlaceholderItem() which returns false for TV shows
+      // when Children metadata is missing from the Plex API response.
       if (!plexItem) {
         const titleMatches = await findPlexItemsByTitle(
           plexClient,
@@ -173,23 +176,17 @@ export async function discoverPlaceholdersFromMarkers(
         const candidate =
           titleMatches.find((m) => !m.hasTmdbGuid) || titleMatches[0];
         if (candidate) {
-          const candidateMetadata = await plexClient.getMetadata(
-            candidate.ratingKey.toString(),
-            { includeChildren: true }
-          );
-          if (placeholderContextService.isPlaceholderItem(candidateMetadata)) {
-            plexItem = {
-              ratingKey: candidate.ratingKey,
-              title: candidate.title,
-            };
-            logger.info('Tier 1: Found Plex item by title fallback', {
-              label: 'PlaceholderService',
-              title: marker.title,
-              year: marker.year,
-              ratingKey: candidate.ratingKey,
-              hasTmdbGuid: candidate.hasTmdbGuid,
-            });
-          }
+          plexItem = {
+            ratingKey: candidate.ratingKey,
+            title: candidate.title,
+          };
+          logger.info('Tier 1: Found Plex item by title fallback', {
+            label: 'PlaceholderService',
+            title: marker.title,
+            year: marker.year,
+            ratingKey: candidate.ratingKey,
+            hasTmdbGuid: candidate.hasTmdbGuid,
+          });
         }
       }
 
@@ -278,6 +275,7 @@ export async function discoverPlaceholdersFromMarkers(
           plexMatches.get(`${dbRecord.tmdbId}-tv`);
 
         // Title fallback for items without TMDB GUID in Plex
+        // Marker file proves this is a placeholder — trust it over isPlaceholderItem()
         if (!plexItem) {
           const titleMatches = await findPlexItemsByTitle(
             plexClient,
@@ -290,25 +288,17 @@ export async function discoverPlaceholdersFromMarkers(
           const candidate =
             titleMatches.find((m) => !m.hasTmdbGuid) || titleMatches[0];
           if (candidate) {
-            const candidateMetadata = await plexClient.getMetadata(
-              candidate.ratingKey.toString(),
-              { includeChildren: true }
-            );
-            if (
-              placeholderContextService.isPlaceholderItem(candidateMetadata)
-            ) {
-              plexItem = {
-                ratingKey: candidate.ratingKey,
-                title: candidate.title,
-              };
-              logger.info('Tier 2: Found Plex item by title fallback', {
-                label: 'PlaceholderService',
-                title: marker.title,
-                year: marker.year,
-                ratingKey: candidate.ratingKey,
-                hasTmdbGuid: candidate.hasTmdbGuid,
-              });
-            }
+            plexItem = {
+              ratingKey: candidate.ratingKey,
+              title: candidate.title,
+            };
+            logger.info('Tier 2: Found Plex item by title fallback', {
+              label: 'PlaceholderService',
+              title: marker.title,
+              year: marker.year,
+              ratingKey: candidate.ratingKey,
+              hasTmdbGuid: candidate.hasTmdbGuid,
+            });
           }
         }
 

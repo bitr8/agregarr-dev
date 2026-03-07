@@ -1740,34 +1740,48 @@ async function createPlaceholders(
 
     try {
       // Set metadata markers for Recently Added filtering
-      if (sourceItem.mediaType === 'tv') {
-        // For TV shows: Need to set title on the episode (S00E00)
-        // Use retry logic to handle cases where Plex hasn't fully populated episode metadata yet
-        const titleSet = await ensurePlaceholderEpisodeTitle(
-          plexClient,
-          plexItem.ratingKey,
-          sourceItem.title
-        );
-        if (!titleSet) {
-          logger.warn(
-            'Failed to set placeholder episode title - may appear in filtered hubs',
-            {
-              label: 'PlaceholderService',
-              title: sourceItem.title,
-              ratingKey: plexItem.ratingKey,
-            }
-          );
-        }
-      } else if (sourceItem.mediaType === 'movie') {
-        // For movies: Add label to the movie item
+      // Label is the primary exclusion mechanism (used by filtered hub smart collections)
+      // Wrapped separately so a Plex API failure doesn't prevent DB persist
+      try {
         await plexClient.addLabelToItem(
           plexItem.ratingKey,
           'trailer-placeholder'
         );
-        logger.debug('Added placeholder label to movie', {
+        logger.debug('Added placeholder label', {
+          label: 'PlaceholderService',
+          title: sourceItem.title,
+          mediaType: sourceItem.mediaType,
+          ratingKey: plexItem.ratingKey,
+        });
+
+        if (sourceItem.mediaType === 'tv') {
+          // Also set episode title as secondary marker (used by overlay system)
+          const titleSet = await ensurePlaceholderEpisodeTitle(
+            plexClient,
+            plexItem.ratingKey,
+            sourceItem.title
+          );
+          if (!titleSet) {
+            logger.warn(
+              'Failed to set placeholder episode title (label still applied)',
+              {
+                label: 'PlaceholderService',
+                title: sourceItem.title,
+                ratingKey: plexItem.ratingKey,
+              }
+            );
+          }
+        }
+      } catch (labelError) {
+        // Label will be re-applied on next discovery sync — don't block DB persist
+        logger.warn('Failed to apply placeholder label', {
           label: 'PlaceholderService',
           title: sourceItem.title,
           ratingKey: plexItem.ratingKey,
+          error:
+            labelError instanceof Error
+              ? labelError.message
+              : String(labelError),
         });
       }
 
