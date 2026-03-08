@@ -103,19 +103,19 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 | PR                                                    | Description                                                      | Depends On |
 | ----------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
+| [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming               | -          |
+| [#515](https://github.com/agregarr/agregarr/pull/515) | Remove vm2 sandbox dependency                                    | -          |
+| [#514](https://github.com/agregarr/agregarr/pull/514) | Fix SVG sanitisation bypass                                      | -          |
+| [#513](https://github.com/agregarr/agregarr/pull/513) | Fix export path traversal                                        | -          |
 | [#503](https://github.com/agregarr/agregarr/pull/503) | Fix TV placeholders leaking into filtered hubs                   | -          |
 | [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures      | -          |
 | [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID             | #491       |
-| [#404](https://github.com/agregarr/agregarr/pull/404) | Check \*arr download status for placeholder lifecycle            | -          |
 
 ### Pending Submission
 
 | Feature                                         | Blocked By |
 | ----------------------------------------------- | ---------- |
 | Direct Plex API deletion for stale placeholders | -          |
-| Use Sonarr folder naming for TV placeholders    | #404       |
-
-> **Note:** Sonarr folder naming extends `batchCheckDownloadStatus()` from #404, adding `folderName` to the `showsByTvdbId` map. Cannot submit until #404 merges.
 
 > **Legacy Cleanup:** TV placeholders created before the Sonarr folder naming fix may not match Sonarr's naming convention. If orphaned placeholders appear after real content arrives, delete the placeholder folder and let the next sync recreate it correctly.
 
