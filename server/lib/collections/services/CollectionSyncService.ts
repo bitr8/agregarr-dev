@@ -188,28 +188,55 @@ export class CollectionSyncService {
               cleanedUp++;
             } else if (needsTitleFix && plexItem) {
               // Still a placeholder - ensure label for filtered hub exclusion
-              await plexClient.addLabelToItem(
-                plexItem.ratingKey,
-                'trailer-placeholder'
-              );
-              labelsFixed++;
+              try {
+                await plexClient.addLabelToItem(
+                  plexItem.ratingKey,
+                  'trailer-placeholder'
+                );
+                labelsFixed++;
+              } catch (error) {
+                logger.error('Failed to apply placeholder label', {
+                  label: 'Collection Sync Service',
+                  title: marker.title,
+                  ratingKey: plexItem.ratingKey,
+                  error:
+                    error instanceof Error ? error.message : 'Unknown error',
+                });
+                // Skip title fix if label failed - no point fixing title
+                // on an item that won't be filtered from hubs
+                continue;
+              }
 
               // Also fix episode title as secondary marker (overlay system)
-              const fixed = await ensurePlaceholderEpisodeTitle(
-                plexClient,
-                plexItem.ratingKey,
-                marker.title
-              );
-              if (fixed) {
-                titlesFixes++;
-              } else {
+              try {
+                const fixed = await ensurePlaceholderEpisodeTitle(
+                  plexClient,
+                  plexItem.ratingKey,
+                  marker.title
+                );
+                if (fixed) {
+                  titlesFixes++;
+                } else {
+                  titleFixFailures++;
+                  logger.warn(
+                    'Failed to fix placeholder episode title (label still applied)',
+                    {
+                      label: 'Collection Sync Service',
+                      title: marker.title,
+                      ratingKey: plexItem.ratingKey,
+                    }
+                  );
+                }
+              } catch (error) {
                 titleFixFailures++;
-                logger.warn(
+                logger.error(
                   'Failed to fix placeholder episode title (label still applied)',
                   {
                     label: 'Collection Sync Service',
                     title: marker.title,
                     ratingKey: plexItem.ratingKey,
+                    error:
+                      error instanceof Error ? error.message : 'Unknown error',
                   }
                 );
               }
@@ -340,11 +367,21 @@ export class CollectionSyncService {
               moviesCleanedUp++;
             } else if (plexItem) {
               // Still a placeholder - ensure label for filtered hub exclusion
-              await plexClient.addLabelToItem(
-                plexItem.ratingKey,
-                'trailer-placeholder'
-              );
-              labelsFixed++;
+              try {
+                await plexClient.addLabelToItem(
+                  plexItem.ratingKey,
+                  'trailer-placeholder'
+                );
+                labelsFixed++;
+              } catch (error) {
+                logger.error('Failed to apply placeholder label', {
+                  label: 'Collection Sync Service',
+                  title: movie.title,
+                  ratingKey: plexItem.ratingKey,
+                  error:
+                    error instanceof Error ? error.message : 'Unknown error',
+                });
+              }
             }
           }
 
