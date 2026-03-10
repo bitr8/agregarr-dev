@@ -67,6 +67,7 @@ export interface PlexMetadata {
   type: 'movie' | 'show' | 'season' | 'episode';
   title: string;
   thumb?: string;
+  editionTitle?: string;
   Guid: {
     id: string;
   }[];
@@ -1403,56 +1404,84 @@ class PlexAPI {
   /**
    * Add a label to an individual item (movie, show, episode)
    */
-  public async addLabelToItem(ratingKey: string, label: string): Promise<void> {
-    try {
-      // Get current item metadata to preserve existing labels
-      const metadata = await this.getMetadata(ratingKey);
+  public async addLabelToItem(
+    ratingKey: string,
+    label: string,
+    maxAttempts = 2
+  ): Promise<void> {
+    const attempts = Math.max(1, maxAttempts);
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        // Get current item metadata to preserve existing labels
+        const metadata = await this.getMetadata(ratingKey);
 
-      // Get existing labels
-      const existingLabels: string[] = [];
-      if (metadata && 'Label' in metadata) {
-        const labels = metadata.Label as { tag: string }[] | undefined;
-        if (labels && Array.isArray(labels)) {
-          existingLabels.push(...labels.map((l) => l.tag));
+        // Get existing labels
+        const existingLabels: string[] = [];
+        if (metadata && 'Label' in metadata) {
+          const labels = metadata.Label as { tag: string }[] | undefined;
+          if (labels && Array.isArray(labels)) {
+            existingLabels.push(...labels.map((l) => l.tag));
+          }
+        }
+
+        // Check if label already exists
+        if (existingLabels.includes(label)) {
+          logger.debug('Label already exists on item', {
+            label: 'Plex API',
+            ratingKey,
+            labelTag: label,
+          });
+          return;
+        }
+
+        // Build params with all labels (existing + new)
+        const allLabels = [...existingLabels, label];
+        const params: Record<string, string> = {};
+        allLabels.forEach((labelTag, index) => {
+          params[`label[${index}].tag.tag`] = labelTag;
+        });
+
+        const queryString = Object.entries(params)
+          .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+          .join('&');
+
+        const editUrl = `/library/metadata/${ratingKey}?${queryString}`;
+
+        await this.safePutQuery(editUrl);
+
+        if (attempt > 1) {
+          logger.info(`Label applied on retry for ${ratingKey}`, {
+            label: 'Plex API',
+            labelTag: label,
+            attempt,
+          });
+        } else {
+          logger.debug('Added label to item', {
+            label: 'Plex API',
+            ratingKey,
+            labelTag: label,
+          });
+        }
+        return;
+      } catch (error) {
+        if (attempt < attempts) {
+          logger.warn(`Label apply failed for ${ratingKey}, retrying in 1s`, {
+            label: 'Plex API',
+            attempt,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        } else {
+          logger.error(
+            `Error adding label to item ${ratingKey} (after ${attempts} attempts)`,
+            {
+              label: 'Plex API',
+              error,
+            }
+          );
+          throw error;
         }
       }
-
-      // Check if label already exists
-      if (existingLabels.includes(label)) {
-        logger.debug('Label already exists on item', {
-          label: 'Plex API',
-          ratingKey,
-          labelTag: label,
-        });
-        return;
-      }
-
-      // Build params with all labels (existing + new)
-      const allLabels = [...existingLabels, label];
-      const params: Record<string, string> = {};
-      allLabels.forEach((labelTag, index) => {
-        params[`label[${index}].tag.tag`] = labelTag;
-      });
-
-      const queryString = Object.entries(params)
-        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-        .join('&');
-
-      const editUrl = `/library/metadata/${ratingKey}?${queryString}`;
-
-      await this.safePutQuery(editUrl);
-
-      logger.debug('Added label to item', {
-        label: 'Plex API',
-        ratingKey,
-        labelTag: label,
-      });
-    } catch (error) {
-      logger.error(`Error adding label to item ${ratingKey}`, {
-        label: 'Plex API',
-        error,
-      });
-      throw error;
     }
   }
 

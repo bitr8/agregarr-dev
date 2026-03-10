@@ -241,7 +241,17 @@ export class CollectionSyncService {
                 );
               }
             }
-            // Items with needsTitleFix but no plexItem are orphaned - skip for now
+            // Item on disk but not found in Plex — will be caught by post-sync hub verification
+            if (needsTitleFix && !plexItem) {
+              logger.warn(
+                'Placeholder not matched in Plex during discovery (deferred to hub verification)',
+                {
+                  label: 'Collection Sync Service',
+                  title: marker.title,
+                  tmdbId: marker.tmdbId,
+                }
+              );
+            }
           }
 
           logger.info('Global TV placeholder processing complete', {
@@ -830,6 +840,17 @@ export class CollectionSyncService {
       }
     }
 
+    // Post-sync: verify filtered hub labels to catch any placeholders that leaked through
+    try {
+      onProgress?.(processedCount, 'Verifying filtered hub labels...');
+      await this.verifyFilteredHubLabels(plexClient, collectionConfigs);
+    } catch (error) {
+      logger.warn('Filtered hub label verification failed', {
+        label: 'Collection Sync Service',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     // Clear the sync cache after completion to free memory
     syncCacheService.clear();
 
@@ -842,6 +863,222 @@ export class CollectionSyncService {
       updated: totalUpdated,
       processedCollectionKeys,
     };
+  }
+
+  /**
+   * Verify filtered hub smart collections don't contain placeholder items.
+   *
+   * The hub IS the verification mechanism — it shows items WITHOUT the
+   * trailer-placeholder label. Any placeholder visible in the hub has a
+   * missing label. We check the hub contents, identify placeholders via
+   * DB lookup (fast) or metadata inspection (fallback), and apply the label.
+   */
+  private async verifyFilteredHubLabels(
+    plexClient: PlexAPI,
+    collectionConfigs: CollectionConfig[]
+  ): Promise<void> {
+    const { PlaceholderItem } = await import('@server/entity/PlaceholderItem');
+    const { PlaceholderContextService } = await import(
+      '@server/lib/placeholders/services/PlaceholderContextService'
+    );
+    const { getRepository, In } = await import('typeorm');
+
+    // Dedupe by collectionRatingKey to avoid processing the same hub twice
+    const seenRatingKeys = new Set<string>();
+    const filteredHubConfigs = collectionConfigs.filter((c) => {
+      if (c.type !== 'filtered_hub' || !c.collectionRatingKey) return false;
+      if (seenRatingKeys.has(c.collectionRatingKey)) return false;
+      seenRatingKeys.add(c.collectionRatingKey);
+      return true;
+    });
+
+    if (filteredHubConfigs.length === 0) return;
+
+    const contextService = new PlaceholderContextService();
+    let totalChecked = 0;
+    let totalLeaks = 0;
+    let totalFixed = 0;
+    let totalFailed = 0;
+
+    for (const config of filteredHubConfigs) {
+      try {
+        const hubRatingKey = config.collectionRatingKey as string;
+
+        // Get items currently visible in the hub (items WITHOUT the label)
+        const hubItemKeys = await plexClient.getCollectionItems(hubRatingKey);
+        if (hubItemKeys.length === 0) continue;
+
+        totalChecked += hubItemKeys.length;
+
+        // Batch DB lookup: which hub items are known placeholders?
+        // Chunk to stay within SQLite parameter limits (max 999)
+        const repo = getRepository(PlaceholderItem);
+        const dbMatches: InstanceType<typeof PlaceholderItem>[] = [];
+        const DB_CHUNK_SIZE = 500;
+        for (let i = 0; i < hubItemKeys.length; i += DB_CHUNK_SIZE) {
+          const chunk = hubItemKeys.slice(i, i + DB_CHUNK_SIZE);
+          const results = await repo.find({
+            where: { plexRatingKey: In(chunk) },
+            select: ['plexRatingKey', 'title'],
+          });
+          dbMatches.push(...results);
+        }
+        const dbMatchKeys = new Set(
+          dbMatches.map((m) => m.plexRatingKey).filter(Boolean)
+        );
+
+        // Items in DB are confirmed placeholders — apply label
+        for (const match of dbMatches) {
+          if (!match.plexRatingKey) continue;
+          totalLeaks++;
+          try {
+            await plexClient.addLabelToItem(
+              match.plexRatingKey,
+              'trailer-placeholder'
+            );
+            totalFixed++;
+            logger.info(
+              'Hub verification: applied missing label to placeholder',
+              {
+                label: 'Collection Sync Service',
+                title: match.title,
+                ratingKey: match.plexRatingKey,
+                hub: config.name,
+              }
+            );
+          } catch (error) {
+            totalFailed++;
+            logger.error('Hub verification: failed to apply label', {
+              label: 'Collection Sync Service',
+              title: match.title,
+              ratingKey: match.plexRatingKey,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        // For remaining hub items not in DB, check metadata as fallback
+        const unknownKeys = hubItemKeys.filter((k) => !dbMatchKeys.has(k));
+        if (unknownKeys.length > 0) {
+          const metadataBatch = await plexClient.getMetadataBatch(unknownKeys);
+
+          // Log if batch fetch missed items (partial chunk failure)
+          const unverifiedCount = unknownKeys.filter(
+            (k) => !metadataBatch.has(k)
+          ).length;
+          if (unverifiedCount > 0) {
+            logger.warn(
+              `Hub verification: ${unverifiedCount} items could not be fetched from Plex (will retry next sync)`,
+              {
+                label: 'Collection Sync Service',
+                hub: config.name,
+                unverified: unverifiedCount,
+                total: unknownKeys.length,
+              }
+            );
+          }
+
+          for (const [ratingKey, metadata] of metadataBatch) {
+            // Adapter for isPlaceholderItemAsync — it calls
+            // query(`/library/metadata/${ratingKey}/children`).
+            // We bypass getChildrenMetadata because it has the same
+            // `Metadata || Directory` truthy-empty-array bug: if Plex
+            // returns seasons in Directory with empty Metadata, they
+            // get dropped. Instead use getMetadata(includeChildren)
+            // and merge both arrays.
+            const plexApiAdapter = {
+              query: async () => {
+                const resp = await plexClient.getMetadata(ratingKey, {
+                  includeChildren: true,
+                });
+                const children = resp?.Children;
+                const allChildren = [
+                  ...(children?.Metadata || []),
+                  ...(children?.Directory || []),
+                ];
+                return {
+                  MediaContainer: {
+                    Metadata: allChildren.length > 0 ? allChildren : undefined,
+                  },
+                };
+              },
+            };
+            let isPlaceholder = false;
+            try {
+              isPlaceholder = await contextService.isPlaceholderItemAsync(
+                metadata,
+                plexApiAdapter
+              );
+            } catch (error) {
+              logger.debug(
+                'Hub verification: placeholder check failed for item',
+                {
+                  label: 'Collection Sync Service',
+                  ratingKey,
+                  title: metadata.title,
+                  error: error instanceof Error ? error.message : String(error),
+                }
+              );
+            }
+
+            if (isPlaceholder) {
+              totalLeaks++;
+              try {
+                await plexClient.addLabelToItem(
+                  ratingKey,
+                  'trailer-placeholder'
+                );
+                totalFixed++;
+                logger.info(
+                  'Hub verification: applied missing label to non-DB placeholder',
+                  {
+                    label: 'Collection Sync Service',
+                    title: metadata.title,
+                    ratingKey,
+                    hub: config.name,
+                  }
+                );
+              } catch (error) {
+                totalFailed++;
+                logger.error('Hub verification: failed to apply label', {
+                  label: 'Collection Sync Service',
+                  title: metadata.title,
+                  ratingKey,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        logger.warn(
+          `Hub verification failed for "${config.name}", continuing with remaining hubs`,
+          {
+            label: 'Collection Sync Service',
+            hub: config.name,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+    }
+
+    if (totalLeaks > 0) {
+      logger.warn(
+        `Hub verification found ${totalLeaks} placeholder leaks, ${totalFixed} fixed, ${totalFailed} failed`,
+        {
+          label: 'Collection Sync Service',
+          checked: totalChecked,
+          leaks: totalLeaks,
+          fixed: totalFixed,
+          failed: totalFailed,
+        }
+      );
+    } else {
+      logger.info('Hub verification clean — no placeholder leaks detected', {
+        label: 'Collection Sync Service',
+        checked: totalChecked,
+      });
+    }
   }
 
   /**
