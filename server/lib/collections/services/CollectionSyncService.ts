@@ -881,7 +881,8 @@ export class CollectionSyncService {
     const { PlaceholderContextService } = await import(
       '@server/lib/placeholders/services/PlaceholderContextService'
     );
-    const { getRepository, In } = await import('typeorm');
+    const { getRepository } = await import('@server/datasource');
+    const { In } = await import('typeorm');
 
     // Dedupe by collectionRatingKey to avoid processing the same hub twice
     const seenRatingKeys = new Set<string>();
