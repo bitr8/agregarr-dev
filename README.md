@@ -89,7 +89,11 @@ Defaults to `false` (Playwright) for safety. Flip back if Cloudflare starts bloc
 
 ### Placeholder Lifecycle Fixes
 
-Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
+Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and don't respond to filter changes.
+
+**Retroactive Filter Application** -- Upstream placeholder filters (year, language, country, genre, keyword) only apply when placeholders are created. Filters added after creation have no effect on existing placeholders. This fork evaluates existing placeholders against the current filter config during cleanup and removes those that no longer pass. Rating filters are skipped for retroactive evaluation since unreleased content has no ratings.
+
+**Self-Healing for Stuck Records** -- If a placeholder file is deleted externally (disk issue, manual cleanup), the DB record blocks re-creation. This fork detects missing files for active items and clears the DB record so the creation flow can recreate the placeholder on next sync. Only triggers on confirmed file-not-found (ENOENT), not transient filesystem errors.
 
 **Direct Plex Deletion** -- Plex ignores empty directories during library scans. When a placeholder file is deleted and its folder becomes empty, `scanLibrary()` + `emptyTrash()` won't remove the stale database entry. This fork deletes stale items directly via `DELETE /library/metadata/{ratingKey}`, matching by exact file path. Falls back to scan+trash when direct deletion can't find matches.
 
@@ -101,21 +105,23 @@ Upstream placeholder cleanup has two gaps that leave orphaned entries in Plex.
 
 ### Open
 
-| PR                                                    | Description                                                      | Depends On |
-| ----------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
-| [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming               | -          |
-| [#515](https://github.com/agregarr/agregarr/pull/515) | Remove vm2 sandbox dependency                                    | -          |
-| [#514](https://github.com/agregarr/agregarr/pull/514) | Fix SVG sanitisation bypass                                      | -          |
-| [#513](https://github.com/agregarr/agregarr/pull/513) | Fix export path traversal                                        | -          |
-| [#503](https://github.com/agregarr/agregarr/pull/503) | Fix TV placeholders leaking into filtered hubs                   | -          |
-| [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures      | -          |
-| [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID             | #491       |
+| PR                                                    | Description                                                 | Depends On |
+| ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming          | -          |
+| [#515](https://github.com/agregarr/agregarr/pull/515) | Remove vm2 sandbox dependency                               | -          |
+| [#514](https://github.com/agregarr/agregarr/pull/514) | Fix SVG sanitisation bypass                                 | -          |
+| [#513](https://github.com/agregarr/agregarr/pull/513) | Fix export path traversal                                   | -          |
+| [#503](https://github.com/agregarr/agregarr/pull/503) | Fix TV placeholders leaking into filtered hubs              | -          |
+| [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures | -          |
+| [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID        | #491       |
 
 ### Pending Submission
 
-| Feature                                         | Blocked By |
-| ----------------------------------------------- | ---------- |
-| Direct Plex API deletion for stale placeholders | -          |
+| Feature                                         | Blocked By          |
+| ----------------------------------------------- | ------------------- |
+| Retroactive placeholder filter application      | Deploy verification |
+| Self-healing for stuck placeholder DB records   | Deploy verification |
+| Direct Plex API deletion for stale placeholders | -                   |
 
 > **Legacy Cleanup:** TV placeholders created before the Sonarr folder naming fix may not match Sonarr's naming convention. If orphaned placeholders appear after real content arrives, delete the placeholder folder and let the next sync recreate it correctly.
 
