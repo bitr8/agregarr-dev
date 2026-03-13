@@ -37,7 +37,7 @@ For general Agregarr configuration (services, collections, overlays etc.), see t
 
 ## Fork-Only Features
 
-Features not yet submitted upstream. These exist because upstream Agregarr has scaling pain points when running many collections, and placeholder lifecycle has gaps that leave orphaned entries in Plex.
+Features in this fork that aren't in upstream Agregarr. Some have open PRs, others are fork-only. These exist because upstream has scaling pain points when running many collections, and placeholder lifecycle has gaps that leave orphaned entries in Plex.
 
 ### Real-time Overlay Job Progress
 
@@ -101,12 +101,17 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 **Sonarr Folder Naming** -- Agregarr creates placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrives, Plex sees them as different shows, leaving orphaned entries. This fork extracts the folder name from Sonarr's series path. Falls back to standard naming if the show isn't in Sonarr.
 
+**Download Status Awareness** -- Upstream doesn't check whether content has already been downloaded in Radarr/Sonarr. This fork queries *arr download status in batch, skips placeholder creation for items already downloaded, and uses download status as a cleanup signal. Prevents unnecessary placeholders for content that's about to arrive.
+
+**Post-Sync Hub Verification** -- After collection sync completes, queries each filtered hub and applies missing `trailer-placeholder` labels to any items that slipped through. A safety net that catches label leaks regardless of which pipeline stage failed to apply them.
+
 ## Upstream PRs
 
 ### Open
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#526](https://github.com/agregarr/agregarr/pull/526) | Retroactive placeholder filter evaluation during cleanup    | -          |
 | [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming          | -          |
 | [#515](https://github.com/agregarr/agregarr/pull/515) | Remove vm2 sandbox dependency                               | -          |
 | [#514](https://github.com/agregarr/agregarr/pull/514) | Fix SVG sanitisation bypass                                 | -          |
@@ -115,13 +120,12 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 | [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures | -          |
 | [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID        | #491       |
 
-### Pending Submission
+### Fork-Only (No Upstream PR Planned)
 
-| Feature                                         | Blocked By          |
-| ----------------------------------------------- | ------------------- |
-| Retroactive placeholder filter application      | Deploy verification |
-| Self-healing for stuck placeholder DB records   | Deploy verification |
-| Direct Plex API deletion for stale placeholders | -                   |
+| Feature                                         | Why Fork-Only                              |
+| ----------------------------------------------- | ------------------------------------------ |
+| Direct Plex API deletion for stale placeholders | Requires "Allow media deletion" in Plex    |
+| Post-sync hub verification for label leaks      | Safety net for fork's label-based filtering |
 
 > **Legacy Cleanup:** TV placeholders created before the Sonarr folder naming fix may not match Sonarr's naming convention. If orphaned placeholders appear after real content arrives, delete the placeholder folder and let the next sync recreate it correctly.
 
