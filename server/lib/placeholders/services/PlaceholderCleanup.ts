@@ -65,7 +65,7 @@ export async function cleanupPlaceholderForRealContent(
 
 /**
  * Handle placeholder operations based on createPlaceholdersForMissing setting
- * - If enabled: runs cleanup (released items, orphaned items)
+ * - If enabled: runs cleanup (released items, orphaned items, stuck records)
  * - If disabled: deletes all placeholder records for the config
  * Files will be cleaned up later by orphaned file cleanup
  */
@@ -701,6 +701,7 @@ async function deletePlexPlaceholderEpisode(
  * Clean up placeholders for a collection:
  * 1. Items with real content detected in Plex (via discovery system)
  * 2. Items no longer in source data (orphaned items)
+ * 3. Active items with missing placeholder files (self-healing — clears DB record for re-creation)
  *
  * Released items are tracked for configured window (placeholderReleasedDays, default: 7 days),
  * then database records are removed and overlay system automatically updates posters.
@@ -767,6 +768,54 @@ export async function cleanupPlaceholdersForConfig(
         // No need to skip items - we process all orphaned items
 
         const isOrphaned = !sourceTmdbIds.has(placeholder.tmdbId);
+
+        // Self-healing: if item is still in source but placeholder file is
+        // missing (external deletion, disk issue), remove the DB record so the
+        // creation flow can recreate it next sync.
+        if (!isOrphaned && placeholder.placeholderPath) {
+          const { getPlaceholderRootFolder } = await import(
+            '@server/lib/placeholders/helpers/placeholderPathHelpers'
+          );
+          const libraryPath = getPlaceholderRootFolder(
+            config.libraryId,
+            placeholder.mediaType
+          );
+
+          if (libraryPath) {
+            const fullPath = path.join(
+              libraryPath,
+              placeholder.placeholderPath
+            );
+            try {
+              await fs.access(fullPath);
+            } catch {
+              // File missing — clear DB record to unblock recreation
+              logger.info(
+                'Placeholder file missing for active item — removing DB record for re-creation',
+                {
+                  label: 'PlaceholderService',
+                  title: placeholder.title,
+                  tmdbId: placeholder.tmdbId,
+                  path: fullPath,
+                }
+              );
+
+              if (
+                placeholder.mediaType === 'tv' &&
+                placeholder.plexRatingKey
+              ) {
+                await deletePlexPlaceholderEpisode(
+                  plexClient,
+                  placeholder.plexRatingKey,
+                  placeholder.title
+                );
+              }
+
+              await repository.remove(placeholder);
+              removedCount++;
+            }
+          }
+        }
 
         // For orphaned items, check if past configured window
         if (isOrphaned) {
