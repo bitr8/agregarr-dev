@@ -788,31 +788,39 @@ export async function cleanupPlaceholdersForConfig(
             );
             try {
               await fs.access(fullPath);
-            } catch {
-              // File missing — clear DB record to unblock recreation
-              logger.info(
-                'Placeholder file missing for active item — removing DB record for re-creation',
-                {
-                  label: 'PlaceholderService',
-                  title: placeholder.title,
-                  tmdbId: placeholder.tmdbId,
-                  path: fullPath,
-                }
-              );
+            } catch (fileError) {
+              // Only treat ENOENT (file not found) as genuinely missing.
+              // Permission errors, NFS timeouts, etc. should not trigger cleanup.
+              const isFileNotFound =
+                fileError instanceof Error &&
+                'code' in fileError &&
+                (fileError as NodeJS.ErrnoException).code === 'ENOENT';
 
-              if (
-                placeholder.mediaType === 'tv' &&
-                placeholder.plexRatingKey
-              ) {
-                await deletePlexPlaceholderEpisode(
-                  plexClient,
-                  placeholder.plexRatingKey,
-                  placeholder.title
+              if (isFileNotFound) {
+                logger.info(
+                  'Placeholder file missing for active item — removing DB record for re-creation',
+                  {
+                    label: 'PlaceholderService',
+                    title: placeholder.title,
+                    tmdbId: placeholder.tmdbId,
+                    path: fullPath,
+                  }
                 );
-              }
 
-              await repository.remove(placeholder);
-              removedCount++;
+                if (
+                  placeholder.mediaType === 'tv' &&
+                  placeholder.plexRatingKey
+                ) {
+                  await deletePlexPlaceholderEpisode(
+                    plexClient,
+                    placeholder.plexRatingKey,
+                    placeholder.title
+                  );
+                }
+
+                await repository.remove(placeholder);
+                removedCount++;
+              }
             }
           }
         }
