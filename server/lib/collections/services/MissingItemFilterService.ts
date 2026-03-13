@@ -97,7 +97,7 @@ export class MissingItemFilterService {
     missingItems: MissingItem[],
     config: CollectionConfig,
     serviceLabel: string,
-    options?: { skipMediaTypeCheck?: boolean }
+    options?: { skipMediaTypeCheck?: boolean; skipRatingFilters?: boolean }
   ): Promise<FilteredMissingItemsResult> {
     // Track filtered items for summary logging
     const yearFilteredItems: string[] = [];
@@ -164,7 +164,11 @@ export class MissingItemFilterService {
 
     // Step 2: Bulk fetch IMDb ratings if filter is enabled
     const imdbRatingsMap = new Map<number, number | null>(); // tmdbId -> rating
-    if (config.minimumImdbRating && config.minimumImdbRating > 0) {
+    if (
+      config.minimumImdbRating &&
+      config.minimumImdbRating > 0 &&
+      !options?.skipRatingFilters
+    ) {
       await this.bulkFetchImdbRatings(
         yearFilteredMissingItems,
         imdbRatingsMap,
@@ -177,10 +181,11 @@ export class MissingItemFilterService {
     const rtRatingsMap = new Map<number, number | null>(); // tmdbId -> critics score
     const rtAudienceRatingsMap = new Map<number, number | null>(); // tmdbId -> audience score
     if (
-      (config.minimumRottenTomatoesRating &&
+      !options?.skipRatingFilters &&
+      ((config.minimumRottenTomatoesRating &&
         config.minimumRottenTomatoesRating > 0) ||
-      (config.minimumRottenTomatoesAudienceRating &&
-        config.minimumRottenTomatoesAudienceRating > 0)
+        (config.minimumRottenTomatoesAudienceRating &&
+          config.minimumRottenTomatoesAudienceRating > 0))
     ) {
       await this.fetchRTRatings(
         yearFilteredMissingItems,
@@ -196,7 +201,11 @@ export class MissingItemFilterService {
 
     for (const item of yearFilteredMissingItems) {
       // Check IMDb rating filter using cached ratings
-      if (config.minimumImdbRating && config.minimumImdbRating > 0) {
+      if (
+        config.minimumImdbRating &&
+        config.minimumImdbRating > 0 &&
+        !options?.skipRatingFilters
+      ) {
         if (imdbRatingsMap.has(item.tmdbId)) {
           const rating = imdbRatingsMap.get(item.tmdbId);
 
@@ -243,7 +252,8 @@ export class MissingItemFilterService {
       // Check Rotten Tomatoes critics rating filter using cached ratings
       if (
         config.minimumRottenTomatoesRating &&
-        config.minimumRottenTomatoesRating > 0
+        config.minimumRottenTomatoesRating > 0 &&
+        !options?.skipRatingFilters
       ) {
         if (rtRatingsMap.has(item.tmdbId)) {
           const score = rtRatingsMap.get(item.tmdbId);
@@ -294,7 +304,8 @@ export class MissingItemFilterService {
       // Check Rotten Tomatoes audience rating filter using cached ratings
       if (
         config.minimumRottenTomatoesAudienceRating &&
-        config.minimumRottenTomatoesAudienceRating > 0
+        config.minimumRottenTomatoesAudienceRating > 0 &&
+        !options?.skipRatingFilters
       ) {
         if (rtAudienceRatingsMap.has(item.tmdbId)) {
           const score = rtAudienceRatingsMap.get(item.tmdbId);

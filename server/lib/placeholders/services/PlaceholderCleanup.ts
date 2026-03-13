@@ -2,6 +2,7 @@ import type PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
+import type { MissingItem } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -698,6 +699,24 @@ async function deletePlexPlaceholderEpisode(
 }
 
 /**
+ * Check if any retroactively-applicable placeholder filters are configured.
+ * Rating filters are excluded because retroactive evaluation uses
+ * skipRatingFilters (unreleased content has no ratings).
+ */
+function hasPlaceholderFilters(config: CollectionConfig): boolean {
+  if (config.placeholderMinimumYear && config.placeholderMinimumYear > 0)
+    return true;
+
+  const pfs = config.placeholderFilterSettings;
+  if (pfs?.genres?.values?.length) return true;
+  if (pfs?.countries?.values?.length) return true;
+  if (pfs?.languages?.values?.length) return true;
+  if (pfs?.keywords?.values?.length) return true;
+
+  return false;
+}
+
+/**
  * Clean up placeholders for a collection:
  * 1. Items with real content detected in Plex (via discovery system)
  * 2. Items no longer in source data (orphaned items)
@@ -758,6 +777,80 @@ export async function cleanupPlaceholdersForConfig(
   // Fixed grace period for orphaned items - items that fall off the source list
   // are removed after this many days. Not user-configurable to keep UX simple.
   const ORPHANED_GRACE_PERIOD_DAYS = 7;
+
+  // Retroactive filter evaluation: check existing placeholders against current filters.
+  // Placeholders that no longer pass filters are removed so filter changes take effect
+  // on already-created placeholders, not just new ones.
+  let filterPassedTmdbIds: Set<number> | undefined;
+
+  if (
+    config.createPlaceholdersForMissing &&
+    hasPlaceholderFilters(config) &&
+    sourceTmdbIds &&
+    sourceTmdbIds.size > 0
+  ) {
+    // Collect non-orphaned placeholders for filter evaluation
+    const nonOrphanedPlaceholders = placeholders.filter((p) =>
+      sourceTmdbIds.has(p.tmdbId)
+    );
+
+    if (nonOrphanedPlaceholders.length > 0) {
+      // Convert PlaceholderItem[] to MissingItem[] for the filter service
+      const syntheticMissingItems: MissingItem[] = nonOrphanedPlaceholders.map(
+        (p) => ({
+          tmdbId: p.tmdbId,
+          tvdbId: p.tvdbId,
+          mediaType: p.mediaType,
+          title: p.title,
+          year: p.year,
+          originalPosition: 0,
+          source: p.source,
+        })
+      );
+
+      try {
+        const { missingItemFilterService, buildPlaceholderFilterConfig } =
+          await import(
+            '@server/lib/collections/services/MissingItemFilterService'
+          );
+        const placeholderFilterConfig = buildPlaceholderFilterConfig(config);
+        const { filteredItems } =
+          await missingItemFilterService.filterMissingItems(
+            syntheticMissingItems,
+            placeholderFilterConfig,
+            'Placeholder Retroactive Filter',
+            { skipMediaTypeCheck: true, skipRatingFilters: true }
+          );
+
+        filterPassedTmdbIds = new Set(filteredItems.map((item) => item.tmdbId));
+
+        const filteredOutCount =
+          nonOrphanedPlaceholders.length - filterPassedTmdbIds.size;
+        if (filteredOutCount > 0) {
+          logger.info(
+            `${filteredOutCount} existing placeholders no longer match filters`,
+            {
+              label: 'PlaceholderService',
+              configName: config.name,
+              evaluated: nonOrphanedPlaceholders.length,
+              passed: filterPassedTmdbIds.size,
+              filteredOut: filteredOutCount,
+            }
+          );
+        }
+      } catch (filterError) {
+        // Filter evaluation failure should not block other cleanup
+        logger.warn('Failed to evaluate retroactive placeholder filters', {
+          label: 'PlaceholderService',
+          configName: config.name,
+          error:
+            filterError instanceof Error
+              ? filterError.message
+              : String(filterError),
+        });
+      }
+    }
+  }
 
   // Check for orphaned items (no longer in source)
   if (sourceTmdbIds && sourceTmdbIds.size > 0) {
@@ -820,9 +913,125 @@ export async function cleanupPlaceholdersForConfig(
 
                 await repository.remove(placeholder);
                 removedCount++;
+                continue; // Already removed — skip filter and orphan checks
               }
             }
           }
+        }
+
+        // Retroactive filter check: remove non-orphaned placeholders that
+        // no longer pass the current placeholder filter configuration.
+        if (
+          !isOrphaned &&
+          filterPassedTmdbIds &&
+          !filterPassedTmdbIds.has(placeholder.tmdbId)
+        ) {
+          logger.info('Removing placeholder that fails current filters', {
+            label: 'PlaceholderService',
+            title: placeholder.title,
+            tmdbId: placeholder.tmdbId,
+          });
+
+          // Use the same removal pattern as orphan cleanup:
+          // file + Plex entry + DB record, all as a unit.
+          let fileRemovalSucceeded = false;
+          if (placeholder.placeholderPath) {
+            const { removePlaceholder } = await import(
+              '@server/lib/placeholders/placeholderManager'
+            );
+            const { getPlaceholderRootFolder } = await import(
+              '@server/lib/placeholders/helpers/placeholderPathHelpers'
+            );
+            const libraryPath = getPlaceholderRootFolder(
+              config.libraryId,
+              placeholder.mediaType
+            );
+
+            if (!libraryPath) {
+              logger.error(
+                'Library path not configured - cannot remove filtered placeholder',
+                {
+                  label: 'PlaceholderService',
+                  title: placeholder.title,
+                  mediaType: placeholder.mediaType,
+                  libraryId: config.libraryId,
+                }
+              );
+              continue;
+            }
+
+            const fullPath = path.join(
+              libraryPath,
+              placeholder.placeholderPath
+            );
+
+            // Check if any OTHER collection still needs this file
+            // Exclude both this config and its multi-source sub-configs
+            const allRecordsForPath = await repository.find({
+              where: {
+                placeholderPath: placeholder.placeholderPath,
+                configId: Not(config.id),
+              },
+            });
+            const otherCollectionRecords = allRecordsForPath.filter(
+              (r) => !r.configId.startsWith(`${config.id}-source-`)
+            );
+
+            if (otherCollectionRecords.length > 0) {
+              fileRemovalSucceeded = true;
+              logger.info(
+                'Filtered placeholder file shared with other collections - keeping file',
+                {
+                  label: 'PlaceholderService',
+                  title: placeholder.title,
+                  otherCollections: otherCollectionRecords.length,
+                }
+              );
+            } else {
+              try {
+                await removePlaceholder(fullPath, placeholder.mediaType);
+                fileRemovalSucceeded = true;
+              } catch (error) {
+                const isFileNotFound =
+                  error instanceof Error &&
+                  'code' in error &&
+                  (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+                if (isFileNotFound) {
+                  fileRemovalSucceeded = true;
+                } else {
+                  logger.error(
+                    'Failed to remove filtered placeholder file - keeping database record',
+                    {
+                      label: 'PlaceholderService',
+                      title: placeholder.title,
+                      path: fullPath,
+                      error:
+                        error instanceof Error ? error.message : String(error),
+                    }
+                  );
+                  continue;
+                }
+              }
+            }
+          } else {
+            fileRemovalSucceeded = true;
+          }
+
+          if (fileRemovalSucceeded) {
+            if (placeholder.mediaType === 'tv' && placeholder.plexRatingKey) {
+              await deletePlexPlaceholderEpisode(
+                plexClient,
+                placeholder.plexRatingKey,
+                placeholder.title
+              );
+            }
+
+            await repository.remove(placeholder);
+            removedCount++;
+          }
+
+          continue; // Skip orphan check - already handled
         }
 
         // For orphaned items, check if past configured window
@@ -838,10 +1047,9 @@ export async function cleanupPlaceholdersForConfig(
           );
           let context: { releaseDate?: string } = {};
           try {
-            context =
-              await placeholderContextService.getPlaceholderContext(
-                placeholder
-              );
+            context = await placeholderContextService.getPlaceholderContext(
+              placeholder
+            );
           } catch (contextError) {
             logger.warn(
               'Failed to fetch context for orphaned placeholder, using creation date',
@@ -1017,7 +1225,6 @@ export async function cleanupPlaceholdersForConfig(
             }
           }
         }
-
       } catch (error) {
         logger.error('Error processing placeholder cleanup', {
           label: 'PlaceholderService',
