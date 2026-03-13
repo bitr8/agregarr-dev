@@ -65,7 +65,7 @@ export async function cleanupPlaceholderForRealContent(
 
 /**
  * Handle placeholder operations based on createPlaceholdersForMissing setting
- * - If enabled: runs cleanup (released items, orphaned items, stale items)
+ * - If enabled: runs cleanup (released items, orphaned items)
  * - If disabled: deletes all placeholder records for the config
  * Files will be cleaned up later by orphaned file cleanup
  */
@@ -701,7 +701,6 @@ async function deletePlexPlaceholderEpisode(
  * Clean up placeholders for a collection:
  * 1. Items with real content detected in Plex (via discovery system)
  * 2. Items no longer in source data (orphaned items)
- * 3. Items that have been placeholders for 7+ days (stale items)
  *
  * Released items are tracked for configured window (placeholderReleasedDays, default: 7 days),
  * then database records are removed and overlay system automatically updates posters.
@@ -753,30 +752,24 @@ export async function cleanupPlaceholdersForConfig(
   let removedCount = 0;
 
   // NOTE: Title fixing and real content cleanup now happens globally during discovery
-  // This function only handles collection-specific orphaned/stale item cleanup
+  // This function only handles collection-specific orphaned item cleanup
 
   // Fixed grace period for orphaned items - items that fall off the source list
   // are removed after this many days. Not user-configurable to keep UX simple.
   const ORPHANED_GRACE_PERIOD_DAYS = 7;
 
-  // Check for orphaned items (not in source) and stale items (too old)
+  // Check for orphaned items (no longer in source)
   if (sourceTmdbIds && sourceTmdbIds.size > 0) {
-    const STALE_THRESHOLD_DAYS = 7; // 7 days
     let orphanedCount = 0;
-    let staleCount = 0;
 
     for (const placeholder of placeholders) {
       try {
         // No need to skip items - we process all orphaned items
 
         const isOrphaned = !sourceTmdbIds.has(placeholder.tmdbId);
-        const isStale =
-          placeholder.createdAt &&
-          Date.now() - placeholder.createdAt.getTime() >
-            STALE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
 
         // For orphaned items, check if past configured window
-        if (isOrphaned && !isStale) {
+        if (isOrphaned) {
           // This handles items that fall off source lists (e.g., Trakt Trending)
           // Keep them for placeholderReleasedDays from:
           // - Release date (if released) - so users see "recently released" items
@@ -786,9 +779,26 @@ export async function cleanupPlaceholdersForConfig(
           const { placeholderContextService } = await import(
             '@server/lib/placeholders/services/PlaceholderContextService'
           );
-          const context = await placeholderContextService.getPlaceholderContext(
-            placeholder
-          );
+          let context: { releaseDate?: string } = {};
+          try {
+            context =
+              await placeholderContextService.getPlaceholderContext(
+                placeholder
+              );
+          } catch (contextError) {
+            logger.warn(
+              'Failed to fetch context for orphaned placeholder, using creation date',
+              {
+                label: 'PlaceholderService',
+                title: placeholder.title,
+                tmdbId: placeholder.tmdbId,
+                error:
+                  contextError instanceof Error
+                    ? contextError.message
+                    : String(contextError),
+              }
+            );
+          }
 
           let windowStartDate: Date = placeholder.createdAt;
           let windowType = 'creation';
@@ -951,146 +961,8 @@ export async function cleanupPlaceholdersForConfig(
           }
         }
 
-        // Stale items (7+ days old) - always remove
-        if (isStale) {
-          const reason = `stale (${STALE_THRESHOLD_DAYS}+ days old)`;
-
-          logger.info('Removing stale placeholder', {
-            label: 'PlaceholderService',
-            title: placeholder.title,
-            source: placeholder.source,
-            reason,
-            age: placeholder.createdAt
-              ? Math.floor(
-                  (Date.now() - placeholder.createdAt.getTime()) /
-                    (24 * 60 * 60 * 1000)
-                )
-              : 'unknown',
-          });
-
-          // Remove placeholder file if it exists
-          let fileRemovalSucceeded = false;
-          if (placeholder.placeholderPath) {
-            const { removePlaceholder } = await import(
-              '@server/lib/placeholders/placeholderManager'
-            );
-            const { getPlaceholderRootFolder } = await import(
-              '@server/lib/placeholders/helpers/placeholderPathHelpers'
-            );
-            const libraryPath = getPlaceholderRootFolder(
-              config.libraryId,
-              placeholder.mediaType
-            );
-
-            if (!libraryPath) {
-              logger.error(
-                'Library path not configured - cannot remove placeholder file',
-                {
-                  label: 'PlaceholderService',
-                  title: placeholder.title,
-                  mediaType: placeholder.mediaType,
-                  libraryId: config.libraryId,
-                }
-              );
-              continue;
-            }
-
-            // Construct full path from relative path
-            const fullPath = path.join(
-              libraryPath,
-              placeholder.placeholderPath
-            );
-
-            // Check if any OTHER collection still needs this file
-            const otherCollectionRecords = await repository.find({
-              where: {
-                placeholderPath: placeholder.placeholderPath,
-                configId: Not(config.id),
-              },
-            });
-
-            if (otherCollectionRecords.length > 0) {
-              // Other collections still use this file - don't delete it
-              fileRemovalSucceeded = true;
-              logger.info(
-                'Stale placeholder file shared with other collections - keeping file',
-                {
-                  label: 'PlaceholderService',
-                  title: placeholder.title,
-                  otherCollections: otherCollectionRecords.length,
-                }
-              );
-            } else {
-              // No other collections use this file - safe to delete
-              try {
-                await removePlaceholder(fullPath, placeholder.mediaType);
-                fileRemovalSucceeded = true;
-                logger.info('Removed placeholder file', {
-                  label: 'PlaceholderService',
-                  title: placeholder.title,
-                  path: fullPath,
-                });
-              } catch (error) {
-                // If file doesn't exist (ENOENT), treat as successful removal
-                const isFileNotFound =
-                  error instanceof Error &&
-                  'code' in error &&
-                  error.code === 'ENOENT';
-
-                if (isFileNotFound) {
-                  fileRemovalSucceeded = true;
-                  logger.info(
-                    'Placeholder file already removed - cleaning up database record',
-                    {
-                      label: 'PlaceholderService',
-                      title: placeholder.title,
-                      path: fullPath,
-                    }
-                  );
-                } else {
-                  logger.error(
-                    'Failed to remove placeholder file - keeping database record',
-                    {
-                      label: 'PlaceholderService',
-                      title: placeholder.title,
-                      path: fullPath,
-                      error:
-                        error instanceof Error ? error.message : String(error),
-                    }
-                  );
-                  continue;
-                }
-              }
-            }
-          } else {
-            fileRemovalSucceeded = true; // No file to remove
-          }
-
-          // Remove from database if file removal succeeded
-          if (fileRemovalSucceeded) {
-            // Delete stale Plex episode entry for TV placeholders
-            if (placeholder.mediaType === 'tv' && placeholder.plexRatingKey) {
-              await deletePlexPlaceholderEpisode(
-                plexClient,
-                placeholder.plexRatingKey,
-                placeholder.title
-              );
-            }
-
-            await repository.remove(placeholder);
-            removedCount++;
-            staleCount++;
-
-            logger.info('Removed placeholder from database', {
-              label: 'PlaceholderService',
-              title: placeholder.title,
-              source: placeholder.source,
-              reason,
-            });
-          }
-        }
       } catch (error) {
-        logger.error('Error removing stale placeholder', {
+        logger.error('Error processing placeholder cleanup', {
           label: 'PlaceholderService',
           title: placeholder.title,
           error: error instanceof Error ? error.message : String(error),
@@ -1098,13 +970,11 @@ export async function cleanupPlaceholdersForConfig(
       }
     }
 
-    if (orphanedCount > 0 || staleCount > 0) {
-      logger.info('Orphaned/stale placeholder cleanup summary', {
+    if (orphanedCount > 0) {
+      logger.info('Orphaned placeholder cleanup summary', {
         label: 'PlaceholderService',
         configName: config.name,
         orphaned: orphanedCount,
-        stale: staleCount,
-        total: orphanedCount + staleCount,
       });
     }
   }
