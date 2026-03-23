@@ -20,7 +20,7 @@ const ICON_THUMBNAIL_SIZE = 64; // 64x64 thumbnails
  * Sanitize SVG content by removing potentially dangerous elements and attributes.
  * Strips script tags, event handlers, foreignObject, and javascript: URIs.
  */
-export function sanitizeSvg(svgBuffer: Buffer): Buffer {
+function sanitizeSvg(svgBuffer: Buffer): Buffer {
   let svg = svgBuffer.toString('utf8');
 
   // Remove <script> tags and their contents
@@ -242,7 +242,6 @@ export async function uploadIcon(
     let thumbnailFilename: string | undefined;
 
     if (mimeType === 'image/svg+xml') {
-      // Sanitize SVG to remove potentially dangerous content
       processedBuffer = sanitizeSvg(fileBuffer);
     } else {
       // For raster images, ensure reasonable size and create thumbnail
@@ -576,7 +575,11 @@ export function getIconPath(
   type: 'user' | 'system' = 'user'
 ): string {
   const dir = type === 'system' ? SERVICES_ICONS_DIR : ICONS_STORAGE_DIR;
-  return path.join(dir, filename);
+  const resolved = path.resolve(dir, filename);
+  if (!resolved.startsWith(path.resolve(dir) + path.sep)) {
+    throw new Error('Invalid icon path');
+  }
+  return resolved;
 }
 
 /**
