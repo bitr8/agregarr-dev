@@ -1,3 +1,0 @@
-# Lessons Learned
-
----
