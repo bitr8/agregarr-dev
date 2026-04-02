@@ -111,12 +111,10 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#556](https://github.com/agregarr/agregarr/pull/556) | Remove date-based overlays when content is downloaded        | -          |
+| [#547](https://github.com/agregarr/agregarr/pull/547) | Back off on IMDb Top 250 cache refresh failure               | -          |
 | [#526](https://github.com/agregarr/agregarr/pull/526) | Retroactive placeholder filter evaluation during cleanup    | -          |
 | [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming          | -          |
-| [#515](https://github.com/agregarr/agregarr/pull/515) | Remove vm2 sandbox dependency                               | -          |
-| [#514](https://github.com/agregarr/agregarr/pull/514) | Fix SVG sanitisation bypass                                 | -          |
-| [#513](https://github.com/agregarr/agregarr/pull/513) | Fix export path traversal                                   | -          |
-| [#503](https://github.com/agregarr/agregarr/pull/503) | Fix TV placeholders leaking into filtered hubs              | -          |
 | [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures | -          |
 | [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID        | #491       |
 
@@ -133,7 +131,11 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#515](https://github.com/agregarr/agregarr/pull/515) | Remove vm2 sandbox dependency                                        |
+| [#514](https://github.com/agregarr/agregarr/pull/514) | Fix SVG sanitisation bypass                                          |
+| [#513](https://github.com/agregarr/agregarr/pull/513) | Fix export path traversal                                            |
 | [#504](https://github.com/agregarr/agregarr/pull/504) | Support Maintainerr v3 API (mediaServerId rename)                    |
+| [#503](https://github.com/agregarr/agregarr/pull/503) | Fix TV placeholders leaking into filtered hubs                       |
 | [#491](https://github.com/agregarr/agregarr/pull/491) | Handle Plex returning TV seasons as Children.Directory               |
 | [#481](https://github.com/agregarr/agregarr/pull/481) | Guard splice in arrangeCollectionItemsInOrder                        |
 | [#483](https://github.com/agregarr/agregarr/pull/483) | Parallelise collection membership check in overlay test              |
