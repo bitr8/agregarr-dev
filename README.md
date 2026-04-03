@@ -116,7 +116,7 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 | [#526](https://github.com/agregarr/agregarr/pull/526) | Retroactive placeholder filter evaluation during cleanup    | -          |
 | [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming          | -          |
 | [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures | -          |
-| [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID        | #491       |
+| [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID        | -          |
 
 ### Fork-Only (No Upstream PR Planned)
 
@@ -127,7 +127,8 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 > **Legacy Cleanup:** TV placeholders created before the Sonarr folder naming fix may not match Sonarr's naming convention. If orphaned placeholders appear after real content arrives, delete the placeholder folder and let the next sync recreate it correctly.
 
-### Merged
+<details>
+<summary>Merged (40 PRs)</summary>
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
@@ -173,10 +174,12 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 | [#278](https://github.com/agregarr/agregarr/pull/278) | Filter daily shows from Coming Soon collections                      |
 | [#277](https://github.com/agregarr/agregarr/pull/277) | TMDB poster caching and race condition fixes                         |
 
+</details>
+
 ## License
 
 GPL-3.0, same as upstream.
 
 ## Credits
 
-All the real work is by the [Agregarr](https://github.com/agregarr/agregarr) team.
+Built on [Agregarr](https://github.com/agregarr/agregarr).
