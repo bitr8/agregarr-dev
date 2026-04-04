@@ -376,6 +376,13 @@ export async function buildRenderContext(
         requiredContextFields.has('rtCertifiedFresh');
 
       if (needsRtRatings && tmdbId) {
+        // Use TMDb title for RT lookup — Plex titles may include year suffixes
+        // (e.g. "Young Sherlock 2026") that break RT fuzzy matching
+        const rtTitle =
+          mediaType === 'movie'
+            ? (tmdbData as { title: string }).title
+            : (tmdbData as { name: string }).name;
+
         // Use TMDB ID as cache key (stable, avoids title/year collision issues)
         const rtCacheKey = `rt:${mediaType}:${tmdbId}`;
         const rtCache = cacheManager.getCache('rt-ratings');
@@ -436,11 +443,11 @@ export async function buildRenderContext(
               const rtClient = new RottenTomatoes();
               return mediaType === 'movie'
                 ? await rtClient.getMovieRatings(
-                    context.title || '',
+                    rtTitle || context.title || '',
                     context.year || 0
                   )
                 : await rtClient.getTVRatings(
-                    context.title || '',
+                    rtTitle || context.title || '',
                     context.year
                   );
             })();
