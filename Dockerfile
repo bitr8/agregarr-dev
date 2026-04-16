@@ -36,7 +36,7 @@ FROM node:20.19.5-alpine
 WORKDIR /app
 
 RUN apk add --no-cache \
-  tzdata tini fontconfig ttf-dejavu font-noto-emoji \
+  tzdata tini su-exec fontconfig ttf-dejavu font-noto-emoji \
   cairo pango jpeg giflib pixman \
   ffmpeg python3 \
   && mkdir -p /usr/share/fonts/truetype/poster-fonts && \
@@ -100,11 +100,15 @@ RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O 
 
 COPY --from=build_image /app ./
 
+# Entrypoint handles optional PUID/PGID privilege dropping
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Configure Playwright to use system Chromium
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-ENTRYPOINT [ "/sbin/tini", "--" ]
+ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "yarn", "start" ]
 
 EXPOSE 7171
