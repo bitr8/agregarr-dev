@@ -12,7 +12,16 @@ UMASK=${UMASK:-022}
 
 # Create group/user if they don't already exist
 getent group "$PGID" >/dev/null 2>&1 || addgroup -g "$PGID" agregarr
-getent passwd "$PUID" >/dev/null 2>&1 || adduser -D -H -u "$PUID" -G "$(getent group "$PGID" | cut -d: -f1)" agregarr
+if ! getent passwd "$PUID" >/dev/null 2>&1; then
+  adduser -D -H -h /home/agregarr -u "$PUID" -G "$(getent group "$PGID" | cut -d: -f1)" agregarr
+fi
+
+# Ensure a writable home directory (yarn cache/global folders live here)
+USER_HOME=$(getent passwd "$PUID" | cut -d: -f6)
+if [ -n "$USER_HOME" ] && [ "$USER_HOME" != "/" ]; then
+  mkdir -p "$USER_HOME"
+  chown "$PUID:$PGID" "$USER_HOME"
+fi
 
 # Fix ownership on directories the app needs to write to
 chown -R "$PUID:$PGID" /app/config
