@@ -290,7 +290,6 @@ router.post('/:libraryId/stop', (req, res) => {
       libraryId,
     });
   } else if (result === 'already') {
-    // Idempotent - return success if already stopping
     return res.status(200).json({
       message: 'Stop already in progress',
       libraryId,
@@ -298,6 +297,76 @@ router.post('/:libraryId/stop', (req, res) => {
   } else {
     return res.status(404).json({
       error: 'No running job found for this library',
+    });
+  }
+});
+
+// POST /api/v1/overlay-library-configs/:libraryId/apply-items - Apply overlays to specific items
+router.post('/:libraryId/apply-items', async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Authentication required',
+      });
+    }
+
+    const { libraryId } = req.params;
+    const { ratingKey } = req.body;
+
+    if (!ratingKey || typeof ratingKey !== 'string') {
+      return res.status(400).json({
+        error: 'ratingKey is required and must be a string',
+      });
+    }
+
+    // Check if full overlay application is running
+    const overlayApplication = (await import('@server/lib/overlayApplication'))
+      .default;
+    if (overlayApplication.running) {
+      return res.status(409).json({
+        error:
+          'Full overlay sync is currently running. Please wait for it to complete or cancel it before syncing individual items.',
+        conflictType: 'full-sync-running',
+      });
+    }
+
+    // Check if this library is already being processed
+    const libraryStatus = overlayLibraryService.getLibraryStatus(libraryId);
+    if (libraryStatus.running) {
+      return res.status(409).json({
+        error: 'This library is already being synced.',
+        conflictType: 'library-already-running',
+      });
+    }
+
+    logger.info('Applying overlays to single item', {
+      libraryId,
+      ratingKey,
+      userId: req.user?.id,
+    });
+
+    // Start async overlay application for single item
+    overlayLibraryService
+      .applyOverlaysToCollectionItems([ratingKey], libraryId)
+      .catch((error: unknown) => {
+        logger.error('Single item overlay application failed', {
+          libraryId,
+          ratingKey,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    // Return immediately - overlay application runs in background
+    return res.status(202).json({
+      message: 'Overlay application started for item',
+      libraryId,
+      ratingKey,
+    });
+  } catch (error) {
+    logger.error('Failed to start single item overlay application:', error);
+    return next({
+      status: 500,
+      message: 'Failed to start overlay application',
     });
   }
 });
