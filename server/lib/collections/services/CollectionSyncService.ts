@@ -180,6 +180,16 @@ export class CollectionSyncService {
             // This works even without a plexItem (content downloaded to different library)
             if (!needsTitleFix && marker.tmdbId) {
               // Real content detected - clean up placeholder
+              if (plexItem) {
+                try {
+                  await plexClient.removeLabelFromItem(
+                    plexItem.ratingKey,
+                    'trailer-placeholder'
+                  );
+                } catch {
+                  // Non-fatal: label may already be absent
+                }
+              }
               await cleanupPlaceholderForRealContent(
                 marker.tmdbId,
                 marker.placeholderPath,
@@ -369,6 +379,16 @@ export class CollectionSyncService {
             // This works even without a plexItem (content downloaded to different library)
             if (needsCleanup) {
               // Real content detected - clean up placeholder
+              if (plexItem) {
+                try {
+                  await plexClient.removeLabelFromItem(
+                    plexItem.ratingKey,
+                    'trailer-placeholder'
+                  );
+                } catch {
+                  // Non-fatal: label may already be absent
+                }
+              }
               await cleanupPlaceholderForRealContent(
                 movie.tmdbId,
                 movie.placeholderPath,
