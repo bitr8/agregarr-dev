@@ -516,10 +516,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         total: missingItems.length,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       logger.error(
-        `Failed to process auto-requests for ${config.name}: ${error}`,
+        `Failed to process auto-requests for ${config.name}: ${errorMessage}`,
         {
           label: `${this.source} Collections`,
+          error: errorMessage,
         }
       );
 

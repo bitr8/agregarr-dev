@@ -863,7 +863,7 @@ export class CollectionSyncService {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to process collection ${config.name}: ${error}`, {
+        logger.error(`Failed to process collection ${config.name}: ${errorMessage}`, {
           label: 'Collection Sync Service',
           configId: config.id,
           error: errorMessage,

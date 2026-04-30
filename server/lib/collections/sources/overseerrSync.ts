@@ -687,12 +687,15 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
           collectedRatingKeys.push(result.collectionRatingKey);
         }
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         logger.error(
-          `Failed to process collection for user ${userCollections.user.displayName}: ${error}`,
+          `Failed to process collection for user ${userCollections.user.displayName}: ${errorMessage}`,
           {
             label: 'Overseerr Collections',
             userId: userCollections.user.id,
             userName: userCollections.user.displayName,
+            error: errorMessage,
           }
         );
       }
