@@ -101,9 +101,11 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 **Sonarr Folder Naming** -- Agregarr creates placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrives, Plex sees them as different shows, leaving orphaned entries. This fork extracts the folder name from Sonarr's series path. Falls back to standard naming if the show isn't in Sonarr.
 
-**Download Status Awareness** -- Upstream doesn't check whether content has already been downloaded in Radarr/Sonarr. This fork queries *arr download status in batch, skips placeholder creation for items already downloaded, and uses download status as a cleanup signal. Prevents unnecessary placeholders for content that's about to arrive.
+**Download Status Awareness** -- Upstream doesn't check whether content has already been downloaded in Radarr/Sonarr. This fork queries \*arr download status in batch, skips placeholder creation for items already downloaded, and uses download status as a cleanup signal. Prevents unnecessary placeholders for content that's about to arrive.
 
 **Post-Sync Hub Verification** -- After collection sync completes, queries each filtered hub and applies missing `trailer-placeholder` labels to any items that slipped through. A safety net that catches label leaks regardless of which pipeline stage failed to apply them.
+
+**TV Placeholder Label Cleanup** -- Upstream's placeholder label removal only runs during full sync's discovery path. Quick sync (triggered between full syncs when real content arrives) deleted placeholder files and DB records but never removed the `trailer-placeholder` label from the Plex show. Orphan/filter cleanup also missed it. This fork centralises label removal into all cleanup paths, adds a `tvdbId` fallback from the DB when marker files lack it, and removes labels during episode deletion. Without this fix, TV shows that arrive between full syncs stay hidden from Recently Added.
 
 ## Upstream PRs
 
@@ -111,8 +113,6 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
-| [#556](https://github.com/agregarr/agregarr/pull/556) | Remove date-based overlays when content is downloaded        | -          |
-| [#547](https://github.com/agregarr/agregarr/pull/547) | Back off on IMDb Top 250 cache refresh failure               | -          |
 | [#526](https://github.com/agregarr/agregarr/pull/526) | Retroactive placeholder filter evaluation during cleanup    | -          |
 | [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming          | -          |
 | [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures | -          |
@@ -120,18 +120,21 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 ### Fork-Only (No Upstream PR Planned)
 
-| Feature                                         | Why Fork-Only                              |
-| ----------------------------------------------- | ------------------------------------------ |
-| Direct Plex API deletion for stale placeholders | Requires "Allow media deletion" in Plex    |
+| Feature                                         | Why Fork-Only                               |
+| ----------------------------------------------- | ------------------------------------------- |
+| Direct Plex API deletion for stale placeholders | Requires "Allow media deletion" in Plex     |
 | Post-sync hub verification for label leaks      | Safety net for fork's label-based filtering |
 
 > **Legacy Cleanup:** TV placeholders created before the Sonarr folder naming fix may not match Sonarr's naming convention. If orphaned placeholders appear after real content arrives, delete the placeholder folder and let the next sync recreate it correctly.
 
 <details>
-<summary>Merged (40 PRs)</summary>
+<summary>Merged (43 PRs)</summary>
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [#579](https://github.com/agregarr/agregarr/pull/579) | Refresh Plex shared-server cache at start of user filter batches     |
+| [#556](https://github.com/agregarr/agregarr/pull/556) | Remove date-based overlays when content is downloaded                |
+| [#547](https://github.com/agregarr/agregarr/pull/547) | Back off on IMDb Top 250 cache refresh failure                       |
 | [#515](https://github.com/agregarr/agregarr/pull/515) | Remove vm2 sandbox dependency                                        |
 | [#514](https://github.com/agregarr/agregarr/pull/514) | Fix SVG sanitisation bypass                                          |
 | [#513](https://github.com/agregarr/agregarr/pull/513) | Fix export path traversal                                            |
