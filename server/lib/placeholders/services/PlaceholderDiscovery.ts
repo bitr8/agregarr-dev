@@ -191,8 +191,19 @@ export async function discoverPlaceholdersFromMarkers(
       }
 
       // Check if *arr reports content as downloaded (works even if content is in different Plex library)
-      const arrStatus = marker.tvdbId
-        ? showsByTvdbId.get(marker.tvdbId)
+      // Fall back to DB record's tvdbId when marker file lacks it
+      let effectiveTvdbId = marker.tvdbId;
+      if (!effectiveTvdbId) {
+        const dbRecord = await repository.findOne({
+          where: { tmdbId: marker.tmdbId },
+          select: ['tvdbId'],
+        });
+        if (dbRecord?.tvdbId) {
+          effectiveTvdbId = dbRecord.tvdbId;
+        }
+      }
+      const arrStatus = effectiveTvdbId
+        ? showsByTvdbId.get(effectiveTvdbId)
         : undefined;
       const isDownloadedInArr = arrStatus?.downloaded === true;
 

@@ -179,33 +179,12 @@ export class CollectionSyncService {
             // Cleanup triggers when needsTitleFix is false (real content detected via Plex OR *arr)
             // This works even without a plexItem (content downloaded to different library)
             if (!needsTitleFix && marker.tmdbId) {
-              // Real content detected - clean up placeholder
-              if (plexItem) {
-                try {
-                  await plexClient.removeLabelFromItem(
-                    plexItem.ratingKey,
-                    'trailer-placeholder'
-                  );
-                } catch (error) {
-                  logger.warn(
-                    'Failed to remove placeholder label, deferring cleanup',
-                    {
-                      label: 'Collection Sync Service',
-                      title: marker.title,
-                      ratingKey: plexItem.ratingKey,
-                      error:
-                        error instanceof Error
-                          ? error.message
-                          : 'Unknown error',
-                    }
-                  );
-                  continue;
-                }
-              }
               await cleanupPlaceholderForRealContent(
                 marker.tmdbId,
                 marker.placeholderPath,
-                'tv'
+                'tv',
+                plexClient,
+                plexItem?.ratingKey
               );
               cleanedUp++;
             } else if (needsTitleFix && plexItem) {
@@ -390,33 +369,12 @@ export class CollectionSyncService {
             // Cleanup triggers when needsCleanup is true (real content detected via Plex OR *arr)
             // This works even without a plexItem (content downloaded to different library)
             if (needsCleanup) {
-              // Real content detected - clean up placeholder
-              if (plexItem) {
-                try {
-                  await plexClient.removeLabelFromItem(
-                    plexItem.ratingKey,
-                    'trailer-placeholder'
-                  );
-                } catch (error) {
-                  logger.warn(
-                    'Failed to remove placeholder label, deferring cleanup',
-                    {
-                      label: 'Collection Sync Service',
-                      title: movie.title,
-                      ratingKey: plexItem.ratingKey,
-                      error:
-                        error instanceof Error
-                          ? error.message
-                          : 'Unknown error',
-                    }
-                  );
-                  continue;
-                }
-              }
               await cleanupPlaceholderForRealContent(
                 movie.tmdbId,
                 movie.placeholderPath,
-                'movie'
+                'movie',
+                plexClient,
+                plexItem?.ratingKey
               );
               moviesCleanedUp++;
             } else if (plexItem) {
@@ -863,11 +821,14 @@ export class CollectionSyncService {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to process collection ${config.name}: ${errorMessage}`, {
-          label: 'Collection Sync Service',
-          configId: config.id,
-          error: errorMessage,
-        });
+        logger.error(
+          `Failed to process collection ${config.name}: ${errorMessage}`,
+          {
+            label: 'Collection Sync Service',
+            configId: config.id,
+            error: errorMessage,
+          }
+        );
 
         // Persist error for UI display
         settings.setCollectionSyncError(config.id, errorMessage);
