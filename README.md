@@ -133,7 +133,7 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 > **Legacy Cleanup:** TV placeholders created before the Sonarr folder naming fix may not match Sonarr's naming convention. If orphaned placeholders appear after real content arrives, delete the placeholder folder and let the next sync recreate it correctly.
 
 <details>
-<summary>Merged (45 PRs)</summary>
+<summary>Merged (52 PRs)</summary>
 
 | PR                                                    | Description                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------- |
