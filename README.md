@@ -58,6 +58,7 @@ Upstream Agregarr makes individual API calls per item, per rating source, per ca
 | **Batch Overlay Metadata**    | Plex metadata fetched one item at a time             | Batches of 200 per API call. Falls back on failure     |
 | **AniList Retry Cap**         | `parseInt` NaN bug causes infinite tight retry loops | Capped at 5 attempts                                   |
 | **Release Date TTL Cap**      | Stale cache shows wrong overlay for new releases     | Items within 3 days of release: max 2h TTL             |
+| **Sync Status Fix**           | Large multi-source collections stuck as "pending"    | Partial source failures no longer block sync status    |
 
 **Persistent TMDB Resolution Cache** -- Letterboxd collections require resolving titles to TMDB IDs. Upstream re-resolves every item on every sync (6 TMDB API calls each). This caches results in SQLite with adaptive TTL.
 
