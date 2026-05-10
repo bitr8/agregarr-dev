@@ -1505,12 +1505,12 @@ class PlexAPI {
         }
       }
 
-      // Check if label exists (case-insensitive)
-      const labelIndex = existingLabels.findIndex(
-        (existingLabel) => existingLabel.toLowerCase() === label.toLowerCase()
+      // Remove ALL case-insensitive matches (handles duplicates with different casing)
+      const updatedLabels = existingLabels.filter(
+        (existingLabel) => existingLabel.toLowerCase() !== label.toLowerCase()
       );
 
-      if (labelIndex === -1) {
+      if (updatedLabels.length === existingLabels.length) {
         logger.debug('Label does not exist on item, nothing to remove', {
           label: 'Plex API',
           ratingKey,
@@ -1518,11 +1518,6 @@ class PlexAPI {
         });
         return;
       }
-
-      // Remove the label from the array
-      const updatedLabels = existingLabels.filter(
-        (_, index) => index !== labelIndex
-      );
 
       // Build params with remaining labels
       const params: Record<string, string> = {};
