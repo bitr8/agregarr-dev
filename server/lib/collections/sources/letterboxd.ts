@@ -4,7 +4,6 @@ import type {
   TmdbMovieResult,
   TmdbTvResult,
 } from '@server/api/themoviedb/interfaces';
-import type { TmdbResolutionCache } from '@server/entity/TmdbResolutionCache';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   findPlexItemsByTmdbIds,
@@ -490,7 +489,11 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
           item.year
         );
         const cached = cacheMap.get(cacheKey);
-        if (cached?.tmdbId !== null && cached?.tmdbId !== undefined && cached?.mediaType) {
+        if (
+          cached?.tmdbId !== null &&
+          cached?.tmdbId !== undefined &&
+          cached?.mediaType
+        ) {
           resolvedMap.set(item.letterboxdUrl, {
             tmdbId: cached.tmdbId,
             mediaType: cached.mediaType,
@@ -558,7 +561,11 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
           cacheHits: cacheInserted,
           phase1: searchResults.size,
           phase2: filmPageResults.size,
-          phase3: resolvedMap.size - searchResults.size - filmPageResults.size - cacheInserted,
+          phase3:
+            resolvedMap.size -
+            searchResults.size -
+            filmPageResults.size -
+            cacheInserted,
         }
       );
 
@@ -943,7 +950,7 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
         /<li[^>]*class="[^"]*griditem[^"]*"[^>]*>(.*?)<\/li>/gs,
       ];
 
-      const targetLinkRegex = /data-target-link="([^"]+)"/;
+      const targetLinkRegex = /data-(?:target-link|item-link)="([^"]+)"/;
       const fullDisplayNameRegex = /data-item-full-display-name="([^"]+)"/;
       const titleRegex = /data-item-name="([^"]+)"/;
 
