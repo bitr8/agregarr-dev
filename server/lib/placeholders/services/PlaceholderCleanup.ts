@@ -34,6 +34,11 @@ export async function cleanupPlaceholderForRealContent(
           plexRatingKey,
           'trailer-placeholder'
         );
+        logger.info('Removed trailer-placeholder label from Plex item', {
+          label: 'PlaceholderService',
+          tmdbId,
+          ratingKey: plexRatingKey,
+        });
       } catch (error) {
         logger.warn(
           'Failed to remove placeholder label — continuing with file/DB cleanup',
@@ -44,6 +49,30 @@ export async function cleanupPlaceholderForRealContent(
             error: error instanceof Error ? error.message : 'Unknown error',
           }
         );
+      }
+
+      // Also check DB for other ratingKeys that may have the label
+      // (handles separate Plex entries for placeholder vs real content)
+      const dbRecords = await repository.find({ where: { tmdbId } });
+      for (const record of dbRecords) {
+        if (record.plexRatingKey && record.plexRatingKey !== plexRatingKey) {
+          try {
+            await plexClient.removeLabelFromItem(
+              record.plexRatingKey,
+              'trailer-placeholder'
+            );
+            logger.info(
+              'Removed trailer-placeholder label from placeholder Plex entry',
+              {
+                label: 'PlaceholderService',
+                tmdbId,
+                ratingKey: record.plexRatingKey,
+              }
+            );
+          } catch {
+            // Best effort — placeholder entry may already be gone
+          }
+        }
       }
     }
 
