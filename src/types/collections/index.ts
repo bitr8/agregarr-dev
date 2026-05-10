@@ -63,6 +63,8 @@ export interface PlexHubConfig {
   lastSyncedAt?: string; // ISO string timestamp of last successful sync to Plex
   lastModifiedAt?: string; // ISO string timestamp when config was last modified
   needsSync?: boolean; // true if modified since last sync
+  lastSyncWarning?: string; // Warning from last sync (synced but with issues)
+  lastSyncWarningAt?: string; // ISO timestamp of warning
   isLinked?: boolean; // True if hub is actively linked to other hubs (set by backend linking logic)
   linkId?: number; // Group ID for linked hubs (set by backend linking logic)
   isUnlinked?: boolean; // True if this hub was deliberately unlinked and should not be grouped with siblings
@@ -118,6 +120,8 @@ export interface PreExistingCollectionConfig {
   lastSyncedAt?: string; // ISO string timestamp of last successful sync to Plex
   lastModifiedAt?: string; // ISO string timestamp when config was last modified
   needsSync?: boolean; // true if modified since last sync
+  lastSyncWarning?: string; // Warning from last sync (synced but with issues)
+  lastSyncWarningAt?: string; // ISO timestamp of warning
   isLinked?: boolean; // True if collection is actively linked to other collections (set by backend linking logic)
   linkId?: number; // Group ID for linked collections (set by backend linking logic)
   isUnlinked?: boolean; // True if this collection was deliberately unlinked and should not be grouped with siblings
@@ -213,6 +217,8 @@ export interface CollectionFormConfig {
   readonly lastSyncedAt?: string; // ISO string timestamp of last successful sync to Plex
   readonly lastModifiedAt?: string; // ISO string timestamp when config was last modified
   readonly needsSync?: boolean; // true if modified since last sync
+  readonly lastSyncWarning?: string; // Warning from last sync (synced but with issues)
+  readonly lastSyncWarningAt?: string; // ISO timestamp of warning
   readonly maxItems?: number; // Optional for hubs/pre-existing
   readonly mediaType?: MediaType;
   readonly libraryId: string; // Selected library ID - each config is for exactly one library

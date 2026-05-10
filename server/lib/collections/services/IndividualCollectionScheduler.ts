@@ -905,9 +905,14 @@ export class IndividualCollectionScheduler {
         );
       }
 
-      // Mark collection as synced (update needsSync status)
-      settings.markCollectionSynced(collectionId, 'collection');
-      settings.save();
+      // Update sync status based on result (all methods save internally)
+      if (result.error) {
+        settings.setCollectionSyncError(collectionId, result.error);
+      } else if (result.warning) {
+        settings.setCollectionSyncWarning(collectionId, result.warning);
+      } else {
+        settings.markCollectionSynced(collectionId, 'collection');
+      }
 
       // Sync Plex collection ordering after collection sync
       const { HubSyncService } = await import(

@@ -786,7 +786,7 @@ export class CollectionSyncService {
             );
           }
 
-          // Check if the sync returned an error (e.g., from multi-source orchestrator)
+          // Check if the sync returned an error or warning
           if (result.error) {
             logger.warn(
               `Collection sync returned error for ${config.name}: ${result.error}`,
@@ -795,10 +795,20 @@ export class CollectionSyncService {
                 configId: config.id,
               }
             );
-            // Persist error for UI display
+            // Persist error for UI display — keeps needsSync=true
             settings.setCollectionSyncError(config.id, result.error);
+          } else if (result.warning) {
+            logger.info(
+              `Collection sync completed with warning for ${config.name}: ${result.warning}`,
+              {
+                label: 'Collection Sync Service',
+                configId: config.id,
+              }
+            );
+            // Synced successfully but with issues — mark synced, persist warning
+            settings.setCollectionSyncWarning(config.id, result.warning);
           } else {
-            // Mark collection as successfully synced (clears any previous error)
+            // Mark collection as successfully synced (clears any previous error/warning)
             settings.markCollectionSynced(config.id, 'collection');
           }
         }

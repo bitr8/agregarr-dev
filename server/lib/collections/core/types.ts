@@ -107,8 +107,10 @@ export interface SyncResult {
   updated: number;
   /** Whether Plex collections were mutated (created, updated, or deleted) */
   mutated?: boolean;
-  /** Optional error information */
+  /** Optional error information (hard failure — collection did not sync) */
   error?: string;
+  /** Optional warning (soft failure — collection synced but ancillary operation failed) */
+  warning?: string;
   /** Optional additional details */
   details?: Record<string, unknown>;
 }

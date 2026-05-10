@@ -686,6 +686,8 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
         lastSyncedAt: configToUpdate.lastSyncedAt, // Last sync timestamp is per-library
         lastSyncError: configToUpdate.lastSyncError, // Sync errors are per-library
         lastSyncErrorAt: configToUpdate.lastSyncErrorAt, // Sync error timestamp is per-library
+        lastSyncWarning: configToUpdate.lastSyncWarning, // Sync warnings are per-library
+        lastSyncWarningAt: configToUpdate.lastSyncWarningAt, // Sync warning timestamp is per-library
         missing: configToUpdate.missing, // Missing status is per-library (can exist in one library but not another)
       };
 
@@ -1922,7 +1924,7 @@ collectionsRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
           );
         }
 
-        // Check if the sync returned an error (e.g., from multi-source orchestrator)
+        // Check if the sync returned an error or warning
         if (result.error) {
           logger.warn(
             `Individual collection sync returned error for ${collectionConfig.name}: ${result.error}`,
@@ -1931,13 +1933,21 @@ collectionsRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
               collectionId: id,
             }
           );
-          // Persist error for UI display
+          // Persist error for UI display — keeps needsSync=true
           settings.setCollectionSyncError(id, result.error);
-          settings.save();
+        } else if (result.warning) {
+          logger.info(
+            `Individual collection sync completed with warning for ${collectionConfig.name}: ${result.warning}`,
+            {
+              label: 'Individual Collection Sync',
+              collectionId: id,
+            }
+          );
+          // Synced successfully but with issues — mark synced, persist warning
+          settings.setCollectionSyncWarning(id, result.warning);
         } else {
-          // Mark collection as synced (update needsSync status, clears any previous error)
+          // Mark collection as synced (update needsSync status, clears any previous error/warning)
           settings.markCollectionSynced(id, 'collection');
-          settings.save();
         }
 
         // Sync Plex collection ordering after collection sync

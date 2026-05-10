@@ -102,6 +102,8 @@ export interface CollectionConfig {
   readonly needsSync?: boolean; // true if modified since last sync
   readonly lastSyncError?: string; // Error message from last failed sync (cleared on success)
   readonly lastSyncErrorAt?: string; // ISO string timestamp of when the sync error occurred
+  readonly lastSyncWarning?: string; // Warning from last sync (synced but with issues)
+  readonly lastSyncWarningAt?: string; // ISO string timestamp of when the sync warning occurred
   readonly maxItems: number;
   readonly customDays?: number; // Number of days for Tautulli collections (required for Tautulli type)
   readonly minimumPlays?: number; // Minimum play count for Tautulli collections (defaults to 3 if not set, 1-100)
@@ -608,6 +610,8 @@ export interface WatchlistSyncSettings {
   };
   lastSyncAt?: Date; // Last successful sync timestamp
   lastSyncError?: string; // Last sync error message
+  lastSyncWarning?: string; // Last sync warning (synced but with issues)
+  lastSyncWarningAt?: string; // ISO timestamp of warning
 }
 
 // Quota interface removed - request system not needed in Agregarr
@@ -1266,6 +1270,8 @@ class Settings {
               lastSyncedAt: now,
               lastSyncError: undefined,
               lastSyncErrorAt: undefined,
+              lastSyncWarning: undefined,
+              lastSyncWarningAt: undefined,
             });
           }
         }
@@ -1314,6 +1320,30 @@ class Settings {
           lastSyncError: error,
           lastSyncErrorAt: now,
           needsSync: true, // Keep marked as needing sync since it failed
+        });
+        this.save();
+      }
+    }
+  }
+
+  /**
+   * Set a sync warning for a specific collection (soft failure — collection synced but with issues)
+   */
+  public setCollectionSyncWarning(collectionId: string, warning: string): void {
+    const now = new Date().toISOString();
+
+    if (this.data.plex.collectionConfigs) {
+      const config = this.data.plex.collectionConfigs.find(
+        (c) => c.id === collectionId
+      );
+      if (config) {
+        Object.assign(config, {
+          lastSyncWarning: warning,
+          lastSyncWarningAt: now,
+          needsSync: false,
+          lastSyncedAt: now,
+          lastSyncError: undefined,
+          lastSyncErrorAt: undefined,
         });
         this.save();
       }
