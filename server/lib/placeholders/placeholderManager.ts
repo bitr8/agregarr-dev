@@ -230,9 +230,15 @@ export async function removePlaceholder(
             ? realpathError.message
             : String(realpathError),
       });
-      throw new Error(
+      const err = new Error(
         'Cannot resolve placeholder path - file may not exist or permissions denied'
       );
+      if (realpathError instanceof Error && 'code' in realpathError) {
+        (err as NodeJS.ErrnoException).code = (
+          realpathError as NodeJS.ErrnoException
+        ).code;
+      }
+      throw err;
     }
 
     // Find which configured library root contains this placeholder

@@ -978,6 +978,25 @@ export async function cleanupPlaceholdersForConfig(
                 }
 
                 await repository.remove(placeholder);
+
+                // Clean up empty parent directories left behind
+                try {
+                  const parentDir = path.dirname(fullPath);
+                  const parentFiles = await fs.readdir(parentDir);
+                  if (parentFiles.length === 0) {
+                    await fs.rmdir(parentDir);
+                    if (placeholder.mediaType === 'tv') {
+                      const grandParentDir = path.dirname(parentDir);
+                      const gpFiles = await fs.readdir(grandParentDir);
+                      if (gpFiles.length === 0) {
+                        await fs.rmdir(grandParentDir);
+                      }
+                    }
+                  }
+                } catch {
+                  // Best effort — directory may not be empty or already gone
+                }
+
                 removedCount++;
                 continue; // Already removed — skip filter and orphan checks
               }
