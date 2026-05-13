@@ -284,6 +284,7 @@ class PlexSmartCollectionManager {
    * @param mediaType - 'movie' or 'tv'
    * @param subtype - Hub subtype ('recently_added', 'recently_released', or 'recently_released_episodes')
    * @param maxItems - Maximum number of items to include in the smart collection
+   * @param excludeCollectionTitles - Collection titles to exclude via Plex smart filter
    * @returns The rating key of the created smart collection or null if failed
    */
   public async createFilteredHub(
@@ -294,7 +295,8 @@ class PlexSmartCollectionManager {
       | 'recently_added'
       | 'recently_released'
       | 'recently_released_episodes',
-    maxItems?: number
+    maxItems?: number,
+    excludeCollectionTitles?: string[]
   ): Promise<string | null> {
     try {
       logger.debug(
@@ -333,6 +335,13 @@ class PlexSmartCollectionManager {
         filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else {
         throw new Error(`Unsupported filtered hub subtype: ${subtype}`);
+      }
+
+      // Add collection exclusion filters
+      if (excludeCollectionTitles?.length) {
+        for (const colTitle of excludeCollectionTitles) {
+          filterUri += `&collection!=${encodeURIComponent(colTitle)}`;
+        }
       }
 
       // Add limit parameter if specified
@@ -621,6 +630,7 @@ class PlexSmartCollectionManager {
    * @param mediaType - 'movie' or 'tv'
    * @param subtype - Hub subtype ('recently_added', 'recently_released', or 'recently_released_episodes')
    * @param maxItems - Maximum number of items to include in the smart collection
+   * @param excludeCollectionTitles - Collection titles to exclude via Plex smart filter
    * @returns Promise<void>
    */
   public async updateFilteredHubUri(
@@ -631,7 +641,8 @@ class PlexSmartCollectionManager {
       | 'recently_added'
       | 'recently_released'
       | 'recently_released_episodes',
-    maxItems?: number
+    maxItems?: number,
+    excludeCollectionTitles?: string[]
   ): Promise<void> {
     try {
       logger.debug(
@@ -671,6 +682,13 @@ class PlexSmartCollectionManager {
         filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
       } else {
         throw new Error(`Unsupported filtered hub subtype: ${subtype}`);
+      }
+
+      // Add collection exclusion filters
+      if (excludeCollectionTitles?.length) {
+        for (const colTitle of excludeCollectionTitles) {
+          filterUri += `&collection!=${encodeURIComponent(colTitle)}`;
+        }
       }
 
       // Add limit parameter if specified
