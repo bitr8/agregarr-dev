@@ -204,14 +204,33 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
       const libraryCollections = allCollections.filter(
         (col) => col.libraryKey === config.libraryId
       );
+      logger.info('Resolving filtered hub exclusions', {
+        label: 'Filtered Hub Collections',
+        configName: config.name,
+        excludeFromCollections: config.excludeFromCollections,
+        libraryId: config.libraryId,
+        allCollectionsCount: allCollections.length,
+        libraryCollectionsCount: libraryCollections.length,
+      });
       for (const excludedId of config.excludeFromCollections) {
         const excludedConfig = settings.plex.collectionConfigs?.find(
           (c) => c.id === excludedId
         );
-        if (!excludedConfig?.collectionRatingKey) {
-          logger.debug(
-            `Skipping exclusion for config ${excludedId}: no collection rating key`,
+        if (!excludedConfig) {
+          logger.warn(
+            `Exclusion config ${excludedId} not found in settings`,
             { label: 'Filtered Hub Collections' }
+          );
+          continue;
+        }
+        if (!excludedConfig.collectionRatingKey) {
+          logger.warn(
+            `Exclusion config ${excludedId} (${excludedConfig.name}) has no collectionRatingKey`,
+            {
+              label: 'Filtered Hub Collections',
+              excludedConfigType: excludedConfig.type,
+              excludedConfigLibrary: excludedConfig.libraryId,
+            }
           );
           continue;
         }
@@ -220,10 +239,22 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
         );
         if (plexCol?.title) {
           excludeCollectionTitles.push(plexCol.title);
-        } else {
-          logger.debug(
-            `Skipping exclusion for config ${excludedId}: Plex collection not found`,
+          logger.info(
+            `Resolved exclusion: ${excludedConfig.name} -> Plex "${plexCol.title}" (ratingKey ${plexCol.ratingKey})`,
             { label: 'Filtered Hub Collections' }
+          );
+        } else {
+          logger.warn(
+            `Exclusion config ${excludedId} (${excludedConfig.name}): Plex collection not found in library`,
+            {
+              label: 'Filtered Hub Collections',
+              collectionRatingKey: excludedConfig.collectionRatingKey,
+              excludedConfigLibrary: excludedConfig.libraryId,
+              hubLibrary: config.libraryId,
+              libraryCollectionKeys: libraryCollections
+                .map((c) => c.ratingKey)
+                .slice(0, 20),
+            }
           );
         }
       }
@@ -233,6 +264,15 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
           configName: config.name,
           excludedCollections: excludeCollectionTitles,
         });
+      } else {
+        logger.warn(
+          'No exclusions resolved — filtered hub URI will be rebuilt without exclusions',
+          {
+            label: 'Filtered Hub Collections',
+            configName: config.name,
+            excludeFromCollections: config.excludeFromCollections,
+          }
+        );
       }
     }
 
