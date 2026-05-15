@@ -340,7 +340,7 @@ class PlexSmartCollectionManager {
       // Add collection exclusion filters
       if (excludeCollectionTitles?.length) {
         for (const colTitle of excludeCollectionTitles) {
-          filterUri += `&collection!=${encodeURIComponent(colTitle)}`;
+          filterUri += `&collection!=${encodeURIComponent(colTitle.trim())}`;
         }
       }
 
@@ -687,7 +687,7 @@ class PlexSmartCollectionManager {
       // Add collection exclusion filters
       if (excludeCollectionTitles?.length) {
         for (const colTitle of excludeCollectionTitles) {
-          filterUri += `&collection!=${encodeURIComponent(colTitle)}`;
+          filterUri += `&collection!=${encodeURIComponent(colTitle.trim())}`;
         }
       }
 

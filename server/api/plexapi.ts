@@ -1288,20 +1288,28 @@ class PlexAPI {
     title: string,
     libraryKey?: string
   ): Promise<void> {
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
+      logger.warn(
+        `Skipping empty title update for collection ${collectionRatingKey}`,
+        { label: 'Plex API', collectionRatingKey }
+      );
+      return;
+    }
     try {
       // Use the correct Plex API endpoint for editing collection metadata
       // Collections require PUT /library/sections/{libraryKey}/all with type=18
       // The old endpoint /library/metadata/{ratingKey} doesn't reliably update collection titles
       if (libraryKey) {
         const editUrl = `/library/sections/${libraryKey}/all?type=18&id=${collectionRatingKey}&title.value=${encodeURIComponent(
-          title
+          normalizedTitle
         )}&title.locked=1`;
         await this.safePutQuery(editUrl);
       } else {
         // Fallback to old method if libraryKey not provided (for backwards compatibility)
         // This may not work reliably for collections
         const params = {
-          'title.value': title,
+          'title.value': normalizedTitle,
         };
 
         const queryString = Object.entries(params)

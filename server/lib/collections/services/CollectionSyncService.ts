@@ -601,8 +601,18 @@ export class CollectionSyncService {
       ReturnType<PlexAPI['getAllCollections']>
     > | null = null;
 
-    // Process each collection config directly
-    for (const config of collectionConfigs) {
+    // Process filtered hubs last so excluded collections have final titles in Plex.
+    // collection!= uses exact string matching — title drift breaks exclusions.
+    const regularConfigs = collectionConfigs.filter(
+      (c) => c.type !== 'filtered_hub'
+    );
+    const filteredHubConfigs = collectionConfigs.filter(
+      (c) => c.type === 'filtered_hub'
+    );
+    const orderedConfigs = [...regularConfigs, ...filteredHubConfigs];
+    let refreshedForFilteredHubs = false;
+
+    for (const config of orderedConfigs) {
       if (this.cancelled) break;
 
       try {
@@ -641,6 +651,21 @@ export class CollectionSyncService {
             }
           );
         } else {
+          // Force-refresh cache once before filtered hub phase so exclusion title
+          // resolution reads post-sync titles. Title updates don't set mutated=true.
+          if (
+            config.type === 'filtered_hub' &&
+            !refreshedForFilteredHubs &&
+            cachedAllCollections !== null
+          ) {
+            cachedAllCollections = null;
+            refreshedForFilteredHubs = true;
+            logger.debug(
+              'Invalidating getAllCollections cache before filtered hub phase',
+              { label: 'Collection Sync Service' }
+            );
+          }
+
           // Use cached collections list, re-fetching only when stale
           if (!cachedAllCollections) {
             logger.debug('Fetching getAllCollections from Plex API', {
