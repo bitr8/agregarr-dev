@@ -1455,6 +1455,15 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           // UPDATE PATH: Collection exists (and is regular collection)
           collectionRatingKey = existingCollection.ratingKey;
 
+          // Set custom sort BEFORE updating contents — updateCollectionContents
+          // calls arrangeCollectionItemsInOrder internally, which reads item order
+          // from Plex. Without custom sort, Plex returns release-date order,
+          // causing the arrangement to operate against the wrong baseline.
+          await plexClient.updateCollectionContentSort(
+            collectionRatingKey,
+            'custom'
+          );
+
           // Smart update: add new items, remove old ones
           const updateResult = await plexClient.updateCollectionContents(
             collectionRatingKey,

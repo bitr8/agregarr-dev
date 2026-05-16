@@ -1774,6 +1774,10 @@ export class MultiSourceOrchestrator {
             );
 
             collectionRatingKey = existingCollection.ratingKey;
+            await plexClient.updateCollectionContentSort(
+              collectionRatingKey,
+              'custom'
+            );
             const updateResult = await plexClient.updateCollectionContents(
               collectionRatingKey,
               plexItems

@@ -1831,12 +1831,41 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
         : undefined
     );
 
-    // Combine Plex items with any placeholder items
-    let finalItems = plexItems;
+    // Merge Plex items and placeholders in TMDB franchise order
+    let finalItems: CollectionItem[];
     if (placeholderItems.length > 0) {
-      finalItems = [...plexItems, ...placeholderItems];
+      const plexByTmdbId = new Map(
+        plexItems
+          .filter(
+            (item): item is CollectionItem & { tmdbId: number } =>
+              item.tmdbId != null
+          )
+          .map((item) => [item.tmdbId, item])
+      );
+      const placeholderByTmdbId = new Map(
+        placeholderItems
+          .filter(
+            (item): item is CollectionItem & { tmdbId: number } =>
+              item.tmdbId != null
+          )
+          .map((item) => [item.tmdbId, item])
+      );
+
+      finalItems = [];
+      for (const movie of franchiseData.movies) {
+        const plex = plexByTmdbId.get(movie.tmdbId);
+        if (plex) {
+          finalItems.push(plex);
+        } else {
+          const placeholder = placeholderByTmdbId.get(movie.tmdbId);
+          if (placeholder) {
+            finalItems.push(placeholder);
+          }
+        }
+      }
+
       logger.debug(
-        `Added ${placeholderItems.length} placeholder items to franchise ${collectionName}`,
+        `Merged ${placeholderItems.length} placeholder items into franchise ${collectionName} in TMDB order`,
         {
           label: 'TMDB Franchise',
           plexItems: plexItems.length,
@@ -1844,6 +1873,8 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           total: finalItems.length,
         }
       );
+    } else {
+      finalItems = plexItems;
     }
 
     // Check if we should skip auto-poster generation
