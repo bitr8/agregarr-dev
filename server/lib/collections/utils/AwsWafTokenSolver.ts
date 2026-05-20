@@ -16,6 +16,11 @@ export class AwsWafTokenSolver {
   > = new Map();
   private static solvingInProgress: Map<string, Promise<Cookie[]>> = new Map();
 
+  private static readonly DOMAIN_SOLVE_URLS: Record<string, string> = {
+    'www.imdb.com': 'https://www.imdb.com/chart/top/',
+    'imdb.com': 'https://www.imdb.com/chart/top/',
+  };
+
   /**
    * Get cookies for a domain, solving WAF challenge if needed
    */
@@ -60,11 +65,12 @@ export class AwsWafTokenSolver {
    */
   private static async solveChallenge(url: string): Promise<Cookie[]> {
     const domain = new URL(url).hostname;
+    const solveUrl = this.DOMAIN_SOLVE_URLS[domain] ?? url;
 
     logger.info('Solving AWS WAF challenge for domain', {
       label: 'AWS WAF Solver',
       domain,
-      url,
+      url: solveUrl,
     });
 
     let context: BrowserContext | null = null;
@@ -93,14 +99,13 @@ export class AwsWafTokenSolver {
 
       const page = await context.newPage();
 
-      // Navigate to the URL
       logger.debug('Navigating to URL to trigger WAF challenge', {
         label: 'AWS WAF Solver',
-        url,
+        url: solveUrl,
       });
 
-      const response = await page.goto(url, {
-        waitUntil: 'networkidle',
+      const response = await page.goto(solveUrl, {
+        waitUntil: 'load',
         timeout: 30000,
       });
 
@@ -116,8 +121,7 @@ export class AwsWafTokenSolver {
           label: 'AWS WAF Solver',
         });
 
-        // Wait for the challenge to complete (page will reload with 200)
-        await page.waitForLoadState('networkidle', { timeout: 30000 });
+        await page.waitForLoadState('load', { timeout: 30000 });
 
         // Give it a moment to ensure cookies are set
         await page.waitForTimeout(1000);

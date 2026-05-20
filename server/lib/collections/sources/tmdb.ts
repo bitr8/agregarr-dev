@@ -1100,10 +1100,15 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           libraryCache
         );
         if (!randomResult) {
-          throw this.createSyncError(
-            CollectionSyncErrorType.CONFIGURATION_ERROR,
-            `No random TMDB collections available with ${mediaType} content`
+          logger.warn(
+            `No random TMDB collections available with ${mediaType} content`,
+            {
+              label: 'TMDB Collections',
+              collection: config.name,
+              mediaType,
+            }
           );
+          return tmdbData;
         }
 
         const { url: randomUrl, title: listTitle } = randomResult;

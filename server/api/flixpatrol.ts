@@ -178,32 +178,15 @@ class FlixPatrolAPI extends ExternalAPI {
             }
           );
 
-          // Bypass ExternalAPI and use direct axios request to avoid bot detection
-          const response = await this.axios.get(url, {
-            headers: {
-              // Completely override all headers to look like a real browser
-              'User-Agent':
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              Accept:
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-              'Accept-Language': 'en-US,en;q=0.9',
-              'Cache-Control': 'no-cache',
-              Pragma: 'no-cache',
-              'Sec-Ch-Ua':
-                '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-              'Sec-Ch-Ua-Mobile': '?0',
-              'Sec-Ch-Ua-Platform': '"macOS"',
-              'Sec-Fetch-Dest': 'document',
-              'Sec-Fetch-Mode': 'navigate',
-              'Sec-Fetch-Site': 'none',
-              'Sec-Fetch-User': '?1',
-              'Upgrade-Insecure-Requests': '1',
-            },
-            timeout: 30000,
-          });
+          const { CloudflareSolver } = await import(
+            '@server/lib/collections/utils/CloudflareSolver'
+          );
+          const baseUrl = url.split('#')[0];
+          const fullUrl = `https://flixpatrol.com${baseUrl}`;
+          const html = await CloudflareSolver.fetchPage(fullUrl);
 
           const result = await this.parseStreamingOverviewHtml(
-            response.data,
+            html,
             basePlatform,
             region,
             requestedMediaType,
@@ -348,30 +331,12 @@ class FlixPatrolAPI extends ExternalAPI {
         label: 'FlixPatrol API',
       });
 
-      // Bypass ExternalAPI and use direct axios request to avoid bot detection
-      const response = await this.axios.get('/top10/streaming/', {
-        headers: {
-          // Completely override all headers to look like a real browser
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-          'Sec-Ch-Ua':
-            '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': '"macOS"',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Sec-Fetch-User': '?1',
-          'Upgrade-Insecure-Requests': '1',
-        },
-        timeout: 30000,
-      });
-      const html = response.data;
+      const { CloudflareSolver } = await import(
+        '@server/lib/collections/utils/CloudflareSolver'
+      );
+      const html = await CloudflareSolver.fetchPage(
+        'https://flixpatrol.com/top10/streaming/'
+      );
       const countries = this.parseCountriesFromHtml(html);
 
       // Cache for 24 hours
@@ -428,30 +393,12 @@ class FlixPatrolAPI extends ExternalAPI {
 
       const url = `/top10/streaming/${country}/`;
 
-      // Bypass ExternalAPI and use direct axios request to avoid bot detection
-      const response = await this.axios.get(url, {
-        headers: {
-          // Completely override all headers to look like a real browser
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-          'Sec-Ch-Ua':
-            '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': '"macOS"',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Sec-Fetch-User': '?1',
-          'Upgrade-Insecure-Requests': '1',
-        },
-        timeout: 30000,
-      });
-      const html = response.data;
+      const { CloudflareSolver } = await import(
+        '@server/lib/collections/utils/CloudflareSolver'
+      );
+      const html = await CloudflareSolver.fetchPage(
+        `https://flixpatrol.com${url}`
+      );
 
       const platforms = this.parsePlatformsFromHtml(html, country);
 
