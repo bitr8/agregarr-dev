@@ -238,9 +238,21 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
           (c) => c.ratingKey === excludedConfig.collectionRatingKey
         );
         if (plexCol?.title) {
-          excludeCollectionTitles.push(plexCol.title);
+          const resolvedTitle = plexCol.title.trim();
+          if (plexCol.title !== resolvedTitle) {
+            logger.warn(
+              `Plex collection "${plexCol.title}" (ratingKey ${plexCol.ratingKey}) has leading/trailing whitespace — fixing title to prevent exclusion mismatch`,
+              { label: 'Filtered Hub Collections' }
+            );
+            await plexClient.updateCollectionTitle(
+              plexCol.ratingKey,
+              resolvedTitle,
+              excludedConfig.libraryId
+            );
+          }
+          excludeCollectionTitles.push(resolvedTitle);
           logger.info(
-            `Resolved exclusion: ${excludedConfig.name} -> Plex "${plexCol.title}" (ratingKey ${plexCol.ratingKey})`,
+            `Resolved exclusion: ${excludedConfig.name} -> Plex "${resolvedTitle}" (ratingKey ${plexCol.ratingKey})`,
             { label: 'Filtered Hub Collections' }
           );
         } else {
