@@ -650,6 +650,8 @@ export interface MainSettings {
   skipYoutubeTrailerDownloads?: boolean; // If true, skip YouTube trailer downloads and use hardcoded placeholder video only (speeds up sync)
   // Letterboxd fetching method
   letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: false)
+  // FlixPatrol fetching method
+  flixpatrolUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for FlixPatrol page fetching (default: false)
 }
 
 interface PublicSettings {

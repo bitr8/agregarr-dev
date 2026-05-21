@@ -1,5 +1,6 @@
 import ExternalAPI from '@server/api/externalapi';
 import cacheManager from '@server/lib/cache';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { JSDOM } from 'jsdom';
 
@@ -90,6 +91,22 @@ class FlixPatrolAPI extends ExternalAPI {
     );
   }
 
+  private async fetchFlixPatrolPage(url: string): Promise<string> {
+    const usePlainHttp = getSettings().main.flixpatrolUsePlainHttp ?? false;
+
+    if (usePlainHttp) {
+      const { FlixPatrolHttpClient } = await import(
+        '@server/lib/collections/utils/FlixPatrolHttpClient'
+      );
+      return FlixPatrolHttpClient.fetchPage(url);
+    }
+
+    const { CloudflareSolver } = await import(
+      '@server/lib/collections/utils/CloudflareSolver'
+    );
+    return CloudflareSolver.fetchPage(url);
+  }
+
   /**
    * Get top 10 lists for a specific platform
    */
@@ -178,12 +195,9 @@ class FlixPatrolAPI extends ExternalAPI {
             }
           );
 
-          const { CloudflareSolver } = await import(
-            '@server/lib/collections/utils/CloudflareSolver'
-          );
           const baseUrl = url.split('#')[0];
           const fullUrl = `https://flixpatrol.com${baseUrl}`;
-          const html = await CloudflareSolver.fetchPage(fullUrl);
+          const html = await this.fetchFlixPatrolPage(fullUrl);
 
           const result = await this.parseStreamingOverviewHtml(
             html,
@@ -331,10 +345,7 @@ class FlixPatrolAPI extends ExternalAPI {
         label: 'FlixPatrol API',
       });
 
-      const { CloudflareSolver } = await import(
-        '@server/lib/collections/utils/CloudflareSolver'
-      );
-      const html = await CloudflareSolver.fetchPage(
+      const html = await this.fetchFlixPatrolPage(
         'https://flixpatrol.com/top10/streaming/'
       );
       const countries = this.parseCountriesFromHtml(html);
@@ -393,10 +404,7 @@ class FlixPatrolAPI extends ExternalAPI {
 
       const url = `/top10/streaming/${country}/`;
 
-      const { CloudflareSolver } = await import(
-        '@server/lib/collections/utils/CloudflareSolver'
-      );
-      const html = await CloudflareSolver.fetchPage(
+      const html = await this.fetchFlixPatrolPage(
         `https://flixpatrol.com${url}`
       );
 
