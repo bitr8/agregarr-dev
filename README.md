@@ -41,7 +41,7 @@ This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream 
 
 ## Fork-Only Features
 
-Two problem areas drove most of these changes: sync performance at scale (40+ collections, 10k+ items) and placeholder lifecycle gaps that leave orphaned entries in Plex.
+Two problem areas drove most of these changes: sync performance at scale (40+ collections, 10k+ items) and placeholder lifecycle gaps that leave orphaned entries in Plex. Early groundwork for Jellyfin support is underway.
 
 ### Real-time Overlay Job Progress
 
