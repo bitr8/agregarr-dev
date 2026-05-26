@@ -6,7 +6,7 @@ Active fork of [Agregarr](https://github.com/agregarr/agregarr) packaging perfor
 
 Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agregarr). `develop` and `latest` tags are identical — both track the develop branch with all fork features included. Rebuilds on every push.
 
-**amd64 only** — no arm64/Apple Silicon builds.
+**Multi-arch** — supports amd64 and arm64 (Apple Silicon, Raspberry Pi 4+).
 
 **Switching from upstream?** Replace the image line in your existing compose file — config volumes are compatible:
 
