@@ -83,11 +83,11 @@ Upstream Agregarr makes individual API calls per item, per rating source, per ca
 | 142 pages         | ~25 min    | ~40 sec    |
 | Cloudflare blocks | 0          | 0          |
 
-To enable, add to `settings.json`:
+To enable, **stop the container first**, then add to `settings.json`:
 
 ```json
 {
-  "main": {
+  "plex": {
     "letterboxdUsePlainHttp": true
   }
 }
@@ -97,17 +97,17 @@ Defaults to `false` (Playwright) for safety. Flip back if Cloudflare starts bloc
 
 **Plain HTTP for FlixPatrol** (`flixpatrolUsePlainHttp`) -- Same approach as Letterboxd. FlixPatrol top 10 pages return full HTML without Cloudflare challenges. Applies to all 3 fetch paths (platform top 10, country list, platform discovery).
 
-To enable, add to `settings.json`:
+To enable, **stop the container first**, then add to `settings.json`:
 
 ```json
 {
-  "main": {
+  "plex": {
     "flixpatrolUsePlainHttp": true
   }
 }
 ```
 
-Defaults to `false` (Playwright) for safety.
+Defaults to `false` (Playwright) for safety. **Agregarr overwrites `settings.json` while running** — edits made to a live container will be lost on next save.
 
 ### Placeholder Lifecycle Fixes
 
