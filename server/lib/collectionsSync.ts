@@ -1,4 +1,5 @@
 import PlexAPI from '@server/api/plexapi';
+import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -50,6 +51,7 @@ class CollectionsSync {
 
   public cancel(): void {
     this.cancelled = true;
+    collectionSyncService.cancel();
   }
 
   /**
@@ -247,6 +249,10 @@ class CollectionsSync {
     IndividualCollectionScheduler.setFullSyncRunning(true);
     this.setStage('Starting sync...');
 
+    // Initialize rich progress tracking (will be populated with total count later)
+    collectionSyncProgress.startSync(0);
+    collectionSyncProgress.setDetail('Starting sync...');
+
     const settings = getSettings();
 
     // Validate Plex configuration
@@ -255,6 +261,7 @@ class CollectionsSync {
         'Plex server configuration incomplete. Please check Plex settings.',
         { label: 'Collections Sync' }
       );
+      collectionSyncProgress.fail('Plex server configuration incomplete');
       return;
     }
 
@@ -272,6 +279,7 @@ class CollectionsSync {
           label: 'Collections Sync',
         }
       );
+      collectionSyncProgress.fail('No local admin Plex token found');
       return;
     }
 
@@ -280,6 +288,7 @@ class CollectionsSync {
     try {
       // Initialize Plex client
       this.setStage('Connecting to Plex server...');
+      collectionSyncProgress.setDetail('Connecting to Plex server...');
       const plexClient = await this.getPlexClient();
 
       // Test connection
@@ -290,12 +299,17 @@ class CollectionsSync {
 
       // Refresh external service data for template variables
       this.setStage('Refreshing external data...');
+      collectionSyncProgress.setDetail('Refreshing external data...');
       await this.refreshExternalData(plexClient);
 
       // Get collection count for progress tracking - only count actual agregarr collections
       const settings = getSettings();
       const agregarrCollections = settings.plex.collectionConfigs || [];
       this.setStage('Processing collections...', agregarrCollections.length, 0);
+
+      // Transition to processing phase with actual collection count
+      collectionSyncProgress.setTotalCollections(agregarrCollections.length);
+      collectionSyncProgress.setPhase('processing');
 
       // Perform the sync operations using our new service
       const syncResult = await collectionSyncService.syncAllConfigurations(
@@ -304,6 +318,7 @@ class CollectionsSync {
           if (currentAction) {
             // Show detailed action for current collection
             this.setStage(currentAction, agregarrCollections.length, processed);
+            collectionSyncProgress.setDetail(currentAction);
           } else {
             // Show general progress
             this.setStage(
@@ -315,8 +330,12 @@ class CollectionsSync {
         }
       );
 
+      // Transition to cleanup phase
+      collectionSyncProgress.setPhase('cleanup');
+
       // Sync hub visibility settings
       this.setStage('Syncing hub visibility settings...');
+      collectionSyncProgress.setDetail('Syncing hub visibility settings...');
       const { HubSyncService } = await import(
         './collections/plex/HubSyncService'
       );
@@ -327,16 +346,21 @@ class CollectionsSync {
 
       // Sync pre-existing collection sortTitles based on promotion status
       this.setStage('Updating collection sort titles...');
+      collectionSyncProgress.setDetail('Updating collection sort titles...');
       await hubSyncService.syncPreExistingCollectionSortTitles(plexClient);
 
       // Sync unified ordering (collections + hubs)
       this.setStage('Applying collection ordering to Plex...');
+      collectionSyncProgress.setDetail(
+        'Applying collection ordering to Plex...'
+      );
       await hubSyncService.syncUnifiedOrdering(plexClient, (stage: string) => {
         this.setStage(stage);
       });
 
       // Clean up orphaned collections after sync completes
       this.setStage('Cleaning up orphaned collections...');
+      collectionSyncProgress.setDetail('Cleaning up orphaned collections...');
       logger.info('Starting post-sync cleanup of orphaned collections', {
         label: 'Collections Sync',
       });
@@ -397,6 +421,7 @@ class CollectionsSync {
 
       // Clean up orphaned placeholder records and files
       this.setStage('Cleaning up orphaned placeholders...');
+      collectionSyncProgress.setDetail('Cleaning up orphaned placeholders...');
       let cleanupResult: {
         filesRemoved: number;
         deletedPaths: {
@@ -438,6 +463,7 @@ class CollectionsSync {
         this.setStage(
           'Removing stale Plex entries for deleted placeholders...'
         );
+        collectionSyncProgress.setDetail('Removing stale Plex entries...');
 
         const { cleanupStalePlexEntries } = await import(
           '@server/lib/placeholders/services/PlaceholderCleanup'
@@ -449,6 +475,7 @@ class CollectionsSync {
 
       // Run discovery to refresh missing warnings
       this.setStage('Refreshing collection status...');
+      collectionSyncProgress.setDetail('Refreshing collection status...');
       try {
         const { discoveryService } = await import(
           '@server/lib/collections/services/DiscoveryService'
@@ -472,6 +499,7 @@ class CollectionsSync {
       // Randomize home order for collections with randomizeHomeOrder enabled
       try {
         this.setStage('Randomizing home order...');
+        collectionSyncProgress.setDetail('Randomizing home order...');
         const randomizeHomeOrder = (
           await import('@server/lib/randomizeHomeOrder')
         ).default;
@@ -490,9 +518,14 @@ class CollectionsSync {
         durationMs: duration,
       });
 
-      // Mark global sync as completed successfully
-      this.setStage('Sync completed successfully');
-      settings.setGlobalSyncComplete();
+      if (this.cancelled) {
+        this.setStage('Sync cancelled');
+        collectionSyncProgress.cancel();
+      } else {
+        this.setStage('Sync completed successfully');
+        settings.setGlobalSyncComplete();
+        collectionSyncProgress.complete();
+      }
     } catch (error) {
       const errorMessage = extractErrorMessage(error);
       logger.error(`Collections sync failed: ${errorMessage}.`, {
@@ -501,6 +534,7 @@ class CollectionsSync {
 
       // Mark global sync error
       settings.setGlobalSyncError(errorMessage);
+      collectionSyncProgress.fail(errorMessage);
     } finally {
       this.running = false;
       this.cancelled = false;

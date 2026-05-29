@@ -227,7 +227,7 @@ app
       try {
         const descriptor = Object.getOwnPropertyDescriptor(req, 'ip');
         if (descriptor?.writable === true) {
-          req.ip = getClientIp(req) ?? '';
+          (req as { ip: string }).ip = getClientIp(req) ?? '';
         }
       } catch (e) {
         logger.error('Failed to attach the ip to the request', {

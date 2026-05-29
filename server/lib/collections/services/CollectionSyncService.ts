@@ -2,6 +2,7 @@ import OverseerrAPI, {
   type OverseerrMediaRequest,
 } from '@server/api/overseerr';
 import type PlexAPI from '@server/api/plexapi';
+import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
 import { getCollectionMediaType } from '@server/lib/collections/core/CollectionUtilities';
@@ -463,6 +464,7 @@ export class CollectionSyncService {
     plexClient: PlexAPI,
     onProgress?: (processed: number, currentCollectionName?: string) => void
   ): Promise<SyncResult & { processedCollectionKeys: Set<string> }> {
+    this.cancelled = false;
     const settings = getSettings();
     const collectionConfigs = settings.plex.collectionConfigs || [];
 
@@ -621,6 +623,11 @@ export class CollectionSyncService {
 
         // Report collection processing start
         onProgress?.(processedCount, `Processing "${config.name}"...`);
+        collectionSyncProgress.startCollection(
+          config.id,
+          config.name,
+          config.type
+        );
 
         // Wait for API access for this collection type to prevent concurrent access
         const { IndividualCollectionScheduler } = await import(
@@ -642,6 +649,7 @@ export class CollectionSyncService {
             processedCount,
             `Skipping content sync for "${config.name}" (custom scheduled)...`
           );
+          collectionSyncProgress.completeCollection('skipped', 0, 0);
 
           logger.debug(
             `Skipped content sync for custom scheduled collection: ${config.name}`,
@@ -822,6 +830,12 @@ export class CollectionSyncService {
             );
             // Persist error for UI display — keeps needsSync=true
             settings.setCollectionSyncError(config.id, result.error);
+            collectionSyncProgress.completeCollection(
+              'error',
+              created,
+              updated,
+              result.error
+            );
           } else if (result.warning) {
             logger.info(
               `Collection sync completed with warning for ${config.name}: ${result.warning}`,
@@ -832,9 +846,19 @@ export class CollectionSyncService {
             );
             // Synced successfully but with issues — mark synced, persist warning
             settings.setCollectionSyncWarning(config.id, result.warning);
+            collectionSyncProgress.completeCollection(
+              'success',
+              created,
+              updated
+            );
           } else {
             // Mark collection as successfully synced (clears any previous error/warning)
             settings.markCollectionSynced(config.id, 'collection');
+            collectionSyncProgress.completeCollection(
+              'success',
+              created,
+              updated
+            );
           }
         }
 
@@ -867,6 +891,7 @@ export class CollectionSyncService {
 
         // Persist error for UI display
         settings.setCollectionSyncError(config.id, errorMessage);
+        collectionSyncProgress.completeCollection('error', 0, 0, errorMessage);
 
         // Still increment counter to avoid getting stuck
         processedCount++;
