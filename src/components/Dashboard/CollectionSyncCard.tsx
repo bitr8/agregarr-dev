@@ -197,7 +197,7 @@ const CollectionSyncCard: React.FC = () => {
     }
   );
 
-  const status = data?.current;
+  const status = data?.current ?? data?.lastCompleted ?? null;
 
   const borderColor = status ? getBorderColor(status.phase) : '';
   const progressBarColor = status ? getProgressBarColor(status.phase) : '';
