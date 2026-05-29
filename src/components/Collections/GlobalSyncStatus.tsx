@@ -1,5 +1,10 @@
 import Spinner from '@app/assets/spinner.svg';
 import Tooltip from '@app/components/Common/Tooltip';
+import type {
+  CollectionSyncStatus,
+  SyncProgressResponse,
+} from '@app/utils/collections/syncProgressTypes';
+import { formatTime } from '@app/utils/timeFormatters';
 import {
   CheckIcon,
   ExclamationTriangleIcon,
@@ -32,41 +37,13 @@ interface GlobalSyncStatusResponse {
   nextSyncAt?: string;
 }
 
-interface LastCompletedStatus {
-  phase: string;
-  runningFor: number;
-  successCount: number;
-  errorCount: number;
-  skippedCount: number;
-  recentOutcomes: {
-    name: string;
-    outcome: 'success' | 'error' | 'skipped';
-    errorMessage?: string;
-  }[];
-}
-
-interface SyncProgressResponse {
-  current: { phase: string } | null;
-  lastCompleted: LastCompletedStatus | null;
-}
-
 interface GlobalSyncStatusProps {
   isStarting?: boolean;
   onSyncStart?: (refreshFn: () => void) => void;
   onSyncComplete?: () => void;
 }
 
-const formatDuration = (seconds: number): string => {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${secs}s`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}h ${mins}m`;
-};
-
-const LastSyncSummary: React.FC<{ status: LastCompletedStatus }> = ({
+const LastSyncSummary: React.FC<{ status: CollectionSyncStatus }> = ({
   status,
 }) => {
   const errorOutcomes = status.recentOutcomes.filter(
@@ -84,6 +61,11 @@ const LastSyncSummary: React.FC<{ status: LastCompletedStatus }> = ({
             )}
           </div>
         ))}
+        {status.errorCount > errorOutcomes.length && (
+          <span className="block text-xs italic text-gray-500">
+            +{status.errorCount - errorOutcomes.length} older errors
+          </span>
+        )}
       </div>
     ) : null;
 
@@ -114,9 +96,7 @@ const LastSyncSummary: React.FC<{ status: LastCompletedStatus }> = ({
           {status.skippedCount}
         </span>
       )}
-      <span className="text-gray-600">
-        ({formatDuration(status.runningFor)})
-      </span>
+      <span className="text-gray-600">({formatTime(status.runningFor)})</span>
     </span>
   );
 };

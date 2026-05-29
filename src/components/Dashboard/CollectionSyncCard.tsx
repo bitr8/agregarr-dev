@@ -1,5 +1,11 @@
 import Button from '@app/components/Common/Button';
 import Tooltip from '@app/components/Common/Tooltip';
+import type {
+  CollectionOutcome,
+  SyncPhase,
+  SyncProgressResponse,
+} from '@app/utils/collections/syncProgressTypes';
+import { formatDurationMs, formatTime } from '@app/utils/timeFormatters';
 import {
   CheckIcon,
   ExclamationTriangleIcon,
@@ -12,70 +18,6 @@ import type React from 'react';
 import { useState } from 'react';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
-
-type SyncPhase =
-  | 'setup'
-  | 'processing'
-  | 'cleanup'
-  | 'completed'
-  | 'cancelled'
-  | 'failed';
-
-interface CollectionOutcome {
-  configId: string;
-  name: string;
-  sourceType: string;
-  outcome: 'success' | 'error' | 'skipped';
-  created: number;
-  updated: number;
-  errorMessage?: string;
-  durationMs: number;
-}
-
-interface CollectionSyncStatus {
-  phase: SyncPhase;
-  phaseLabel: string;
-  startTime: number;
-  runningFor: number;
-  totalCollections: number;
-  processedCollections: number;
-  progressPercent: number;
-  currentCollection?: {
-    name: string;
-    sourceType: string;
-    runningFor: number;
-  };
-  currentDetail?: string;
-  successCount: number;
-  errorCount: number;
-  skippedCount: number;
-  createdCount: number;
-  updatedCount: number;
-  recentOutcomes: CollectionOutcome[];
-  estimatedSecondsRemaining: number | null;
-  completedAt?: number;
-}
-
-interface SyncProgressResponse {
-  current: CollectionSyncStatus | null;
-  lastCompleted: CollectionSyncStatus | null;
-}
-
-const formatTime = (seconds: number): string => {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${secs}s`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}h ${mins}m`;
-};
-
-const formatDuration = (ms: number): string => {
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 1) return '<1s';
-  return formatTime(seconds);
-};
 
 const isActivePhase = (phase: SyncPhase): boolean =>
   phase === 'setup' || phase === 'processing' || phase === 'cleanup';
@@ -224,6 +166,11 @@ const ErrorStatCell: React.FC<{
               )}
             </div>
           ))}
+          {errorCount > errorOutcomes.length && (
+            <span className="block text-xs italic text-gray-500">
+              +{errorCount - errorOutcomes.length} older errors
+            </span>
+          )}
         </div>
       }
     >
@@ -425,7 +372,7 @@ const CollectionSyncCard: React.FC = () => {
                     {outcome.sourceType}
                   </span>
                   <span className="shrink-0 text-gray-500">
-                    {formatDuration(outcome.durationMs)}
+                    {formatDurationMs(outcome.durationMs)}
                   </span>
                 </div>
               ))}

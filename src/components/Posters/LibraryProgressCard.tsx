@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import { formatTime } from '@app/utils/timeFormatters';
 import {
   CheckIcon,
   ExclamationTriangleIcon,
@@ -39,16 +40,6 @@ interface LibraryProgressCardProps {
   onStop: () => void;
   isStopping?: boolean;
 }
-
-const formatTime = (seconds: number): string => {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${secs}s`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}h ${mins}m`;
-};
 
 const getBorderColor = (state: JobState): string => {
   switch (state) {
