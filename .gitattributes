@@ -33,6 +33,7 @@
 .gitattributes merge=ours
 .husky/prepare-commit-msg merge=ours
 README.md merge=ours
+server/api/github.ts merge=ours
 
 .husky export-ignore
 .husky/prepare-commit-msg merge=ours
