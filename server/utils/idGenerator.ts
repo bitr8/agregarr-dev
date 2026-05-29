@@ -36,15 +36,4 @@ export class IdGenerator {
 
     return nextId.toString();
   }
-
-  public static getNextId(): string {
-    const settings = getSettings();
-    const nextId = settings.main.nextConfigId ?? this.STARTING_ID;
-    return nextId.toString();
-  }
-
-  public static isGeneratedId(id: string): boolean {
-    const numericId = parseInt(id, 10);
-    return !isNaN(numericId) && numericId >= this.STARTING_ID;
-  }
 }
