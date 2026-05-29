@@ -7165,6 +7165,50 @@ paths:
                     type: integer
                     description: Number of collections that need to be synced
                     example: 7
+  /collections/sync/progress:
+    get:
+      summary: Get detailed sync progress for dashboard
+      description: Returns current sync progress and last completed sync snapshot for the dashboard card and last-sync summary.
+      tags:
+        - collections
+      responses:
+        '200':
+          description: Sync progress retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current:
+                    type: object
+                    nullable: true
+                    description: Current or recently completed sync status, null when idle
+                  lastCompleted:
+                    type: object
+                    nullable: true
+                    description: Snapshot of the last completed sync, persists until next sync starts
+  /collections/sync/cancel:
+    post:
+      summary: Cancel a running collection sync
+      description: Requests cancellation of the currently running collection sync. Cancellation is async.
+      tags:
+        - collections
+      responses:
+        '200':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Collection sync cancellation requested
+        '409':
+          description: No sync is currently running
   /collections/preview-template:
     post:
       summary: Preview a collection template
