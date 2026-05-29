@@ -1,6 +1,12 @@
 import Spinner from '@app/assets/spinner.svg';
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import Tooltip from '@app/components/Common/Tooltip';
+import {
+  CheckIcon,
+  ExclamationTriangleIcon,
+  ForwardIcon,
+} from '@heroicons/react/24/outline';
 import axios from 'axios';
+import Link from 'next/link';
 import React, { useCallback } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
@@ -26,11 +32,94 @@ interface GlobalSyncStatusResponse {
   nextSyncAt?: string;
 }
 
+interface LastCompletedStatus {
+  phase: string;
+  runningFor: number;
+  successCount: number;
+  errorCount: number;
+  skippedCount: number;
+  recentOutcomes: {
+    name: string;
+    outcome: 'success' | 'error' | 'skipped';
+    errorMessage?: string;
+  }[];
+}
+
+interface SyncProgressResponse {
+  current: { phase: string } | null;
+  lastCompleted: LastCompletedStatus | null;
+}
+
 interface GlobalSyncStatusProps {
   isStarting?: boolean;
   onSyncStart?: (refreshFn: () => void) => void;
   onSyncComplete?: () => void;
 }
+
+const formatDuration = (seconds: number): string => {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${secs}s`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours}h ${mins}m`;
+};
+
+const LastSyncSummary: React.FC<{ status: LastCompletedStatus }> = ({
+  status,
+}) => {
+  const errorOutcomes = status.recentOutcomes.filter(
+    (o) => o.outcome === 'error'
+  );
+
+  const errorTooltip =
+    errorOutcomes.length > 0 ? (
+      <div className="max-w-xs space-y-1">
+        {errorOutcomes.map((o, i) => (
+          <div key={i}>
+            <span className="font-medium">{o.name}</span>
+            {o.errorMessage && (
+              <span className="block text-gray-400">{o.errorMessage}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    ) : null;
+
+  return (
+    <span className="flex items-center gap-1.5 text-gray-500">
+      &mdash;
+      <span className="flex items-center gap-0.5">
+        <CheckIcon className="h-3 w-3 text-green-400" />
+        {status.successCount}
+      </span>
+      {status.errorCount > 0 &&
+        (errorTooltip ? (
+          <Tooltip content={errorTooltip}>
+            <span className="flex cursor-help items-center gap-0.5 text-red-400">
+              <ExclamationTriangleIcon className="h-3 w-3" />
+              {status.errorCount}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="flex items-center gap-0.5 text-red-400">
+            <ExclamationTriangleIcon className="h-3 w-3" />
+            {status.errorCount}
+          </span>
+        ))}
+      {status.skippedCount > 0 && (
+        <span className="flex items-center gap-0.5">
+          <ForwardIcon className="h-3 w-3 text-amber-400" />
+          {status.skippedCount}
+        </span>
+      )}
+      <span className="text-gray-600">
+        ({formatDuration(status.runningFor)})
+      </span>
+    </span>
+  );
+};
 
 const GlobalSyncStatus: React.FC<GlobalSyncStatusProps> = ({
   isStarting = false,
@@ -45,6 +134,18 @@ const GlobalSyncStatus: React.FC<GlobalSyncStatusProps> = ({
       refreshInterval: (data) => (data?.running ? 1000 : 5000), // Refresh every 1 second while running, 5 seconds when idle
     }
   );
+
+  const { data: progressData, mutate: mutateProgress } =
+    useSWR<SyncProgressResponse>(
+      '/api/v1/collections/sync/progress',
+      (url: string) => axios.get(url).then((res) => res.data),
+      {
+        refreshInterval: () => (syncStatus?.running ? 0 : 10000),
+        revalidateOnFocus: false,
+      }
+    );
+
+  const lastCompleted = progressData?.lastCompleted ?? null;
 
   // Create a stable callback function
   const refreshSync = useCallback(() => {
@@ -66,14 +167,13 @@ const GlobalSyncStatus: React.FC<GlobalSyncStatusProps> = ({
     const wasRunning = prevRunningRef.current;
     const isRunning = syncStatus?.running;
 
-    // If sync just completed (was running but now stopped), trigger onSyncComplete
-    if (wasRunning === true && isRunning === false && onSyncComplete) {
-      onSyncComplete();
+    if (wasRunning === true && isRunning === false) {
+      mutateProgress();
+      onSyncComplete?.();
     }
 
-    // Update the ref for next comparison
     prevRunningRef.current = isRunning;
-  }, [syncStatus?.running, onSyncComplete]);
+  }, [syncStatus?.running, onSyncComplete, mutateProgress]);
 
   if (!syncStatus) {
     return null;
@@ -158,6 +258,12 @@ const GlobalSyncStatus: React.FC<GlobalSyncStatusProps> = ({
                 </span>
               )}
           </span>
+          <Link
+            href="/dashboard"
+            className="text-indigo-400 hover:text-indigo-300"
+          >
+            View on Dashboard
+          </Link>
         </div>
       )}
 
@@ -188,12 +294,14 @@ const GlobalSyncStatus: React.FC<GlobalSyncStatusProps> = ({
         (syncStatus?.collectionsNeedingSync || 0) === 0 &&
         syncStatus?.lastGlobalSyncAt && (
           <div className="flex flex-col">
-            <span>
-              {intl.formatMessage(messages.lastSync, {
-                time: formatRelativeTime(syncStatus.lastGlobalSyncAt),
-              })}
-            </span>
-            {/* Next Sync Time - Only show if we have a next sync time */}
+            <div className="flex items-center gap-1.5">
+              <span>
+                {intl.formatMessage(messages.lastSync, {
+                  time: formatRelativeTime(syncStatus.lastGlobalSyncAt),
+                })}
+              </span>
+              {lastCompleted && <LastSyncSummary status={lastCompleted} />}
+            </div>
             {syncStatus?.nextSyncAt && (
               <span>
                 {intl.formatMessage(messages.nextSync, {

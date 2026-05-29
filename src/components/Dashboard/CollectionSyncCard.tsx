@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import Tooltip from '@app/components/Common/Tooltip';
 import {
   CheckIcon,
   ExclamationTriangleIcon,
@@ -187,6 +188,50 @@ const PhaseStepper: React.FC<{ phase: SyncPhase }> = ({ phase }) => {
   );
 };
 
+const ErrorStatCell: React.FC<{
+  errorCount: number;
+  recentOutcomes: CollectionOutcome[];
+}> = ({ errorCount, recentOutcomes }) => {
+  const errorOutcomes = recentOutcomes.filter((o) => o.outcome === 'error');
+
+  const cell = (
+    <div
+      className={`rounded-md bg-stone-900 p-3 ${
+        errorCount > 0 ? 'cursor-help' : ''
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <ExclamationTriangleIcon className="h-4 w-4 text-red-400" />
+        <span className="text-xs text-gray-400">Errors</span>
+      </div>
+      <p className="mt-1 text-lg font-semibold text-red-400">{errorCount}</p>
+    </div>
+  );
+
+  if (errorCount === 0 || errorOutcomes.length === 0) return cell;
+
+  return (
+    <Tooltip
+      content={
+        <div className="max-w-xs space-y-1.5">
+          {errorOutcomes.map((o) => (
+            <div key={`${o.configId}-${o.durationMs}`}>
+              <span className="font-medium">{o.name}</span>
+              {o.errorMessage && (
+                <span className="block text-xs text-gray-400">
+                  {o.errorMessage}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      }
+    >
+      {cell}
+    </Tooltip>
+  );
+};
+
 const CollectionSyncCard: React.FC = () => {
   const [isStopping, setIsStopping] = useState(false);
   const { addToast } = useToasts();
@@ -336,15 +381,10 @@ const CollectionSyncCard: React.FC = () => {
             </p>
           </div>
 
-          <div className="rounded-md bg-stone-900 p-3">
-            <div className="flex items-center gap-2">
-              <ExclamationTriangleIcon className="h-4 w-4 text-red-400" />
-              <span className="text-xs text-gray-400">Errors</span>
-            </div>
-            <p className="mt-1 text-lg font-semibold text-red-400">
-              {status.errorCount}
-            </p>
-          </div>
+          <ErrorStatCell
+            errorCount={status.errorCount}
+            recentOutcomes={status.recentOutcomes}
+          />
 
           <div className="rounded-md bg-stone-900 p-3">
             <div className="flex items-center gap-2">
