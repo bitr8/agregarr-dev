@@ -300,7 +300,7 @@ class CollectionSyncProgress {
   }
 
   private finalize(phase: 'completed' | 'cancelled' | 'failed'): void {
-    if (!this.current) return;
+    if (!this.current || isTerminalPhase(this.current.phase)) return;
     this.current.phase = phase;
     this.current.completedAt = Date.now();
     this.current.currentCollection = undefined;
