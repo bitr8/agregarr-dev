@@ -462,7 +462,11 @@ export class CollectionSyncService {
    */
   public async syncAllConfigurations(
     plexClient: PlexAPI,
-    onProgress?: (processed: number, currentCollectionName?: string) => void
+    onProgress?: (
+      processed: number,
+      currentCollectionName?: string,
+      total?: number
+    ) => void
   ): Promise<SyncResult & { processedCollectionKeys: Set<string> }> {
     this.cancelled = false;
     const settings = getSettings();
@@ -612,6 +616,9 @@ export class CollectionSyncService {
       (c) => c.type === 'filtered_hub'
     );
     const orderedConfigs = [...regularConfigs, ...filteredHubConfigs];
+    const totalConfigs = orderedConfigs.length;
+    collectionSyncProgress.setTotalCollections(totalConfigs);
+    onProgress?.(0, 'Processing collections...', totalConfigs);
     let refreshedForFilteredHubs = false;
 
     for (const config of orderedConfigs) {
@@ -622,7 +629,11 @@ export class CollectionSyncService {
         let updated = 0;
 
         // Report collection processing start
-        onProgress?.(processedCount, `Processing "${config.name}"...`);
+        onProgress?.(
+          processedCount,
+          `Processing "${config.name}"...`,
+          totalConfigs
+        );
         collectionSyncProgress.startCollection(
           config.id,
           config.name,
@@ -647,7 +658,8 @@ export class CollectionSyncService {
           // Skip content sync for custom scheduled collections - cleanup handles them via label matching
           onProgress?.(
             processedCount,
-            `Skipping content sync for "${config.name}" (custom scheduled)...`
+            `Skipping content sync for "${config.name}" (custom scheduled)...`,
+            totalConfigs
           );
           collectionSyncProgress.completeCollection('skipped', 0, 0);
 
@@ -876,7 +888,7 @@ export class CollectionSyncService {
 
         // Update progress count
         processedCount++;
-        onProgress?.(processedCount);
+        onProgress?.(processedCount, undefined, totalConfigs);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -895,7 +907,7 @@ export class CollectionSyncService {
 
         // Still increment counter to avoid getting stuck
         processedCount++;
-        onProgress?.(processedCount);
+        onProgress?.(processedCount, undefined, totalConfigs);
       } finally {
         // Always release the API, regardless of success or failure
         const { IndividualCollectionScheduler } = await import(

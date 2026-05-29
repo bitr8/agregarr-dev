@@ -302,30 +302,19 @@ class CollectionsSync {
       collectionSyncProgress.setDetail('Refreshing external data...');
       await this.refreshExternalData(plexClient);
 
-      // Get collection count for progress tracking - only count actual agregarr collections
-      const settings = getSettings();
-      const agregarrCollections = settings.plex.collectionConfigs || [];
-      this.setStage('Processing collections...', agregarrCollections.length, 0);
-
-      // Transition to processing phase with actual collection count
-      collectionSyncProgress.setTotalCollections(agregarrCollections.length);
+      // Transition to processing phase — total set by syncAllConfigurations
       collectionSyncProgress.setPhase('processing');
 
       // Perform the sync operations using our new service
       const syncResult = await collectionSyncService.syncAllConfigurations(
         plexClient,
-        (processed: number, currentAction?: string) => {
+        (processed: number, currentAction?: string, total?: number) => {
+          const t = total ?? 0;
           if (currentAction) {
-            // Show detailed action for current collection
-            this.setStage(currentAction, agregarrCollections.length, processed);
+            this.setStage(currentAction, t, processed);
             collectionSyncProgress.setDetail(currentAction);
           } else {
-            // Show general progress
-            this.setStage(
-              'Processing collections...',
-              agregarrCollections.length,
-              processed
-            );
+            this.setStage('Processing collections...', t, processed);
           }
         }
       );
