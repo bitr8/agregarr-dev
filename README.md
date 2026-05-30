@@ -43,11 +43,11 @@ This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream 
 
 Two problem areas drove most of these changes: sync performance at scale (40+ collections, 10k+ items) and placeholder lifecycle gaps that leave orphaned entries in Plex. Early groundwork for Jellyfin support is underway.
 
-### Real-time Overlay Job Progress
+### Dashboard Sync Progress Cards
 
-Overlay jobs on large libraries can run 30+ minutes with no feedback. This adds live dashboard status showing progress, item counts, ETA, and a stop button for each library.
+Both collection and overlay syncs get unified side-by-side dashboard cards with live progress, stats, ETA, and start/stop controls. Cards are sticky -- they show last completed results when idle, and display "Waiting for..." when queued behind another job.
 
-![Overlay Jobs Status](public/images/overlay-jobs-status.png)
+![Collection Sync Dashboard](public/images/collection-sync-dashboard.png)
 
 ### Performance
 
