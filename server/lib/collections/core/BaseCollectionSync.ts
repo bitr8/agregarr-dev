@@ -1645,6 +1645,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       // First, try to find collection by stored ratingKey if available
       // This is more reliable than label matching for all single collections
       // Skip for multi-collection patterns (one config generates multiple collections)
+      let ratingKeyWasStale = false;
       const isMultiCollectionPattern =
         (config?.type === 'overseerr' && config?.subtype === 'users') ||
         (config?.type === 'tmdb' && config?.subtype === 'auto_franchise');
@@ -1672,6 +1673,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                   configName: config.name,
                 }
               );
+              ratingKeyWasStale = true;
             } else {
               logger.debug(
                 `Found existing collection by stored ratingKey: ${existingByRatingKey.title}`,
@@ -1701,6 +1703,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               error: error instanceof Error ? error.message : String(error),
             }
           );
+          ratingKeyWasStale = true;
         }
       }
 
@@ -1820,6 +1823,22 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               labels: matchedCollection.labels,
             }
           );
+
+          // Self-heal: persist the correct ratingKey when the stored one was stale
+          if (ratingKeyWasStale && config?.id && config.libraryId) {
+            logger.info(
+              `Self-healing stale ratingKey for "${config.name}": ${config.collectionRatingKey} → ${matchedCollection.collection.ratingKey}`,
+              { label: 'Base Collection Sync' }
+            );
+            const libraryId = Array.isArray(config.libraryId)
+              ? config.libraryId[0]
+              : config.libraryId;
+            updateConfigWithRatingKey(
+              config.id,
+              matchedCollection.collection.ratingKey,
+              libraryId
+            );
+          }
 
           return {
             ratingKey: matchedCollection.collection.ratingKey,
