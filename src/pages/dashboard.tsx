@@ -50,9 +50,11 @@ const DashboardPage: NextPage = () => {
       </div>
 
       <div className="space-y-6">
-        {/* Running Jobs - shown at top when jobs are active */}
-        <RunningJobsCard />
-        <CollectionSyncCard />
+        {/* Job Status Cards - side by side */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <RunningJobsCard />
+          <CollectionSyncCard />
+        </div>
 
         {/* Overview Stats */}
         <DashboardStats />

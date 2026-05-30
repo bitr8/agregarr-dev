@@ -233,166 +233,162 @@ const CollectionSyncCard: React.FC = () => {
   const displayedOutcomes = status.recentOutcomes.slice(0, 5);
 
   return (
-    <div className="mb-6">
-      <div
-        className={`rounded-lg border-2 ${borderColor} bg-stone-800 p-6 shadow-sm transition-all`}
-      >
-        {/* Header */}
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-white">
-              Collection Sync
-            </h3>
-            <p className="text-xs text-gray-400">{status.phaseLabel}</p>
-          </div>
-          {active && (
-            <Button
-              buttonType="danger"
-              buttonSize="sm"
-              onClick={handleCancel}
-              disabled={isStopping}
-              className="flex items-center gap-1.5"
-            >
-              <StopIcon className="h-4 w-4" />
-              {isStopping ? 'Stopping...' : 'Stop'}
-            </Button>
-          )}
+    <div
+      className={`rounded-lg border-2 ${borderColor} bg-stone-800 p-6 shadow-sm transition-all`}
+    >
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-white">Collection Sync</h3>
+          <p className="text-xs text-gray-400">{status.phaseLabel}</p>
         </div>
-
-        {/* Phase Stepper */}
-        <div className="mb-4">
-          <PhaseStepper phase={status.phase} />
-        </div>
-
-        {/* Progress Bar */}
-        <div className="mb-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-300">Progress</span>
-            {showDeterminate && (
-              <span className="text-xs text-gray-400">
-                {status.progressPercent}%
-              </span>
-            )}
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-gray-700">
-            {showDeterminate ? (
-              <div
-                className={`h-full transition-all duration-300 ${progressBarColor}`}
-                style={{ width: `${status.progressPercent}%` }}
-              />
-            ) : active ? (
-              <div
-                className={`h-full w-1/3 animate-pulse rounded-full ${progressBarColor}`}
-              />
-            ) : (
-              <div
-                className={`h-full ${progressBarColor}`}
-                style={{ width: '100%' }}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Current Collection Panel */}
-        {status.currentCollection && (
-          <div className="mb-4 rounded-md bg-stone-900 p-3">
-            <p className="text-xs text-gray-500">Syncing</p>
-            <p className="truncate text-sm font-medium text-white">
-              {status.currentCollection.name}
-            </p>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="rounded bg-stone-700 px-1.5 py-0.5 text-[10px] font-medium text-gray-300">
-                {status.currentCollection.sourceType}
-              </span>
-              <span className="text-xs text-gray-500">
-                Collection{' '}
-                {Math.min(
-                  status.processedCollections + 1,
-                  status.totalCollections
-                )}{' '}
-                of {status.totalCollections}
-              </span>
-            </div>
-          </div>
+        {active && (
+          <Button
+            buttonType="danger"
+            buttonSize="sm"
+            onClick={handleCancel}
+            disabled={isStopping}
+            className="flex items-center gap-1.5"
+          >
+            <StopIcon className="h-4 w-4" />
+            {isStopping ? 'Stopping...' : 'Stop'}
+          </Button>
         )}
+      </div>
 
-        {/* Stats Grid */}
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-md bg-stone-900 p-3">
-            <div className="flex items-center gap-2">
-              <CheckIcon className="h-4 w-4 text-green-400" />
-              <span className="text-xs text-gray-400">Synced</span>
-            </div>
-            <p className="mt-1 text-lg font-semibold text-green-400">
-              {status.successCount}
-            </p>
-          </div>
+      {/* Phase Stepper */}
+      <div className="mb-4">
+        <PhaseStepper phase={status.phase} />
+      </div>
 
-          <ErrorStatCell
-            errorCount={status.errorCount}
-            recentOutcomes={status.recentOutcomes}
-          />
-
-          <div className="rounded-md bg-stone-900 p-3">
-            <div className="flex items-center gap-2">
-              <ForwardIcon className="h-4 w-4 text-amber-400" />
-              <span className="text-xs text-gray-400">Skipped</span>
-            </div>
-            <p className="mt-1 text-lg font-semibold text-amber-400">
-              {status.skippedCount}
-            </p>
-          </div>
-
-          <div className="rounded-md bg-stone-900 p-3">
-            <div className="flex items-center gap-2">
-              <PlusIcon className="h-4 w-4 text-blue-400" />
-              <span className="text-xs text-gray-400">Created</span>
-            </div>
-            <p className="mt-1 text-lg font-semibold text-blue-400">
-              {status.createdCount}
-            </p>
-          </div>
-        </div>
-
-        {/* Recent Outcomes */}
-        {displayedOutcomes.length > 0 && (
-          <div className="mb-4">
-            <p className="mb-2 text-xs font-medium text-gray-300">Recent</p>
-            <div className="space-y-1">
-              {displayedOutcomes.map((outcome) => (
-                <div
-                  key={`${outcome.configId}-${outcome.durationMs}`}
-                  className="flex items-center gap-2 text-xs"
-                >
-                  {getOutcomeIcon(outcome.outcome)}
-                  <span className="min-w-0 flex-1 truncate text-gray-300">
-                    {outcome.name}
-                  </span>
-                  <span className="shrink-0 rounded bg-stone-700 px-1.5 py-0.5 text-[10px] text-gray-400">
-                    {outcome.sourceType}
-                  </span>
-                  <span className="shrink-0 text-gray-500">
-                    {formatDurationMs(outcome.durationMs)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>
-            {status.phase === 'processing'
-              ? `Processed ${status.processedCollections} / ${status.totalCollections}`
-              : `${formatTime(status.runningFor)} elapsed`}
-          </span>
-          {eta && (
-            <span>
-              ETA: <span className="text-gray-300">{eta}</span>
+      {/* Progress Bar */}
+      <div className="mb-4">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-medium text-gray-300">Progress</span>
+          {showDeterminate && (
+            <span className="text-xs text-gray-400">
+              {status.progressPercent}%
             </span>
           )}
         </div>
+        <div className="h-2 overflow-hidden rounded-full bg-gray-700">
+          {showDeterminate ? (
+            <div
+              className={`h-full transition-all duration-300 ${progressBarColor}`}
+              style={{ width: `${status.progressPercent}%` }}
+            />
+          ) : active ? (
+            <div
+              className={`h-full w-1/3 animate-pulse rounded-full ${progressBarColor}`}
+            />
+          ) : (
+            <div
+              className={`h-full ${progressBarColor}`}
+              style={{ width: '100%' }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Current Collection Panel */}
+      {status.currentCollection && (
+        <div className="mb-4 rounded-md bg-stone-900 p-3">
+          <p className="text-xs text-gray-500">Syncing</p>
+          <p className="truncate text-sm font-medium text-white">
+            {status.currentCollection.name}
+          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="rounded bg-stone-700 px-1.5 py-0.5 text-[10px] font-medium text-gray-300">
+              {status.currentCollection.sourceType}
+            </span>
+            <span className="text-xs text-gray-500">
+              Collection{' '}
+              {Math.min(
+                status.processedCollections + 1,
+                status.totalCollections
+              )}{' '}
+              of {status.totalCollections}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Grid */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-md bg-stone-900 p-3">
+          <div className="flex items-center gap-2">
+            <CheckIcon className="h-4 w-4 text-green-400" />
+            <span className="text-xs text-gray-400">Synced</span>
+          </div>
+          <p className="mt-1 text-lg font-semibold text-green-400">
+            {status.successCount}
+          </p>
+        </div>
+
+        <ErrorStatCell
+          errorCount={status.errorCount}
+          recentOutcomes={status.recentOutcomes}
+        />
+
+        <div className="rounded-md bg-stone-900 p-3">
+          <div className="flex items-center gap-2">
+            <ForwardIcon className="h-4 w-4 text-amber-400" />
+            <span className="text-xs text-gray-400">Skipped</span>
+          </div>
+          <p className="mt-1 text-lg font-semibold text-amber-400">
+            {status.skippedCount}
+          </p>
+        </div>
+
+        <div className="rounded-md bg-stone-900 p-3">
+          <div className="flex items-center gap-2">
+            <PlusIcon className="h-4 w-4 text-blue-400" />
+            <span className="text-xs text-gray-400">Created</span>
+          </div>
+          <p className="mt-1 text-lg font-semibold text-blue-400">
+            {status.createdCount}
+          </p>
+        </div>
+      </div>
+
+      {/* Recent Outcomes */}
+      {displayedOutcomes.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-medium text-gray-300">Recent</p>
+          <div className="space-y-1">
+            {displayedOutcomes.map((outcome) => (
+              <div
+                key={`${outcome.configId}-${outcome.durationMs}`}
+                className="flex items-center gap-2 text-xs"
+              >
+                {getOutcomeIcon(outcome.outcome)}
+                <span className="min-w-0 flex-1 truncate text-gray-300">
+                  {outcome.name}
+                </span>
+                <span className="shrink-0 rounded bg-stone-700 px-1.5 py-0.5 text-[10px] text-gray-400">
+                  {outcome.sourceType}
+                </span>
+                <span className="shrink-0 text-gray-500">
+                  {formatDurationMs(outcome.durationMs)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>
+          {status.phase === 'processing'
+            ? `Processed ${status.processedCollections} / ${status.totalCollections}`
+            : `${formatTime(status.runningFor)} elapsed`}
+        </span>
+        {eta && (
+          <span>
+            ETA: <span className="text-gray-300">{eta}</span>
+          </span>
+        )}
       </div>
     </div>
   );

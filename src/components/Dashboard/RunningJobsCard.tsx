@@ -38,10 +38,7 @@ const RunningJobsCard: React.FC = () => {
     }
   );
 
-  const runningJobs =
-    data?.runningLibraries.filter(
-      (lib) => lib.state === 'running' || lib.state === 'cancelling'
-    ) || [];
+  const allJobs = data?.runningLibraries || [];
 
   const handleStop = async (libraryId: string) => {
     if (stoppingIds.has(libraryId)) return; // Prevent double-click
@@ -69,19 +66,18 @@ const RunningJobsCard: React.FC = () => {
     }
   };
 
-  if (runningJobs.length === 0) {
+  if (allJobs.length === 0) {
     return null;
   }
 
   const jobStatus = data?.jobStatus;
-  // Show queue progress only when processing multiple libraries and not yet complete
   const showQueueProgress =
     jobStatus?.running &&
     jobStatus.totalLibraries > 1 &&
     jobStatus.processedLibraries < jobStatus.totalLibraries;
 
   return (
-    <div className="mb-6">
+    <div>
       <div className="mb-4 flex items-baseline gap-3">
         <h3 className="text-lg font-semibold text-white">Overlay Jobs</h3>
         {showQueueProgress && (
@@ -91,8 +87,8 @@ const RunningJobsCard: React.FC = () => {
           </span>
         )}
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {runningJobs.map((lib) => (
+      <div className="space-y-4">
+        {allJobs.map((lib) => (
           <LibraryProgressCard
             key={lib.libraryId}
             status={lib}
