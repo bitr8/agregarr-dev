@@ -4,7 +4,7 @@ import CollectionStatsGrid from '@app/components/Dashboard/CollectionStatsGrid';
 import CollectionSyncCard from '@app/components/Dashboard/CollectionSyncCard';
 import DashboardStats from '@app/components/Dashboard/DashboardStats';
 import MissingItemsFeed from '@app/components/Dashboard/MissingItemsFeed';
-import RunningJobsCard from '@app/components/Dashboard/RunningJobsCard';
+import OverlaySyncCard from '@app/components/Dashboard/OverlaySyncCard';
 import { Permission, useUser } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
 import { defineMessages, useIntl } from 'react-intl';
@@ -50,9 +50,9 @@ const DashboardPage: NextPage = () => {
       </div>
 
       <div className="space-y-6">
-        {/* Job Status Cards - side by side */}
+        {/* Sync Status Cards - side by side */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <RunningJobsCard />
+          <OverlaySyncCard />
           <CollectionSyncCard />
         </div>
 

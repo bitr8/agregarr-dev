@@ -10,6 +10,7 @@ import {
   CheckIcon,
   ExclamationTriangleIcon,
   ForwardIcon,
+  PlayIcon,
   PlusIcon,
   StopIcon,
 } from '@heroicons/react/24/outline';
@@ -181,6 +182,7 @@ const ErrorStatCell: React.FC<{
 
 const CollectionSyncCard: React.FC = () => {
   const [isStopping, setIsStopping] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const { addToast } = useToasts();
 
   const { data, mutate } = useSWR<SyncProgressResponse>(
@@ -226,6 +228,26 @@ const CollectionSyncCard: React.FC = () => {
     }
   };
 
+  const handleStart = async () => {
+    if (isStarting) return;
+    setIsStarting(true);
+    try {
+      await axios.post('/api/v1/collections/sync');
+      addToast('Collection sync started', {
+        appearance: 'success',
+        autoDismiss: true,
+      });
+      await mutate();
+    } catch {
+      addToast('Failed to start collection sync', {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   if (!status) return null;
 
   const active = isActivePhase(status.phase);
@@ -242,7 +264,7 @@ const CollectionSyncCard: React.FC = () => {
           <h3 className="text-lg font-semibold text-white">Collection Sync</h3>
           <p className="text-xs text-gray-400">{status.phaseLabel}</p>
         </div>
-        {active && (
+        {active ? (
           <Button
             buttonType="danger"
             buttonSize="sm"
@@ -252,6 +274,17 @@ const CollectionSyncCard: React.FC = () => {
           >
             <StopIcon className="h-4 w-4" />
             {isStopping ? 'Stopping...' : 'Stop'}
+          </Button>
+        ) : (
+          <Button
+            buttonType="primary"
+            buttonSize="sm"
+            onClick={handleStart}
+            disabled={isStarting}
+            className="flex items-center gap-1.5"
+          >
+            <PlayIcon className="h-4 w-4" />
+            {isStarting ? 'Starting...' : 'Start'}
           </Button>
         )}
       </div>
