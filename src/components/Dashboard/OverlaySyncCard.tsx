@@ -104,9 +104,11 @@ const OverlaySyncCard: React.FC = () => {
     '/api/v1/overlay-library-configs/status/all',
     {
       refreshInterval: (latestData) => {
-        const hasActive = latestData?.runningLibraries?.some(
-          (lib) => lib.state === 'running' || lib.state === 'cancelling'
-        );
+        const hasActive =
+          latestData?.jobStatus?.running ||
+          latestData?.runningLibraries?.some(
+            (lib) => lib.state === 'running' || lib.state === 'cancelling'
+          );
         return hasActive ? 1000 : 5000;
       },
       revalidateOnFocus: false,
@@ -117,49 +119,19 @@ const OverlaySyncCard: React.FC = () => {
   const allLibs = data?.runningLibraries || [];
   const jobStatus = data?.jobStatus;
 
-  if (allLibs.length === 0) return null;
-
   const activeLib = allLibs.find(
     (lib) => lib.state === 'running' || lib.state === 'cancelling'
   );
-  const currentLib = activeLib || allLibs[0];
-  const isActive =
-    currentLib.state === 'running' || currentLib.state === 'cancelling';
-  const overallState: OverlayState = activeLib
-    ? activeLib.state
+  const isActive = !!activeLib || !!jobStatus?.running;
+  const overallState: OverlayState = jobStatus?.running
+    ? activeLib?.state === 'cancelling'
+      ? 'cancelling'
+      : 'running'
     : allLibs.some((l) => l.state === 'failed')
     ? 'failed'
     : allLibs.some((l) => l.state === 'cancelled')
     ? 'cancelled'
     : 'completed';
-
-  const totalSuccess = allLibs.reduce((s, l) => s + l.successCount, 0);
-  const totalErrors = allLibs.reduce((s, l) => s + l.errorCount, 0);
-  const totalSkipped = allLibs.reduce((s, l) => s + l.skippedCount, 0);
-  const totalFiltered = allLibs.reduce((s, l) => s + l.filteredCount, 0);
-  const totalItems = allLibs.reduce((s, l) => s + l.totalItems, 0);
-  const totalProcessed =
-    totalSuccess + totalErrors + totalSkipped + totalFiltered;
-
-  const overallProgress =
-    totalItems > 0
-      ? Math.min(100, Math.round((totalProcessed / totalItems) * 100))
-      : isActive
-      ? 0
-      : 100;
-
-  const totalRunningFor = allLibs.reduce(
-    (max, l) => Math.max(max, l.runningFor),
-    0
-  );
-
-  const borderColor = getBorderColor(overallState);
-  const progressBarColor = getProgressBarColor(overallState);
-
-  const eta =
-    activeLib?.estimatedSecondsRemaining != null
-      ? formatTime(activeLib.estimatedSecondsRemaining)
-      : null;
 
   const handleStop = async () => {
     if (isStopping) return;
@@ -200,6 +172,57 @@ const OverlaySyncCard: React.FC = () => {
       setIsStarting(false);
     }
   };
+
+  if (allLibs.length === 0 && !isActive) {
+    return (
+      <div className="rounded-lg border-2 border-stone-700 bg-stone-800 p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Overlay Sync</h3>
+            <p className="text-xs text-gray-400">Idle</p>
+          </div>
+          <Button
+            buttonType="primary"
+            buttonSize="sm"
+            onClick={handleStart}
+            disabled={isStarting}
+            className="flex items-center gap-1.5"
+          >
+            <PlayIcon className="h-4 w-4" />
+            {isStarting ? 'Starting...' : 'Start'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const totalSuccess = allLibs.reduce((s, l) => s + l.successCount, 0);
+  const totalErrors = allLibs.reduce((s, l) => s + l.errorCount, 0);
+  const totalSkipped = allLibs.reduce((s, l) => s + l.skippedCount, 0);
+  const totalFiltered = allLibs.reduce((s, l) => s + l.filteredCount, 0);
+  const totalItems = allLibs.reduce((s, l) => s + l.totalItems, 0);
+  const totalProcessed =
+    totalSuccess + totalErrors + totalSkipped + totalFiltered;
+
+  const overallProgress =
+    totalItems > 0
+      ? Math.min(100, Math.round((totalProcessed / totalItems) * 100))
+      : overallState === 'completed'
+      ? 100
+      : 0;
+
+  const totalRunningFor = allLibs.reduce(
+    (max, l) => Math.max(max, l.runningFor),
+    0
+  );
+
+  const borderColor = getBorderColor(overallState);
+  const progressBarColor = getProgressBarColor(overallState);
+
+  const eta =
+    activeLib?.estimatedSecondsRemaining != null
+      ? formatTime(activeLib.estimatedSecondsRemaining)
+      : null;
 
   return (
     <div
@@ -350,8 +373,11 @@ const OverlaySyncCard: React.FC = () => {
                   {lib.libraryName}
                 </span>
                 <span className="shrink-0 text-gray-500">
-                  {lib.successCount + lib.skippedCount + lib.filteredCount}/
-                  {lib.totalItems}
+                  {lib.successCount +
+                    lib.errorCount +
+                    lib.skippedCount +
+                    lib.filteredCount}
+                  /{lib.totalItems}
                 </span>
                 <span className="shrink-0 text-gray-500">
                   {formatTime(lib.runningFor)}

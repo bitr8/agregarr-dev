@@ -248,7 +248,30 @@ const CollectionSyncCard: React.FC = () => {
     }
   };
 
-  if (!status) return null;
+  if (!status) {
+    return (
+      <div className="rounded-lg border-2 border-stone-700 bg-stone-800 p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              Collection Sync
+            </h3>
+            <p className="text-xs text-gray-400">Idle</p>
+          </div>
+          <Button
+            buttonType="primary"
+            buttonSize="sm"
+            onClick={handleStart}
+            disabled={isStarting}
+            className="flex items-center gap-1.5"
+          >
+            <PlayIcon className="h-4 w-4" />
+            {isStarting ? 'Starting...' : 'Start'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const active = isActivePhase(status.phase);
   const showDeterminate = status.phase === 'processing';
