@@ -44,4 +44,5 @@ export interface CollectionSyncStatus {
 export interface SyncProgressResponse {
   current: CollectionSyncStatus | null;
   lastCompleted: CollectionSyncStatus | null;
+  pending: boolean;
 }

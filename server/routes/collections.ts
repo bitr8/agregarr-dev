@@ -1736,9 +1736,12 @@ collectionsRoutes.get('/sync/status', async (_req, res) => {
  * Get detailed sync progress for dashboard card and last-sync summary
  */
 collectionsRoutes.get('/sync/progress', (_req, res) => {
+  const current = collectionSyncProgress.getStatus();
+  const pending = !current && collectionsSync.running;
   return res.status(200).json({
-    current: collectionSyncProgress.getStatus(),
+    current,
     lastCompleted: collectionSyncProgress.getLastCompleted(),
+    pending,
   });
 });
 

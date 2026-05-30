@@ -62,11 +62,15 @@ class OverlayApplication {
       return;
     }
 
+    this.running = true;
+    this.cancelled = false;
+
     // Safety check: don't run if base poster download is in progress
     const { plexBasePosterDownloadJob } = await import(
       '@server/lib/overlays/PlexBasePosterDownloadJob'
     );
     if (plexBasePosterDownloadJob.running) {
+      this.running = false;
       throw new Error(
         'Cannot run overlay application while base posters are being downloaded. ' +
           'Please wait for the download to complete.'
@@ -83,9 +87,14 @@ class OverlayApplication {
           label: 'Overlay Application',
         }
       );
-      while (overlaysQuickSync.status.running) {
+      while (overlaysQuickSync.status.running && !this.cancelled) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+    }
+
+    if (this.cancelled) {
+      this.running = false;
+      return;
     }
 
     // Wait for Collections Sync to complete if running
@@ -98,12 +107,22 @@ class OverlayApplication {
           label: 'Overlay Application',
         }
       );
-      while (collectionsSync.status.running) {
+      while (collectionsSync.status.running && !this.cancelled) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
-      logger.info('Collections Sync completed, starting Overlay Application', {
-        label: 'Overlay Application',
-      });
+      if (!this.cancelled) {
+        logger.info(
+          'Collections Sync completed, starting Overlay Application',
+          {
+            label: 'Overlay Application',
+          }
+        );
+      }
+    }
+
+    if (this.cancelled) {
+      this.running = false;
+      return;
     }
 
     // Wait for any per-library overlay syncs to complete
@@ -119,17 +138,21 @@ class OverlayApplication {
           runningLibraries: runningLibraries.map((l) => l.libraryName),
         }
       );
-      while (runningLibraries.length > 0) {
+      while (runningLibraries.length > 0 && !this.cancelled) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         runningLibraries = overlayLibraryService.getAllRunningLibraries();
       }
-      logger.info('Per-library overlay syncs completed, starting full sync', {
-        label: 'Overlay Application',
-      });
+      if (!this.cancelled) {
+        logger.info('Per-library overlay syncs completed, starting full sync', {
+          label: 'Overlay Application',
+        });
+      }
     }
 
-    this.running = true;
-    this.cancelled = false;
+    if (this.cancelled) {
+      this.running = false;
+      return;
+    }
     this.currentStage = '';
     this.totalLibraries = 0;
     this.processedLibraries = 0;

@@ -155,11 +155,16 @@ class CollectionsSync {
   }
 
   public async run(): Promise<void> {
+    // Set running early so the UI can show pending/waiting state
+    this.running = true;
+    this.cancelled = false;
+
     // Check if discovery is running to prevent race conditions
     const { discoveryService } = await import(
       '@server/lib/collections/services/DiscoveryService'
     );
     if (discoveryService.status.running) {
+      this.running = false;
       throw new Error(
         'Discovery is currently running. Please wait for discovery to complete before starting sync.'
       );
@@ -175,10 +180,14 @@ class CollectionsSync {
           label: 'Collections Sync',
         }
       );
-      // Wait for randomization to complete
-      while (randomizeHomeOrder.status.running) {
+      while (randomizeHomeOrder.status.running && !this.cancelled) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+    }
+
+    if (this.cancelled) {
+      this.running = false;
+      return;
     }
 
     // Wait for Collections Quick Sync to complete if running
@@ -192,9 +201,14 @@ class CollectionsSync {
           label: 'Collections Sync',
         }
       );
-      while (collectionsQuickSync.status.running) {
+      while (collectionsQuickSync.status.running && !this.cancelled) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+    }
+
+    if (this.cancelled) {
+      this.running = false;
+      return;
     }
 
     // Wait for Overlay Application to complete if running
@@ -207,12 +221,22 @@ class CollectionsSync {
           label: 'Collections Sync',
         }
       );
-      while (overlayApplication.status.running) {
+      while (overlayApplication.status.running && !this.cancelled) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
-      logger.info('Overlay Application completed, starting Collections Sync', {
-        label: 'Collections Sync',
-      });
+      if (!this.cancelled) {
+        logger.info(
+          'Overlay Application completed, starting Collections Sync',
+          {
+            label: 'Collections Sync',
+          }
+        );
+      }
+    }
+
+    if (this.cancelled) {
+      this.running = false;
+      return;
     }
 
     // Wait for any running individual collection syncs to complete
@@ -243,9 +267,11 @@ class CollectionsSync {
       await IndividualCollectionScheduler.waitForIndividualSyncsToComplete();
     }
 
-    // Set running state immediately for UI feedback and prevent individual syncs
-    this.running = true;
-    this.cancelled = false;
+    if (this.cancelled) {
+      this.running = false;
+      return;
+    }
+
     IndividualCollectionScheduler.setFullSyncRunning(true);
     this.setStage('Starting sync...');
 

@@ -199,7 +199,9 @@ const CollectionSyncCard: React.FC = () => {
     }
   );
 
-  const status = data?.current ?? data?.lastCompleted ?? null;
+  const pending = data?.pending || false;
+  const status =
+    data?.current ?? (pending ? null : data?.lastCompleted) ?? null;
 
   const borderColor = status ? getBorderColor(status.phase) : '';
   const progressBarColor = status ? getProgressBarColor(status.phase) : '';
@@ -250,24 +252,43 @@ const CollectionSyncCard: React.FC = () => {
 
   if (!status) {
     return (
-      <div className="rounded-lg border-2 border-stone-700 bg-stone-800 p-6 shadow-sm">
+      <div
+        className={`rounded-lg border-2 ${
+          pending ? 'border-orange-500' : 'border-stone-700'
+        } bg-stone-800 p-6 shadow-sm`}
+      >
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-white">
               Collection Sync
             </h3>
-            <p className="text-xs text-gray-400">Idle</p>
+            <p className="text-xs text-gray-400">
+              {pending ? 'Waiting for overlays...' : 'Idle'}
+            </p>
           </div>
-          <Button
-            buttonType="primary"
-            buttonSize="sm"
-            onClick={handleStart}
-            disabled={isStarting}
-            className="flex items-center gap-1.5"
-          >
-            <PlayIcon className="h-4 w-4" />
-            {isStarting ? 'Starting...' : 'Start'}
-          </Button>
+          {pending ? (
+            <Button
+              buttonType="danger"
+              buttonSize="sm"
+              onClick={handleCancel}
+              disabled={isStopping}
+              className="flex items-center gap-1.5"
+            >
+              <StopIcon className="h-4 w-4" />
+              {isStopping ? 'Stopping...' : 'Stop'}
+            </Button>
+          ) : (
+            <Button
+              buttonType="primary"
+              buttonSize="sm"
+              onClick={handleStart}
+              disabled={isStarting}
+              className="flex items-center gap-1.5"
+            >
+              <PlayIcon className="h-4 w-4" />
+              {isStarting ? 'Starting...' : 'Start'}
+            </Button>
+          )}
         </div>
       </div>
     );

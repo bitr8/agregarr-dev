@@ -10,7 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import type React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
@@ -43,6 +43,7 @@ interface JobStatus {
 interface RunningLibrariesResponse {
   runningLibraries: LibraryStatus[];
   jobStatus: JobStatus;
+  pending: boolean;
 }
 
 type OverlayState =
@@ -116,14 +117,28 @@ const OverlaySyncCard: React.FC = () => {
     }
   );
 
-  const allLibs = data?.runningLibraries || [];
+  const liveLibs = data?.runningLibraries || [];
   const jobStatus = data?.jobStatus;
+  const pending = data?.pending || false;
 
-  const activeLib = allLibs.find(
+  const lastSnapshotRef = useRef<LibraryStatus[]>([]);
+  if (liveLibs.length > 0) {
+    lastSnapshotRef.current = liveLibs;
+  }
+  const allLibs =
+    liveLibs.length > 0
+      ? liveLibs
+      : !jobStatus?.running && !pending
+      ? lastSnapshotRef.current
+      : [];
+
+  const activeLib = liveLibs.find(
     (lib) => lib.state === 'running' || lib.state === 'cancelling'
   );
-  const isActive = !!activeLib || !!jobStatus?.running;
-  const overallState: OverlayState = jobStatus?.running
+  const isActive = !!activeLib || !!jobStatus?.running || pending;
+  const overallState: OverlayState = pending
+    ? 'running'
+    : jobStatus?.running
     ? activeLib?.state === 'cancelling'
       ? 'cancelling'
       : 'running'
@@ -131,6 +146,8 @@ const OverlaySyncCard: React.FC = () => {
     ? 'failed'
     : allLibs.some((l) => l.state === 'cancelled')
     ? 'cancelled'
+    : allLibs.length > 0
+    ? 'completed'
     : 'completed';
 
   const handleStop = async () => {
@@ -232,7 +249,11 @@ const OverlaySyncCard: React.FC = () => {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-white">Overlay Sync</h3>
-          <p className="text-xs text-gray-400">{getStateLabel(overallState)}</p>
+          <p className="text-xs text-gray-400">
+            {pending
+              ? 'Waiting for collections...'
+              : getStateLabel(overallState)}
+          </p>
         </div>
         {isActive ? (
           <Button

@@ -7187,6 +7187,9 @@ paths:
                     type: object
                     nullable: true
                     description: Snapshot of the last completed sync, persists until next sync starts
+                  pending:
+                    type: boolean
+                    description: True when sync is queued but waiting for another job to complete
   /collections/sync/cancel:
     post:
       summary: Cancel a running collection sync
