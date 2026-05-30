@@ -37,7 +37,7 @@ For general Agregarr configuration (services, collections, overlays etc.), see t
 
 ## Relationship to upstream
 
-This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream go back as PRs (46 merged, 8 open). Fork-only features are documented separately — they rely on behaviour or trade-offs upstream may not want to adopt.
+This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream go back as PRs (46 merged, 11 open). Fork-only features are documented separately — they rely on behaviour or trade-offs upstream may not want to adopt.
 
 ## Fork-Only Features
 
@@ -137,6 +137,9 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#606](https://github.com/agregarr/agregarr/pull/606) | Self-heal stale collectionRatingKey during label fallback   | -          |
+| [#605](https://github.com/agregarr/agregarr/pull/605) | Invalidate stale AWS WAF tokens and add solve backoff       | -          |
+| [#604](https://github.com/agregarr/agregarr/pull/604) | Quick sync exclusion bypass fix                             | -          |
 | [#599](https://github.com/agregarr/agregarr/pull/599) | Apply mutual exclusion to filtered hub collections          | -          |
 | [#596](https://github.com/agregarr/agregarr/pull/596) | Detect real content in TV placeholder cleanup via Plex      | -          |
 | [#595](https://github.com/agregarr/agregarr/pull/595) | Fix jobs page crash on unparseable cron expressions         | -          |
