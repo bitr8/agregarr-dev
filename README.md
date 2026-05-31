@@ -28,10 +28,15 @@ services:
       - /path/to/placeholder/tv:/data/tv # Optional: Coming Soon
     environment:
       - TZ=Australia/Sydney
+      - PUID=1000 # Your host user ID (run `id -u`)
+      - PGID=1000 # Your host group ID (run `id -g`)
+      - UMASK=022
     ports:
       - 7171:7171
     restart: unless-stopped
 ```
+
+> **File permissions:** You must set `PUID` and `PGID` to match the user that owns your media directories. Without these, the container runs as root and creates directories with restrictive permissions — which breaks imports in Sonarr, Radarr, and other apps that run as a non-root user. On Unraid, use `PUID=99` and `PGID=100`.
 
 For general Agregarr configuration (services, collections, overlays etc.), see the [upstream docs](https://agregarr.org/docs/installation) — note that they reference the upstream image, not this fork.
 
