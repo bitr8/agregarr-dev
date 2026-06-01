@@ -102,6 +102,11 @@ interface PreviewCollectionModalProps {
     sonarrTagId?: number;
     radarrInstanceId?: number;
     sonarrInstanceId?: number;
+    // Coming Soon specific fields
+    comingSoonRadarrServerId?: number;
+    comingSoonSonarrServerId?: number;
+    comingSoonRadarrRootFolder?: string;
+    comingSoonSonarrRootFolder?: string;
     // Multi-source specific fields
     isMultiSource?: boolean;
     sources?: {
@@ -224,6 +229,10 @@ const PreviewCollectionModal = ({
     sonarrTagId: previewConfig.sonarrTagId,
     radarrInstanceId: previewConfig.radarrInstanceId,
     sonarrInstanceId: previewConfig.sonarrInstanceId,
+    comingSoonRadarrServerId: previewConfig.comingSoonRadarrServerId,
+    comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
+    comingSoonRadarrRootFolder: previewConfig.comingSoonRadarrRootFolder,
+    comingSoonSonarrRootFolder: previewConfig.comingSoonSonarrRootFolder,
     isMultiSource: previewConfig.isMultiSource,
     sources: previewConfig.sources,
     combineMode: previewConfig.combineMode,
@@ -306,6 +315,11 @@ const PreviewCollectionModal = ({
           sonarrTagId: previewConfig.sonarrTagId,
           radarrInstanceId: previewConfig.radarrInstanceId,
           sonarrInstanceId: previewConfig.sonarrInstanceId,
+          // Coming Soon specific fields
+          comingSoonRadarrServerId: previewConfig.comingSoonRadarrServerId,
+          comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
+          comingSoonRadarrRootFolder: previewConfig.comingSoonRadarrRootFolder,
+          comingSoonSonarrRootFolder: previewConfig.comingSoonSonarrRootFolder,
           forceRefresh: forceRefresh,
           // Multi-source specific fields
           isMultiSource: previewConfig.isMultiSource,

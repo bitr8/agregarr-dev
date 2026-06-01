@@ -921,6 +921,11 @@ async function processPreviewAsync(
     sonarrTagId?: number;
     radarrInstanceId?: number;
     sonarrInstanceId?: number;
+    // Coming Soon specific fields
+    comingSoonRadarrServerId?: number;
+    comingSoonSonarrServerId?: number;
+    comingSoonRadarrRootFolder?: string;
+    comingSoonSonarrRootFolder?: string;
     forceRefresh?: boolean; // If true, bypass cache and fetch fresh data
     // Multi-source specific fields
     isMultiSource?: boolean;
@@ -959,6 +964,10 @@ async function processPreviewAsync(
       radarrInstanceId,
       sonarrTagId,
       sonarrInstanceId,
+      comingSoonRadarrServerId,
+      comingSoonSonarrServerId,
+      comingSoonRadarrRootFolder,
+      comingSoonSonarrRootFolder,
       forceRefresh,
       isMultiSource,
       sources,
@@ -1087,6 +1096,15 @@ async function processPreviewAsync(
 
     if (type === 'originals') {
       previewConfigRecord.provider = provider;
+    }
+
+    if (type === 'comingsoon') {
+      previewConfigRecord.comingSoonRadarrServerId = comingSoonRadarrServerId;
+      previewConfigRecord.comingSoonSonarrServerId = comingSoonSonarrServerId;
+      previewConfigRecord.comingSoonRadarrRootFolder =
+        comingSoonRadarrRootFolder;
+      previewConfigRecord.comingSoonSonarrRootFolder =
+        comingSoonSonarrRootFolder;
     }
 
     const previewConfig = previewConfigRecord as unknown as CollectionConfig;

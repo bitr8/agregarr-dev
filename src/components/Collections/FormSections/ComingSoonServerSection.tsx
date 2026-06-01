@@ -29,11 +29,13 @@ const messages = defineMessages({
   selectTags: 'Select tags...',
   selectServerFirst: 'Select a server first',
   noTags: 'No tags available on this server.',
-  radarrRootFolder: 'Radarr Root Folder',
-  sonarrRootFolder: 'Sonarr Root Folder',
+  radarrRootFolder: 'Radarr Root Folder (Movies)',
+  sonarrRootFolder: 'Sonarr Root Folder (TV Shows)',
   allRootFolders: 'All Root Folders',
-  rootFolderHelp:
-    'Only include items stored under this root folder. Useful when multiple libraries share the same Radarr/Sonarr instance.',
+  radarrRootFolderHelp:
+    'Only include movies stored under this Radarr root folder. Leave on "All" if this library only has one root folder, or if you want movies from all paths.',
+  sonarrRootFolderHelp:
+    'Only include TV shows stored under this Sonarr root folder. Leave on "All" if this library only has one root folder, or if you want shows from all paths.',
 });
 
 interface ComingSoonServerSectionProps {
@@ -233,7 +235,7 @@ const ComingSoonServerSection = ({
             </select>
           </div>
           <p className="mt-1 text-xs text-gray-500">
-            {intl.formatMessage(messages.rootFolderHelp)}
+            {intl.formatMessage(messages.radarrRootFolderHelp)}
           </p>
         </div>
       )}
@@ -299,7 +301,7 @@ const ComingSoonServerSection = ({
             </select>
           </div>
           <p className="mt-1 text-xs text-gray-500">
-            {intl.formatMessage(messages.rootFolderHelp)}
+            {intl.formatMessage(messages.sonarrRootFolderHelp)}
           </p>
         </div>
       )}

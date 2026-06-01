@@ -4862,6 +4862,15 @@ const CollectionFormConfigForm = ({
                         sonarrTagId: values.sonarrTagId,
                         radarrInstanceId: values.radarrInstanceId,
                         sonarrInstanceId: values.sonarrInstanceId,
+                        // Coming Soon specific fields
+                        comingSoonRadarrServerId:
+                          values.comingSoonRadarrServerId,
+                        comingSoonSonarrServerId:
+                          values.comingSoonSonarrServerId,
+                        comingSoonRadarrRootFolder:
+                          values.comingSoonRadarrRootFolder,
+                        comingSoonSonarrRootFolder:
+                          values.comingSoonSonarrRootFolder,
                         // Multi-source specific fields
                         isMultiSource: values.isMultiSource,
                         sources: values.sources as
