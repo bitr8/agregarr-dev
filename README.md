@@ -152,6 +152,7 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#607](https://github.com/agregarr/agregarr/pull/607) | Sort TMDB franchise parts by release date                   | -          |
 | [#606](https://github.com/agregarr/agregarr/pull/606) | Self-heal stale collectionRatingKey during label fallback   | -          |
 | [#605](https://github.com/agregarr/agregarr/pull/605) | Invalidate stale AWS WAF tokens and add solve backoff       | -          |
 | [#604](https://github.com/agregarr/agregarr/pull/604) | Quick sync exclusion bypass fix                             | -          |
