@@ -914,13 +914,16 @@ export function updateConfigWithRatingKey(
       const existingConfig = collectionConfigs[configIndex];
 
       // Verify this rating key is for the correct library
-      if (libraryId && existingConfig.libraryId !== libraryId) {
+      const configLibId = Array.isArray(existingConfig.libraryId)
+        ? existingConfig.libraryId[0]
+        : existingConfig.libraryId;
+      if (libraryId && configLibId !== libraryId) {
         logger.warn(
-          `Rating key library mismatch: config for library ${existingConfig.libraryId}, but rating key for library ${libraryId}`,
+          `Rating key library mismatch: config for library ${configLibId}, but rating key for library ${libraryId}`,
           {
             label: 'Collection Utilities',
             configId,
-            configLibrary: existingConfig.libraryId,
+            configLibrary: configLibId,
             ratingKeyLibrary: libraryId,
           }
         );
