@@ -299,6 +299,14 @@ export const saveIndividualConfigs = async (
         ...(collectionConfig.comingSoonSonarrTagIds !== undefined && {
           comingSoonSonarrTagIds: collectionConfig.comingSoonSonarrTagIds,
         }),
+        ...(collectionConfig.comingSoonRadarrRootFolder !== undefined && {
+          comingSoonRadarrRootFolder:
+            collectionConfig.comingSoonRadarrRootFolder,
+        }),
+        ...(collectionConfig.comingSoonSonarrRootFolder !== undefined && {
+          comingSoonSonarrRootFolder:
+            collectionConfig.comingSoonSonarrRootFolder,
+        }),
         ...(collectionConfig.isMultiSource !== undefined && {
           isMultiSource: collectionConfig.isMultiSource,
         }),

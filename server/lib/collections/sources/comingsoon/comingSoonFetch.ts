@@ -10,6 +10,8 @@ import {
   persistTraktTokens,
 } from '@server/utils/traktAuth';
 
+const ensureTrailingSlash = (p: string) => (p.endsWith('/') ? p : p + '/');
+
 /**
  * Check if a movie is truly upcoming (not already released/available)
  */
@@ -140,6 +142,18 @@ export async function fetchMonitoredMovies(
           } else {
             // 'include' mode (default)
             if (!hasMatchingTag) continue; // Only include movies with at least one selected tag
+          }
+        }
+
+        // Apply root folder filtering if configured
+        if (config.comingSoonRadarrRootFolder) {
+          if (
+            !movie.path ||
+            !movie.path.startsWith(
+              ensureTrailingSlash(config.comingSoonRadarrRootFolder)
+            )
+          ) {
+            continue;
           }
         }
 
@@ -326,6 +340,17 @@ export async function fetchMonitoredShows(
             if (hasMatchingTag) continue;
           } else {
             if (!hasMatchingTag) continue;
+          }
+        }
+
+        // Apply root folder filtering if configured
+        if (config.comingSoonSonarrRootFolder) {
+          if (
+            !series.rootFolderPath ||
+            ensureTrailingSlash(series.rootFolderPath) !==
+              ensureTrailingSlash(config.comingSoonSonarrRootFolder)
+          ) {
+            continue;
           }
         }
 

@@ -287,6 +287,8 @@ export interface CollectionConfig {
   readonly comingSoonTagMode?: 'include' | 'exclude'; // Tag filter mode
   readonly comingSoonRadarrTagIds?: number[]; // Radarr tag IDs to filter by
   readonly comingSoonSonarrTagIds?: number[]; // Sonarr tag IDs to filter by
+  readonly comingSoonRadarrRootFolder?: string; // Radarr root folder path to filter by
+  readonly comingSoonSonarrRootFolder?: string; // Sonarr root folder path to filter by
   // Overlay sync option
   readonly applyOverlaysDuringSync?: boolean; // If true, apply overlays to collection items immediately after sync (default: true for Coming Soon, false for others)
   // Time restriction settings

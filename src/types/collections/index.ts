@@ -419,6 +419,8 @@ export interface CollectionFormConfig {
   readonly comingSoonTagMode?: 'include' | 'exclude'; // Tag filter mode
   readonly comingSoonRadarrTagIds?: number[]; // Radarr tag IDs to filter by
   readonly comingSoonSonarrTagIds?: number[]; // Sonarr tag IDs to filter by
+  readonly comingSoonRadarrRootFolder?: string; // Radarr root folder path to filter by
+  readonly comingSoonSonarrRootFolder?: string; // Sonarr root folder path to filter by
   // Generic ordering options (applicable to all collection types)
   readonly sortOrder?: CollectionSortOrder; // Sort order for collection items (default: 'default')
   // Unified person minimum items for plex/actors|directors
@@ -627,6 +629,8 @@ export interface CollectionConfigCreateRequest {
   readonly comingSoonTagMode?: 'include' | 'exclude';
   readonly comingSoonRadarrTagIds?: number[];
   readonly comingSoonSonarrTagIds?: number[];
+  readonly comingSoonRadarrRootFolder?: string;
+  readonly comingSoonSonarrRootFolder?: string;
   readonly sortOrder?: CollectionSortOrder;
   // Unified person minimum items for plex actors/directors
   readonly personMinimumItems?: number;
@@ -774,6 +778,8 @@ export const toCollectionCreateRequest = (
     comingSoonTagMode: config.comingSoonTagMode,
     comingSoonRadarrTagIds: config.comingSoonRadarrTagIds,
     comingSoonSonarrTagIds: config.comingSoonSonarrTagIds,
+    comingSoonRadarrRootFolder: config.comingSoonRadarrRootFolder,
+    comingSoonSonarrRootFolder: config.comingSoonSonarrRootFolder,
     sortOrder: config.sortOrder,
     personMinimumItems: config.personMinimumItems,
     excludeFromCollections: config.excludeFromCollections,

@@ -1721,6 +1721,12 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).comingSoonRadarrTagIds ?? [],
           comingSoonSonarrTagIds:
             (config as CollectionFormConfig).comingSoonSonarrTagIds ?? [],
+          comingSoonRadarrRootFolder:
+            (config as CollectionFormConfig).comingSoonRadarrRootFolder ??
+            undefined,
+          comingSoonSonarrRootFolder:
+            (config as CollectionFormConfig).comingSoonSonarrRootFolder ??
+            undefined,
           // Direct download server selection
           directDownloadRadarrServerId:
             (config as CollectionFormConfig).directDownloadRadarrServerId ??
@@ -2288,6 +2294,14 @@ const CollectionFormConfigForm = ({
               values.subtype === 'monitored' &&
               values.comingSoonFilterByTags
                 ? values.comingSoonSonarrTagIds
+                : undefined,
+            comingSoonRadarrRootFolder:
+              values.type === 'comingsoon' && values.subtype === 'monitored'
+                ? values.comingSoonRadarrRootFolder
+                : undefined,
+            comingSoonSonarrRootFolder:
+              values.type === 'comingsoon' && values.subtype === 'monitored'
+                ? values.comingSoonSonarrRootFolder
                 : undefined,
             autoPoster: values.autoPoster,
             autoPosterTemplate: values.autoPosterTemplate,

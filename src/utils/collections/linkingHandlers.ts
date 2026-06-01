@@ -193,6 +193,8 @@ export const linkCollectionConfig = async (
             comingSoonTagMode: masterConfig.comingSoonTagMode,
             comingSoonRadarrTagIds: masterConfig.comingSoonRadarrTagIds,
             comingSoonSonarrTagIds: masterConfig.comingSoonSonarrTagIds,
+            comingSoonRadarrRootFolder: masterConfig.comingSoonRadarrRootFolder,
+            comingSoonSonarrRootFolder: masterConfig.comingSoonSonarrRootFolder,
             searchMissingMovies: masterConfig.searchMissingMovies,
             searchMissingTV: masterConfig.searchMissingTV,
             autoApproveMovies: masterConfig.autoApproveMovies,

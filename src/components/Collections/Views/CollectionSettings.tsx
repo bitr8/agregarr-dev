@@ -435,6 +435,8 @@ const CollectionSettings = ({
           comingSoonTagMode: config.comingSoonTagMode,
           comingSoonRadarrTagIds: config.comingSoonRadarrTagIds,
           comingSoonSonarrTagIds: config.comingSoonSonarrTagIds,
+          comingSoonRadarrRootFolder: config.comingSoonRadarrRootFolder,
+          comingSoonSonarrRootFolder: config.comingSoonSonarrRootFolder,
           sortOrder: config.sortOrder,
           timeRestriction: config.timeRestriction,
           customPoster: config.customPoster,
