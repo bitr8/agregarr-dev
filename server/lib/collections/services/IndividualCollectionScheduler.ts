@@ -931,14 +931,18 @@ export class IndividualCollectionScheduler {
         }
       );
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       logger.error(
-        `Scheduled collection sync failed for ${collectionId}: ${error}`,
+        `Scheduled collection sync failed for ${collectionId}: ${errorMessage}`,
         {
           label: 'Individual Collection Scheduler',
           collectionId,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
         }
       );
+      const settings = getSettings();
+      settings.setCollectionSyncError(collectionId, errorMessage);
     } finally {
       // Always release the API, regardless of success or failure
       const settings = getSettings();
