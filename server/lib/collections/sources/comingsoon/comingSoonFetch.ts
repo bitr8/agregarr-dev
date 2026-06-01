@@ -163,24 +163,9 @@ export async function fetchMonitoredMovies(
           continue;
         }
 
-        // Skip movies without any release date information
-        const hasReleaseDate = Boolean(
-          movie.releaseDate ||
-            movie.digitalRelease ||
-            movie.physicalRelease ||
-            movie.inCinemas
-        );
-
-        if (!hasReleaseDate) {
-          logger.debug('Skipping movie without release date', {
-            label: 'Coming Soon Collections',
-            title: movie.title,
-            tmdbId: movie.tmdbId,
-          });
-          continue;
-        }
-
         // Check if release date is within configured window
+        // Movies without any *arr dates are allowed through — TMDB enrichment may provide dates.
+        // The post-enrichment filter in enrichWithTMDBReleaseDates() drops items still dateless.
         // CRITICAL: Apply +3 month estimate for theatrical-only releases BEFORE filtering
         // BUT only if Radarr hasn't already estimated a digital release date
         let releaseDate: Date | null = null;
@@ -233,14 +218,13 @@ export async function fetchMonitoredMovies(
 
         upcomingCount++;
 
-        // Pass raw release dates - enrichWithTMDBReleaseDates will fetch fresh TMDB data and calculate final date
+        // Pass Radarr dates — enrichment prefers these, TMDB backfills missing fields
         items.push({
           tmdbId: movie.tmdbId,
           title: movie.title,
           mediaType: 'movie',
           source: 'radarr',
           monitored: true,
-          // Pass Radarr dates (likely stale/incomplete) - TMDB enrichment will override these
           releaseDate: movie.releaseDate,
           digitalRelease: movie.digitalRelease,
           physicalRelease: movie.physicalRelease,
@@ -1229,19 +1213,60 @@ export async function enrichWithTMDBReleaseDates(
             ? extractReleaseDates(movieDetails.release_dates.results)
             : {};
 
-          // Set extracted dates on item
-          item.digitalRelease = extracted.digitalRelease;
-          item.physicalRelease = extracted.physicalRelease;
-          item.inCinemas = extracted.inCinemas;
+          // For *arr-sourced items, prefer their dates (more accurate for monitored content).
+          // TMDB backfills fields the *arr source doesn't have.
+          // For all other sources (TMDB, Trakt, etc.), TMDB wins as before.
+          const preferArr =
+            item.source === 'radarr' || item.source === 'sonarr';
+
+          if (preferArr) {
+            const arrDigital = item.digitalRelease;
+            const arrPhysical = item.physicalRelease;
+            const arrInCinemas = item.inCinemas;
+
+            item.digitalRelease = arrDigital || extracted.digitalRelease;
+            item.physicalRelease = arrPhysical || extracted.physicalRelease;
+            item.inCinemas = arrInCinemas || extracted.inCinemas;
+
+            // Log when *arr and TMDB dates diverge significantly
+            const pairs: [string, string | undefined, string | undefined][] = [
+              ['digitalRelease', arrDigital, extracted.digitalRelease],
+              ['physicalRelease', arrPhysical, extracted.physicalRelease],
+              ['inCinemas', arrInCinemas, extracted.inCinemas],
+            ];
+            for (const [field, arrVal, tmdbVal] of pairs) {
+              if (arrVal && tmdbVal && arrVal !== tmdbVal) {
+                const diffDays = Math.abs(
+                  (new Date(arrVal).getTime() - new Date(tmdbVal).getTime()) /
+                    (24 * 60 * 60 * 1000)
+                );
+                if (diffDays > 7) {
+                  logger.info(
+                    `${item.source} and TMDB ${field} differ by ${Math.round(diffDays)} days — using ${item.source} value`,
+                    {
+                      label: 'PlaceholderService',
+                      title: item.title,
+                      arrValue: arrVal,
+                      tmdbValue: tmdbVal,
+                    }
+                  );
+                }
+              }
+            }
+          } else {
+            item.digitalRelease = extracted.digitalRelease;
+            item.physicalRelease = extracted.physicalRelease;
+            item.inCinemas = extracted.inCinemas;
+          }
 
           // Fallback to generic release_date if no specific theatrical date (same as overlays)
           const inCinemas =
-            extracted.inCinemas || movieDetails.release_date || undefined;
+            item.inCinemas || movieDetails.release_date || undefined;
 
           // Use shared priority logic: earliest of (Digital, Physical) > Theatrical (+90 days)
           const releaseDateResult = determineReleaseDate(
-            extracted.digitalRelease,
-            extracted.physicalRelease,
+            item.digitalRelease,
+            item.physicalRelease,
             inCinemas
           );
 
@@ -1250,10 +1275,11 @@ export async function enrichWithTMDBReleaseDates(
             item.releaseDate = releaseDateResult.releaseDate;
             item.isEstimatedDate = releaseDateResult.isEstimated;
 
-            logger.debug('Updated release date from TMDB enrichment', {
+            logger.debug('Updated release date from enrichment', {
               label: 'PlaceholderService',
               title: item.title,
               source: item.source,
+              preferArr,
               oldReleaseDate,
               newReleaseDate: item.releaseDate,
               isEstimated: releaseDateResult.isEstimated,
@@ -1544,16 +1570,15 @@ export async function markMonitoredStatus(
     }
   }
 
-  // Cross-reference items with Radarr/Sonarr to add monitoring/file status
-  // DO NOT overwrite release dates - items from TMDB already have fresh dates
+  // Cross-reference items with Radarr/Sonarr to add monitoring/file status.
+  // Backfill *arr dates only when item has none (e.g., TMDB/Trakt-sourced).
+  // Enrichment later decides priority based on item.source.
   for (const item of items) {
     if (item.mediaType === 'movie') {
       const radarrData = radarrMovieMap.get(item.tmdbId);
       if (radarrData) {
         item.monitored = radarrData.monitored;
         item.hasFile = radarrData.hasFile;
-        // Only use Radarr dates if item doesn't have them yet (from TMDB source)
-        // This preserves fresh TMDB dates from fetchTmdbComingSoonMovies()
         if (!item.releaseDate) item.releaseDate = radarrData.releaseDate;
         if (!item.digitalRelease)
           item.digitalRelease = radarrData.digitalRelease;
@@ -1581,9 +1606,9 @@ export async function markMonitoredStatus(
     }
   }
 
-  // Fetch fresh TMDB release dates for all items (except those already enriched by fetchTmdbComingSoon*)
-  // This ensures monitored Radarr/Sonarr items get fresh TMDB data instead of stale *arr dates
-  // Also filters out items outside the configured date window
+  // Enrich with TMDB release dates and filter by date window.
+  // *arr-sourced items keep their dates, TMDB backfills missing fields.
+  // Other sources (TMDB, Trakt) get TMDB dates as before.
   await enrichWithTMDBReleaseDates(items, maxDaysAway, releasedDays);
 
   logger.debug('Enriched Trakt items with Radarr/Sonarr data', {
