@@ -138,6 +138,14 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 **TV Placeholder Real Content Detection** -- Upstream's TV placeholder discovery never checks whether real content has arrived — when a Plex item exists for a marker, it always keeps it as a placeholder. Movies have this detection, but TV skips it entirely. This fork adds the same Plex metadata check: if the show has Season 1+ alongside Season 00, cleanup triggers. Sonarr download status is a secondary signal. Also fixes a truthy-empty-array bug where `Metadata || Directory` picks an empty array over a populated one, and makes label removal best-effort so transient Plex errors don't block cleanup.
 
+### Coming Soon Improvements
+
+**Prefer \*arr Release Dates** -- Upstream's TMDB enrichment unconditionally overwrites Radarr/Sonarr release dates, even when the \*arr source has more accurate data for monitored content. This fork preserves \*arr dates and only backfills from TMDB when a field is missing (e.g., Radarr has `digitalRelease` but no `physicalRelease`, TMDB fills the gap). Scoped to \*arr-sourced items only -- Trakt, TMDB, and Letterboxd sources still get TMDB dates as before. Logs a warning when \*arr and TMDB dates diverge by more than a week, so stale Radarr entries are visible in the logs.
+
+**Announced Movies Without Dates** -- Upstream silently drops Radarr movies that have no release date fields at all (common for early announcements with `status: announced`). These items never reach TMDB enrichment, so TMDB can't provide dates either. This fork lets them through to enrichment, where TMDB can fill in theatrical or digital dates. Items that are still dateless after enrichment are filtered out by the existing post-enrichment date window check.
+
+**Root Folder Filtering** -- Coming Soon monitored settings now include optional root folder dropdowns, populated from Radarr/Sonarr. Movies filter by path prefix, TV shows by `rootFolderPath` equality. Useful when multiple libraries point to different root folders on the same \*arr instance.
+
 ## Upstream PRs
 
 ### Open
