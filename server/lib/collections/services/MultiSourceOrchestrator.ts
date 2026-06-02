@@ -1353,31 +1353,102 @@ export class MultiSourceOrchestrator {
       config.id
     );
 
+    const options: CollectionUpdateOptions = {
+      collectionName: config.name,
+      mediaType,
+      visibilityConfig: {
+        usersHome: config.visibilityConfig?.usersHome ?? true,
+        serverOwnerHome: config.visibilityConfig?.serverOwnerHome ?? false,
+        libraryRecommended: config.visibilityConfig?.libraryRecommended ?? true,
+        isActive: config.isActive,
+      },
+      customLabel,
+      sortOrderLibrary: config.sortOrderLibrary,
+      isLibraryPromoted: config.isLibraryPromoted,
+      totalCollectionsInLibrary: undefined, // Not applicable for multi-source
+      customPoster: config.customPoster,
+      processedCollectionKeys,
+      libraryKey: config.libraryId,
+      config,
+    };
+
     // Use standard collection creation/update pipeline
-    return await this.createOrUpdateCollectionStandardized(
-      plexClient,
-      allCollections,
-      items,
-      {
-        collectionName: config.name,
-        mediaType,
-        visibilityConfig: {
-          usersHome: config.visibilityConfig?.usersHome ?? true,
-          serverOwnerHome: config.visibilityConfig?.serverOwnerHome ?? false,
-          libraryRecommended:
-            config.visibilityConfig?.libraryRecommended ?? true,
-          isActive: config.isActive,
-        },
-        customLabel,
-        sortOrderLibrary: config.sortOrderLibrary,
-        isLibraryPromoted: config.isLibraryPromoted,
-        totalCollectionsInLibrary: undefined, // Not applicable for multi-source
-        customPoster: config.customPoster,
-        processedCollectionKeys,
-        libraryKey: config.libraryId,
-        config,
+    try {
+      return await this.createOrUpdateCollectionStandardized(
+        plexClient,
+        allCollections,
+        items,
+        options
+      );
+    } catch (error) {
+      // Self-heal a stale collection ratingKey (#562). The allCollections
+      // snapshot is fetched once at the start of a sync job. During long syncs
+      // the matched Plex collection can be deleted and recreated, leaving the
+      // snapshot ratingKey stale so every mutation 404s and the config is stuck
+      // with needsSync=true forever. On a 404, refresh the snapshot and retry
+      // once: the label-based finder then resolves the live collection and the
+      // pipeline persists its rating key via updateConfigWithRatingKey.
+      if (!this.isStaleCollectionError(error)) {
+        throw error;
       }
-    );
+      logger.warn(
+        `Multi-source collection "${config.name}" update returned 404 (stale collection ratingKey) - refreshing Plex collections and retrying once`,
+        {
+          label: 'Multi-Source Orchestrator',
+          configId: config.id,
+          collectionName: config.name,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+      const freshCollections = await plexClient.getAllCollections();
+      return await this.createOrUpdateCollectionStandardized(
+        plexClient,
+        freshCollections,
+        items,
+        options
+      );
+    }
+  }
+
+  /**
+   * Detect a "collection no longer exists in Plex" error (HTTP 404). Used to
+   * decide whether to refresh the cached collection snapshot and retry once
+   * (#562). Kept broad to match the rest of the codebase, which checks for the
+   * '404' substring rather than an exact Plex error string.
+   */
+  private isStaleCollectionError(error: unknown): boolean {
+    const message =
+      error instanceof Error ? error.message : String(error ?? '');
+    return message.includes('404');
+  }
+
+  /**
+   * Apply Plex custom sort ordering without failing the whole sync. The sort is
+   * cosmetic (item arrangement is applied separately via
+   * arrangeCollectionItemsInOrder, which is already wrapped) so a 404 or
+   * transient error here must not propagate and leave the collection stuck with
+   * needsSync=true.
+   */
+  private async setCustomSortSafely(
+    plexClient: PlexAPI,
+    collectionRatingKey: string,
+    collectionName: string
+  ): Promise<void> {
+    try {
+      await plexClient.updateCollectionContentSort(
+        collectionRatingKey,
+        'custom'
+      );
+    } catch (error) {
+      logger.warn(
+        `Failed to set custom sort for multi-source collection "${collectionName}" (non-fatal)`,
+        {
+          label: 'Multi-Source Orchestrator',
+          collectionRatingKey,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+    }
   }
 
   /**
@@ -1774,14 +1845,28 @@ export class MultiSourceOrchestrator {
             );
 
             collectionRatingKey = existingCollection.ratingKey;
-            await plexClient.updateCollectionContentSort(
+            await this.setCustomSortSafely(
+              plexClient,
               collectionRatingKey,
-              'custom'
+              collectionName
             );
             const updateResult = await plexClient.updateCollectionContents(
               collectionRatingKey,
               plexItems
             );
+
+            // updateCollectionContents catches internally and returns errors
+            // rather than throwing, so a stale ratingKey (404) would otherwise
+            // be swallowed and skip the self-heal retry (#562). Surface it.
+            if (
+              updateResult.errors.some((e) => this.isStaleCollectionError(e))
+            ) {
+              throw new Error(
+                `Multi-source collection content update failed (response code: 404) for "${collectionName}": ${updateResult.errors.join(
+                  '; '
+                )}`
+              );
+            }
 
             // Update title if it changed (for DYNAMIC_CYCLE_TITLE)
             if (existingCollection.title !== collectionName) {
@@ -1887,9 +1972,10 @@ export class MultiSourceOrchestrator {
       }
 
       // For regular collections: Set custom sort and arrange items
-      await plexClient.updateCollectionContentSort(
+      await this.setCustomSortSafely(
+        plexClient,
         collectionRatingKey,
-        'custom'
+        collectionName
       );
 
       if (plexItems.length > 1) {
