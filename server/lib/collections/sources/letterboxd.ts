@@ -975,8 +975,8 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
       }
 
       if (matches.length === 0) {
-        logger.warn(
-          'No matches found with any pattern - Letterboxd structure may have changed',
+        logger.debug(
+          'No matches found with any pattern (expected on last page of paginated lists)',
           {
             label: 'Letterboxd Collections',
             htmlLength: html.length,

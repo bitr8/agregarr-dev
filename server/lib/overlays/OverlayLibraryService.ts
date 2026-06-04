@@ -1543,70 +1543,136 @@ class OverlayLibraryService {
       const itemRatingKeys = normalizedItems.map((i) => i.ratingKey);
       const batchMeta = await plexApi.getMetadataBatch(itemRatingKeys);
 
-      // Process each item
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (const { ratingKey, contextOverrides } of normalizedItems) {
-        try {
-          // Use batch-prefetched metadata, falling back to individual fetch on miss
-          const itemMetadata =
-            batchMeta.get(ratingKey) ?? (await plexApi.getMetadata(ratingKey));
-
-          if (itemMetadata) {
-            // CRITICAL: Skip episodes and seasons - overlays only apply to movies and shows
-            if (
-              itemMetadata.type === 'episode' ||
-              itemMetadata.type === 'season'
-            ) {
-              continue;
-            }
-
-            // Convert to PlexLibraryItem format (cast to satisfy type requirements)
-            const item = {
-              ratingKey: itemMetadata.ratingKey,
-              title: itemMetadata.title,
-              year: (itemMetadata as { year?: number }).year,
-              type: itemMetadata.type,
-              guid: itemMetadata.guid || '',
-              Guid: itemMetadata.Guid,
-              Media: itemMetadata.Media,
-              Label: itemMetadata.Label,
-              parentIndex: itemMetadata.parentIndex,
-              index: itemMetadata.index,
-              addedAt: itemMetadata.addedAt || 0,
-              updatedAt: itemMetadata.updatedAt || 0,
-              editionTitle: (itemMetadata as { editionTitle?: string })
-                .editionTitle,
-            } as PlexLibraryItem;
-
-            await this.applyOverlaysToItem(
-              plexApi,
-              item,
-              sortedTemplates,
-              mediaType,
-              libraryId,
-              config.libraryName,
-              contextOverrides
-            );
-            successCount++;
-          }
-        } catch (error) {
-          errorCount++;
-          logger.error('Failed to apply overlays to collection item', {
-            label: 'OverlayLibrary',
-            ratingKey,
-            error: error instanceof Error ? error.message : String(error),
-          });
+      // Convert batch metadata to PlexLibraryItem[] for prefetch
+      const plexItems: PlexLibraryItem[] = [];
+      for (const meta of batchMeta.values()) {
+        if (meta && meta.type !== 'episode' && meta.type !== 'season') {
+          plexItems.push({
+            ratingKey: meta.ratingKey,
+            title: meta.title,
+            year: (meta as { year?: number }).year,
+            type: meta.type,
+            guid: meta.guid || '',
+            Guid: meta.Guid,
+            Media: meta.Media,
+            Label: meta.Label,
+            parentIndex: meta.parentIndex,
+            index: meta.index,
+            addedAt: meta.addedAt || 0,
+            updatedAt: meta.updatedAt || 0,
+            editionTitle: (meta as { editionTitle?: string }).editionTitle,
+          } as PlexLibraryItem);
         }
       }
 
-      logger.info('Completed overlay application for collection items', {
-        label: 'OverlayLibrary',
-        successCount,
-        errorCount,
-        totalItems: normalizedItems.length,
-      });
+      // Prefetch IMDb ratings and TMDB release dates for collection items
+      // (mirrors the library-level prefetch in applyOverlaysToLibrary)
+      const { extractUsedContextFields } = await import(
+        '@server/utils/metadataHashing'
+      );
+      const templateDataArray = sortedTemplates.map((t) => t.getTemplateData());
+      const applicationConditions = sortedTemplates.map((t) =>
+        t.getApplicationCondition()
+      );
+      const requiredContextFields = extractUsedContextFields(
+        templateDataArray,
+        applicationConditions
+      );
+      this.requiredContextFieldsByLibrary.set(libraryId, requiredContextFields);
+
+      try {
+        const needsImdbRatings =
+          requiredContextFields.has('imdbRating') ||
+          requiredContextFields.has('isImdbTop250') ||
+          requiredContextFields.has('imdbTop250Rank');
+
+        const needsReleaseDates =
+          requiredContextFields.has('releaseDate') ||
+          requiredContextFields.has('daysUntilRelease') ||
+          requiredContextFields.has('daysAgo') ||
+          requiredContextFields.has('nextEpisodeAirDate') ||
+          requiredContextFields.has('daysUntilNextEpisode') ||
+          requiredContextFields.has('nextSeasonAirDate') ||
+          requiredContextFields.has('daysUntilNextSeason') ||
+          requiredContextFields.has('daysAgoNextSeason') ||
+          requiredContextFields.has('seasonNumber') ||
+          requiredContextFields.has('episodeNumber');
+
+        if (needsImdbRatings && plexItems.length > 0) {
+          await this.prefetchImdbRatings(plexItems);
+        }
+        if (needsReleaseDates && plexItems.length > 0) {
+          await this.prefetchTmdbReleaseDates(plexItems);
+        }
+
+        // Process each item
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const { ratingKey, contextOverrides } of normalizedItems) {
+          try {
+            // Use batch-prefetched metadata, falling back to individual fetch on miss
+            const itemMetadata =
+              batchMeta.get(ratingKey) ??
+              (await plexApi.getMetadata(ratingKey));
+
+            if (itemMetadata) {
+              // CRITICAL: Skip episodes and seasons - overlays only apply to movies and shows
+              if (
+                itemMetadata.type === 'episode' ||
+                itemMetadata.type === 'season'
+              ) {
+                continue;
+              }
+
+              // Convert to PlexLibraryItem format (cast to satisfy type requirements)
+              const item = {
+                ratingKey: itemMetadata.ratingKey,
+                title: itemMetadata.title,
+                year: (itemMetadata as { year?: number }).year,
+                type: itemMetadata.type,
+                guid: itemMetadata.guid || '',
+                Guid: itemMetadata.Guid,
+                Media: itemMetadata.Media,
+                Label: itemMetadata.Label,
+                parentIndex: itemMetadata.parentIndex,
+                index: itemMetadata.index,
+                addedAt: itemMetadata.addedAt || 0,
+                updatedAt: itemMetadata.updatedAt || 0,
+                editionTitle: (itemMetadata as { editionTitle?: string })
+                  .editionTitle,
+              } as PlexLibraryItem;
+
+              await this.applyOverlaysToItem(
+                plexApi,
+                item,
+                sortedTemplates,
+                mediaType,
+                libraryId,
+                config.libraryName,
+                contextOverrides
+              );
+              successCount++;
+            }
+          } catch (error) {
+            errorCount++;
+            logger.error('Failed to apply overlays to collection item', {
+              label: 'OverlayLibrary',
+              ratingKey,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        logger.info('Completed overlay application for collection items', {
+          label: 'OverlayLibrary',
+          successCount,
+          errorCount,
+          totalItems: normalizedItems.length,
+        });
+      } finally {
+        this.requiredContextFieldsByLibrary.delete(libraryId);
+      }
     } catch (error) {
       logger.error('Failed to apply overlays to collection items', {
         label: 'OverlayLibrary',
