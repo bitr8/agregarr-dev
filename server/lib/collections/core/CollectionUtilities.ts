@@ -1174,7 +1174,6 @@ export async function applyCollectionExclusions(
   plexClient: PlexAPI,
   source: CollectionSource
 ): Promise<CollectionItem[]> {
-  // Skip if no exclusions configured
   if (
     !config.excludeFromCollections ||
     config.excludeFromCollections.length === 0
@@ -1183,19 +1182,21 @@ export async function applyCollectionExclusions(
   }
 
   try {
-    // Get all items from excluded collections
     const excludedRatingKeys = new Set<string>();
+    // Lazy-fetched on first label fallback, shared across exclusions
+    let allCollections:
+      | Awaited<ReturnType<typeof plexClient.getAllCollections>>
+      | undefined;
+    const settings = getSettings();
 
     for (const excludedCollectionId of config.excludeFromCollections) {
-      // Find the collection configuration to get its rating key
-      const settings = getSettings();
       const excludedConfig = settings.plex.collectionConfigs?.find(
         (c) => c.id === excludedCollectionId
       );
 
-      if (!excludedConfig || !excludedConfig.collectionRatingKey) {
+      if (!excludedConfig) {
         logger.debug(
-          `Excluded collection ${excludedCollectionId} not found or has no rating key`,
+          `Excluded collection config ${excludedCollectionId} not found in settings`,
           {
             label: `${source} Collections`,
             configName: config.name,
@@ -1205,40 +1206,98 @@ export async function applyCollectionExclusions(
         continue;
       }
 
-      // Fetch items from the excluded collection
-      try {
-        const collectionItemRatingKeys = await plexClient.getCollectionItems(
-          excludedConfig.collectionRatingKey
-        );
+      let ratingKey = excludedConfig.collectionRatingKey;
 
-        // Add all rating keys from this collection to the exclusion set
-        for (const ratingKey of collectionItemRatingKeys) {
-          excludedRatingKeys.add(ratingKey);
-        }
-
-        logger.debug(
-          `Loaded ${collectionItemRatingKeys.length} items from excluded collection "${excludedConfig.name}"`,
-          {
-            label: `${source} Collections`,
-            configName: config.name,
-            excludedCollection: excludedConfig.name,
-            itemCount: collectionItemRatingKeys.length,
-          }
-        );
-      } catch (error) {
-        logger.warn(
-          `Failed to fetch items from excluded collection ${excludedConfig.name}: ${error}`,
-          {
-            label: `${source} Collections`,
-            configName: config.name,
-            excludedCollection: excludedConfig.name,
-            error: error instanceof Error ? error.message : String(error),
-          }
+      let collectionItemRatingKeys: string[] = [];
+      if (ratingKey) {
+        collectionItemRatingKeys = await plexClient.getCollectionItems(
+          ratingKey
         );
       }
+
+      // Fallback: ratingKey missing or stale (getCollectionItems returns []
+      // on 404). Distinguish stale from genuinely empty by checking whether
+      // the ratingKey exists in the full collection list.
+      if (!ratingKey || collectionItemRatingKeys.length === 0) {
+        if (!allCollections) {
+          allCollections = await plexClient.getAllCollections();
+        }
+
+        // If the ratingKey exists in Plex, the collection is just empty
+        if (
+          ratingKey &&
+          allCollections.some((c) => c.ratingKey === ratingKey)
+        ) {
+          logger.debug(
+            `Excluded collection "${excludedConfig.name}" exists but is empty — no items to exclude`,
+            {
+              label: `${source} Collections`,
+              configName: config.name,
+              excludedCollection: excludedConfig.name,
+            }
+          );
+          continue;
+        }
+
+        // ratingKey is missing or not found in Plex — search by label,
+        // scoped to the excluded config's library
+        const libraryId = Array.isArray(excludedConfig.libraryId)
+          ? excludedConfig.libraryId[0]
+          : excludedConfig.libraryId;
+        const resolved = allCollections
+          .filter((c) => c.libraryKey === libraryId)
+          .find((c) =>
+            c.labels?.some(
+              (label) => parseConfigIdFromLabel(label) === excludedCollectionId
+            )
+          );
+
+        if (resolved) {
+          logger.info(
+            `Exclusion config ${excludedCollectionId} (${
+              excludedConfig.name
+            }): ${
+              ratingKey ? `stale ratingKey ${ratingKey}` : 'no ratingKey'
+            } — resolved via label to ratingKey ${resolved.ratingKey}`,
+            { label: `${source} Collections` }
+          );
+          ratingKey = resolved.ratingKey;
+          updateConfigWithRatingKey(
+            excludedCollectionId,
+            resolved.ratingKey,
+            libraryId
+          );
+          collectionItemRatingKeys = await plexClient.getCollectionItems(
+            resolved.ratingKey
+          );
+        } else {
+          logger.warn(
+            `Exclusion config ${excludedCollectionId} (${excludedConfig.name}): Plex collection not found by ratingKey or label`,
+            {
+              label: `${source} Collections`,
+              configName: config.name,
+              collectionRatingKey: ratingKey,
+            }
+          );
+          continue;
+        }
+      }
+
+      for (const itemRatingKey of collectionItemRatingKeys) {
+        excludedRatingKeys.add(itemRatingKey);
+      }
+
+      logger.debug(
+        `Loaded ${collectionItemRatingKeys.length} items from excluded collection "${excludedConfig.name}"`,
+        {
+          label: `${source} Collections`,
+          configName: config.name,
+          excludedCollection: excludedConfig.name,
+          itemCount: collectionItemRatingKeys.length,
+        }
+      );
     }
 
-    // Filter out items that exist in any excluded collection
     const beforeCount = items.length;
     const filteredItems = items.filter(
       (item) => !excludedRatingKeys.has(item.ratingKey)
@@ -1269,7 +1328,6 @@ export async function applyCollectionExclusions(
         error: error instanceof Error ? error.message : String(error),
       }
     );
-    // Return original items on error - don't fail the entire sync
     return items;
   }
 }
