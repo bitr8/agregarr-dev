@@ -1,5 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
-import type { ComingSoonItem } from '@server/entity/ComingSoonItem';
+import { ComingSoonItem } from '@server/entity/ComingSoonItem';
+import { getRepository } from '@server/datasource';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
@@ -657,6 +658,16 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     const tmdbToSource = new Map(sourceData.map((s) => [s.tmdbId, s]));
     const matchedTmdbIds = new Set<number>();
 
+    // Pre-fetch which tmdbIds still have DB records (cleanup deletes them)
+    const matchedTmdbIdList = [...matchedItemsMap.keys()].map((k) =>
+      parseInt(k.replace('tmdb-', ''), 10)
+    );
+    const existingDbRecords = await getRepository(ComingSoonItem).find({
+      where: matchedTmdbIdList.map((id) => ({ tmdbId: id })),
+      select: ['tmdbId'],
+    });
+    const tmdbIdsWithDbRecord = new Set(existingDbRecords.map((r) => r.tmdbId));
+
     // Check matched items - separate real items from our placeholders
     for (const [tmdbKey, itemData] of matchedItemsMap) {
       const tmdbId = parseInt(tmdbKey.replace('tmdb-', ''), 10);
@@ -723,26 +734,39 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
 
         // Ensure placeholder has the correct label for Recently Added filtering
         // This fixes placeholders that may have been created without the label
-        try {
-          await plexClient.addLabelToItem(
-            itemData.ratingKey,
-            'trailer-placeholder'
+        // Skip if discovery already cleaned up this item — the DB record is
+        // deleted during cleanup, so its absence means real content arrived
+        if (tmdbIdsWithDbRecord.has(tmdbId)) {
+          try {
+            await plexClient.addLabelToItem(
+              itemData.ratingKey,
+              'trailer-placeholder'
+            );
+            logger.debug('Ensured placeholder label exists', {
+              label: 'Coming Soon Collections',
+              title: sourceItem.title,
+              ratingKey: itemData.ratingKey,
+            });
+          } catch (labelError) {
+            logger.warn('Failed to ensure placeholder label', {
+              label: 'Coming Soon Collections',
+              title: sourceItem.title,
+              ratingKey: itemData.ratingKey,
+              error:
+                labelError instanceof Error
+                  ? labelError.message
+                  : String(labelError),
+            });
+          }
+        } else {
+          logger.debug(
+            'Skipping label re-add — placeholder was cleaned up by discovery',
+            {
+              label: 'Coming Soon Collections',
+              title: sourceItem.title,
+              tmdbId,
+            }
           );
-          logger.debug('Ensured placeholder label exists', {
-            label: 'Coming Soon Collections',
-            title: sourceItem.title,
-            ratingKey: itemData.ratingKey,
-          });
-        } catch (labelError) {
-          logger.warn('Failed to ensure placeholder label', {
-            label: 'Coming Soon Collections',
-            title: sourceItem.title,
-            ratingKey: itemData.ratingKey,
-            error:
-              labelError instanceof Error
-                ? labelError.message
-                : String(labelError),
-          });
         }
       }
 

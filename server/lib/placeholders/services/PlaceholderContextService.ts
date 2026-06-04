@@ -274,22 +274,21 @@ export class PlaceholderContextService {
       // TV shows: Check seasons
 
       // If Children metadata is already provided, use it
-      const childSeasons =
-        plexMetadata.Children?.Metadata || plexMetadata.Children?.Directory;
-      if (childSeasons) {
+      // Merge both arrays — Plex may populate either or both
+      const childSeasons = [
+        ...(plexMetadata.Children?.Metadata || []),
+        ...(plexMetadata.Children?.Directory || []),
+      ];
+      if (childSeasons.length > 0) {
         const seasons = childSeasons as {
           index?: number;
         }[];
 
-        if (seasons.length === 0) {
-          return false;
-        }
-
         const nonZeroSeasons = seasons.filter(
-          (s) => s.index && s.index > 0
+          (s) => s.index !== undefined && s.index > 0
         ).length;
 
-        return nonZeroSeasons === 0 && seasons.length > 0;
+        return nonZeroSeasons === 0;
       }
 
       // Phase 2: Detailed check for suspicious items
@@ -324,9 +323,10 @@ export class PlaceholderContextService {
           });
 
           // Seasons may be in Metadata or Directory depending on Plex version/endpoint
-          const seasons = (response?.MediaContainer?.Metadata ||
-            response?.MediaContainer?.Directory ||
-            []) as {
+          const seasons = [
+            ...(response?.MediaContainer?.Metadata || []),
+            ...(response?.MediaContainer?.Directory || []),
+          ] as {
             index?: number;
           }[];
 
@@ -343,7 +343,7 @@ export class PlaceholderContextService {
 
           // Check if all seasons are Season 00
           const nonZeroSeasons = seasons.filter(
-            (s) => s.index && s.index > 0
+            (s) => s.index !== undefined && s.index > 0
           ).length;
 
           const isPlaceholder = nonZeroSeasons === 0 && seasons.length > 0;
