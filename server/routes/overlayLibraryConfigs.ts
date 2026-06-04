@@ -381,8 +381,8 @@ router.get('/:libraryId/status', (req, res) => {
 // GET /api/v1/overlay-library-configs/status/all - Get all running libraries and job status
 router.get('/status/all', (_req, res) => {
   const runningLibraries = overlayLibraryService.getAllRunningLibraries();
-  const jobRunning = overlayApplication.status.running;
-  const pending = jobRunning && runningLibraries.length === 0;
+  const pending =
+    overlayApplication.status.pending && runningLibraries.length === 0;
   return res.status(200).json({
     runningLibraries,
     jobStatus: overlayApplication.status,

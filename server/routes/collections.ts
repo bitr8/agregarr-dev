@@ -1737,7 +1737,7 @@ collectionsRoutes.get('/sync/status', async (_req, res) => {
  */
 collectionsRoutes.get('/sync/progress', (_req, res) => {
   const current = collectionSyncProgress.getStatus();
-  const pending = !current && collectionsSync.running;
+  const pending = !current && collectionsSync.pending;
   return res.status(200).json({
     current,
     lastCompleted: collectionSyncProgress.getLastCompleted(),
@@ -1750,7 +1750,9 @@ collectionsRoutes.get('/sync/progress', (_req, res) => {
  * Cancel a running collection sync
  */
 collectionsRoutes.post('/sync/cancel', isAuthenticated(), (_req, res) => {
-  if (!collectionsSync.running) {
+  // Allow cancel during the pending/wait phase too: the wait loops honour
+  // this.cancelled, so Stop should work before real work begins (running=true).
+  if (!collectionsSync.running && !collectionsSync.pending) {
     return res.status(409).json({
       status: 'error',
       message: 'No collection sync is currently running',

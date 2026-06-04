@@ -10,6 +10,10 @@ import { collectionSyncService } from './collections/services/CollectionSyncServ
 
 class CollectionsSync {
   public running = false;
+  // Set while waiting for other jobs to finish, before real work begins.
+  // Kept separate from `running` so the cross-job wait loops never see a
+  // merely-queued sync as active (that would deadlock with Overlay Application).
+  public pending = false;
   private cancelled = false;
   private cleanupService = new CollectionCleanupService();
 
@@ -21,6 +25,7 @@ class CollectionsSync {
   public get status() {
     return {
       running: this.running,
+      pending: this.pending,
       cancelled: this.cancelled,
       currentStage: this.currentStage,
       totalCollections: this.totalCollections,
@@ -155,8 +160,11 @@ class CollectionsSync {
   }
 
   public async run(): Promise<void> {
-    // Set running early so the UI can show pending/waiting state
-    this.running = true;
+    // Mark pending (not running) so the UI shows the waiting state without the
+    // cross-job wait loops below treating this sync as active. `running` is set
+    // only once all the waits clear (see below) to avoid a mutual deadlock with
+    // Overlay Application, which waits on collectionsSync.status.running.
+    this.pending = true;
     this.cancelled = false;
 
     // Check if discovery is running to prevent race conditions
@@ -164,7 +172,7 @@ class CollectionsSync {
       '@server/lib/collections/services/DiscoveryService'
     );
     if (discoveryService.status.running) {
-      this.running = false;
+      this.pending = false;
       throw new Error(
         'Discovery is currently running. Please wait for discovery to complete before starting sync.'
       );
@@ -186,7 +194,7 @@ class CollectionsSync {
     }
 
     if (this.cancelled) {
-      this.running = false;
+      this.pending = false;
       return;
     }
 
@@ -207,7 +215,7 @@ class CollectionsSync {
     }
 
     if (this.cancelled) {
-      this.running = false;
+      this.pending = false;
       return;
     }
 
@@ -235,7 +243,7 @@ class CollectionsSync {
     }
 
     if (this.cancelled) {
-      this.running = false;
+      this.pending = false;
       return;
     }
 
@@ -268,50 +276,57 @@ class CollectionsSync {
     }
 
     if (this.cancelled) {
-      this.running = false;
+      this.pending = false;
       return;
     }
 
+    // All cross-job waits have cleared: claim the running state now. Setting it
+    // here (rather than at the top of run()) is what prevents the deadlock with
+    // Overlay Application while still gating individual syncs during real work.
+    this.running = true;
+    this.pending = false;
     IndividualCollectionScheduler.setFullSyncRunning(true);
     this.setStage('Starting sync...');
 
-    // Initialize rich progress tracking (will be populated with total count later)
-    collectionSyncProgress.startSync(0);
-    collectionSyncProgress.setDetail('Starting sync...');
-
     const settings = getSettings();
-
-    // Validate Plex configuration
-    if (!settings.plex.ip || !settings.plex.machineId) {
-      logger.error(
-        'Plex server configuration incomplete. Please check Plex settings.',
-        { label: 'Collections Sync' }
-      );
-      collectionSyncProgress.fail('Plex server configuration incomplete');
-      return;
-    }
-
-    // Get admin user for Plex token
-    // Check local admin user for Plex token (not external Overseerr)
-    const { getAdminUser } = await import(
-      '@server/lib/collections/core/CollectionUtilities'
-    );
-    const localAdmin = await getAdminUser();
-
-    if (!localAdmin?.plexToken) {
-      logger.warn(
-        'Collections sync skipped. No local admin Plex token found.',
-        {
-          label: 'Collections Sync',
-        }
-      );
-      collectionSyncProgress.fail('No local admin Plex token found');
-      return;
-    }
-
     const startTime = Date.now();
 
+    // Everything past the running claim runs inside try/finally so that an
+    // early return from the pre-flight validation below still releases the
+    // running / pending / full-sync flags (the finally block resets them).
     try {
+      // Initialize rich progress tracking (populated with total count later)
+      collectionSyncProgress.startSync(0);
+      collectionSyncProgress.setDetail('Starting sync...');
+
+      // Validate Plex configuration
+      if (!settings.plex.ip || !settings.plex.machineId) {
+        logger.error(
+          'Plex server configuration incomplete. Please check Plex settings.',
+          { label: 'Collections Sync' }
+        );
+        collectionSyncProgress.fail('Plex server configuration incomplete');
+        return;
+      }
+
+      // Get admin user for Plex token
+      // Check local admin user for Plex token (not external Overseerr)
+      const { getAdminUser } = await import(
+        '@server/lib/collections/core/CollectionUtilities'
+      );
+      const localAdmin = await getAdminUser();
+
+      if (!localAdmin?.plexToken) {
+        logger.warn(
+          'Collections sync skipped. No local admin Plex token found.',
+          {
+            label: 'Collections Sync',
+          }
+        );
+        collectionSyncProgress.fail('No local admin Plex token found');
+        return;
+      }
+
       // Initialize Plex client
       this.setStage('Connecting to Plex server...');
       collectionSyncProgress.setDetail('Connecting to Plex server...');
@@ -552,6 +567,7 @@ class CollectionsSync {
       collectionSyncProgress.fail(errorMessage);
     } finally {
       this.running = false;
+      this.pending = false;
       this.cancelled = false;
 
       // Allow individual syncs to resume
