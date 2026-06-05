@@ -1529,8 +1529,34 @@ export class MultiSourceOrchestrator {
       );
 
       // Label all items (new and existing)
+      let labelFailures = 0;
       for (const itemKey of itemRatingKeys) {
-        await plexClient.addLabelToItem(itemKey, labelName);
+        try {
+          await plexClient.addLabelToItem(itemKey, labelName);
+        } catch (error) {
+          labelFailures++;
+          logger.warn(
+            `Failed to label item ${itemKey} for smart collection "${collectionName}" (skipping)`,
+            {
+              label: 'Multi-Source Orchestrator',
+              configId: options.config.id,
+              itemRatingKey: itemKey,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+        }
+      }
+      if (labelFailures > 0) {
+        logger.info(
+          `${labelFailures}/${itemRatingKeys.length} items failed labeling for smart collection "${collectionName}"`,
+          {
+            label: 'Multi-Source Orchestrator',
+            configId: options.config.id,
+            collectionName,
+            labelFailures,
+            totalItems: itemRatingKeys.length,
+          }
+        );
       }
 
       // CLEANUP: Remove labels from items that are no longer in the collection
@@ -1855,17 +1881,19 @@ export class MultiSourceOrchestrator {
               plexItems
             );
 
-            // updateCollectionContents catches internally and returns errors
-            // rather than throwing, so a stale ratingKey (404) would otherwise
-            // be swallowed and skip the self-heal retry (#562). Surface it.
-            if (
-              updateResult.errors.some((e) => this.isStaleCollectionError(e))
-            ) {
-              throw new Error(
-                `Multi-source collection content update failed (response code: 404) for "${collectionName}": ${updateResult.errors.join(
-                  '; '
-                )}`
-              );
+            // updateCollectionContents catches 404s internally and returns
+            // generic error strings ("Failed to add N items") that don't
+            // contain "404", so string-based detection can't trigger the
+            // self-heal. Instead, when items fail to add, verify the
+            // collection still exists in Plex directly.
+            if (updateResult.errors.length > 0) {
+              const collectionExists =
+                await plexClient.getCollectionMetadataSafe(collectionRatingKey);
+              if (!collectionExists) {
+                throw new Error(
+                  `Multi-source collection content update failed for "${collectionName}": collection not found in Plex (stale ratingKey ${collectionRatingKey}, response code: 404)`
+                );
+              }
             }
 
             // Update title if it changed (for DYNAMIC_CYCLE_TITLE)
