@@ -8,6 +8,11 @@ on:
     branches:
       - develop
       - 'feature/**'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
 
 jobs:
   test:
