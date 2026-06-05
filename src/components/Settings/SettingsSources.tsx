@@ -7,6 +7,7 @@ import SensitiveInput from '@app/components/Common/SensitiveInput';
 import globalMessages from '@app/i18n/globalMessages';
 import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
 import type {
+  MainSettings,
   MaintainerrSettings,
   MDBListSettings,
   MyAnimeListSettings,
@@ -137,6 +138,16 @@ const messages = defineMessages({
     'Seerr, Radarr, and Sonarr are configured on the next page',
   overseerrDownloadsTitleSettings:
     'Seerr, Radarr, and Sonarr are configured on the Downloads page',
+  fetchingSettings: 'Fetching Settings',
+  letterboxdUsePlainHttp: 'Use Plain HTTP for Letterboxd',
+  letterboxdUsePlainHttpTip:
+    'Use direct HTTP requests instead of browser automation (Playwright) for Letterboxd page fetching. Much faster and works unless Cloudflare challenges return.',
+  flixpatrolUsePlainHttp: 'Use Plain HTTP for FlixPatrol',
+  flixpatrolUsePlainHttpTip:
+    'Use direct HTTP requests instead of browser automation (Playwright) for FlixPatrol page fetching. Much faster and works unless Cloudflare challenges return.',
+  toastFetchingSettingsSuccess: 'Fetching settings saved successfully!',
+  toastFetchingSettingsFailure:
+    'Something went wrong while saving fetching settings.',
 });
 
 interface SettingsSourcesProps {
@@ -181,6 +192,9 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
     useSWR<MyAnimeListSettings>('/api/v1/settings/myanimelist');
   const { data: dataMaintainerr, mutate: revalidateMaintainerr } =
     useSWR<MaintainerrSettings>('/api/v1/settings/maintainerr');
+  const { data: dataMain, mutate: revalidateMain } = useSWR<MainSettings>(
+    '/api/v1/settings/main'
+  );
   const [showTraktCodeModal, setShowTraktCodeModal] = useState(false);
   const [traktCode, setTraktCode] = useState('');
   const [isExchangingCode, setIsExchangingCode] = useState(false);
@@ -342,6 +356,115 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
           />
         </div>
       </div>
+
+      {/* Fetching Settings (Letterboxd / FlixPatrol plain HTTP) */}
+      <div className="section">
+        <div className="mb-6">
+          <h3 className="heading">
+            {intl.formatMessage(messages.fetchingSettings)}
+          </h3>
+        </div>
+      </div>
+      <Formik
+        initialValues={{
+          letterboxdUsePlainHttp: dataMain?.letterboxdUsePlainHttp ?? false,
+          flixpatrolUsePlainHttp: dataMain?.flixpatrolUsePlainHttp ?? false,
+        }}
+        enableReinitialize
+        onSubmit={async (values) => {
+          try {
+            await axios.post('/api/v1/settings/main', {
+              letterboxdUsePlainHttp: values.letterboxdUsePlainHttp,
+              flixpatrolUsePlainHttp: values.flixpatrolUsePlainHttp,
+            });
+            revalidateMain();
+            addToast(
+              intl.formatMessage(messages.toastFetchingSettingsSuccess),
+              { appearance: 'success', autoDismiss: true }
+            );
+          } catch (e) {
+            addToast(
+              intl.formatMessage(messages.toastFetchingSettingsFailure),
+              { appearance: 'error', autoDismiss: true }
+            );
+          }
+        }}
+      >
+        {({ values, setFieldValue, handleSubmit, isSubmitting }) => (
+          <form className="section" onSubmit={handleSubmit}>
+            <div className="form-row">
+              <label
+                htmlFor="letterboxdUsePlainHttp"
+                className="checkbox-label"
+              >
+                <span className="mr-2">
+                  {intl.formatMessage(messages.letterboxdUsePlainHttp)}
+                </span>
+                <span className="label-tip">
+                  {intl.formatMessage(messages.letterboxdUsePlainHttpTip)}
+                </span>
+              </label>
+              <div className="form-input-area">
+                <Field
+                  type="checkbox"
+                  id="letterboxdUsePlainHttp"
+                  name="letterboxdUsePlainHttp"
+                  onChange={() => {
+                    setFieldValue(
+                      'letterboxdUsePlainHttp',
+                      !values.letterboxdUsePlainHttp
+                    );
+                  }}
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <label
+                htmlFor="flixpatrolUsePlainHttp"
+                className="checkbox-label"
+              >
+                <span className="mr-2">
+                  {intl.formatMessage(messages.flixpatrolUsePlainHttp)}
+                </span>
+                <span className="label-tip">
+                  {intl.formatMessage(messages.flixpatrolUsePlainHttpTip)}
+                </span>
+              </label>
+              <div className="form-input-area">
+                <Field
+                  type="checkbox"
+                  id="flixpatrolUsePlainHttp"
+                  name="flixpatrolUsePlainHttp"
+                  onChange={() => {
+                    setFieldValue(
+                      'flixpatrolUsePlainHttp',
+                      !values.flixpatrolUsePlainHttp
+                    );
+                  }}
+                />
+              </div>
+            </div>
+            <div className="actions">
+              <div className="flex justify-end">
+                <span className="ml-3 inline-flex rounded-md shadow-sm">
+                  <Button
+                    buttonType="primary"
+                    type="submit"
+                    disabled={isSubmitting}
+                  >
+                    <ArrowDownOnSquareIcon />
+                    <span>
+                      {isSubmitting
+                        ? intl.formatMessage(messages.saving)
+                        : intl.formatMessage(messages.save)}
+                    </span>
+                  </Button>
+                </span>
+              </div>
+            </div>
+          </form>
+        )}
+      </Formik>
 
       {/* Trakt Settings */}
       <div className="section">
