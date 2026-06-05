@@ -60,19 +60,19 @@ Both collection and overlay syncs get unified side-by-side dashboard cards with 
 
 Upstream Agregarr makes individual API calls per item, per rating source, per cache miss. With 40+ collections and 10k+ items, syncs take hours and hammer external APIs. These changes reduce that to minutes.
 
-| Fix                             | Why                                                   | Impact                                                 |
-| ------------------------------- | ----------------------------------------------------- | ------------------------------------------------------ |
-| **Batch IMDb Prefetch**         | Upstream fetches IMDb ratings one item at a time      | Thousands of API calls reduced to tens                 |
-| **Adaptive TTL Caching**        | All cached ratings expire at the same fixed interval  | New releases: 12h, older content: up to 30 days        |
-| **Configurable Rating Cache**   | No way to tune cache duration                         | `ratingsCacheMaxDays` in settings.json (default: 30)   |
-| **Collection Sync Cache**       | `getAllCollections()` called on every loop iteration  | Cached with mutation-based invalidation. Saves ~25-30s |
-| **Batch Overlay Metadata**      | Plex metadata fetched one item at a time              | Batches of 200 per API call. Falls back on failure     |
-| **FlixPatrol CloudflareSolver** | Hardcoded browser-spoofing headers stopped working    | Uses Playwright-based solver, same as Letterboxd       |
-| **WAF Solver Timeout Fix**      | IMDb pages never reach `networkidle`, WAF solve hangs | Uses `/chart/top/` for token acquisition, `load` wait  |
-| **AniList Retry Cap**           | `parseInt` NaN bug causes infinite tight retry loops  | Capped at 5 attempts                                   |
-| **Release Date TTL Cap**        | Stale cache shows wrong overlay for new releases      | Items within 3 days of release: max 2h TTL             |
-| **Sync Status Fix**             | Large multi-source collections stuck as "pending"     | Partial source failures no longer block sync status    |
-| **TMDB Random Graceful Fail**   | No random collection throws, blocks entire sync       | Warns and skips, existing collection preserved         |
+| Fix                             | Why                                                   | Impact                                                     |
+| ------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------- |
+| **Batch IMDb Prefetch**         | Upstream fetches IMDb ratings one item at a time      | Thousands of API calls reduced to tens                     |
+| **Adaptive TTL Caching**        | All cached ratings expire at the same fixed interval  | New releases: 12h, older content: up to 30 days            |
+| **Configurable Rating Cache**   | No way to tune cache duration                         | `ratingsCacheMaxDays` in settings.json (default: 30)       |
+| **Collection Sync Cache**       | `getAllCollections()` called on every loop iteration  | Cached with mutation-based invalidation. Saves ~25-30s     |
+| **Batch Overlay Metadata**      | Plex metadata fetched one item at a time              | Batches of 200 per API call. Falls back on failure         |
+| **FlixPatrol CloudflareSolver** | Hardcoded browser-spoofing headers stopped working    | Uses Playwright-based solver, same as Letterboxd           |
+| **WAF Solver Timeout Fix**      | IMDb pages never reach `networkidle`, WAF solve hangs | Uses `/chart/top/` for token acquisition, `load` wait      |
+| **AniList Retry Cap**           | `parseInt` NaN bug causes infinite tight retry loops  | Capped at 5 attempts                                       |
+| **Release Date TTL Cap**        | Stale cache shows wrong overlay for new releases      | Items within 3 days of release: max 2h TTL                 |
+| **Sync Status Fix**             | Large multi-source collections stuck as "pending"     | Self-heal for stale ratingKeys + item-level 404 resilience |
+| **TMDB Random Graceful Fail**   | No random collection throws, blocks entire sync       | Warns and skips, existing collection preserved             |
 
 **Persistent TMDB Resolution Cache** -- Letterboxd collections require resolving titles to TMDB IDs. Upstream re-resolves every item on every sync (6 TMDB API calls each). This caches results in SQLite with adaptive TTL.
 
@@ -90,31 +90,11 @@ Upstream Agregarr makes individual API calls per item, per rating source, per ca
 | 142 pages         | ~25 min    | ~40 sec    |
 | Cloudflare blocks | 0          | 0          |
 
-To enable, **stop the container first**, then add to `settings.json`:
-
-```json
-{
-  "plex": {
-    "letterboxdUsePlainHttp": true
-  }
-}
-```
-
-Defaults to `false` (Playwright) for safety. Flip back if Cloudflare starts blocking.
+Enable via **Settings > Sources > Fetching Settings** in the UI. Defaults to off (Playwright) for safety. Flip back if Cloudflare starts blocking.
 
 **Plain HTTP for FlixPatrol** (`flixpatrolUsePlainHttp`) -- Same approach as Letterboxd. FlixPatrol top 10 pages return full HTML without Cloudflare challenges. Applies to all 3 fetch paths (platform top 10, country list, platform discovery).
 
-To enable, **stop the container first**, then add to `settings.json`:
-
-```json
-{
-  "plex": {
-    "flixpatrolUsePlainHttp": true
-  }
-}
-```
-
-Defaults to `false` (Playwright) for safety. **Agregarr overwrites `settings.json` while running** — edits made to a live container will be lost on next save.
+Enable via **Settings > Sources > Fetching Settings** in the UI. Defaults to off (Playwright) for safety.
 
 ### Placeholder Lifecycle Fixes
 
