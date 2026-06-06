@@ -52,11 +52,11 @@ export class RandomListManager {
       'https://www.imdb.com/list/ls068082370/', // Must See Crime Movies
     ],
     letterboxd: [
-      'https://letterboxd.com/dave/list/reddit-top-250/',
-      'https://letterboxd.com/lifeasfiction/list/letterboxd-top-250/',
-      'https://letterboxd.com/bestofrt/list/best-of-rotten-tomatoes/',
-      'https://letterboxd.com/cinema/list/criterion-collection/',
-      'https://letterboxd.com/crew/list/popular-reviews/',
+      'https://letterboxd.com/official/list/top-250-films-with-the-most-fans/',
+      'https://letterboxd.com/official/list/the-letterboxd-top-250-as-of-2025/',
+      'https://letterboxd.com/imthelizardking/list/rotten-tomatoes-300-best-movies-of-all-time/',
+      'https://letterboxd.com/jbutts15/list/the-complete-criterion-collection/',
+      'https://letterboxd.com/dave/list/imdb-top-250/',
     ],
   };
 
@@ -146,11 +146,11 @@ enabled=false
 
 # Example URLs (set enabled=true to activate):
 
-https://letterboxd.com/dave/list/reddit-top-250/
-https://letterboxd.com/lifeasfiction/list/letterboxd-top-250/
-https://letterboxd.com/crew/list/popular-reviews/
-https://letterboxd.com/bestofrt/list/best-of-rotten-tomatoes/
-https://letterboxd.com/cinema/list/criterion-collection/
+https://letterboxd.com/official/list/top-250-films-with-the-most-fans/
+https://letterboxd.com/official/list/the-letterboxd-top-250-as-of-2025/
+https://letterboxd.com/imthelizardking/list/rotten-tomatoes-300-best-movies-of-all-time/
+https://letterboxd.com/jbutts15/list/the-complete-criterion-collection/
+https://letterboxd.com/dave/list/imdb-top-250/
 `,
     };
 
