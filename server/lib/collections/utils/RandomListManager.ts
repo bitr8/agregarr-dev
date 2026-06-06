@@ -58,15 +58,43 @@ export class RandomListManager {
       'https://letterboxd.com/jbutts15/list/the-complete-criterion-collection/',
       'https://letterboxd.com/dave/list/imdb-top-250/',
     ],
+    tmdb: [
+      'https://www.themoviedb.org/collection/645', // James Bond (27)
+      'https://www.themoviedb.org/collection/9485', // Fast & Furious (12)
+      'https://www.themoviedb.org/collection/10', // Star Wars (9)
+      'https://www.themoviedb.org/collection/1241', // Harry Potter (8)
+      'https://www.themoviedb.org/collection/87359', // Mission: Impossible (8)
+      'https://www.themoviedb.org/collection/328', // Jurassic Park (7)
+      'https://www.themoviedb.org/collection/86311', // Avengers (6)
+      'https://www.themoviedb.org/collection/8945', // Mad Max (6)
+      'https://www.themoviedb.org/collection/399', // Predator (6)
+      'https://www.themoviedb.org/collection/84', // Indiana Jones (5)
+      'https://www.themoviedb.org/collection/1570', // Die Hard (5)
+      'https://www.themoviedb.org/collection/295', // Pirates of the Caribbean (5)
+      'https://www.themoviedb.org/collection/31562', // Bourne (5)
+      'https://www.themoviedb.org/collection/404609', // John Wick (4)
+      'https://www.themoviedb.org/collection/2344', // The Matrix (4)
+      'https://www.themoviedb.org/collection/8091', // Alien (4)
+    ],
   };
 
-  // TMDB filtered collections cache
+  // TMDB filtered collections cache (from daily export)
   private static tmdbFilteredCache: {
     collections: { id: number; name: string }[];
     lastFiltered: number;
     nextRefresh: number;
   } | null = null;
   private static readonly TMDB_FILTERED_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+  // TMDB collections discovered from user's library (much smaller, pre-validated)
+  private static tmdbLibraryCollectionsCache: {
+    urls: string[];
+    lastBuilt: number;
+    nextRefresh: number;
+  } | null = null;
+  private static tmdbLibraryBuildPromise: Promise<string[]> | null = null;
+  private static readonly TMDB_LIBRARY_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+  private static readonly TMDB_LIBRARY_NEGATIVE_TTL = 4 * 60 * 60 * 1000; // 4 hours
 
   /**
    * Initialize the RandomListManager with the config directory
@@ -505,6 +533,24 @@ https://letterboxd.com/dave/list/imdb-top-250/
         }
       );
       return null;
+    }
+
+    // For TMDB with library cache: use pre-filtered collections from user's library
+    if (sourceType === 'tmdb' && libraryCache && targetMediaType === 'movie') {
+      const libraryUrls = await this.getTmdbCollectionsFromLibrary(libraryCache);
+      if (libraryUrls.length > 0) {
+        const randomIndex = Math.floor(Math.random() * libraryUrls.length);
+        const selectedUrl = libraryUrls[randomIndex];
+        logger.info(
+          `Selected TMDB collection from user library: ${selectedUrl}`,
+          {
+            label: 'RandomListManager',
+            selectedUrl,
+            candidateCount: libraryUrls.length,
+          }
+        );
+        return selectedUrl;
+      }
     }
 
     // Try up to 500 random URLs to find one suitable for target media type
@@ -959,6 +1005,169 @@ https://letterboxd.com/dave/list/imdb-top-250/
       });
       return [];
     }
+  }
+
+  /**
+   * Build a pool of TMDB collection URLs from the user's Plex library.
+   * Samples library movies, looks up belongs_to_collection via TMDB API,
+   * then verifies each collection has ≥2 matches in the full library.
+   */
+  private static async getTmdbCollectionsFromLibrary(
+    libraryCache: LibraryItemsCache
+  ): Promise<string[]> {
+    const now = Date.now();
+    if (
+      this.tmdbLibraryCollectionsCache &&
+      now < this.tmdbLibraryCollectionsCache.nextRefresh
+    ) {
+      return this.tmdbLibraryCollectionsCache.urls;
+    }
+
+    // Deduplicate concurrent callers
+    if (this.tmdbLibraryBuildPromise) {
+      return this.tmdbLibraryBuildPromise;
+    }
+
+    this.tmdbLibraryBuildPromise = this.buildTmdbCollectionsFromLibrary(
+      libraryCache,
+      now
+    ).finally(() => {
+      this.tmdbLibraryBuildPromise = null;
+    });
+
+    return this.tmdbLibraryBuildPromise;
+  }
+
+  private static async buildTmdbCollectionsFromLibrary(
+    libraryCache: LibraryItemsCache,
+    now: number
+  ): Promise<string[]> {
+    try {
+      const { default: TmdbAPI } = await import('@server/api/themoviedb');
+      const tmdbClient = new TmdbAPI();
+
+      // Extract TMDB IDs from movie items only (skip TV — they lack belongs_to_collection)
+      const movieTmdbIds = new Set<number>();
+      for (const libraryKey of Object.keys(libraryCache)) {
+        for (const item of libraryCache[libraryKey]) {
+          if (!item.Guid) continue;
+          const hasTvdb = item.Guid.some((g) => g.id.startsWith('tvdb://'));
+          if (hasTvdb) continue;
+          for (const guid of item.Guid) {
+            if (guid.id.startsWith('tmdb://')) {
+              const id = parseInt(guid.id.replace('tmdb://', ''), 10);
+              if (!isNaN(id)) movieTmdbIds.add(id);
+            }
+          }
+        }
+      }
+
+      if (movieTmdbIds.size === 0) {
+        this.cacheTmdbLibraryResult([], now);
+        return [];
+      }
+
+      // Shuffle and sample up to 150 unique movies
+      const shuffled = Array.from(movieTmdbIds);
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const sample = shuffled.slice(0, 150);
+
+      // Map each sampled movie to its collection ID (if any)
+      const movieToCollection = new Map<number, number>();
+      const results = await Promise.allSettled(
+        sample.map((tmdbId) =>
+          tmdbClient
+            .getMovie({ movieId: tmdbId })
+            .then((movie) => ({ tmdbId, collection: movie.belongs_to_collection }))
+        )
+      );
+
+      const rejected = results.filter((r) => r.status === 'rejected').length;
+      if (rejected > 0) {
+        logger.warn(
+          `TMDB library collection lookup: ${rejected}/${results.length} requests failed`,
+          { label: 'RandomListManager' }
+        );
+      }
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.collection?.id) {
+          movieToCollection.set(result.value.tmdbId, result.value.collection.id);
+        }
+      }
+
+      // For each discovered collection, verify ≥2 movies exist in the full library
+      const collectionIds = new Set(movieToCollection.values());
+      const collectionMembers = new Map<number, number>();
+
+      for (const collId of collectionIds) {
+        collectionMembers.set(collId, 0);
+      }
+
+      // Fetch collection details to get all member movie IDs, then check against library
+      const collectionResults = await Promise.allSettled(
+        Array.from(collectionIds).map((collId) =>
+          tmdbClient
+            .getCollection({ collectionId: collId })
+            .then((coll) => ({
+              collId,
+              parts: (coll.parts || [])
+                .filter((p: { id?: number }) => p?.id)
+                .map((p: { id?: number }) => p.id as number),
+            }))
+        )
+      );
+
+      const validCollectionIds: number[] = [];
+      for (const result of collectionResults) {
+        if (result.status !== 'fulfilled') continue;
+        const { collId, parts } = result.value;
+        const matchCount = parts.filter((id: number) => movieTmdbIds.has(id)).length;
+        if (matchCount >= 2) {
+          validCollectionIds.push(collId);
+        }
+      }
+
+      const urls = validCollectionIds.map(
+        (id) => `https://www.themoviedb.org/collection/${id}`
+      );
+
+      logger.info(
+        `Built TMDB collection pool from library: ${urls.length} collections (${collectionIds.size} discovered, ${urls.length} with ≥2 Plex matches) from ${sample.length} sampled movies`,
+        {
+          label: 'RandomListManager',
+          validCollections: urls.length,
+          discoveredCollections: collectionIds.size,
+          sampledMovies: sample.length,
+          totalLibraryMovies: movieTmdbIds.size,
+          failedLookups: rejected,
+        }
+      );
+
+      this.cacheTmdbLibraryResult(urls, now);
+      return urls;
+    } catch (error) {
+      logger.warn('Failed to build TMDB collections from library', {
+        label: 'RandomListManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
+  private static cacheTmdbLibraryResult(urls: string[], now: number): void {
+    this.tmdbLibraryCollectionsCache = {
+      urls,
+      lastBuilt: now,
+      nextRefresh:
+        now +
+        (urls.length > 0
+          ? this.TMDB_LIBRARY_CACHE_TTL
+          : this.TMDB_LIBRARY_NEGATIVE_TTL),
+    };
   }
 
   /**
