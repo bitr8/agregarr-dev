@@ -226,7 +226,8 @@ class CollectionSyncProgress {
     outcome: 'success' | 'error' | 'skipped',
     created: number,
     updated: number,
-    errorMessage?: string
+    errorMessage?: string,
+    incrementProcessed = true
   ): void {
     if (!this.current) return;
 
@@ -272,13 +273,16 @@ class CollectionSyncProgress {
 
     this.current.createdCount += created;
     this.current.updatedCount += updated;
-    this.current.processedCollections++;
     this.current.currentCollection = undefined;
 
-    // Rolling window for ETA
-    this.current._recentCollectionTimes.push(now);
-    if (this.current._recentCollectionTimes.length > ETA_ROLLING_WINDOW) {
-      this.current._recentCollectionTimes.shift();
+    if (incrementProcessed) {
+      this.current.processedCollections++;
+
+      // Rolling window for ETA (per unique collection)
+      this.current._recentCollectionTimes.push(now);
+      if (this.current._recentCollectionTimes.length > ETA_ROLLING_WINDOW) {
+        this.current._recentCollectionTimes.shift();
+      }
     }
   }
 

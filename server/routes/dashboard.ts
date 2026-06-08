@@ -139,9 +139,20 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
       }
     }
 
-    // Get collection configs count
-    const agregarrCollectionCount =
-      settings.plex.collectionConfigs?.length || 0;
+    // Count unique logical collections (linked configs across libraries = one)
+    const configs = settings.plex.collectionConfigs || [];
+    const seenLinkIds = new Set<number>();
+    let agregarrCollectionCount = 0;
+    for (const c of configs) {
+      if (c.isLinked && c.linkId != null) {
+        if (!seenLinkIds.has(c.linkId)) {
+          seenLinkIds.add(c.linkId);
+          agregarrCollectionCount++;
+        }
+      } else {
+        agregarrCollectionCount++;
+      }
+    }
     const preExistingCollectionCount =
       settings.plex.preExistingCollectionConfigs?.length || 0;
 

@@ -616,13 +616,38 @@ export class CollectionSyncService {
       (c) => c.type === 'filtered_hub'
     );
     const orderedConfigs = [...regularConfigs, ...filteredHubConfigs];
-    const totalConfigs = orderedConfigs.length;
-    collectionSyncProgress.setTotalCollections(totalConfigs);
-    onProgress?.(0, 'Processing collections...', totalConfigs);
+
+    // Count unique logical collections (linked configs across libraries = one collection)
+    const countedLinkIds = new Set<number>();
+    let uniqueCollectionCount = 0;
+    for (const c of orderedConfigs) {
+      if (c.isLinked && c.linkId != null) {
+        if (!countedLinkIds.has(c.linkId)) {
+          countedLinkIds.add(c.linkId);
+          uniqueCollectionCount++;
+        }
+      } else {
+        uniqueCollectionCount++;
+      }
+    }
+
+    collectionSyncProgress.setTotalCollections(uniqueCollectionCount);
+    onProgress?.(0, 'Processing collections...', uniqueCollectionCount);
     let refreshedForFilteredHubs = false;
+    const processedLinkIds = new Set<number>();
 
     for (const config of orderedConfigs) {
       if (this.cancelled) break;
+
+      // Linked configs across libraries represent one logical collection
+      const isNewUniqueCollection = !(
+        config.isLinked &&
+        config.linkId != null &&
+        processedLinkIds.has(config.linkId)
+      );
+      if (config.isLinked && config.linkId != null) {
+        processedLinkIds.add(config.linkId);
+      }
 
       try {
         let created = 0;
@@ -632,7 +657,7 @@ export class CollectionSyncService {
         onProgress?.(
           processedCount,
           `Processing "${config.name}"...`,
-          totalConfigs
+          uniqueCollectionCount
         );
         collectionSyncProgress.startCollection(
           config.id,
@@ -659,9 +684,15 @@ export class CollectionSyncService {
           onProgress?.(
             processedCount,
             `Skipping content sync for "${config.name}" (custom scheduled)...`,
-            totalConfigs
+            uniqueCollectionCount
           );
-          collectionSyncProgress.completeCollection('skipped', 0, 0);
+          collectionSyncProgress.completeCollection(
+            'skipped',
+            0,
+            0,
+            undefined,
+            isNewUniqueCollection
+          );
 
           logger.debug(
             `Skipped content sync for custom scheduled collection: ${config.name}`,
@@ -846,7 +877,8 @@ export class CollectionSyncService {
               'error',
               created,
               updated,
-              result.error
+              result.error,
+              isNewUniqueCollection
             );
           } else if (result.warning) {
             logger.info(
@@ -861,7 +893,9 @@ export class CollectionSyncService {
             collectionSyncProgress.completeCollection(
               'success',
               created,
-              updated
+              updated,
+              undefined,
+              isNewUniqueCollection
             );
           } else {
             // Mark collection as successfully synced (clears any previous error/warning)
@@ -869,7 +903,9 @@ export class CollectionSyncService {
             collectionSyncProgress.completeCollection(
               'success',
               created,
-              updated
+              updated,
+              undefined,
+              isNewUniqueCollection
             );
           }
         }
@@ -886,9 +922,9 @@ export class CollectionSyncService {
           );
         }
 
-        // Update progress count
-        processedCount++;
-        onProgress?.(processedCount, undefined, totalConfigs);
+        // Update progress count (only for new unique collections)
+        if (isNewUniqueCollection) processedCount++;
+        onProgress?.(processedCount, undefined, uniqueCollectionCount);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -903,11 +939,16 @@ export class CollectionSyncService {
 
         // Persist error for UI display
         settings.setCollectionSyncError(config.id, errorMessage);
-        collectionSyncProgress.completeCollection('error', 0, 0, errorMessage);
+        collectionSyncProgress.completeCollection(
+          'error',
+          0,
+          0,
+          errorMessage,
+          isNewUniqueCollection
+        );
 
-        // Still increment counter to avoid getting stuck
-        processedCount++;
-        onProgress?.(processedCount, undefined, totalConfigs);
+        if (isNewUniqueCollection) processedCount++;
+        onProgress?.(processedCount, undefined, uniqueCollectionCount);
       } finally {
         // Always release the API, regardless of success or failure
         const { IndividualCollectionScheduler } = await import(
