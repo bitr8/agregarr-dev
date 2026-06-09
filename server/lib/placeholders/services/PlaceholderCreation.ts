@@ -1281,12 +1281,29 @@ async function createPlaceholders(
             }
           }
         } catch (error) {
-          logger.error('Failed to delete orphaned placeholder', {
-            label: 'PlaceholderService',
-            title: item.title,
-            tmdbId,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          const isFileAlreadyGone =
+            error instanceof Error &&
+            'code' in error &&
+            (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+          if (isFileAlreadyGone) {
+            deletedOrphanCount++;
+            logger.debug(
+              'Orphaned placeholder file already removed - skipping',
+              {
+                label: 'PlaceholderService',
+                title: item.title,
+                tmdbId,
+              }
+            );
+          } else {
+            logger.error('Failed to delete orphaned placeholder', {
+              label: 'PlaceholderService',
+              title: item.title,
+              tmdbId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
 
         continue; // Skip to next item - orphan has been deleted
