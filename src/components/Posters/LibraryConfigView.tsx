@@ -7,7 +7,6 @@ import {
   ExclamationTriangleIcon,
   PlayIcon,
 } from '@heroicons/react/24/solid';
-import type { OverlayTemplateType } from '@server/entity/OverlayTemplate';
 import axios from 'axios';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
@@ -58,36 +57,24 @@ interface EnabledOverlay {
   };
 }
 
-interface Template {
-  id: number;
-  name: string;
-  type: OverlayTemplateType;
-}
-
 // Component to show large preview for a library (grid layout)
 const LibraryPreviewLarge: React.FC<{
   libraryId: string;
   enabledOverlays: EnabledOverlay[];
-  templates: Template[];
   refreshTrigger?: number;
-}> = ({ libraryId, enabledOverlays, templates, refreshTrigger = 0 }) => {
+}> = ({ libraryId, enabledOverlays, refreshTrigger = 0 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const previewUrlRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchPreview = useCallback(async () => {
-    // Filter out status overlays for the preview
-    const nonStatusTemplateIds = enabledOverlays
-      .filter((o) => {
-        if (!o.enabled) return false;
-        const template = templates.find((t) => t.id === o.templateId);
-        return template && template.type !== 'status';
-      })
+    const enabledIds = enabledOverlays
+      .filter((o) => o.enabled)
       .sort((a, b) => a.layerOrder - b.layerOrder)
       .map((o) => o.templateId);
 
-    if (nonStatusTemplateIds.length === 0) {
+    if (enabledIds.length === 0) {
       setPreviewUrl(null);
       return;
     }
@@ -109,7 +96,7 @@ const LibraryPreviewLarge: React.FC<{
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            templateIds: nonStatusTemplateIds,
+            templateIds: enabledIds,
             contextId: `library-${libraryId}`, // Each library gets its own context
           }),
           signal: abortController.signal,
@@ -124,11 +111,20 @@ const LibraryPreviewLarge: React.FC<{
           previewUrlRef.current = url;
           return url;
         });
+      } else {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Library preview request failed for library ${libraryId}: ${response.status}`
+        );
       }
     } catch (error) {
-      // Ignore abort errors and other preview errors
+      // Ignore abort errors triggered by cancelled requests
       if (error instanceof Error && error.name !== 'AbortError') {
-        // Log non-abort errors if needed
+        // eslint-disable-next-line no-console
+        console.error(
+          `Library preview request failed for library ${libraryId}:`,
+          error
+        );
       }
     } finally {
       // Only clear loading if this is still the active request
@@ -137,7 +133,7 @@ const LibraryPreviewLarge: React.FC<{
         abortControllerRef.current = null;
       }
     }
-  }, [enabledOverlays, templates, libraryId]);
+  }, [enabledOverlays, libraryId]);
 
   useEffect(() => {
     fetchPreview();
@@ -329,18 +325,12 @@ const LibraryConfigView: React.FC = () => {
     '/api/v1/overlay-library-configs'
   );
 
-  // Fetch templates for filtering status overlays in preview
-  const { data: templatesData } = useSWR<{ templates: Template[] }>(
-    '/api/v1/overlay-templates'
-  );
-
   // Fetch overlay settings to get poster source
   const { data: overlaySettings } = useSWR<{
     defaultPosterSource: 'tmdb' | 'plex';
     initialSetupComplete: boolean;
   }>('/api/v1/overlay-settings');
 
-  const templates = templatesData?.templates || [];
   const posterSource = overlaySettings?.defaultPosterSource || 'tmdb';
 
   if (librariesError) {
@@ -408,9 +398,7 @@ const LibraryConfigView: React.FC = () => {
           const overlayCount =
             config?.enabledOverlays.filter((o) => o.enabled).length || 0;
           const hasOverlays =
-            config &&
-            config.enabledOverlays.some((o) => o.enabled) &&
-            templates.length > 0;
+            config && config.enabledOverlays.some((o) => o.enabled);
           const isSyncing = syncingLibraries.has(library.key);
           const isConfirmClicked = confirmClickedLibraries.has(library.key);
 
@@ -425,7 +413,6 @@ const LibraryConfigView: React.FC = () => {
                   <LibraryPreviewLarge
                     libraryId={library.key}
                     enabledOverlays={config.enabledOverlays}
-                    templates={templates}
                     refreshTrigger={refreshTriggers[library.key] || 0}
                   />
                 ) : (
