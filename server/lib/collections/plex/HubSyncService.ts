@@ -694,18 +694,97 @@ export class HubSyncService {
               // Continue with empty items - will generate template-only poster
             }
 
-            // Generate poster using the template system
-            const posterFilename = await generatePoster(
-              {
+            // Check if regeneration is needed before generating. Fail-open:
+            // any error in the pre-check falls through to generation. The
+            // hash is only recorded after upload if it computed successfully;
+            // a null hash skips the record and self-corrects next sync.
+            let posterInputHash: string | null = null;
+            let posterUpToDate = false;
+            try {
+              // Fetch template data for accurate change detection
+              let templateData: unknown = null;
+              if (preExistingConfig.autoPosterTemplate) {
+                const { getRepository } = await import('@server/datasource');
+                const { PosterTemplate } = await import(
+                  '@server/entity/PosterTemplate'
+                );
+                const templateRepo = getRepository(PosterTemplate);
+                const template = await templateRepo.findOne({
+                  where: { id: preExistingConfig.autoPosterTemplate },
+                });
+                templateData = template?.templateData;
+              }
+
+              // Calculate input hash based on what determines the poster content
+              const { calculatePosterInputHash } = await import(
+                '@server/utils/metadataHashing'
+              );
+              posterInputHash = calculatePosterInputHash({
+                templateId: preExistingConfig.autoPosterTemplate || null,
+                templateData, // Include template content for change detection
+                itemIds: (posterItems || [])
+                  .map((item) => item.tmdbId?.toString() || item.title)
+                  .slice(0, 50),
                 collectionName,
-                collectionType: 'pre_existing', // Use pre_existing as the collection type
                 mediaType: preExistingConfig.mediaType,
-                items: posterItems,
-                autoPosterTemplate: preExistingConfig.autoPosterTemplate,
-              },
-              `Auto-generated: ${collectionName}`,
-              preExistingConfig.id
-            );
+                collectionType: 'pre_existing',
+              });
+
+              const metadataTrackingService = (
+                await import('@server/lib/metadata/MetadataTrackingService')
+              ).default;
+
+              const shouldRegenerate =
+                await metadataTrackingService.shouldRegeneratePoster(
+                  preExistingConfig.collectionRatingKey,
+                  posterInputHash
+                );
+
+              if (!shouldRegenerate) {
+                const currentPosterUrl = await plexClient.getCurrentPosterUrl(
+                  preExistingConfig.collectionRatingKey
+                );
+                posterUpToDate =
+                  !(await metadataTrackingService.shouldReapplyPoster(
+                    preExistingConfig.collectionRatingKey,
+                    currentPosterUrl
+                  ));
+              }
+            } catch (metadataError) {
+              logger.warn(
+                'Poster metadata pre-check failed, proceeding with generation',
+                {
+                  label: 'MetadataTracking',
+                  collectionId: preExistingConfig.id,
+                  error: extractErrorMessage(metadataError),
+                }
+              );
+            }
+
+            if (posterUpToDate) {
+              logger.debug(
+                `Poster unchanged, skipping regeneration for pre-existing collection: ${collectionName}`,
+                {
+                  label: 'Hub Sync Service',
+                  collectionId: preExistingConfig.id,
+                }
+              );
+            }
+
+            // Generate poster using the template system
+            const posterFilename = posterUpToDate
+              ? null
+              : await generatePoster(
+                  {
+                    collectionName,
+                    collectionType: 'pre_existing', // Use pre_existing as the collection type
+                    mediaType: preExistingConfig.mediaType,
+                    items: posterItems,
+                    autoPosterTemplate: preExistingConfig.autoPosterTemplate,
+                  },
+                  `Auto-generated: ${collectionName}`,
+                  preExistingConfig.id
+                );
 
             if (posterFilename) {
               // posterFilename is now a full path to temp file
@@ -720,36 +799,7 @@ export class HubSyncService {
                 preExistingConfig.collectionRatingKey
               );
 
-              if (plexPosterUrl) {
-                // Fetch template data for accurate change detection
-                let templateData: unknown = null;
-                if (preExistingConfig.autoPosterTemplate) {
-                  const { getRepository } = await import('@server/datasource');
-                  const { PosterTemplate } = await import(
-                    '@server/entity/PosterTemplate'
-                  );
-                  const templateRepo = getRepository(PosterTemplate);
-                  const template = await templateRepo.findOne({
-                    where: { id: preExistingConfig.autoPosterTemplate },
-                  });
-                  templateData = template?.templateData;
-                }
-
-                // Calculate input hash based on what determines the poster content
-                const { calculatePosterInputHash } = await import(
-                  '@server/utils/metadataHashing'
-                );
-                const posterInputHash = calculatePosterInputHash({
-                  templateId: preExistingConfig.autoPosterTemplate || null,
-                  templateData, // Include template content for change detection
-                  itemIds: (posterItems || [])
-                    .map((item) => item.tmdbId?.toString() || item.title)
-                    .slice(0, 50),
-                  collectionName,
-                  mediaType: preExistingConfig.mediaType,
-                  collectionType: 'pre_existing',
-                });
-
+              if (plexPosterUrl && posterInputHash) {
                 const metadataTrackingService = (
                   await import('@server/lib/metadata/MetadataTrackingService')
                 ).default;
