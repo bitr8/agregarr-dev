@@ -120,6 +120,42 @@ async function createTVPlaceholder(
   // Create directories
   await fs.mkdir(seasonDir, { recursive: true });
 
+  // Write a .plexmatch file so Plex matches the show deterministically.
+  // Title/year matching fails for obscure shows, which leaves the item without
+  // a tmdb:// GUID and makes discovery treat the placeholder as unmatched.
+  const plexmatchPath = path.join(showDir, '.plexmatch');
+  const plexmatchTitle = title.replace(/[\r\n]+/g, ' ').trim();
+  const plexmatchLines = [`title: ${plexmatchTitle}`];
+  if (year) {
+    plexmatchLines.push(`year: ${year}`);
+  }
+  plexmatchLines.push(`tmdbid: ${options.tmdbId}`);
+  if (options.tvdbId) {
+    plexmatchLines.push(`tvdbid: ${options.tvdbId}`);
+  }
+  try {
+    // wx: fail if the file exists - never clobber manual match hints,
+    // especially in Sonarr-named folders that may pre-exist
+    await fs.writeFile(plexmatchPath, plexmatchLines.join('\n') + '\n', {
+      encoding: 'utf-8',
+      flag: 'wx',
+    });
+  } catch (error) {
+    const alreadyExists =
+      error instanceof Error &&
+      'code' in error &&
+      (error as NodeJS.ErrnoException).code === 'EEXIST';
+
+    if (!alreadyExists) {
+      logger.warn('Failed to write .plexmatch file', {
+        label: 'PlaceholderService',
+        title,
+        path: plexmatchPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // Create trailer file
   const filename = 'S00E00.Trailer.mp4';
   const destinationPath = path.join(seasonDir, filename);
@@ -365,8 +401,14 @@ export async function removePlaceholder(
             path: seasonDir,
           });
 
-          // Try to remove show directory if it's empty
-          const showFiles = await fs.readdir(showDir);
+          // Try to remove show directory if it's empty.
+          // A leftover .plexmatch counts as empty - it only exists for the
+          // placeholder. If real content merged into the folder, leave it.
+          let showFiles = await fs.readdir(showDir);
+          if (showFiles.length === 1 && showFiles[0] === '.plexmatch') {
+            await fs.unlink(path.join(showDir, '.plexmatch'));
+            showFiles = [];
+          }
           if (showFiles.length === 0) {
             await fs.rmdir(showDir);
             logger.debug('Removed empty show directory', {

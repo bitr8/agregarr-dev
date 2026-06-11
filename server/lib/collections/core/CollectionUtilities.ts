@@ -2139,6 +2139,8 @@ export async function findPlexItemsByTitle(
     ratingKey: string;
     title: string;
     year?: number;
+    tmdbId?: number;
+    tvdbId?: number;
     hasTmdbGuid: boolean;
     hasAnyGuid: boolean;
   }[]
@@ -2147,6 +2149,8 @@ export async function findPlexItemsByTitle(
     ratingKey: string;
     title: string;
     year?: number;
+    tmdbId?: number;
+    tvdbId?: number;
     hasTmdbGuid: boolean;
     hasAnyGuid: boolean;
   }[] = [];
@@ -2203,9 +2207,11 @@ export async function findPlexItemsByTitle(
           }
         }
 
-        // Check if item has TMDB guid
-        const hasTmdbGuid =
-          item.Guid?.some((guid) => guid.id.startsWith('tmdb://')) || false;
+        // Extract external ids so callers can verify the match is the item
+        // they asked for, not just any title overlap with a TMDB guid
+        const itemTmdbId = extractTmdbIdFromGuids(item.Guid);
+        const itemTvdbId = extractTvdbIdFromGuids(item.Guid);
+        const hasTmdbGuid = itemTmdbId !== undefined;
 
         // Check if item has any guid (matched vs unmatched)
         const hasAnyGuid = (item.Guid?.length || 0) > 0;
@@ -2214,6 +2220,8 @@ export async function findPlexItemsByTitle(
           ratingKey: item.ratingKey,
           title: item.title,
           year: item.year,
+          tmdbId: itemTmdbId,
+          tvdbId: itemTvdbId,
           hasTmdbGuid,
           hasAnyGuid,
         });

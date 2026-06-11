@@ -979,15 +979,31 @@ export async function cleanupPlaceholdersForConfig(
 
                 await repository.remove(placeholder);
 
-                // Clean up empty parent directories left behind
+                // Clean up empty parent directories left behind.
+                // Placeholder metadata files (.comingsoon, .plexmatch) don't
+                // count as content — remove them so the dirs qualify as empty.
                 try {
                   const parentDir = path.dirname(fullPath);
-                  const parentFiles = await fs.readdir(parentDir);
+                  let parentFiles = await fs.readdir(parentDir);
+                  if (
+                    placeholder.mediaType === 'tv' &&
+                    parentFiles.length === 1 &&
+                    parentFiles[0] === '.comingsoon'
+                  ) {
+                    await fs.unlink(path.join(parentDir, '.comingsoon'));
+                    parentFiles = [];
+                  }
                   if (parentFiles.length === 0) {
                     await fs.rmdir(parentDir);
                     if (placeholder.mediaType === 'tv') {
                       const grandParentDir = path.dirname(parentDir);
-                      const gpFiles = await fs.readdir(grandParentDir);
+                      let gpFiles = await fs.readdir(grandParentDir);
+                      if (gpFiles.length === 1 && gpFiles[0] === '.plexmatch') {
+                        await fs.unlink(
+                          path.join(grandParentDir, '.plexmatch')
+                        );
+                        gpFiles = [];
+                      }
                       if (gpFiles.length === 0) {
                         await fs.rmdir(grandParentDir);
                       }
