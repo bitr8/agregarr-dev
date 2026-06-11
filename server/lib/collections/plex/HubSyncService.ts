@@ -449,7 +449,6 @@ export class HubSyncService {
               }
             );
           }
-
         } catch (error) {
           const errorMessage = extractErrorMessage(error);
           const is404 =
@@ -725,7 +724,7 @@ export class HubSyncService {
                 // Fetch template data for accurate change detection
                 let templateData: unknown = null;
                 if (preExistingConfig.autoPosterTemplate) {
-                  const { getRepository } = await import('typeorm');
+                  const { getRepository } = await import('@server/datasource');
                   const { PosterTemplate } = await import(
                     '@server/entity/PosterTemplate'
                   );
