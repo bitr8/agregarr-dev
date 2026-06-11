@@ -291,8 +291,113 @@ export async function cleanupOrphanedPlaceholderRecords(): Promise<void> {
 }
 
 /**
+ * Remove ghost Plex entries left behind by deleted placeholder files.
+ *
+ * Scans only the directories that contained deletions instead of the whole
+ * library, so unrelated unavailable items (e.g. from a network mount that
+ * dropped mid-sync) can't be swept into the trash and purged. Skips the
+ * explicit emptyTrash call when the Plex server already empties trash
+ * automatically after every scan.
+ *
+ * Directory paths must be in the namespace the Plex server sees. Placeholder
+ * roots are assumed to be mounted identically in Agregarr and Plex — the
+ * same assumption findItemsByFilePaths relies on.
+ *
+ * @param plexClient - Plex API client
+ * @param libraryId - The library section the directories belong to
+ * @param directories - Directories that contained deleted placeholder files
+ */
+export async function removeGhostEntries(
+  plexClient: PlexAPI,
+  libraryId: string,
+  directories: string[]
+): Promise<void> {
+  const uniqueDirectories = [...new Set(directories)];
+  if (uniqueDirectories.length === 0) {
+    return;
+  }
+
+  // A directory only produces a useful scoped scan if Plex can resolve it,
+  // i.e. it sits strictly below one of the section's configured locations.
+  // Directories outside the section (Agregarr and Plex mounted on different
+  // paths) get the old full-library scan instead — less precise, but the
+  // ghosts do get cleaned.
+  const sectionPaths = await plexClient.getLibrarySectionPaths(libraryId);
+  const isInsideSection = (directory: string): boolean =>
+    sectionPaths.length === 0 ||
+    sectionPaths.some(
+      (root) =>
+        directory !== root &&
+        directory.startsWith(root.endsWith('/') ? root : `${root}/`)
+    );
+
+  const scopedDirectories = uniqueDirectories.filter(isInsideSection);
+  const needsFullScan = scopedDirectories.length < uniqueDirectories.length;
+
+  let scansTriggered = 0;
+  for (const directory of scopedDirectories) {
+    try {
+      await plexClient.scanLibrary(libraryId, directory);
+      scansTriggered++;
+    } catch (error) {
+      logger.warn('Scoped Plex scan failed for directory', {
+        label: 'PlaceholderCleanup',
+        libraryId,
+        directory,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (needsFullScan) {
+    logger.warn(
+      'Some placeholder directories are outside the Plex section locations — falling back to a full library scan',
+      {
+        label: 'PlaceholderCleanup',
+        libraryId,
+        outsideSection: uniqueDirectories.length - scopedDirectories.length,
+        sectionPaths,
+      }
+    );
+    try {
+      await plexClient.scanLibrary(libraryId);
+      scansTriggered++;
+    } catch (error) {
+      logger.warn('Full Plex scan fallback failed', {
+        label: 'PlaceholderCleanup',
+        libraryId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Nothing was scanned, so nothing got marked missing — purging now would
+  // only hit unrelated trash
+  if (scansTriggered === 0) {
+    return;
+  }
+
+  // Setting disabled: skip the explicit purge and leave trash to the user's
+  // own Plex maintenance (or the server's auto-empty if they have it on)
+  if (getSettings().plex.autoEmptyTrash === false) {
+    return;
+  }
+
+  // Server purges trash by itself after each scan — an explicit call would
+  // only widen the blast radius to the whole library
+  if (await plexClient.getAutoEmptyTrashEnabled()) {
+    return;
+  }
+
+  // Brief delay so the scans can mark missing files before purging
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await plexClient.emptyTrash(libraryId);
+}
+
+/**
  * Remove stale Plex entries for deleted placeholder files using direct API deletion.
- * Falls back to scan+emptyTrash for libraries where direct deletion missed items.
+ * Falls back to a directory-scoped scan for libraries where direct deletion
+ * missed items.
  *
  * @param plexClient - Plex API client
  * @param deletedPaths - Paths of deleted placeholder files with library metadata
@@ -311,7 +416,22 @@ export async function cleanupStalePlexEntries(
   }
 
   const deletedRatingKeys = new Set<string>();
-  const librariesWithMisses = new Set<string>();
+  const mediaTypeByPath = new Map(
+    deletedPaths.map((d) => [d.fullPath, d.mediaType])
+  );
+  const missedDirectoriesByLibrary = new Map<string, Set<string>>();
+  const addMissedPath = (libraryKey: string, missedPath: string) => {
+    // TV placeholder files live in <show>/Season 00/ — scope the scan to the
+    // show folder. Movie placeholders sit directly in the movie folder.
+    const directory =
+      mediaTypeByPath.get(missedPath) === 'tv'
+        ? path.dirname(path.dirname(missedPath))
+        : path.dirname(missedPath);
+    const missed =
+      missedDirectoriesByLibrary.get(libraryKey) || new Set<string>();
+    missed.add(directory);
+    missedDirectoriesByLibrary.set(libraryKey, missed);
+  };
 
   // Delete pre-resolved ratingKeys directly (TV episodes resolved before file deletion)
   const preResolvedPaths = new Set<string>();
@@ -359,7 +479,7 @@ export async function cleanupStalePlexEntries(
       const matchedPaths = new Set(pathToRatingKeys.keys());
       for (const p of remainingPaths) {
         if (!matchedPaths.has(p)) {
-          librariesWithMisses.add(libraryKey);
+          addMissedPath(libraryKey, p);
         }
       }
 
@@ -391,7 +511,9 @@ export async function cleanupStalePlexEntries(
         }
       }
     } catch (findError) {
-      librariesWithMisses.add(libraryKey);
+      for (const p of remainingPaths) {
+        addMissedPath(libraryKey, p);
+      }
       logger.warn('Failed to find stale Plex items for library', {
         label: 'PlaceholderCleanup',
         libraryKey,
@@ -402,16 +524,17 @@ export async function cleanupStalePlexEntries(
     }
   }
 
-  // Fallback: Run scan+emptyTrash only for libraries where direct deletion missed items
-  if (librariesWithMisses.size > 0) {
-    for (const libraryKey of librariesWithMisses) {
+  // Fallback: scoped scan only for the directories where direct deletion missed items
+  if (missedDirectoriesByLibrary.size > 0) {
+    for (const [libraryKey, missedDirectories] of missedDirectoriesByLibrary) {
       try {
-        await plexClient.scanLibrary(libraryKey);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        await plexClient.emptyTrash(libraryKey);
+        await removeGhostEntries(plexClient, libraryKey, [
+          ...missedDirectories,
+        ]);
         logger.debug('Ran fallback cleanup for library', {
           label: 'PlaceholderCleanup',
           libraryKey,
+          directories: missedDirectories.size,
         });
       } catch (fallbackError) {
         logger.debug('Fallback Plex cleanup failed for library', {
@@ -430,7 +553,7 @@ export async function cleanupStalePlexEntries(
     label: 'PlaceholderCleanup',
     deletedPaths: deletedPaths.length,
     directlyDeleted: deletedRatingKeys.size,
-    librariesNeedingFallback: librariesWithMisses.size,
+    librariesNeedingFallback: missedDirectoriesByLibrary.size,
   });
 
   return deletedRatingKeys.size;

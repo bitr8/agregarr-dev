@@ -196,6 +196,7 @@ class PlexAPI {
   private hubManager: PlexHubManager;
   private smartCollectionManager: PlexSmartCollectionManager;
   private posterManager: PlexPosterManager;
+  private autoEmptyTrashPrefPromise?: Promise<boolean>;
 
   private getExtendedClient(): ExtendedPlexAPI {
     return this.plexClient as ExtendedPlexAPI;
@@ -2206,28 +2207,106 @@ class PlexAPI {
   /**
    * Trigger a Plex library scan/refresh
    * @param libraryId - The library section ID to scan
+   * @param directory - Optional directory to limit the scan to. Must be a
+   *   path as the Plex server sees it. Scoping the scan keeps unrelated
+   *   unavailable items (e.g. a network mount that dropped) out of the trash.
    */
-  public async scanLibrary(libraryId: string): Promise<void> {
+  public async scanLibrary(
+    libraryId: string,
+    directory?: string
+  ): Promise<void> {
     try {
       logger.debug('Triggering Plex library scan', {
         label: 'Plex API',
         libraryId,
+        directory,
       });
 
-      await this.plexClient.query(`/library/sections/${libraryId}/refresh`);
+      await this.plexClient.query(
+        directory
+          ? `/library/sections/${libraryId}/refresh?path=${encodeURIComponent(
+              directory
+            )}`
+          : `/library/sections/${libraryId}/refresh`
+      );
 
       logger.info('Plex library scan triggered', {
         label: 'Plex API',
         libraryId,
+        directory,
       });
     } catch (error) {
       logger.error('Failed to trigger Plex library scan', {
         label: 'Plex API',
         libraryId,
+        directory,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
+  }
+
+  /**
+   * Get the filesystem locations of a library section, as the Plex server
+   * sees them. Used to verify a directory-scoped scan will actually target
+   * a path Plex knows about.
+   * @param libraryId - The library section ID
+   */
+  public async getLibrarySectionPaths(libraryId: string): Promise<string[]> {
+    try {
+      const response = await this.plexClient.query<{
+        MediaContainer: {
+          Directory?: { Location?: { path: string }[] }[];
+        };
+      }>(`/library/sections/${libraryId}`);
+
+      return (
+        response.MediaContainer.Directory?.[0]?.Location?.map(
+          (location) => location.path
+        ) ?? []
+      );
+    } catch (error) {
+      logger.warn('Failed to fetch Plex library section locations', {
+        label: 'Plex API',
+        libraryId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Check whether the Plex server empties trash automatically after every
+   * scan ("Empty trash automatically after every scan" server setting).
+   * When enabled, an explicit emptyTrash call after a scan is redundant.
+   * Defaults to false on error so callers fall back to the explicit call.
+   */
+  public async getAutoEmptyTrashEnabled(): Promise<boolean> {
+    if (!this.autoEmptyTrashPrefPromise) {
+      this.autoEmptyTrashPrefPromise = (async () => {
+        try {
+          const response = await this.plexClient.query<{
+            MediaContainer: {
+              Setting?: { id: string; value: boolean | string }[];
+            };
+          }>('/:/prefs');
+
+          const setting = response.MediaContainer.Setting?.find(
+            (s) => s.id === 'autoEmptyTrash'
+          );
+
+          return setting?.value === true || setting?.value === 'true';
+        } catch (error) {
+          logger.warn('Failed to read Plex server preferences', {
+            label: 'Plex API',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return false;
+        }
+      })();
+    }
+
+    return this.autoEmptyTrashPrefPromise;
   }
 
   /**

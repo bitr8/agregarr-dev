@@ -467,11 +467,19 @@ async function removeUnmatchedPlaceholders(
   }
 
   let removedCount = 0;
+  const removedFolders: string[] = [];
 
   for (const { sourceItem, placeholderPath } of placeholders) {
     try {
       await removePlaceholder(placeholderPath, sourceItem.mediaType);
       removedCount += 1;
+      // TV placeholder files live in <show>/Season 00/ — scope the
+      // ghost-entry scan to the show folder
+      removedFolders.push(
+        sourceItem.mediaType === 'tv'
+          ? path.dirname(path.dirname(placeholderPath))
+          : path.dirname(placeholderPath)
+      );
 
       await recordUnmatchedPlaceholder(config.libraryId, sourceItem);
 
@@ -501,7 +509,10 @@ async function removeUnmatchedPlaceholders(
     });
 
     try {
-      await plexClient.scanLibrary(config.libraryId);
+      const { removeGhostEntries } = await import(
+        '@server/lib/placeholders/services/PlaceholderCleanup'
+      );
+      await removeGhostEntries(plexClient, config.libraryId, removedFolders);
     } catch (error) {
       logger.warn(
         'Failed to trigger cleanup scan after removing unmatched placeholders',
@@ -671,11 +682,19 @@ async function handleUnmatchedPlaceholders(
     );
 
     let deletedCount = 0;
+    const deletedFolders: string[] = [];
     for (const file of filesToDelete) {
       try {
         await removePlaceholder(file.path, file.mediaType);
         excludedUnmatched.add(file.tmdbId);
         deletedCount++;
+        // TV placeholder files live in <show>/Season 00/ — scope the
+        // ghost-entry scan to the show folder
+        deletedFolders.push(
+          file.mediaType === 'tv'
+            ? path.dirname(path.dirname(file.path))
+            : path.dirname(file.path)
+        );
 
         await recordUnmatchedPlaceholder(config.libraryId, {
           tmdbId: file.tmdbId,
@@ -713,7 +732,10 @@ async function handleUnmatchedPlaceholders(
       );
 
       try {
-        await plexClient.scanLibrary(config.libraryId);
+        const { removeGhostEntries } = await import(
+          '@server/lib/placeholders/services/PlaceholderCleanup'
+        );
+        await removeGhostEntries(plexClient, config.libraryId, deletedFolders);
       } catch (error) {
         logger.error('Failed to trigger cleanup scan after deletions', {
           label: 'PlaceholderService',
