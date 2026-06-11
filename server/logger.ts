@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import * as winston from 'winston';
 import 'winston-daily-rotate-file';
+import { scrubSecrets } from './utils/logRedaction';
 
 // Migrate away from old log
 const OLD_LOG_FILE = path.join(__dirname, '../config/logs/agregarr.log');
@@ -46,9 +47,21 @@ const hformat = winston.format.printf(
         });
       }
     }
-    return msg;
+    return scrubSecrets(msg);
   }
 );
+
+// The machinelogs transport serializes via winston.format.json(), bypassing
+// hformat. This format scrubs the final serialized line after json() runs.
+// Redaction patterns cannot consume quotes, so the line stays valid JSON.
+const redactFinalMessage = winston.format((info) => {
+  const MESSAGE = Symbol.for('message');
+  const record = info as unknown as Record<symbol, unknown>;
+  if (typeof record[MESSAGE] === 'string') {
+    record[MESSAGE] = scrubSecrets(record[MESSAGE]);
+  }
+  return info;
+});
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL?.toLowerCase() || 'debug',
@@ -90,7 +103,8 @@ const logger = winston.createLogger({
       format: winston.format.combine(
         winston.format.splat(),
         winston.format.timestamp(),
-        winston.format.json()
+        winston.format.json(),
+        redactFinalMessage()
       ),
     }),
   ],

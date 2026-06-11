@@ -5,6 +5,7 @@ import PlexSmartCollectionManager from '@server/lib/collections/plex/PlexSmartCo
 import type { Library, PlexSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { registerLogSecrets } from '@server/utils/logRedaction';
 import NodePlexAPI from 'plex-api';
 
 // Extended interface for type-safe Plex API HTTP methods
@@ -247,6 +248,9 @@ class PlexAPI {
 
     // Store the token for later use
     this.plexToken = plexToken;
+    // Tokens come from the DB (User.plexToken) and Plex shared-server
+    // responses, not settings.json - register here so logs redact them.
+    registerLogSecrets([plexToken]);
 
     this.plexClient = new NodePlexAPI({
       hostname: settingsPlex.ip,

@@ -3,6 +3,10 @@ import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { defaultHubConfigService } from '@server/lib/collections/services/DefaultHubConfigService';
 import { preExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
 import logger from '@server/logger';
+import {
+  collectSecretValues,
+  registerLogSecrets,
+} from '@server/utils/logRedaction';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import { merge } from 'lodash';
@@ -1141,6 +1145,7 @@ class Settings {
   public load(overrideSettings?: AllSettings): Settings {
     if (overrideSettings) {
       this.data = overrideSettings;
+      registerLogSecrets(collectSecretValues(this.data));
       return this;
     }
 
@@ -1158,6 +1163,7 @@ class Settings {
 
   public save(): void {
     fs.writeFileSync(SETTINGS_PATH, JSON.stringify(this.data, undefined, ' '));
+    registerLogSecrets(collectSecretValues(this.data));
   }
 
   /**
