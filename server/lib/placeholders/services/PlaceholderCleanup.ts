@@ -11,6 +11,62 @@ import path from 'path';
 import { Like, Not } from 'typeorm';
 
 /**
+ * Remove leftover placeholder remnants after the placeholder file itself is
+ * gone: the .comingsoon marker, an empty Season 00 directory, and (for TV)
+ * an empty show directory whose only remaining file is .plexmatch.
+ * Best effort — directories with real content are left untouched.
+ */
+export async function cleanupPlaceholderRemnants(
+  fullPath: string,
+  mediaType: 'movie' | 'tv'
+): Promise<void> {
+  try {
+    const parentDir = path.dirname(fullPath);
+
+    // The .comingsoon marker is always placeholder-owned — remove it
+    // unconditionally so discovery stops re-detecting this item, even when
+    // other remnants (e.g. a .trickplay sidecar) share the directory.
+    if (mediaType === 'tv') {
+      try {
+        await fs.unlink(path.join(parentDir, '.comingsoon'));
+      } catch {
+        // Marker already gone
+      }
+    }
+
+    // Clean up an orphaned .trickplay sidecar directory left for the
+    // deleted placeholder video
+    if (fullPath.endsWith('.mp4')) {
+      try {
+        await fs.rm(fullPath.replace(/\.mp4$/, '.trickplay'), {
+          recursive: true,
+        });
+      } catch {
+        // Sidecar doesn't exist
+      }
+    }
+
+    const parentFiles = await fs.readdir(parentDir);
+    if (parentFiles.length === 0) {
+      await fs.rmdir(parentDir);
+      if (mediaType === 'tv') {
+        const grandParentDir = path.dirname(parentDir);
+        let gpFiles = await fs.readdir(grandParentDir);
+        if (gpFiles.length === 1 && gpFiles[0] === '.plexmatch') {
+          await fs.unlink(path.join(grandParentDir, '.plexmatch'));
+          gpFiles = [];
+        }
+        if (gpFiles.length === 0) {
+          await fs.rmdir(grandParentDir);
+        }
+      }
+    }
+  } catch {
+    // Best effort — directory may not be empty or already gone
+  }
+}
+
+/**
  * Helper function to clean up a placeholder when real content is detected.
  * Removes the Plex label, deletes the placeholder file, and deletes ALL
  * database records for this TMDB ID across all collections.
@@ -76,14 +132,40 @@ export async function cleanupPlaceholderForRealContent(
       }
     }
 
-    await removePlaceholder(placeholderPath, mediaType);
+    try {
+      await removePlaceholder(placeholderPath, mediaType);
 
-    logger.info('Deleted placeholder file - real content detected', {
-      label: 'PlaceholderService',
-      tmdbId,
-      mediaType,
-      placeholderPath,
-    });
+      logger.info('Deleted placeholder file - real content detected', {
+        label: 'PlaceholderService',
+        tmdbId,
+        mediaType,
+        placeholderPath,
+      });
+    } catch (error) {
+      const isFileNotFound =
+        error instanceof Error &&
+        'code' in error &&
+        (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+      if (!isFileNotFound) {
+        throw error;
+      }
+
+      // File already gone (deleted externally or by an earlier partial
+      // cleanup). The goal state is reached — clean up the leftover marker
+      // and empty directories that would otherwise re-trigger discovery
+      // every sync, then continue to DB record deletion.
+      logger.info(
+        'Placeholder file already gone - cleaning up remnants and database records',
+        {
+          label: 'PlaceholderService',
+          tmdbId,
+          mediaType,
+          placeholderPath,
+        }
+      );
+      await cleanupPlaceholderRemnants(placeholderPath, mediaType);
+    }
 
     const allRecords = await repository.find({
       where: { tmdbId },
@@ -1105,36 +1187,10 @@ export async function cleanupPlaceholdersForConfig(
                 // Clean up empty parent directories left behind.
                 // Placeholder metadata files (.comingsoon, .plexmatch) don't
                 // count as content — remove them so the dirs qualify as empty.
-                try {
-                  const parentDir = path.dirname(fullPath);
-                  let parentFiles = await fs.readdir(parentDir);
-                  if (
-                    placeholder.mediaType === 'tv' &&
-                    parentFiles.length === 1 &&
-                    parentFiles[0] === '.comingsoon'
-                  ) {
-                    await fs.unlink(path.join(parentDir, '.comingsoon'));
-                    parentFiles = [];
-                  }
-                  if (parentFiles.length === 0) {
-                    await fs.rmdir(parentDir);
-                    if (placeholder.mediaType === 'tv') {
-                      const grandParentDir = path.dirname(parentDir);
-                      let gpFiles = await fs.readdir(grandParentDir);
-                      if (gpFiles.length === 1 && gpFiles[0] === '.plexmatch') {
-                        await fs.unlink(
-                          path.join(grandParentDir, '.plexmatch')
-                        );
-                        gpFiles = [];
-                      }
-                      if (gpFiles.length === 0) {
-                        await fs.rmdir(grandParentDir);
-                      }
-                    }
-                  }
-                } catch {
-                  // Best effort — directory may not be empty or already gone
-                }
+                await cleanupPlaceholderRemnants(
+                  fullPath,
+                  placeholder.mediaType
+                );
 
                 removedCount++;
                 continue; // Already removed — skip filter and orphan checks
@@ -1222,6 +1278,12 @@ export async function cleanupPlaceholdersForConfig(
                   (error as NodeJS.ErrnoException).code === 'ENOENT';
 
                 if (isFileNotFound) {
+                  // File already gone — clean up the leftover marker and
+                  // empty directories so discovery doesn't re-detect it
+                  await cleanupPlaceholderRemnants(
+                    fullPath,
+                    placeholder.mediaType
+                  );
                   fileRemovalSucceeded = true;
                 } else {
                   logger.error(
@@ -1395,6 +1457,12 @@ export async function cleanupPlaceholdersForConfig(
                     error.code === 'ENOENT';
 
                   if (isFileNotFound) {
+                    // File already gone — clean up the leftover marker and
+                    // empty directories so discovery doesn't re-detect it
+                    await cleanupPlaceholderRemnants(
+                      fullPath,
+                      placeholder.mediaType
+                    );
                     fileRemovalSucceeded = true;
                     logger.info(
                       'Placeholder file already removed - cleaning up database record',

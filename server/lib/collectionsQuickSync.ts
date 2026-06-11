@@ -488,8 +488,18 @@ class CollectionsQuickSync {
             affectedCollections: allPlaceholderRecords.length,
           });
         } catch (error) {
-          if (error instanceof Error && error.message.includes('ENOENT')) {
-            // File doesn't exist - that's fine, proceed with database cleanup
+          if (
+            error instanceof Error &&
+            'code' in error &&
+            (error as NodeJS.ErrnoException).code === 'ENOENT'
+          ) {
+            // File doesn't exist - that's fine, proceed with database cleanup.
+            // Clean up the leftover .comingsoon marker and empty directories
+            // so placeholder discovery doesn't re-detect this item every sync.
+            const { cleanupPlaceholderRemnants } = await import(
+              '@server/lib/placeholders/services/PlaceholderCleanup'
+            );
+            await cleanupPlaceholderRemnants(fullPath, mediaType);
             fileDeleted = true;
             logger.debug('Placeholder file already deleted', {
               label: 'Collections Quick Sync',

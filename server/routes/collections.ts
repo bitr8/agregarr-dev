@@ -1214,15 +1214,19 @@ collectionsRoutes.delete('/:id', isAuthenticated(), async (req, res) => {
                     totalFilesRemoved++;
                   } catch (error) {
                     // File might already be gone - that's ok
-                    if (
+                    const isFileNotFound =
                       error instanceof Error &&
-                      !error.message.includes('ENOENT')
-                    ) {
+                      'code' in error &&
+                      (error as NodeJS.ErrnoException).code === 'ENOENT';
+                    if (!isFileNotFound) {
                       logger.warn('Failed to remove placeholder file', {
                         label: 'Collections API',
                         title: record.title,
                         path: fullPath,
-                        error: error.message,
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
                       });
                     } else {
                       fileDeleted = true; // File doesn't exist - consider it removed

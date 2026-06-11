@@ -257,15 +257,24 @@ export async function removePlaceholder(
     try {
       realPath = await fs.realpath(placeholderPath);
     } catch (realpathError) {
-      // File doesn't exist or can't be resolved - this is a security issue, fail hard
-      logger.error('Cannot resolve real path for placeholder deletion', {
-        label: 'PlaceholderService',
-        requestedPath: placeholderPath,
-        error:
-          realpathError instanceof Error
-            ? realpathError.message
-            : String(realpathError),
-      });
+      // File doesn't exist or can't be resolved - this is a security issue, fail hard.
+      // ENOENT (file already gone) is expected and handled by callers, so log
+      // it quietly; anything else (permissions, mount issues) stays an error.
+      const isFileNotFound =
+        realpathError instanceof Error &&
+        'code' in realpathError &&
+        (realpathError as NodeJS.ErrnoException).code === 'ENOENT';
+      logger[isFileNotFound ? 'debug' : 'error'](
+        'Cannot resolve real path for placeholder deletion',
+        {
+          label: 'PlaceholderService',
+          requestedPath: placeholderPath,
+          error:
+            realpathError instanceof Error
+              ? realpathError.message
+              : String(realpathError),
+        }
+      );
       const err = new Error(
         'Cannot resolve placeholder path - file may not exist or permissions denied'
       );
@@ -427,11 +436,19 @@ export async function removePlaceholder(
       path: placeholderPath,
     });
   } catch (error) {
-    logger.error('Failed to remove placeholder', {
-      label: 'PlaceholderService',
-      error: error instanceof Error ? error.message : String(error),
-      path: placeholderPath,
-    });
+    // ENOENT is handled gracefully by callers (file already gone) — don't
+    // log it as a failure here
+    const isFileNotFound =
+      error instanceof Error &&
+      'code' in error &&
+      (error as NodeJS.ErrnoException).code === 'ENOENT';
+    if (!isFileNotFound) {
+      logger.error('Failed to remove placeholder', {
+        label: 'PlaceholderService',
+        error: error instanceof Error ? error.message : String(error),
+        path: placeholderPath,
+      });
+    }
     throw error;
   }
 }

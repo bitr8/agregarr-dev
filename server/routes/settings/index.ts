@@ -1400,11 +1400,15 @@ settingsRoutes.post('/reset', async (_req, res, next) => {
               filesRemoved++;
             } catch (error) {
               // File might already be gone - that's ok
-              if (error instanceof Error && !error.message.includes('ENOENT')) {
+              const isFileNotFound =
+                error instanceof Error &&
+                'code' in error &&
+                (error as NodeJS.ErrnoException).code === 'ENOENT';
+              if (!isFileNotFound) {
                 logger.warn('Failed to remove placeholder file during reset', {
                   label: 'Settings Reset',
                   path: fullPath,
-                  error: error.message,
+                  error: error instanceof Error ? error.message : String(error),
                 });
               } else {
                 filesRemoved++; // File doesn't exist - consider it removed
