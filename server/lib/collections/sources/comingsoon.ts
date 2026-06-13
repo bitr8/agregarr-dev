@@ -1,6 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
-import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import { getRepository } from '@server/datasource';
+import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
@@ -174,12 +174,32 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
       const sortedItems = await this.sortByReleaseDate(items, sourceData);
 
       if (sortedItems.length === 0) {
-        logger.warn('No items to create collection from after filtering', {
-          label: 'Coming Soon Collections',
-          configName: config.name,
-          originalCount: mappingStats?.original || 0,
-          matched: mappingStats?.filtered || 0,
-        });
+        // Distinguish "no placeholders materialised" from a generic empty
+        // result: without this the collection is silently never created and
+        // discovery later reports it as missing from Plex.
+        const missingItemCount = missingItems?.length ?? 0;
+        if (missingItemCount > 0) {
+          const warning =
+            `${missingItemCount} upcoming item(s) found but no placeholders materialised, so the collection was not created in Plex. ` +
+            'Check that placeholder creation is enabled for this collection, placeholder root folders are configured, ' +
+            'and the items have release date metadata.';
+          logger.warn(`Collection "${config.name}" not created: ${warning}`, {
+            label: 'Coming Soon Collections',
+            configName: config.name,
+            sourceItems: sourceData.length,
+            missingItems: missingItemCount,
+            placeholdersCreated: placeholderItems.length,
+            previouslyCreated: !!config.collectionRatingKey,
+          });
+          return { created: 0, updated: 0, warning };
+        } else {
+          logger.warn('No items to create collection from after filtering', {
+            label: 'Coming Soon Collections',
+            configName: config.name,
+            originalCount: mappingStats?.original || 0,
+            matched: mappingStats?.filtered || 0,
+          });
+        }
         return { created: 0, updated: 0 };
       }
 

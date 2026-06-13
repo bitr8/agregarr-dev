@@ -580,12 +580,29 @@ export class DiscoveryService {
         }
 
         if (!collectionExists) {
+          // A config with no collectionRatingKey was never created in Plex
+          // (e.g. sync produced zero items), so it can't be "missing" —
+          // flagging it tells the user the collection was deleted from Plex
+          // when it never existed. This relies on the invariant that a
+          // collectionRatingKey is only persisted after a successful Plex
+          // collection creation; persisting one earlier would reintroduce
+          // the false positive.
+          if (!config.collectionRatingKey) {
+            logger.debug(
+              `Collection "${config.name}" has never been created in Plex, skipping missing check`,
+              {
+                label: 'Discovery Service - Validation',
+                configId: config.id,
+                libraryId: config.libraryId,
+              }
+            );
+            continue;
+          }
+
           // Debug logging to understand what's happening
-          const collectionInPlex = config.collectionRatingKey
-            ? allCollections.find(
-                (c) => c.ratingKey === config.collectionRatingKey
-              )
-            : null;
+          const collectionInPlex = allCollections.find(
+            (c) => c.ratingKey === config.collectionRatingKey
+          );
 
           logger.debug(`Collection matching debug for "${config.name}"`, {
             label: 'Discovery Service - Validation',

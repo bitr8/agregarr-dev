@@ -202,6 +202,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     let created = 0;
     let updated = 0;
     let mutated = false;
+    let warning: string | undefined;
     const errors: CollectionSyncError[] = [];
 
     // Filter configs for this source
@@ -300,6 +301,11 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           created += result.created;
           updated += result.updated;
 
+          // Callers pass single-config arrays, so the last warning wins
+          if (result.warning) {
+            warning = result.warning;
+          }
+
           // Apply overlays if enabled for this collection
           // Extract rating key from result (handles both MediaProcessingResult and custom result types)
           const customResultRatingKey = (result as CollectionUpdateResult)
@@ -394,6 +400,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         created,
         updated,
         mutated: mutated || created > 0,
+        ...(warning && { warning }),
         details: {
           processingTime: Date.now() - startTime,
           errors: errors.length,
