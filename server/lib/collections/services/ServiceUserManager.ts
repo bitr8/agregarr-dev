@@ -575,7 +575,9 @@ export class ServiceUserManager {
               errorMessage: errorDetails.message,
             }
           );
-          return;
+          throw new Error(
+            `Failed to create external Overseerr user for ${config.username}: ${errorDetails.message}`
+          );
         }
       }
 

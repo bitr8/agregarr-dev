@@ -246,8 +246,19 @@ export class AutoRequestService {
             }
           }
 
-          const userIdToUse =
-            serviceUserToUse.externalOverseerrId || serviceUserToUse.id;
+          if (!serviceUserToUse.externalOverseerrId) {
+            logger.error(
+              `Service user "${serviceUserToUse.displayName}" has no external Overseerr ID — skipping request for ${item.title}. Check Overseerr/Jellyseerr connection and service user setup.`,
+              {
+                label: 'Auto Request Service',
+                collection: config.name,
+                internalUserId: serviceUserToUse.id,
+              }
+            );
+            skippedRequests++;
+            continue;
+          }
+          const userIdToUse = serviceUserToUse.externalOverseerrId;
 
           // Determine server/profile/root folder/tags based on media type and config overrides
           let serverId: number | undefined;
@@ -524,9 +535,12 @@ export class AutoRequestService {
       // Fallback to fresh API call
       const overseerrAPI = this.getOverseerrAPI();
 
-      // Get requests by this service user (use external ID if available)
+      // Get requests by this service user
+      if (!serviceUser.externalOverseerrId) {
+        return false;
+      }
       const requests = await overseerrAPI.getRequests({
-        requestedBy: serviceUser.externalOverseerrId || serviceUser.id,
+        requestedBy: serviceUser.externalOverseerrId,
         take: 1000,
       });
 
@@ -562,7 +576,9 @@ export class AutoRequestService {
     serviceUser: User,
     cachedRequests: OverseerrMediaRequest[]
   ): boolean {
-    const serviceUserId = serviceUser.externalOverseerrId || serviceUser.id;
+    if (!serviceUser.externalOverseerrId) {
+      return false;
+    }
 
     const existingDeclinedRequest = cachedRequests.find(
       (request) =>
@@ -570,7 +586,7 @@ export class AutoRequestService {
         request.type === mediaType &&
         request.status === 3 && // 3 = DECLINED status in Overseerr
         !request.is4k &&
-        request.requestedBy?.id === serviceUserId
+        request.requestedBy?.id === serviceUser.externalOverseerrId
     );
 
     return !!existingDeclinedRequest;
@@ -721,8 +737,7 @@ export class AutoRequestService {
               req.media.tmdbId === missingItem.tmdbId &&
               req.type === missingItem.mediaType &&
               req.requestedBy?.id ===
-                (missingItem.requestedBy?.externalOverseerrId ||
-                  missingItem.requestedBy?.id)
+                missingItem.requestedBy?.externalOverseerrId
           );
 
           if (overseerrRequest) {
