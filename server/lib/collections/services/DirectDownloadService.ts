@@ -315,7 +315,7 @@ export class DirectDownloadService {
       radarrServer: `${radarrSettings.hostname}:${radarrSettings.port}`,
       profileId: profileId,
       rootFolderPath,
-      tags: tagsToSend,
+      tags: finalTags,
     });
   }
 
@@ -485,7 +485,7 @@ export class DirectDownloadService {
       profileId: profileId,
       rootFolderPath,
       seasonsToMonitor: seasonsToMonitorArray,
-      tags: tagsToSend,
+      tags: finalTags,
     });
   }
 

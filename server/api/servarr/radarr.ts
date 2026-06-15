@@ -140,10 +140,36 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
       }
 
       if (movie.id) {
-        logger.info(
-          'Movie is already monitored in Radarr. Skipping add and returning success',
-          { label: 'Radarr' }
-        );
+        if (options.tags && options.tags.length > 0) {
+          try {
+            await this.bulkAddTags([movie.id], options.tags);
+            logger.info(
+              'Movie is already monitored in Radarr. Applied requested tags.',
+              {
+                label: 'Radarr',
+                movieId: movie.id,
+                movieTitle: movie.title,
+                tags: options.tags,
+              }
+            );
+          } catch (e) {
+            logger.warn(
+              'Movie is already monitored in Radarr. Failed to apply tags.',
+              {
+                label: 'Radarr',
+                movieId: movie.id,
+                movieTitle: movie.title,
+                tags: options.tags,
+                error: e instanceof Error ? e.message : 'Unknown error',
+              }
+            );
+          }
+        } else {
+          logger.info(
+            'Movie is already monitored in Radarr. No tags to apply.',
+            { label: 'Radarr', movieId: movie.id, movieTitle: movie.title }
+          );
+        }
         return movie;
       }
 

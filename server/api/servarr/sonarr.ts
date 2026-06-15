@@ -288,8 +288,23 @@ class SonarrAPI extends ServarrBase<{
         series.id &&
         this.areRequestedSeasonsAlreadyAvailable(series, options.seasons)
       ) {
+        if (options.tags && options.tags.length > 0) {
+          try {
+            await this.bulkAddTags([series.id], options.tags);
+          } catch (e) {
+            logger.warn(
+              'Series already available in Sonarr. Failed to apply tags.',
+              {
+                label: 'Sonarr',
+                seriesId: series.id,
+                seriesTitle: series.title,
+                error: e instanceof Error ? e.message : 'Unknown error',
+              }
+            );
+          }
+        }
         logger.info(
-          'Series already exists and requested seasons are available. Skipping add and returning success',
+          'Series already exists and requested seasons are available. Returning success.',
           {
             label: 'Sonarr',
             seriesId: series.id,
@@ -313,16 +328,42 @@ class SonarrAPI extends ServarrBase<{
         return series;
       }
 
-      // Series exists and is already monitored - skip adding
+      // Series exists and is already monitored - skip adding but apply tags
       if (series.id) {
-        logger.info(
-          'Series is already monitored in Sonarr. Skipping add and returning success',
-          {
-            label: 'Sonarr',
-            seriesId: series.id,
-            seriesTitle: series.title,
+        if (options.tags && options.tags.length > 0) {
+          try {
+            await this.bulkAddTags([series.id], options.tags);
+            logger.info(
+              'Series is already monitored in Sonarr. Applied requested tags.',
+              {
+                label: 'Sonarr',
+                seriesId: series.id,
+                seriesTitle: series.title,
+                tags: options.tags,
+              }
+            );
+          } catch (e) {
+            logger.warn(
+              'Series is already monitored in Sonarr. Failed to apply tags.',
+              {
+                label: 'Sonarr',
+                seriesId: series.id,
+                seriesTitle: series.title,
+                tags: options.tags,
+                error: e instanceof Error ? e.message : 'Unknown error',
+              }
+            );
           }
-        );
+        } else {
+          logger.info(
+            'Series is already monitored in Sonarr. No tags to apply.',
+            {
+              label: 'Sonarr',
+              seriesId: series.id,
+              seriesTitle: series.title,
+            }
+          );
+        }
         return series;
       }
 
