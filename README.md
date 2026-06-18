@@ -44,7 +44,7 @@ For general Agregarr configuration (services, collections, overlays etc.), see t
 
 ## Relationship to upstream
 
-This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream go back as PRs (46 merged, 11 open). Fork-only features are documented separately — they rely on behaviour or trade-offs upstream may not want to adopt.
+This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream go back as PRs (46 merged, 12 open). Fork-only features are documented separately — they rely on behaviour or trade-offs upstream may not want to adopt.
 
 ## Fork-Only Features
 
