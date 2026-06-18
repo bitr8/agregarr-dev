@@ -141,6 +141,16 @@ export class AutoRequestService {
           ? Number(config.maxSeasonsToRequest)
           : 0; // 0 = no limit
 
+      // Collect all Agregarr service user Overseerr IDs so the declined check
+      // catches cross-source declines without blocking on unrelated human-user declines
+      const serviceUsers =
+        await this.serviceUserManager.listServiceUsers();
+      const agregarrUserIds = new Set(
+        serviceUsers
+          .map((u) => u.externalOverseerrId)
+          .filter((id): id is number => id != null)
+      );
+
       // Track declined items and season limits for summary logging
       const previouslyDeclinedItems: string[] = [];
       const tooManySeasons: string[] = [];
@@ -193,13 +203,13 @@ export class AutoRequestService {
             autoApprove
           );
 
-          // For manual approval requests, check if this item was previously declined by this service user
+          // For manual approval requests, check if this item was previously declined by any Agregarr service user
           if (!autoApprove) {
             if (
               this.wasPreviouslyDeclinedFromCache(
                 item.tmdbId,
                 item.mediaType,
-                serviceUserToUse,
+                agregarrUserIds,
                 allRequestsResults
               )
             ) {
@@ -513,83 +523,25 @@ export class AutoRequestService {
   }
 
   /**
-   * Check if a request was previously declined by this specific service user (DEPRECATED - use cached version)
-   */
-  private async wasPreviouslyDeclined(
-    tmdbId: number,
-    mediaType: 'movie' | 'tv',
-    serviceUser: User
-  ): Promise<boolean> {
-    try {
-      // OPTIMIZATION: Use cached requests if available
-      if (syncCacheService.getIsInitialized()) {
-        const cachedRequests = syncCacheService.getOverseerrRequests();
-        return this.wasPreviouslyDeclinedFromCache(
-          tmdbId,
-          mediaType,
-          serviceUser,
-          cachedRequests
-        );
-      }
-
-      // Fallback to fresh API call
-      const overseerrAPI = this.getOverseerrAPI();
-
-      // Get requests by this service user
-      if (!serviceUser.externalOverseerrId) {
-        return false;
-      }
-      const requests = await overseerrAPI.getRequests({
-        requestedBy: serviceUser.externalOverseerrId,
-        take: 1000,
-      });
-
-      const existingDeclinedRequest = requests.results.find(
-        (request) =>
-          request.media.tmdbId === tmdbId &&
-          request.type === mediaType &&
-          request.status === 3 && // 3 = DECLINED status in Overseerr
-          !request.is4k
-      );
-
-      return !!existingDeclinedRequest;
-    } catch (error) {
-      logger.warn(`Failed to check declined status for TMDB ID ${tmdbId}`, {
-        label: 'Auto Request Service',
-        tmdbId,
-        mediaType,
-        serviceUserId: serviceUser.id,
-        serviceUserName: serviceUser.displayName,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return false; // If we can't check, allow the request
-    }
-  }
-
-  /**
-   * Check if a request was previously declined by this specific service user using cached requests
-   * OPTIMIZED: No API calls, uses pre-fetched data
+   * Check if a request was previously declined by any Agregarr service user.
+   * Catches cross-source declines in granular/per-service modes without
+   * blocking on unrelated human-user declines.
    */
   private wasPreviouslyDeclinedFromCache(
     tmdbId: number,
     mediaType: 'movie' | 'tv',
-    serviceUser: User,
+    agregarrUserIds: Set<number>,
     cachedRequests: OverseerrMediaRequest[]
   ): boolean {
-    if (!serviceUser.externalOverseerrId) {
-      return false;
-    }
-
-    const existingDeclinedRequest = cachedRequests.find(
+    return cachedRequests.some(
       (request) =>
         request.media.tmdbId === tmdbId &&
         request.type === mediaType &&
         request.status === 3 && // 3 = DECLINED status in Overseerr
         !request.is4k &&
-        request.requestedBy?.id === serviceUser.externalOverseerrId
+        request.requestedBy?.id != null &&
+        agregarrUserIds.has(request.requestedBy.id)
     );
-
-    return !!existingDeclinedRequest;
   }
 
   /**
