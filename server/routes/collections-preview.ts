@@ -332,6 +332,10 @@ async function processMultiSourcePreview(
     customDays?: number;
     minimumPlays?: number;
     networksCountry?: string;
+    radarrTagId?: number;
+    radarrTagServerId?: number;
+    sonarrTagId?: number;
+    sonarrTagServerId?: number;
   }[],
   combineMode: 'interleaved' | 'list_order' | 'randomised' | 'cycle_lists',
   maxItems: number,
@@ -430,6 +434,22 @@ async function processMultiSourcePreview(
           source.subtype?.replace(/_top_10$/, '') || undefined;
         sourceConfigRecord.network = extractedNetwork;
         sourceConfigRecord.networksCountry = source.networksCountry;
+      }
+
+      if (source.type === 'radarrtag') {
+        if (source.radarrTagId !== undefined)
+          sourceConfigRecord.radarrTagId = Number(source.radarrTagId);
+        if (source.radarrTagServerId !== undefined)
+          sourceConfigRecord.radarrInstanceId = Number(
+            source.radarrTagServerId
+          );
+      } else if (source.type === 'sonarrtag') {
+        if (source.sonarrTagId !== undefined)
+          sourceConfigRecord.sonarrTagId = Number(source.sonarrTagId);
+        if (source.sonarrTagServerId !== undefined)
+          sourceConfigRecord.sonarrInstanceId = Number(
+            source.sonarrTagServerId
+          );
       }
 
       const sourceConfig = sourceConfigRecord as unknown as CollectionConfig;
@@ -939,6 +959,10 @@ async function processPreviewAsync(
       customDays?: number;
       minimumPlays?: number;
       networksCountry?: string;
+      radarrTagId?: number;
+      radarrTagServerId?: number;
+      sonarrTagId?: number;
+      sonarrTagServerId?: number;
     }[];
     combineMode?: 'interleaved' | 'list_order' | 'randomised' | 'cycle_lists';
     cycleIndex?: number; // For cycle_lists mode, which source to show
