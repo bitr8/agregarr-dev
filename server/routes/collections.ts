@@ -516,6 +516,10 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       }
     }
 
+    // Fetch pre-existing configs once (used inside the loop for duplicate checks)
+    const preExistingService = new PreExistingCollectionConfigService();
+    const preExistingConfigs = preExistingService.getConfigs();
+
     // Process each config (could be just one, or multiple if linked)
     for (const configToUpdate of configsToUpdate) {
       const configIndex = configs.findIndex((c) => c.id === configToUpdate.id);
@@ -579,13 +583,15 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
           });
         }
 
-        // Also check pre-existing collections
-        const preExistingService = new PreExistingCollectionConfigService();
-        const preExistingConfigs = preExistingService.getConfigs();
+        // Also check pre-existing collections, excluding any that share the
+        // same Plex collection as the config being updated (same ratingKey =
+        // same underlying Plex collection, not a true duplicate)
         const duplicatePreExisting = preExistingConfigs.find(
           (config) =>
             config.name === processedName &&
-            config.libraryId === configToUpdate.libraryId
+            config.libraryId === configToUpdate.libraryId &&
+            (!configToUpdate.collectionRatingKey ||
+              config.collectionRatingKey !== configToUpdate.collectionRatingKey)
         );
 
         if (duplicatePreExisting) {
