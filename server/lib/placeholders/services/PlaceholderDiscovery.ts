@@ -151,6 +151,11 @@ export async function discoverPlaceholdersFromMarkers(
     const { showsByTvdbId } =
       await placeholderContextService.batchCheckDownloadStatus(arrLookups);
 
+    // Shared TMDB client for tvdbId resolution (cache is shared across instances,
+    // but one instance avoids repeated dynamic imports)
+    const TmdbAPI = (await import('@server/api/themoviedb')).default;
+    const tmdbClient = new TmdbAPI();
+
     for (const marker of tier1Markers) {
       if (!marker.tmdbId) {
         continue;
@@ -188,7 +193,7 @@ export async function discoverPlaceholdersFromMarkers(
       }
 
       // Check if *arr reports content as downloaded (works even if content is in different Plex library)
-      // Fall back to DB record's tvdbId when marker file lacks it
+      // Fall back to DB record's tvdbId, then TMDB external_ids when marker file lacks it
       let effectiveTvdbId = marker.tvdbId;
       if (!effectiveTvdbId) {
         const dbRecord = await repository.findOne({
@@ -197,6 +202,42 @@ export async function discoverPlaceholdersFromMarkers(
         });
         if (dbRecord?.tvdbId) {
           effectiveTvdbId = dbRecord.tvdbId;
+        }
+      }
+      // Placeholders created before tvdbId backfill may lack it — resolve
+      // from TMDB external_ids and backfill the DB so subsequent syncs skip this
+      if (!effectiveTvdbId && marker.tmdbId) {
+        try {
+          const showDetails = await tmdbClient.getTvShow({
+            tvId: marker.tmdbId,
+          });
+          if (showDetails.external_ids?.tvdb_id) {
+            effectiveTvdbId = showDetails.external_ids.tvdb_id;
+            // Backfill DB records so future syncs don't repeat the lookup
+            await repository.update(
+              { tmdbId: marker.tmdbId, mediaType: 'tv' },
+              { tvdbId: effectiveTvdbId }
+            );
+            logger.info(
+              'Resolved tvdbId from TMDB external_ids for placeholder cleanup',
+              {
+                label: 'PlaceholderService',
+                title: marker.title,
+                tmdbId: marker.tmdbId,
+                tvdbId: effectiveTvdbId,
+              }
+            );
+          }
+        } catch (error) {
+          logger.warn(
+            'Failed to resolve tvdbId from TMDB — Sonarr check will be skipped',
+            {
+              label: 'PlaceholderService',
+              title: marker.title,
+              tmdbId: marker.tmdbId,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
         }
       }
       const arrStatus = effectiveTvdbId

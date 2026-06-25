@@ -1242,7 +1242,9 @@ export async function enrichWithTMDBReleaseDates(
                 );
                 if (diffDays > 7) {
                   logger.info(
-                    `${item.source} and TMDB ${field} differ by ${Math.round(diffDays)} days — using ${item.source} value`,
+                    `${item.source} and TMDB ${field} differ by ${Math.round(
+                      diffDays
+                    )} days — using ${item.source} value`,
                     {
                       label: 'PlaceholderService',
                       title: item.title,
@@ -1329,49 +1331,56 @@ export async function enrichWithTMDBReleaseDates(
             }
           }
         } else if (item.mediaType === 'tv') {
-          // Only enrich airDate if not already set (Sonarr already provides season-specific dates)
-          if (!item.airDate) {
-            // Fetch TV show details from TMDB
+          const needsDate = !item.airDate;
+          const needsTvdbId = !item.tvdbId;
+
+          if (needsDate || needsTvdbId) {
+            // Fetch TV show details from TMDB (includes external_ids via append_to_response)
             const showDetails = await tmdbClient.getTvShow({
               tvId: item.tmdbId,
             });
 
-            // Find the next upcoming season premiere
-            let nextSeasonAirDate: string | null = null;
-            let nextSeasonNumber = 0;
-
-            if (showDetails.seasons && showDetails.seasons.length > 0) {
-              // Sort seasons by season number
-              const seasons = showDetails.seasons
-                .filter((s) => s.season_number > 0) // Exclude specials (season 0)
-                .sort((a, b) => a.season_number - b.season_number);
-
-              // Find the next season that hasn't aired yet (timezone-aware)
-              for (const season of seasons) {
-                if (season.air_date && isDateInFuture(season.air_date)) {
-                  nextSeasonAirDate = season.air_date;
-                  nextSeasonNumber = season.season_number;
-                  break;
-                }
-              }
+            // Backfill tvdbId from TMDB external_ids (TMDB sources don't provide it,
+            // but it's required for Sonarr download-status checks during cleanup)
+            if (needsTvdbId && showDetails.external_ids?.tvdb_id) {
+              item.tvdbId = showDetails.external_ids.tvdb_id;
             }
 
-            if (nextSeasonAirDate) {
-              item.airDate = nextSeasonAirDate;
-              item.seasonNumber = nextSeasonNumber;
-              item.isReturning = nextSeasonNumber > 1;
+            if (needsDate) {
+              // Find the next upcoming season premiere
+              let nextSeasonAirDate: string | null = null;
+              let nextSeasonNumber = 0;
 
-              logger.debug('Found upcoming season from TMDB for Trakt item', {
-                label: 'PlaceholderService',
-                title: item.title,
-                seasonNumber: nextSeasonNumber,
-                airDate: nextSeasonAirDate,
-              });
-            } else if (showDetails.first_air_date) {
-              // Fallback to first_air_date if no future seasons found
-              item.airDate = showDetails.first_air_date;
-              item.seasonNumber = 1;
-              item.isReturning = false;
+              if (showDetails.seasons && showDetails.seasons.length > 0) {
+                const seasons = showDetails.seasons
+                  .filter((s) => s.season_number > 0)
+                  .sort((a, b) => a.season_number - b.season_number);
+
+                for (const season of seasons) {
+                  if (season.air_date && isDateInFuture(season.air_date)) {
+                    nextSeasonAirDate = season.air_date;
+                    nextSeasonNumber = season.season_number;
+                    break;
+                  }
+                }
+              }
+
+              if (nextSeasonAirDate) {
+                item.airDate = nextSeasonAirDate;
+                item.seasonNumber = nextSeasonNumber;
+                item.isReturning = nextSeasonNumber > 1;
+
+                logger.debug('Found upcoming season from TMDB for Trakt item', {
+                  label: 'PlaceholderService',
+                  title: item.title,
+                  seasonNumber: nextSeasonNumber,
+                  airDate: nextSeasonAirDate,
+                });
+              } else if (showDetails.first_air_date) {
+                item.airDate = showDetails.first_air_date;
+                item.seasonNumber = 1;
+                item.isReturning = false;
+              }
             }
           }
 
