@@ -1854,7 +1854,10 @@ export class DiscoveryService {
           (config) =>
             (Array.isArray(config.libraryId)
               ? config.libraryId.includes(library.key)
-              : config.libraryId === library.key) && config.collectionRatingKey
+              : config.libraryId === library.key) &&
+            (config.collectionRatingKey ||
+              (config.collectionRatingKeys &&
+                config.collectionRatingKeys.length > 0))
         );
 
         // Check pre-existing collections for this library
@@ -1876,37 +1879,44 @@ export class DiscoveryService {
         ];
 
         for (const { type, config } of allLibraryCollections) {
-          const collectionRatingKey = config.collectionRatingKey;
-          const hubIdentifier = `custom.collection.${library.key}.${collectionRatingKey}`;
-
-          // Skip if already in hub management
-          if (existingHubIdentifiers.has(hubIdentifier)) {
-            continue;
+          // Gather all rating keys (multi-collection configs like overseerr/users
+          // use collectionRatingKeys[], single-collection configs use collectionRatingKey)
+          const ratingKeys: string[] = [];
+          if (
+            'collectionRatingKeys' in config &&
+            config.collectionRatingKeys &&
+            config.collectionRatingKeys.length > 0
+          ) {
+            ratingKeys.push(...config.collectionRatingKeys);
+          } else if (config.collectionRatingKey) {
+            ratingKeys.push(config.collectionRatingKey);
           }
 
           // Check if this collection should be promoted based on visibility settings
           const shouldPromote = this.shouldCollectionBePromoted(config);
+          if (!shouldPromote) continue;
 
-          if (shouldPromote) {
+          for (const ratingKey of ratingKeys) {
+            const hubIdentifier = `custom.collection.${library.key}.${ratingKey}`;
+
+            // Skip if already in hub management
+            if (existingHubIdentifiers.has(hubIdentifier)) {
+              continue;
+            }
+
             logger.info(
               `Collection should be visible but not in hub management - promoting: ${config.name}`,
               {
                 label: 'Discovery Service - Promotion',
                 configId: config.id,
                 libraryId: library.key,
-                collectionRatingKey,
+                collectionRatingKey: ratingKey,
                 type,
               }
             );
 
             try {
-              // Promote collection to hub management
-              if (collectionRatingKey) {
-                await plexClient.promoteCollectionToHub(
-                  collectionRatingKey,
-                  library.key
-                );
-              }
+              await plexClient.promoteCollectionToHub(ratingKey, library.key);
 
               // Set visibility settings
               const visibilityConfig =
@@ -1919,6 +1929,7 @@ export class DiscoveryService {
                 );
               }
 
+              existingHubIdentifiers.add(hubIdentifier);
               logger.debug(`Successfully promoted collection: ${config.name}`, {
                 label: 'Discovery Service - Promotion',
                 configId: config.id,
