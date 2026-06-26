@@ -689,13 +689,25 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
         }
       } catch (error) {
         const errorMessage = extractErrorMessage(error);
+        const originalError =
+          error &&
+          typeof error === 'object' &&
+          'originalError' in error &&
+          error.originalError instanceof Error
+            ? error.originalError.message
+            : undefined;
         logger.error(
-          `Failed to process collection for user ${userCollections.user.displayName}: ${errorMessage}`,
+          `Failed to process collection for user ${
+            userCollections.user.displayName
+          }: ${errorMessage}${
+            originalError ? ` (cause: ${originalError})` : ''
+          }`,
           {
             label: 'Overseerr Collections',
             userId: userCollections.user.id,
             userName: userCollections.user.displayName,
             error: errorMessage,
+            cause: originalError,
           }
         );
       }
