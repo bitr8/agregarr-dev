@@ -1,6 +1,7 @@
 import type PlexAPI from '@server/api/plexapi';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  extractErrorMessage,
   findPlexItemsByTmdbIds,
   getCollectionMediaType,
   type LibraryItemsCache,
@@ -687,8 +688,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
           collectedRatingKeys.push(result.collectionRatingKey);
         }
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = extractErrorMessage(error);
         logger.error(
           `Failed to process collection for user ${userCollections.user.displayName}: ${errorMessage}`,
           {
@@ -1078,7 +1078,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
               label: 'Overseerr User Smart Collection Creation',
               itemKey,
               labelName: itemLabelName,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
           // Continue with other items even if one fails
@@ -1118,7 +1118,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
             label: 'Overseerr User Smart Collection Creation',
             collectionName,
             userId,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
       }
@@ -1230,7 +1230,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
             `Failed to delete old base collection, continuing migration`,
             {
               label: 'Overseerr User Smart Collection Migration',
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
         }
@@ -1254,7 +1254,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
             `Failed to delete old regular collection, continuing migration`,
             {
               label: 'Overseerr User Smart Collection Migration',
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
         }
@@ -1296,7 +1296,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
               label: 'Overseerr User Smart Collection Creation',
               smartCollectionRatingKey,
               userId,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
 
@@ -1443,7 +1443,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
           label: 'Overseerr User Smart Collection Creation',
           collectionName,
           userId: userContext?.plexId || userContext?.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
       // Return failure instead of throwing
@@ -1532,7 +1532,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
             label: 'Overseerr User Smart Collection Cleanup',
             userId,
             itemLabelName,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
       }
@@ -1550,7 +1550,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
         label: 'Overseerr User Smart Collection Cleanup',
         userId,
         configName: config.name,
-        error: error instanceof Error ? error.message : String(error),
+        error: extractErrorMessage(error),
       });
     }
   }

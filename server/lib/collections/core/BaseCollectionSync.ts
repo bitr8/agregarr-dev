@@ -19,6 +19,7 @@ import {
   applyCollectionExclusions,
   createCollectionLabel,
   createSyncError,
+  extractErrorMessage,
   getCollectionMediaType,
   handleRateLimit,
   logCollectionProcessingResults,
@@ -175,11 +176,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       return mappedResult.items;
     } catch (error) {
       logger.error(
-        `Failed to extract items from ${this.source} for multi-source collection: ${error}`,
+        `Failed to extract items from ${
+          this.source
+        } for multi-source collection: ${extractErrorMessage(error)}`,
         {
           label: `${this.source} Multi-Source Extractor`,
           configName: config.name,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
       return [];
@@ -523,8 +526,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         total: missingItems.length,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = extractErrorMessage(error);
       logger.error(
         `Failed to process auto-requests for ${config.name}: ${errorMessage}`,
         {
@@ -604,7 +606,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         label: `${this.source} Collections`,
         collectionRatingKey,
         configId,
-        error: error instanceof Error ? error.message : String(error),
+        error: extractErrorMessage(error),
       });
     }
   }
@@ -668,7 +670,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         `Failed to tag existing items in Radarr/Sonarr for ${config.name}`,
         {
           label: `${this.source} Collections`,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
     }
@@ -995,7 +997,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         {
           label: `${this.source} Collections`,
           configId: config.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
 
@@ -1255,7 +1257,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           {
             label: 'Collection Sync',
             collectionName,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
         // Don't fail the sync if label cleanup fails
@@ -1309,7 +1311,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                 `Failed to delete old base collection, continuing migration`,
                 {
                   label: 'Collection Migration',
-                  error: error instanceof Error ? error.message : String(error),
+                  error: extractErrorMessage(error),
                 }
               );
             }
@@ -1487,8 +1489,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                   `Failed to add agregarr-stale label to item ${removedKey}`,
                   {
                     label: 'Collection Update',
-                    error:
-                      error instanceof Error ? error.message : String(error),
+                    error: extractErrorMessage(error),
                   }
                 );
               }
@@ -1519,8 +1520,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                   `Failed to remove agregarr-stale label from item ${staleKey}`,
                   {
                     label: 'Collection Update',
-                    error:
-                      error instanceof Error ? error.message : String(error),
+                    error: extractErrorMessage(error),
                   }
                 );
               }
@@ -1568,7 +1568,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             `Failed to arrange items in collection ${collectionName}`,
             {
               label: 'Collection Update',
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
         }
@@ -1709,7 +1709,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             {
               label: 'Base Collection Sync',
               storedRatingKey: config.collectionRatingKey,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
           ratingKeyWasStale = true;
@@ -1781,14 +1781,14 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               label: 'Base Collection Sync',
               collectionRatingKey: collection.ratingKey,
               collectionTitle: collection.title,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
           return {
             collection,
             labels: [],
             found: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           };
         }
       });
@@ -1934,7 +1934,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           label: 'Collection Search',
           libraryKey,
           customLabel,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
       return null;
@@ -2172,7 +2172,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               label: `${this.source} Collections`,
               collectionRatingKey,
               posterFilename,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
           // Don't fail the entire collection sync if poster upload fails
@@ -2293,7 +2293,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               label: `${this.source} Collections`,
               collectionRatingKey,
               wallpaperFilename,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
           // Don't fail the entire collection sync if wallpaper upload fails
@@ -2320,7 +2320,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           {
             label: `${this.source} Collections`,
             collectionRatingKey,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
         // Don't fail the entire collection sync if summary update fails
@@ -2437,7 +2437,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               label: `${this.source} Collections`,
               collectionRatingKey,
               themeFilename,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
           // Don't fail the entire collection sync if theme upload fails
@@ -2488,7 +2488,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         label: `${this.source} Collections`,
         configId,
         isActive,
-        error: error instanceof Error ? error.message : String(error),
+        error: extractErrorMessage(error),
       });
     }
   }
@@ -2525,7 +2525,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         {
           label: `${this.source} Collections`,
           configId,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
     }
@@ -2569,7 +2569,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         {
           label: `${this.source} Collections`,
           configId: config.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
     }
@@ -2927,7 +2927,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     } catch (error) {
       logger.error('Failed to enrich items with IMDb ratings:', {
         label: `${this.source} Collections`,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: extractErrorMessage(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
       // Return original items on error - don't fail the entire sync
@@ -3278,8 +3278,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                   label: `${this.source} Collections`,
                   configId: config.id,
                   hubIdentifier,
-                  error:
-                    error instanceof Error ? error.message : 'Unknown error',
+                  error: extractErrorMessage(error),
                 }
               );
             }
@@ -3303,22 +3302,26 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           }
         } catch (error) {
           logger.warn(
-            `Failed to remove time-restricted collection ${collection.title}: ${error}`,
+            `Failed to remove time-restricted collection ${
+              collection.title
+            }: ${extractErrorMessage(error)}`,
             {
               label: `${this.source} Collections`,
               configId: config.id,
-              error: error instanceof Error ? error.message : 'Unknown error',
+              error: extractErrorMessage(error),
             }
           );
         }
       }
     } catch (error) {
       logger.warn(
-        `Failed to handle inactive collection for ${config.name}: ${error}`,
+        `Failed to handle inactive collection for ${
+          config.name
+        }: ${extractErrorMessage(error)}`,
         {
           label: `${this.source} Collections`,
           configId: config.id,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: extractErrorMessage(error),
         }
       );
     }
@@ -3360,7 +3363,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         label: `${this.source} Collections`,
         configName: config.name,
         mediaType,
-        error: error instanceof Error ? error.message : String(error),
+        error: extractErrorMessage(error),
       });
 
       return {
@@ -3368,7 +3371,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         updated: 0,
         itemCount: 0,
         collectionKeys: [],
-        error: error instanceof Error ? error.message : String(error),
+        error: extractErrorMessage(error),
       };
     }
   }
@@ -3539,7 +3542,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               'Failed to get template grid size, using default limit',
               {
                 templateId: config.autoPosterTemplate,
-                error: error instanceof Error ? error.message : String(error),
+                error: extractErrorMessage(error),
               }
             );
           }
@@ -3638,7 +3641,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           'Metadata check failed, proceeding with poster generation',
           {
             label: 'MetadataTracking',
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
         // Fall through to generate poster
@@ -3690,7 +3693,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         } catch (error) {
           logger.error('Failed to record poster metadata, upload succeeded', {
             label: 'MetadataTracking',
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           });
         }
       }
@@ -3739,7 +3742,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         {
           label: `${this.source} Collections`,
           configId: config.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
     }

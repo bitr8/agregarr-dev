@@ -5,7 +5,10 @@ import type PlexAPI from '@server/api/plexapi';
 import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
-import { getCollectionMediaType } from '@server/lib/collections/core/CollectionUtilities';
+import {
+  extractErrorMessage,
+  getCollectionMediaType,
+} from '@server/lib/collections/core/CollectionUtilities';
 import type {
   CollectionSource,
   SyncResult,
@@ -74,10 +77,12 @@ export class CollectionSyncService {
       return response.results;
     } catch (error) {
       logger.warn(
-        `Failed to pre-fetch Overseerr requests, services will fall back to individual API calls: ${error}`,
+        `Failed to pre-fetch Overseerr requests, services will fall back to individual API calls: ${extractErrorMessage(
+          error
+        )}`,
         {
           label: 'Collection Sync Service',
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         }
       );
       return []; // Return empty array on error, services will handle fallback
@@ -207,8 +212,7 @@ export class CollectionSyncService {
                   label: 'Collection Sync Service',
                   title: marker.title,
                   ratingKey: plexItem.ratingKey,
-                  error:
-                    error instanceof Error ? error.message : 'Unknown error',
+                  error: extractErrorMessage(error),
                 });
                 // Skip title fix if label failed - no point fixing title
                 // on an item that won't be filtered from hubs
@@ -243,8 +247,7 @@ export class CollectionSyncService {
                     label: 'Collection Sync Service',
                     title: marker.title,
                     ratingKey: plexItem.ratingKey,
-                    error:
-                      error instanceof Error ? error.message : 'Unknown error',
+                    error: extractErrorMessage(error),
                   }
                 );
               }
@@ -308,7 +311,7 @@ export class CollectionSyncService {
           logger.warn('Failed to run global TV placeholder discovery', {
             label: 'Collection Sync Service',
             libraryId: tvLibraryId,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           });
         }
       }
@@ -393,8 +396,7 @@ export class CollectionSyncService {
                   label: 'Collection Sync Service',
                   title: movie.title,
                   ratingKey: plexItem.ratingKey,
-                  error:
-                    error instanceof Error ? error.message : 'Unknown error',
+                  error: extractErrorMessage(error),
                 });
               }
             }
@@ -444,7 +446,7 @@ export class CollectionSyncService {
           logger.warn('Failed to run global movie placeholder discovery', {
             label: 'Collection Sync Service',
             libraryId: movieLibraryId,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           });
         }
       }
@@ -509,7 +511,7 @@ export class CollectionSyncService {
           'Failed to apply pre-sync user restrictions - continuing with sync',
           {
             label: 'Collection Sync Service',
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
       }
@@ -535,7 +537,7 @@ export class CollectionSyncService {
           'Failed to cleanup user filter labels - continuing with sync',
           {
             label: 'Collection Sync Service',
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
       }
@@ -923,8 +925,7 @@ export class CollectionSyncService {
         if (isNewUniqueCollection) processedCount++;
         onProgress?.(processedCount, undefined, uniqueCollectionCount);
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = extractErrorMessage(error);
         logger.error(
           `Failed to process collection ${config.name}: ${errorMessage}`,
           {
@@ -962,7 +963,7 @@ export class CollectionSyncService {
     } catch (error) {
       logger.warn('Filtered hub label verification failed', {
         label: 'Collection Sync Service',
-        error: error instanceof Error ? error.message : String(error),
+        error: extractErrorMessage(error),
       });
     }
 
@@ -1068,7 +1069,7 @@ export class CollectionSyncService {
               label: 'Collection Sync Service',
               title: match.title,
               ratingKey: match.plexRatingKey,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             });
           }
         }
@@ -1132,7 +1133,7 @@ export class CollectionSyncService {
                   label: 'Collection Sync Service',
                   ratingKey,
                   title: metadata.title,
-                  error: error instanceof Error ? error.message : String(error),
+                  error: extractErrorMessage(error),
                 }
               );
             }
@@ -1160,7 +1161,7 @@ export class CollectionSyncService {
                   label: 'Collection Sync Service',
                   title: metadata.title,
                   ratingKey,
-                  error: error instanceof Error ? error.message : String(error),
+                  error: extractErrorMessage(error),
                 });
               }
             }
@@ -1172,7 +1173,7 @@ export class CollectionSyncService {
           {
             label: 'Collection Sync Service',
             hub: config.name,
-            error: error instanceof Error ? error.message : String(error),
+            error: extractErrorMessage(error),
           }
         );
       }
@@ -1222,9 +1223,9 @@ export class CollectionSyncService {
       settings.setOverseerrLabelsApplied(true);
     } catch (error) {
       throw new Error(
-        `Failed to apply pre-sync user restrictions: ${
-          error instanceof Error ? error.message : String(error)
-        }`
+        `Failed to apply pre-sync user restrictions: ${extractErrorMessage(
+          error
+        )}`
       );
     }
   }
@@ -1261,7 +1262,7 @@ export class CollectionSyncService {
             {
               label: 'Collection Sync Service',
               userId,
-              error: error instanceof Error ? error.message : String(error),
+              error: extractErrorMessage(error),
             }
           );
         }
@@ -1280,9 +1281,7 @@ export class CollectionSyncService {
       settings.setOverseerrLabelsApplied(false);
     } catch (error) {
       throw new Error(
-        `Failed to cleanup user filter labels: ${
-          error instanceof Error ? error.message : String(error)
-        }`
+        `Failed to cleanup user filter labels: ${extractErrorMessage(error)}`
       );
     }
   }
