@@ -816,6 +816,10 @@ router.get('/:id/preview', async (req, res, next) => {
       // Maintainerr integration
       daysUntilAction: 5, // Always populate for previews
 
+      // Streaming provider
+      streamingProvider: 'Netflix',
+      streamingProviderId: 8,
+
       // Item metadata
       isPlaceholder: false,
     };
@@ -1027,6 +1031,10 @@ router.post('/combined-preview', async (req, res, next) => {
 
       // Maintainerr integration
       daysUntilAction: 5, // Always populate for previews
+
+      // Streaming provider
+      streamingProvider: 'Netflix',
+      streamingProviderId: 8,
 
       // Item metadata
       isPlaceholder: false,
