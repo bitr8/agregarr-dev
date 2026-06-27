@@ -268,6 +268,9 @@ export interface OverlayRenderContext {
   daysUntilNextSeason?: number; // Calculated days until next SEASON PREMIERE only
   daysAgoNextSeason?: number; // Days since next season premiered (only if nextSeasonAirDate is in the past)
 
+  totalSeasons?: number;
+  seasonsAvailable?: number;
+
   // Episode information
   seasonNumber?: number;
   episodeNumber?: number;
@@ -482,6 +485,8 @@ export const AVAILABLE_VARIABLES = {
       label: 'Days Since Next Season Premiered (TV)',
       example: '7',
     },
+    { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
+    { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
     { field: 'episodeNumber', label: 'Episode Number', example: '16' },
     {
@@ -665,6 +670,8 @@ export const CONDITION_FIELD_CATEGORIES = {
       label: 'Days Since Next Season Premiered (TV)',
       example: '7',
     },
+    { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
+    { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
     { field: 'episodeNumber', label: 'Episode Number', example: '16' },
     { field: 'episodeLabel', label: 'Episode Label', example: 'SERIES FINALE' },
@@ -815,6 +822,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     rtVerifiedHot: true,
     plexUserRating: 10,
     // metacriticScore: 96, // TODO: Implement Metacritic integration
+    totalSeasons: 5,
+    seasonsAvailable: 1,
     seasonNumber: 5,
     episodeNumber: 16,
     episodeLabel: 'SERIES FINALE',
