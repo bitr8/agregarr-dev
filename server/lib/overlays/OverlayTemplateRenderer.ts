@@ -425,6 +425,9 @@ export interface OverlayRenderContext {
   daysUntilNextSeason?: number; // Calculated days until next SEASON PREMIERE only
   daysAgoNextSeason?: number; // Days since next season premiered (only if nextSeasonAirDate is in the past)
 
+  totalSeasons?: number;
+  seasonsAvailable?: number;
+
   // Episode information
   seasonNumber?: number;
   episodeNumber?: number;
