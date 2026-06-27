@@ -587,6 +587,10 @@ export async function buildRenderContext(
       }
 
       // TMDB Status (TV shows only) - using Kometa's user-friendly mapping
+      if (mediaType === 'show' && 'number_of_seasons' in tmdbData) {
+        context.totalSeasons = tmdbData.number_of_seasons;
+      }
+
       if (mediaType === 'show' && 'status' in tmdbData) {
         const rawStatus = tmdbData.status;
 
@@ -993,6 +997,10 @@ export async function buildRenderContext(
 
   // TV-specific
   if (mediaType === 'show') {
+    if (item.childCount !== undefined) {
+      context.seasonsAvailable = item.childCount;
+    }
+
     // For episode-level items, use parentIndex for season
     // For show-level items (placeholders/shows), parentIndex is undefined
     if (item.parentIndex !== undefined) {
