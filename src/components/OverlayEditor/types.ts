@@ -297,6 +297,25 @@ export interface OverlayRenderContext {
   streamingProvider?: string; // Top flatrate provider name by display_priority
   streamingProviderId?: number; // Top flatrate provider ID (stable, for icon mapping)
 
+  // Episode aggregation (populated when enableEpisodeScanning is on for show libraries)
+  showResolution?: string;
+  showHdr?: boolean;
+  showDolbyVision?: boolean;
+  showDolbyVisionProfile?: number;
+  showAudioCodec?: string;
+  showAudioChannels?: number;
+  showVideoCodec?: string;
+  showBitDepth?: number;
+
+  episodeCount?: number;
+  episode4kCount?: number;
+  episode4kPercent?: number;
+  episodeHdrCount?: number;
+  episodeHdrPercent?: number;
+  episodeDvCount?: number;
+  episodeDvPercent?: number;
+  episodeMediaSource?: 'aggregated' | 'show';
+
   // Item metadata
   isPlaceholder: boolean; // true = Coming Soon item, false = real item in Plex
   mediaType: 'movie' | 'show';
@@ -524,6 +543,34 @@ export const AVAILABLE_VARIABLES = {
       example: '5',
     },
   ],
+  'episode-media': [
+    { field: 'episodeCount', label: 'Episode Count', example: '24' },
+    { field: 'episode4kCount', label: '4K Episode Count', example: '18' },
+    { field: 'episode4kPercent', label: '4K Episode %', example: '75' },
+    { field: 'episodeHdrCount', label: 'HDR Episode Count', example: '16' },
+    { field: 'episodeHdrPercent', label: 'HDR Episode %', example: '67' },
+    { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
+    { field: 'episodeDvPercent', label: 'DV Episode %', example: '50' },
+    {
+      field: 'episodeMediaSource',
+      label: 'Media Source',
+      example: 'aggregated',
+    },
+  ],
+  'show-raw': [
+    { field: 'showResolution', label: 'Show Resolution (Raw)', example: '1080' },
+    { field: 'showHdr', label: 'Show HDR (Raw)', example: 'false' },
+    { field: 'showDolbyVision', label: 'Show DV (Raw)', example: 'false' },
+    {
+      field: 'showDolbyVisionProfile',
+      label: 'Show DV Profile (Raw)',
+      example: '7',
+    },
+    { field: 'showAudioCodec', label: 'Show Audio Codec (Raw)', example: 'aac' },
+    { field: 'showAudioChannels', label: 'Show Audio Channels (Raw)', example: '6' },
+    { field: 'showVideoCodec', label: 'Show Video Codec (Raw)', example: 'h264' },
+    { field: 'showBitDepth', label: 'Show Bit Depth (Raw)', example: '8' },
+  ],
 };
 
 /**
@@ -709,6 +756,32 @@ export const CONDITION_FIELD_CATEGORIES = {
       example: '5',
     },
   ],
+  'Episode Media': [
+    { field: 'episodeCount', label: 'Episode Count', example: '24' },
+    { field: 'episode4kCount', label: '4K Episode Count', example: '18' },
+    { field: 'episode4kPercent', label: '4K Episode %', example: '75' },
+    { field: 'episodeHdrCount', label: 'HDR Episode Count', example: '16' },
+    { field: 'episodeHdrPercent', label: 'HDR Episode %', example: '67' },
+    { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
+    { field: 'episodeDvPercent', label: 'DV Episode %', example: '50' },
+    {
+      field: 'episodeMediaSource',
+      label: 'Media Source (aggregated/show)',
+      example: 'aggregated',
+    },
+    { field: 'showResolution', label: 'Show Resolution (Raw)', example: '1080' },
+    { field: 'showHdr', label: 'Show HDR (Raw)', example: 'false' },
+    { field: 'showDolbyVision', label: 'Show DV (Raw)', example: 'false' },
+    {
+      field: 'showDolbyVisionProfile',
+      label: 'Show DV Profile (Raw)',
+      example: '7',
+    },
+    { field: 'showAudioCodec', label: 'Show Audio Codec (Raw)', example: 'aac' },
+    { field: 'showAudioChannels', label: 'Show Channels (Raw)', example: '6' },
+    { field: 'showVideoCodec', label: 'Show Video Codec (Raw)', example: 'h264' },
+    { field: 'showBitDepth', label: 'Show Bit Depth (Raw)', example: '8' },
+  ],
 };
 
 /**
@@ -730,6 +803,8 @@ export function getTemplateTypeFromConditionField(field: string): string {
           return 'status';
         case 'Status':
           return 'status';
+        case 'Episode Media':
+          return 'technical';
       }
     }
   }
@@ -902,5 +977,21 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     'contentRating:AU': 'MA15+',
     'contentRating:NZ': 'R18',
     'contentRating:DE': '16',
+    // Episode aggregation fields
+    showResolution: '1080',
+    showHdr: false,
+    showDolbyVision: false,
+    showAudioCodec: 'aac',
+    showAudioChannels: 6,
+    showVideoCodec: 'h264',
+    showBitDepth: 8,
+    episodeCount: 62,
+    episode4kCount: 0,
+    episode4kPercent: 0,
+    episodeHdrCount: 0,
+    episodeHdrPercent: 0,
+    episodeDvCount: 0,
+    episodeDvPercent: 0,
+    episodeMediaSource: 'aggregated',
   },
 };

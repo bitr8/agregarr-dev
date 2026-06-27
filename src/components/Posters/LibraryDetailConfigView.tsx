@@ -50,15 +50,7 @@ const OPERATOR_LABELS: Record<string, string> = {
 
 // Get field label from AVAILABLE_VARIABLES
 const getFieldLabel = (field: string): string => {
-  const allVars = [
-    ...AVAILABLE_VARIABLES.ratings,
-    ...AVAILABLE_VARIABLES.metadata,
-    ...AVAILABLE_VARIABLES.video,
-    ...AVAILABLE_VARIABLES.audio,
-    ...AVAILABLE_VARIABLES.file,
-    ...AVAILABLE_VARIABLES.playback,
-    ...AVAILABLE_VARIABLES['coming-soon'],
-  ];
+  const allVars = Object.values(AVAILABLE_VARIABLES).flat();
   return allVars.find((v) => v.field === field)?.label || field;
 };
 
@@ -189,6 +181,7 @@ interface LibraryConfig {
   mediaType: 'movie' | 'show';
   enabledOverlays: EnabledOverlay[];
   tmdbLanguage?: string;
+  enableEpisodeScanning?: boolean;
 }
 
 interface LibraryDetailConfigViewProps {
@@ -333,6 +326,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
   const [tmdbLanguage, setTmdbLanguage] = useState<string | undefined>(
     undefined
   );
+  const [enableEpisodeScanning, setEnableEpisodeScanning] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -384,6 +378,9 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
   useEffect(() => {
     if (configData?.enabledOverlays) {
       setEnabledOverlays(configData.enabledOverlays);
+    }
+    if (configData?.enableEpisodeScanning !== undefined) {
+      setEnableEpisodeScanning(configData.enableEpisodeScanning);
     }
     if (configData?.tmdbLanguage !== undefined) {
       setTmdbLanguage(configData.tmdbLanguage);
@@ -577,6 +574,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
             mediaType: configData?.mediaType || libraryType,
             enabledOverlays,
             tmdbLanguage: tmdbLanguage || undefined,
+            enableEpisodeScanning,
           }),
         }
       );
@@ -690,6 +688,35 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
               </DndContext>
             </div>
           </div>
+
+          {/* Episode Scanning Toggle - Only for show libraries */}
+          {libraryType === 'show' && (
+            <div className="mt-4 border-t border-stone-700 pt-4">
+              <div className="flex items-center gap-3">
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={enableEpisodeScanning}
+                    onChange={(e) =>
+                      setEnableEpisodeScanning(e.target.checked)
+                    }
+                    className="peer sr-only"
+                  />
+                  <div className="peer h-5 w-9 rounded-full bg-stone-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-500 peer-checked:after:translate-x-full" />
+                </label>
+                <div>
+                  <span className="text-sm font-medium text-white">
+                    Use episode files for quality badges
+                  </span>
+                  <p className="text-xs text-stone-400">
+                    Scans individual episode files to determine show resolution,
+                    HDR, and audio. More accurate than Plex&apos;s default show
+                    metadata.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* TMDB Language Setting - Footer Area - Only show if TMDB is the poster source */}
           {overlaySettings?.defaultPosterSource === 'tmdb' && (

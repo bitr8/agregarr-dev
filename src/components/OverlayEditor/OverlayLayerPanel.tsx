@@ -440,17 +440,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
   };
 
   const getVariablePreview = (props: OverlayVariableElementProps) => {
-    const allVars = [
-      ...AVAILABLE_VARIABLES.ratings,
-      ...AVAILABLE_VARIABLES.metadata,
-      ...AVAILABLE_VARIABLES.video,
-      ...AVAILABLE_VARIABLES.audio,
-      ...AVAILABLE_VARIABLES.language,
-      ...AVAILABLE_VARIABLES.file,
-      ...AVAILABLE_VARIABLES.playback,
-      ...AVAILABLE_VARIABLES['coming-soon'],
-      ...AVAILABLE_VARIABLES.status,
-    ];
+    const allVars = Object.values(AVAILABLE_VARIABLES).flat();
 
     // Build preview from segments
     return props.segments
@@ -1230,6 +1220,20 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                       </optgroup>
                       <optgroup label="Status">
                         {AVAILABLE_VARIABLES.status.map((v) => (
+                          <option key={v.field} value={v.field}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Episode Media">
+                        {AVAILABLE_VARIABLES['episode-media'].map((v) => (
+                          <option key={v.field} value={v.field}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Show Raw Values">
+                        {AVAILABLE_VARIABLES['show-raw'].map((v) => (
                           <option key={v.field} value={v.field}>
                             {v.label}
                           </option>

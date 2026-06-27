@@ -10,6 +10,7 @@ import type {
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import { overlayTemplateRenderer } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { presetTemplateService } from '@server/lib/overlays/PresetTemplates';
+import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
 import { getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -734,95 +735,18 @@ router.get('/:id/preview', async (req, res, next) => {
     // Fetch real TMDB metadata and ratings using shared helper
     const tmdbData = await fetchPreviewPosterMetadata(mediaType, tmdbId);
 
-    // Build render context with real TMDB data + comprehensive placeholder data
-    // Use fallback values to ensure all fields are always populated for previews
-    const sampleContext = {
-      // Real TMDB data with fallbacks
-      title: tmdbData.title || 'Sample Movie',
-      year: tmdbData.year || 2024,
-      imdbRating: tmdbData.imdbRating || 8.5,
-      rtCriticsScore: tmdbData.rtCriticsScore || 92,
-      rtAudienceScore: tmdbData.rtAudienceScore || 88,
-      rtCertifiedFresh: true,
-      rtVerifiedHot: true,
-      studio: tmdbData.studio || 'Warner Bros.',
-      mediaType: mediaType === 'movie' ? ('movie' as const) : ('show' as const),
-
-      // Ratings (additional)
-      imdbTop250Rank: 42,
-      isImdbTop250: true,
-      // metacriticScore: 85, // TODO: Implement Metacritic integration
-
-      // TMDB Metadata
-      director: 'Christopher Nolan',
-      network: 'HBO', // Always populate for previews
-      genre: 'Action',
-      runtime: 148,
-      tmdbStatus: 'RETURNING', // Always populate for previews
-      tvdbStatus: 'RETURNING', // Always populate for previews
-
-      // Plex Media Info
-      resolution: '4K',
-      width: 3840,
-      height: 2160,
-      aspectRatio: 2.39,
-
-      // Video specs
-      videoCodec: 'hevc',
-      videoProfile: 'main 10',
-      videoFrameRate: '23.976',
-      bitDepth: 10,
-      hdr: true,
-      dolbyVision: true,
-
-      // Audio specs
-      audioCodec: 'truehd',
-      audioChannels: 8,
-      audioChannelLayout: 'atmos',
-      audioFormat: 'English (Dolby TrueHD Atmos 7.1)',
-
-      // File info
-      container: 'mkv',
-      bitrate: 25000,
-      fileSize: 45000000000, // 45 GB
-      filePath: '/media/movies/Sample Movie (2024)/Sample Movie (2024).mkv',
-
-      // Playback stats
-      viewCount: 3,
-      lastPlayed: new Date('2024-12-01'),
-      dateAdded: new Date('2024-11-15'),
-
-      // Status fields
-      releaseDate: '2024-12-25',
-      daysUntilRelease: 14,
-      daysAgo: 3, // Set to 3 for "Released N Days Ago" preview
-      nextEpisodeAirDate: '2025-01-15', // Always populate for previews
-      daysUntilNextEpisode: 32, // Always populate for previews
-      nextSeasonAirDate: '2025-03-01', // Always populate for previews
-      daysUntilNextSeason: 23, // Always populate for previews
-
-      // Episode information
-      seasonNumber: 2, // Always populate for previews
-      episodeNumber: 5, // Always populate for previews
-      episodeLabel: 'EPISODE 5', // Always populate for previews
-
-      // Monitoring status
-      isMonitored: true,
-      inRadarr: true, // Always populate for previews
-      inSonarr: true, // Always populate for previews
-      hasFile: true,
-      downloaded: true,
-
-      // Maintainerr integration
-      daysUntilAction: 5, // Always populate for previews
-
-      // Streaming provider
-      streamingProvider: 'Netflix',
-      streamingProviderId: 8,
-
-      // Item metadata
-      isPlaceholder: false,
-    };
+    // Build render context with shared factory + real TMDB data overrides
+    const sampleContext = createSampleOverlayContext(
+      mediaType === 'movie' ? 'movie' : 'show',
+      {
+        title: tmdbData.title,
+        year: tmdbData.year,
+        imdbRating: tmdbData.imdbRating,
+        rtCriticsScore: tmdbData.rtCriticsScore,
+        rtAudienceScore: tmdbData.rtAudienceScore,
+        studio: tmdbData.studio,
+      }
+    );
 
     // Render the overlay on the poster
     const templateData = template.getTemplateData();
@@ -950,95 +874,18 @@ router.post('/combined-preview', async (req, res, next) => {
       return res.status(200).json({ message: 'Request superseded' });
     }
 
-    // Build render context with comprehensive placeholder data
-    // Use fallback values to ensure all fields are always populated for previews
-    const sampleContext = {
-      // Real TMDB data with fallbacks
-      title: tmdbData.title || 'Sample Movie',
-      year: tmdbData.year || 2024,
-      imdbRating: tmdbData.imdbRating || 8.5,
-      rtCriticsScore: tmdbData.rtCriticsScore || 92,
-      rtAudienceScore: tmdbData.rtAudienceScore || 88,
-      rtCertifiedFresh: true,
-      rtVerifiedHot: true,
-      studio: tmdbData.studio || 'Warner Bros.',
-      mediaType: mediaType === 'movie' ? ('movie' as const) : ('show' as const),
-
-      // Ratings (additional)
-      imdbTop250Rank: 42,
-      isImdbTop250: true,
-      // metacriticScore: 85, // TODO: Implement Metacritic integration
-
-      // TMDB Metadata
-      director: 'Christopher Nolan',
-      network: 'HBO', // Always populate for previews
-      genre: 'Action',
-      runtime: 148,
-      tmdbStatus: 'RETURNING', // Always populate for previews
-      tvdbStatus: 'RETURNING', // Always populate for previews
-
-      // Plex Media Info
-      resolution: '4K',
-      width: 3840,
-      height: 2160,
-      aspectRatio: 2.39,
-
-      // Video specs
-      videoCodec: 'hevc',
-      videoProfile: 'main 10',
-      videoFrameRate: '23.976',
-      bitDepth: 10,
-      hdr: true,
-      dolbyVision: true,
-
-      // Audio specs
-      audioCodec: 'truehd',
-      audioChannels: 8,
-      audioChannelLayout: 'atmos',
-      audioFormat: 'English (Dolby TrueHD Atmos 7.1)',
-
-      // File info
-      container: 'mkv',
-      bitrate: 25000,
-      fileSize: 45000000000, // 45 GB
-      filePath: '/media/movies/Sample Movie (2024)/Sample Movie (2024).mkv',
-
-      // Playback stats
-      viewCount: 3,
-      lastPlayed: new Date('2024-12-01'),
-      dateAdded: new Date('2024-11-15'),
-
-      // Status fields
-      releaseDate: '2024-12-25',
-      daysUntilRelease: 14,
-      daysAgo: 3, // Set to 3 for "Released N Days Ago" preview
-      nextEpisodeAirDate: '2025-01-15', // Always populate for previews
-      daysUntilNextEpisode: 32, // Always populate for previews
-      nextSeasonAirDate: '2025-03-01', // Always populate for previews
-      daysUntilNextSeason: 23, // Always populate for previews
-
-      // Episode information
-      seasonNumber: 2, // Always populate for previews
-      episodeNumber: 5, // Always populate for previews
-      episodeLabel: 'EPISODE 5', // Always populate for previews
-
-      // Monitoring status
-      isMonitored: true,
-      inRadarr: true, // Always populate for previews
-      inSonarr: true, // Always populate for previews
-      hasFile: true,
-      downloaded: true,
-
-      // Maintainerr integration
-      daysUntilAction: 5, // Always populate for previews
-
-      // Streaming provider
-      streamingProvider: 'Netflix',
-      streamingProviderId: 8,
-
-      // Item metadata
-      isPlaceholder: false,
-    };
+    // Build render context with shared factory + real TMDB data overrides
+    const sampleContext = createSampleOverlayContext(
+      mediaType === 'movie' ? 'movie' : 'show',
+      {
+        title: tmdbData.title,
+        year: tmdbData.year,
+        imdbRating: tmdbData.imdbRating,
+        rtCriticsScore: tmdbData.rtCriticsScore,
+        rtAudienceScore: tmdbData.rtAudienceScore,
+        studio: tmdbData.studio,
+      }
+    );
 
     // Batch render: collect all overlay elements, then composite once
     const { width: posterWidth, height: posterHeight } =

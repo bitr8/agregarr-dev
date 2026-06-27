@@ -455,6 +455,25 @@ export interface OverlayRenderContext {
   streamingProvider?: string; // Top flatrate provider name by display_priority
   streamingProviderId?: number; // Top flatrate provider ID (stable, for icon mapping)
 
+  // Episode aggregation (populated when enableEpisodeScanning is on for show libraries)
+  showResolution?: string;
+  showHdr?: boolean;
+  showDolbyVision?: boolean;
+  showDolbyVisionProfile?: number;
+  showAudioCodec?: string;
+  showAudioChannels?: number;
+  showVideoCodec?: string;
+  showBitDepth?: number;
+
+  episodeCount?: number;
+  episode4kCount?: number;
+  episode4kPercent?: number;
+  episodeHdrCount?: number;
+  episodeHdrPercent?: number;
+  episodeDvCount?: number;
+  episodeDvPercent?: number;
+  episodeMediaSource?: 'aggregated' | 'show';
+
   // Item metadata
   isPlaceholder: boolean; // true = Coming Soon item, false = real item in Plex
   mediaType: 'movie' | 'show';

@@ -141,11 +141,14 @@ router.post('/:libraryId', async (req, res, next) => {
     });
 
     if (config) {
-      // Update existing
+      // Update existing — use 'field' in body checks for partial updates
       config.libraryName = libraryName;
       config.mediaType = mediaType;
       config.enabledOverlays = enabledOverlays;
       config.tmdbLanguage = tmdbLanguage || undefined;
+      if ('enableEpisodeScanning' in req.body) {
+        config.enableEpisodeScanning = !!req.body.enableEpisodeScanning;
+      }
     } else {
       // Create new
       config = new OverlayLibraryConfig({
@@ -154,6 +157,7 @@ router.post('/:libraryId', async (req, res, next) => {
         mediaType,
         enabledOverlays,
         tmdbLanguage: tmdbLanguage || undefined,
+        enableEpisodeScanning: !!req.body.enableEpisodeScanning,
       });
     }
 

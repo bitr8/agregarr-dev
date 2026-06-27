@@ -90,7 +90,7 @@ export interface PlexMetadata {
   Media: Media[];
 }
 
-interface PlexStream {
+export interface PlexStream {
   id: number;
   streamType: number; // 1=video, 2=audio, 3=subtitle
   codec: string;
@@ -124,14 +124,14 @@ interface PlexStream {
   forced?: boolean;
 }
 
-interface PlexPart {
+export interface PlexPart {
   id: number;
   file: string;
   size: number;
   Stream?: PlexStream[];
 }
 
-interface Media {
+export interface Media {
   id: number;
   duration: number;
   bitrate: number;
@@ -406,6 +406,60 @@ class PlexAPI {
       totalSize,
       items: response.MediaContainer.Metadata ?? [],
     };
+  }
+
+  /**
+   * Fetch all items of a specific type from a library section.
+   * type=4 for episodes, type=3 for seasons, type=2 for shows, type=1 for movies.
+   * Paginates automatically with configurable page size.
+   */
+  public async getLibraryItemsByType(
+    libraryId: string,
+    type: number,
+    { pageSize = 1000 }: { pageSize?: number } = {}
+  ): Promise<PlexLibraryItem[]> {
+    const allItems: PlexLibraryItem[] = [];
+    let offset = 0;
+    let totalSize = 0;
+    let callCount = 0;
+    const startTime = Date.now();
+
+    do {
+      const response = await this.plexClient.query<PlexLibraryResponse>({
+        uri: `/library/sections/${libraryId}/all?type=${type}&includeGuids=1`,
+        extraHeaders: {
+          'X-Plex-Container-Start': `${offset}`,
+          'X-Plex-Container-Size': `${pageSize}`,
+        },
+      });
+
+      totalSize = response.MediaContainer.totalSize;
+      const items = response.MediaContainer.Metadata ?? [];
+      allItems.push(...items);
+      callCount++;
+      if (items.length === 0) {
+        logger.warn('Empty page returned from Plex, stopping pagination', {
+          label: 'Plex API',
+          libraryId,
+          type,
+          offset,
+          totalSize,
+        });
+        break;
+      }
+      offset += items.length;
+    } while (offset < totalSize);
+
+    logger.debug('Fetched library items by type', {
+      label: 'Plex API',
+      libraryId,
+      type,
+      totalItems: allItems.length,
+      apiCalls: callCount,
+      durationMs: Date.now() - startTime,
+    });
+
+    return allItems;
   }
 
   public async getMetadata(

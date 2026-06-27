@@ -42,6 +42,9 @@ export class OverlayLibraryConfig {
   @Column({ type: 'varchar', nullable: true })
   public tmdbLanguage?: string; // ISO language code for TMDB poster metadata (e.g., 'en', 'fr', 'pt-BR')
 
+  @Column({ type: 'boolean', default: false })
+  public enableEpisodeScanning: boolean;
+
   @CreateDateColumn()
   public createdAt: Date;
 

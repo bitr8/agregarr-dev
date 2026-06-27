@@ -157,17 +157,7 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
     let text = '';
 
     // Build array of all available variables for lookup
-    const allVars = [
-      ...AVAILABLE_VARIABLES.ratings,
-      ...AVAILABLE_VARIABLES.metadata,
-      ...AVAILABLE_VARIABLES.video,
-      ...AVAILABLE_VARIABLES.audio,
-      ...AVAILABLE_VARIABLES.language,
-      ...AVAILABLE_VARIABLES.file,
-      ...AVAILABLE_VARIABLES.playback,
-      ...AVAILABLE_VARIABLES['coming-soon'],
-      ...AVAILABLE_VARIABLES.status,
-    ];
+    const allVars = Object.values(AVAILABLE_VARIABLES).flat();
 
     for (const segment of props.segments) {
       if (segment.type === 'text') {

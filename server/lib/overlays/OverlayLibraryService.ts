@@ -26,6 +26,10 @@ import {
   fetchReleaseDateInfo,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
+import type {
+  AggregatedMediaInfo,
+  EpisodeMediaInfo,
+} from './episodeMediaTypes';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 import {
   evaluateCondition,
@@ -119,6 +123,12 @@ class OverlayLibraryService {
   private maintainerrCollectionsCache?: MaintainerrCollection[];
   // Maps item ratingKey → array of collection IDs the item belongs to
   private collectionMembershipCache?: Map<string, string[]>;
+
+  // Aggregated episode media info for show libraries (per-library, keyed by show ratingKey)
+  private aggregatedMediaByLibrary = new Map<
+    string,
+    Map<string, AggregatedMediaInfo>
+  >();
 
   // Pre-fetched IMDb ratings for batch optimization (global, keyed by IMDb ID)
   // Maps IMDb ID to rating number (or null if no rating available).
@@ -1078,6 +1088,7 @@ class OverlayLibraryService {
       // Clean up cancellation flag and per-library state
       this.cancelledLibraries.delete(libraryId);
       this.requiredContextFieldsByLibrary.delete(libraryId);
+      this.aggregatedMediaByLibrary.delete(libraryId);
       // Clear global caches if no other jobs are running (prevents memory leak)
       this.clearGlobalCachesIfIdle();
     }
@@ -1311,6 +1322,15 @@ class OverlayLibraryService {
         .filter((i) => i.type !== 'episode' && i.type !== 'season')
         .map((i) => i.ratingKey);
       const batchMetadata = await plexApi.getMetadataBatch(overlayRatingKeys);
+
+      // Episode media scanning: aggregate episode-level resolution/HDR/DV to show posters
+      if (config.enableEpisodeScanning && config.mediaType === 'show') {
+        await this.runEpisodeScan(
+          plexApi,
+          libraryId,
+          requiredContextFields
+        );
+      }
 
       // Process each item
       for (const item of allItems) {
@@ -1904,6 +1924,44 @@ class OverlayLibraryService {
         downloaded = true; // Real items not in *arr are assumed downloaded (they exist in Plex)
       }
 
+      // Merge aggregated episode media info if available for this show
+      let episodeAggregation: Partial<OverlayRenderContext> = {};
+      const aggregatedMap = this.aggregatedMediaByLibrary.get(libraryId);
+      if (item.type === 'show') {
+        episodeAggregation.episodeMediaSource = 'show';
+      }
+      if (aggregatedMap && item.type === 'show') {
+        const agg = aggregatedMap.get(item.ratingKey);
+        if (agg) {
+          episodeAggregation = {
+            showResolution: baseContext.resolution,
+            showHdr: baseContext.hdr,
+            showDolbyVision: baseContext.dolbyVision,
+            showDolbyVisionProfile: baseContext.dolbyVisionProfile,
+            showAudioCodec: baseContext.audioCodec,
+            showAudioChannels: baseContext.audioChannels,
+            showVideoCodec: baseContext.videoCodec,
+            showBitDepth: baseContext.bitDepth,
+            resolution: agg.resolution,
+            hdr: agg.hdr,
+            dolbyVision: agg.dolbyVision,
+            dolbyVisionProfile: agg.dolbyVisionProfile,
+            videoCodec: agg.videoCodec,
+            audioCodec: agg.audioCodec,
+            audioChannels: agg.audioChannels,
+            bitDepth: agg.bitDepth,
+            episodeCount: agg.episodeCount,
+            episode4kCount: agg.episode4kCount,
+            episode4kPercent: agg.episode4kPercent,
+            episodeHdrCount: agg.episodeHdrCount,
+            episodeHdrPercent: agg.episodeHdrPercent,
+            episodeDvCount: agg.episodeDvCount,
+            episodeDvPercent: agg.episodeDvPercent,
+            episodeMediaSource: 'aggregated',
+          };
+        }
+      }
+
       // Collection membership for condition evaluation
       const collection = this.collectionMembershipCache?.get(item.ratingKey);
 
@@ -1911,6 +1969,7 @@ class OverlayLibraryService {
         ...baseContext,
         isPlaceholder: actualIsPlaceholder,
         downloaded,
+        ...episodeAggregation,
         ...contextOverrides,
         ...releaseDateContext,
         ...monitoringContext,
@@ -2252,6 +2311,146 @@ class OverlayLibraryService {
       });
       throw error;
     }
+  }
+  /**
+   * Run episode media scan for a show library and store aggregated results.
+   * Always fetches the lightweight episode list to detect new/changed/deleted episodes.
+   * Only fetches stream-level detail for stale entries when HDR/DV fields are needed.
+   */
+  private async runEpisodeScan(
+    plexApi: PlexAPI,
+    libraryId: string,
+    requiredContextFields: Set<string>
+  ): Promise<void> {
+    const { PlexEpisodeMediaScanner } = await import(
+      './PlexEpisodeMediaScanner'
+    );
+    const { EpisodeMediaAggregator } = await import(
+      './EpisodeMediaAggregator'
+    );
+    const { EpisodeMediaCacheService } = await import(
+      './EpisodeMediaCacheService'
+    );
+
+    const needsStreamDetail =
+      requiredContextFields.has('hdr') ||
+      requiredContextFields.has('dolbyVision') ||
+      requiredContextFields.has('dolbyVisionProfile') ||
+      requiredContextFields.has('bitDepth') ||
+      requiredContextFields.has('colorTrc') ||
+      requiredContextFields.has('episodeHdrCount') ||
+      requiredContextFields.has('episodeHdrPercent') ||
+      requiredContextFields.has('episodeDvCount') ||
+      requiredContextFields.has('episodeDvPercent');
+
+    const settings = getSettings();
+    const serverId = settings.plex?.machineId || 'default';
+
+    const cacheService = new EpisodeMediaCacheService();
+    const scanner = new PlexEpisodeMediaScanner(plexApi);
+
+    // Always fetch lightweight episode list to detect new/changed/deleted episodes
+    const freshLightweight = await scanner.scanLibraryEpisodes(
+      libraryId,
+      false
+    );
+
+    const {
+      episodes: cachedEpisodes,
+      hasStreamDetail: cachedHasStreamDetail,
+    } = await cacheService.getCachedEpisodes(serverId, libraryId);
+
+    // Compare against cache to find stale/missing entries
+    const staleKeys = cacheService.getStaleRatingKeys(
+      cachedEpisodes,
+      freshLightweight
+    );
+    const cachedByKey = new Map(
+      cachedEpisodes.map((c) => [c.ratingKey, c])
+    );
+    const currentKeys = new Set(freshLightweight.map((e) => e.ratingKey));
+
+    // If templates now need stream detail but cache was saved without it,
+    // treat all entries as stale so stream detail gets fetched
+    const needsDetailUpgrade = needsStreamDetail && !cachedHasStreamDetail;
+
+    let episodes: EpisodeMediaInfo[];
+
+    if (
+      staleKeys.size === 0 &&
+      !needsDetailUpgrade &&
+      cachedEpisodes.length >= freshLightweight.length
+    ) {
+      // All episodes are cached and fresh — filter to current episodes only
+      episodes = cachedEpisodes.filter((c) => currentKeys.has(c.ratingKey));
+      logger.info('Using cached episode media data', {
+        label: 'EpisodeScanner',
+        libraryId,
+        cachedCount: episodes.length,
+      });
+    } else if (needsStreamDetail && (staleKeys.size > 0 || needsDetailUpgrade)) {
+      // Fetch stream detail for stale or detail-upgrade episodes
+      const keysToFetch = needsDetailUpgrade
+        ? freshLightweight.map((e) => e.ratingKey)
+        : [...staleKeys];
+      const batchMetadata = await plexApi.getMetadataBatch(keysToFetch);
+      const { extractMediaCapabilities } = await import(
+        '@server/utils/mediaCapabilities'
+      );
+
+      // Merge: use cached for fresh entries, updated data for stale entries
+      episodes = freshLightweight.map((ep) => {
+        if (
+          !needsDetailUpgrade &&
+          !staleKeys.has(ep.ratingKey) &&
+          cachedByKey.has(ep.ratingKey)
+        ) {
+          return cachedByKey.get(ep.ratingKey)!;
+        }
+        const metadata = batchMetadata.get(ep.ratingKey);
+        if (metadata?.Media?.[0]) {
+          const media = metadata.Media[0];
+          const streams = media.Part?.[0]?.Stream;
+          if (streams) {
+            const caps = extractMediaCapabilities(media, streams);
+            return { ...ep, ...caps };
+          }
+        }
+        return ep;
+      });
+
+      await cacheService.saveEpisodes(
+        serverId,
+        libraryId,
+        episodes,
+        needsStreamDetail
+      );
+    } else {
+      // No stream detail needed — use lightweight data
+      episodes = freshLightweight;
+      if (staleKeys.size > 0) {
+        await cacheService.saveEpisodes(
+          serverId,
+          libraryId,
+          episodes,
+          false
+        );
+      }
+    }
+
+    await cacheService.cleanExpired(serverId, libraryId);
+
+    const aggregator = new EpisodeMediaAggregator();
+    const aggregated = aggregator.aggregateByShow(episodes);
+
+    this.aggregatedMediaByLibrary.set(libraryId, aggregated);
+
+    logger.info('Episode media aggregation complete', {
+      label: 'EpisodeScanner',
+      libraryId,
+      episodeCount: episodes.length,
+      showCount: aggregated.size,
+    });
   }
 }
 
