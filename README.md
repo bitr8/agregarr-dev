@@ -132,6 +132,27 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 **Root Folder Filtering** -- Coming Soon monitored settings now include optional root folder dropdowns, populated from Radarr/Sonarr. Movies filter by path prefix, TV shows by `rootFolderPath` equality. Useful when multiple libraries point to different root folders on the same \*arr instance.
 
+### Episode Media Scanning
+
+Plex's show-level metadata doesn't always reflect what's on disk -- a show with one 4K episode out of 99 can report as "4K", or a fully upgraded library can still show "1080p". This fork scans actual episode files and aggregates the results with majority vote.
+
+Enable per library: **Overlays > library config > "Use episode files for quality badges"** (show libraries only).
+
+![Episode scanning toggle](docs/episode-scanning-toggle.png)
+
+| Aspect | Before (Plex metadata) | After (episode scanning) |
+| --- | --- | --- |
+| Resolution badge | Whatever Plex reports for the show | Majority of actual episode files |
+| HDR/DV badge | Often wrong or missing | True if 50%+ of episodes have it |
+| Audio codec | Show-level guess | Most common across episodes |
+| Data source | `episodeMediaSource: 'show'` | `episodeMediaSource: 'aggregated'` |
+
+**How it works:** Two-tier scan -- fetches the episode list (~19s for 21K episodes), then only batch-fetches stream detail (HDR, DV, bitDepth) if your templates use those fields (~133s). Results are cached in SQLite for 7 days with hash-based invalidation, so subsequent syncs complete in seconds.
+
+Season 0 specials are excluded from aggregation (they're usually low-quality extras). Existing overlay templates benefit immediately -- aggregated values replace the primary context fields (`resolution`, `hdr`, `dolbyVision`, etc.). Raw show-level values are preserved as `showResolution`, `showHdr`, etc.
+
+New template variables: `episodeCount`, `episode4kPercent`, `episodeHdrPercent`, `episodeDvPercent`, and all `show*` raw fields. Available in both variable text and application conditions.
+
 ### Additional Overlay Variables
 
 **TV Season Counts** -- Two new variables for TV show overlays: `totalSeasons` (from TMDB) and `seasonsAvailable` (seasons in your Plex library). Useful for overlays like "Season 2 of 5" or conditional overlays on incomplete shows. Available as both template variables and condition fields. *(Contributed by [Bergasha](https://github.com/Bergasha))*
