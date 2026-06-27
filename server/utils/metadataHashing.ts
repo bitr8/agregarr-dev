@@ -1,4 +1,5 @@
 import type {
+  OverlayMappedIconElementProps,
   OverlayTemplateData,
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
@@ -96,6 +97,12 @@ export function extractUsedContextFields(
           if (segment.type === 'variable' && segment.field) {
             usedFields.add(segment.field);
           }
+        }
+      }
+      if (element.type === 'mapped-icon') {
+        const props = element.properties as OverlayMappedIconElementProps;
+        if (props.field) {
+          usedFields.add(props.field);
         }
       }
     }

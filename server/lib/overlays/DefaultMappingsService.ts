@@ -194,6 +194,77 @@ function buildNetworkMappings(): IconMapping[] {
   }));
 }
 
+function buildStreamingProviderIdMappings(): IconMapping[] {
+  return [
+    { value: '8', iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png` },
+    { value: '1796', iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png` },
+    { value: '337', iconPath: `${MAPPED_ICONS_BASE}/networks/Disney+.png` },
+    { value: '9', iconPath: `${MAPPED_ICONS_BASE}/networks/Prime Video.png` },
+    { value: '350', iconPath: `${MAPPED_ICONS_BASE}/networks/Apple TV+.png` },
+    { value: '1899', iconPath: `${MAPPED_ICONS_BASE}/networks/Max.png` },
+    { value: '15', iconPath: `${MAPPED_ICONS_BASE}/networks/Hulu.png` },
+    { value: '386', iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png` },
+    { value: '387', iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png` },
+    { value: '2303', iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png` },
+    { value: '2616', iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png` },
+    { value: '283', iconPath: `${MAPPED_ICONS_BASE}/networks/Crunchyroll.png` },
+    { value: '21', iconPath: `${MAPPED_ICONS_BASE}/networks/Stan.png` },
+    { value: '385', iconPath: `${MAPPED_ICONS_BASE}/networks/Binge.png` },
+    { value: '318', iconPath: `${MAPPED_ICONS_BASE}/networks/Adult Swim.png` },
+  ];
+}
+
+function buildStreamingProviderNameMappings(): IconMapping[] {
+  return [
+    { value: 'Netflix', iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png` },
+    {
+      value: 'Netflix Standard with Ads',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png`,
+    },
+    {
+      value: 'Disney Plus',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Disney+.png`,
+    },
+    {
+      value: 'Amazon Prime Video',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Prime Video.png`,
+    },
+    {
+      value: 'Apple TV',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Apple TV+.png`,
+    },
+    { value: 'HBO Max', iconPath: `${MAPPED_ICONS_BASE}/networks/Max.png` },
+    { value: 'Max', iconPath: `${MAPPED_ICONS_BASE}/networks/Max.png` },
+    { value: 'Hulu', iconPath: `${MAPPED_ICONS_BASE}/networks/Hulu.png` },
+    {
+      value: 'Peacock Premium',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png`,
+    },
+    {
+      value: 'Peacock Premium Plus',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png`,
+    },
+    {
+      value: 'Paramount Plus Premium',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png`,
+    },
+    {
+      value: 'Paramount Plus Essential',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png`,
+    },
+    {
+      value: 'Crunchyroll',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Crunchyroll.png`,
+    },
+    { value: 'Stan', iconPath: `${MAPPED_ICONS_BASE}/networks/Stan.png` },
+    { value: 'Binge', iconPath: `${MAPPED_ICONS_BASE}/networks/Binge.png` },
+    {
+      value: 'Adult Swim',
+      iconPath: `${MAPPED_ICONS_BASE}/networks/Adult Swim.png`,
+    },
+  ];
+}
+
 /**
  * Build studio mappings
  */
@@ -297,6 +368,10 @@ const DEFAULT_MAPPINGS: Record<string, IconMapping[]> = {
 
   // Network field - TV network logos
   network: buildNetworkMappings(),
+
+  // Streaming provider fields
+  streamingProvider: buildStreamingProviderNameMappings(),
+  streamingProviderId: buildStreamingProviderIdMappings(),
 
   // Studio field - Movie/TV studio logos
   studio: buildStudioMappings(),

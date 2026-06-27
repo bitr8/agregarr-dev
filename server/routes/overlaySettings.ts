@@ -2,7 +2,7 @@ import overlayApplication from '@server/lib/overlayApplication';
 import { localPosterFolderService } from '@server/lib/overlays/LocalPosterFolderService';
 import { plexBasePosterDownloadJob } from '@server/lib/overlays/PlexBasePosterDownloadJob';
 import { posterResetJob } from '@server/lib/overlays/PosterResetJob';
-import { getSettings } from '@server/lib/settings';
+import { getSettings, type OverlaySettings } from '@server/lib/settings';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 
@@ -17,6 +17,7 @@ router.get('/', isAuthenticated(), (_req, res) => {
   return res.status(200).json({
     defaultPosterSource: settings.overlays?.defaultPosterSource || 'tmdb',
     initialSetupComplete: settings.overlays?.initialSetupComplete || false,
+    watchProviderRegion: settings.overlays?.watchProviderRegion || 'US',
   });
 });
 
@@ -25,17 +26,31 @@ router.get('/', isAuthenticated(), (_req, res) => {
  * Update overlay settings
  */
 router.put('/', isAuthenticated(), async (req, res) => {
-  const { defaultPosterSource } = req.body;
+  const settings = getSettings();
+  const currentOverlays: Partial<OverlaySettings> = settings.overlays || {};
+
+  const defaultPosterSource =
+    req.body.defaultPosterSource ??
+    currentOverlays.defaultPosterSource ??
+    'tmdb';
 
   if (!['tmdb', 'plex', 'local'].includes(defaultPosterSource)) {
     return res.status(400).json({ error: 'Invalid poster source' });
   }
 
-  const settings = getSettings();
+  let watchProviderRegion = currentOverlays.watchProviderRegion;
+  if (req.body.watchProviderRegion !== undefined) {
+    const region = String(req.body.watchProviderRegion).toUpperCase();
+    if (/^[A-Z]{2}$/.test(region)) {
+      watchProviderRegion = region;
+    }
+  }
+
   settings.overlays = {
-    ...settings.overlays,
+    ...currentOverlays,
     defaultPosterSource,
     initialSetupComplete: true,
+    watchProviderRegion,
   };
 
   settings.save();
@@ -43,6 +58,7 @@ router.put('/', isAuthenticated(), async (req, res) => {
   return res.status(200).json({
     defaultPosterSource: settings.overlays.defaultPosterSource,
     initialSetupComplete: settings.overlays.initialSetupComplete,
+    watchProviderRegion: settings.overlays.watchProviderRegion || 'US',
   });
 });
 

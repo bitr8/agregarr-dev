@@ -293,6 +293,10 @@ export interface OverlayRenderContext {
   // Plex Labels (item-level tags applied in Plex)
   plexLabels?: string[]; // Array of Plex label tags on this item
 
+  // Streaming provider (from TMDB watch/providers, flatrate only)
+  streamingProvider?: string; // Top flatrate provider name by display_priority
+  streamingProviderId?: number; // Top flatrate provider ID (stable, for icon mapping)
+
   // Item metadata
   isPlaceholder: boolean; // true = Coming Soon item, false = real item in Plex
   mediaType: 'movie' | 'show';
@@ -322,6 +326,8 @@ export const SINGLE_VALUE_FIELDS = [
   'resolution',
   'audioCodec',
   'audioLanguageCode',
+  'streamingProvider',
+  'streamingProviderId',
 ];
 
 /**
@@ -356,6 +362,11 @@ export const AVAILABLE_VARIABLES = {
     { field: 'director', label: 'Director', example: 'Lana Wachowski' },
     { field: 'studio', label: 'Studio', example: 'Warner Bros.' },
     { field: 'network', label: 'Network (TV)', example: 'AMC' },
+    {
+      field: 'streamingProvider',
+      label: 'Streaming Provider',
+      example: 'Netflix',
+    },
     { field: 'genre', label: 'Genre', example: 'Sci-Fi' },
     { field: 'runtime', label: 'Runtime (min)', example: '136' },
     { field: 'runtimeHHMM', label: 'Runtime (HHMM)', example: '2h 16m' },
@@ -526,6 +537,16 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'director', label: 'Director', example: 'Lana Wachowski' },
     { field: 'studio', label: 'Studio', example: 'Warner Bros.' },
     { field: 'network', label: 'Network (TV)', example: 'AMC' },
+    {
+      field: 'streamingProvider',
+      label: 'Streaming Provider',
+      example: 'Netflix',
+    },
+    {
+      field: 'streamingProviderId',
+      label: 'Streaming Provider ID',
+      example: '8',
+    },
     { field: 'genre', label: 'Genre', example: 'Sci-Fi' },
     { field: 'runtime', label: 'Runtime (min)', example: '136' },
     { field: 'runtimeHHMM', label: 'Runtime (HHMM)', example: '2h 16m' },
@@ -801,6 +822,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     inRadarr: true,
     downloaded: false,
     daysUntilAction: 5,
+    streamingProvider: 'Netflix',
+    streamingProviderId: 8,
     plexLabels: ['4K DV', 'HDR'],
     isPlaceholder: true,
     mediaType: 'movie',
@@ -869,6 +892,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     inSonarr: true,
     downloaded: true,
     daysUntilAction: 12,
+    streamingProvider: 'Disney Plus',
+    streamingProviderId: 337,
     plexLabels: ['Kids'],
     isPlaceholder: false,
     mediaType: 'show',

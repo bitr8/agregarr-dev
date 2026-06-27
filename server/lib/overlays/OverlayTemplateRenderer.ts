@@ -451,6 +451,10 @@ export interface OverlayRenderContext {
   // Plex Labels (item-level tags applied in Plex)
   plexLabels?: string[]; // Array of Plex label tags on this item
 
+  // Streaming provider (from TMDB watch/providers, flatrate only)
+  streamingProvider?: string; // Top flatrate provider name by display_priority
+  streamingProviderId?: number; // Top flatrate provider ID (stable, for icon mapping)
+
   // Item metadata
   isPlaceholder: boolean; // true = Coming Soon item, false = real item in Plex
   mediaType: 'movie' | 'show';

@@ -3099,6 +3099,114 @@ export const PRESET_TEMPLATES: {
       ],
     },
   },
+
+  {
+    name: 'Streaming Provider',
+    description:
+      'Shows streaming service icon (Netflix, Disney+, etc.) in the top-right corner',
+    type: 'metadata',
+    tags: ['Metadata', 'Streaming'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            {
+              field: 'streamingProviderId',
+              operator: 'exists',
+              value: true,
+            },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'streaming-provider-icon',
+          layerOrder: 0,
+          type: 'mapped-icon',
+          x: 855,
+          y: 25,
+          width: 120,
+          height: 120,
+          properties: {
+            field: 'streamingProviderId',
+            mappings: [
+              {
+                value: '8',
+                iconPath: '/assets/mapped-icons/networks/Netflix.png',
+              },
+              {
+                value: '337',
+                iconPath: '/assets/mapped-icons/networks/Disney+.png',
+              },
+              {
+                value: '9',
+                iconPath: '/assets/mapped-icons/networks/Prime Video.png',
+              },
+              {
+                value: '350',
+                iconPath: '/assets/mapped-icons/networks/Apple TV+.png',
+              },
+              {
+                value: '1899',
+                iconPath: '/assets/mapped-icons/networks/Max.png',
+              },
+              {
+                value: '15',
+                iconPath: '/assets/mapped-icons/networks/Hulu.png',
+              },
+              {
+                value: '386',
+                iconPath: '/assets/mapped-icons/networks/Peacock.png',
+              },
+              {
+                value: '387',
+                iconPath: '/assets/mapped-icons/networks/Peacock.png',
+              },
+              {
+                value: '2303',
+                iconPath: '/assets/mapped-icons/networks/Paramount+.png',
+              },
+              {
+                value: '2616',
+                iconPath: '/assets/mapped-icons/networks/Paramount+.png',
+              },
+              {
+                value: '283',
+                iconPath: '/assets/mapped-icons/networks/Crunchyroll.png',
+              },
+              {
+                value: '21',
+                iconPath: '/assets/mapped-icons/networks/Stan.png',
+              },
+              {
+                value: '385',
+                iconPath: '/assets/mapped-icons/networks/Binge.png',
+              },
+              {
+                value: '318',
+                iconPath: '/assets/mapped-icons/networks/Adult Swim.png',
+              },
+              {
+                value: '1796',
+                iconPath: '/assets/mapped-icons/networks/Netflix.png',
+              },
+            ],
+            layout: 'horizontal',
+            iconSize: 120,
+            spacingX: 0,
+            spacingY: 0,
+            maxIcons: 1,
+            grayscale: false,
+            opacity: 100,
+          },
+        },
+      ],
+    },
+  },
 ];
 
 /**

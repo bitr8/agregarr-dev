@@ -6,6 +6,10 @@ import RottenTomatoes, { type RTRating } from '@server/api/rottentomatoes';
 import type { RadarrMovie } from '@server/api/servarr/radarr';
 import type { SonarrSeries } from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
+import type {
+  TmdbWatchProviderDetails,
+  TmdbWatchProviders,
+} from '@server/api/themoviedb/interfaces';
 import TvdbAPI from '@server/api/tvdb';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
@@ -212,6 +216,27 @@ const rtInflightRequests = new Map<string, Promise<RTRating | null>>();
  *          When criticalApiFailed is true, callers should skip overlay application
  *          to avoid regenerating posters with incomplete data.
  */
+function extractStreamingProvider(
+  watchProviderResults:
+    | { [iso_3166_1: string]: TmdbWatchProviders }
+    | undefined,
+  region: string
+): { name: string; id: number } | undefined {
+  if (!watchProviderResults) return undefined;
+
+  const regionData = watchProviderResults[region];
+  if (!regionData?.flatrate?.length) return undefined;
+
+  const sorted = [...regionData.flatrate].sort(
+    (a: TmdbWatchProviderDetails, b: TmdbWatchProviderDetails) =>
+      (a.display_priority ?? Number.MAX_SAFE_INTEGER) -
+        (b.display_priority ?? Number.MAX_SAFE_INTEGER) ||
+      a.provider_name.localeCompare(b.provider_name)
+  );
+
+  return { name: sorted[0].provider_name, id: sorted[0].provider_id };
+}
+
 export async function buildRenderContext(
   item: PlexLibraryItem,
   mediaType: 'movie' | 'show',
@@ -735,6 +760,25 @@ export async function buildRenderContext(
                 ratingEntry.rating;
             }
           }
+        }
+      }
+
+      // Streaming provider
+      const needsStreamingProvider =
+        !requiredContextFields ||
+        requiredContextFields.has('streamingProvider') ||
+        requiredContextFields.has('streamingProviderId');
+
+      if (needsStreamingProvider) {
+        const settings = getSettings();
+        const region = settings.overlays?.watchProviderRegion || 'US';
+        const provider = extractStreamingProvider(
+          tmdbData['watch/providers']?.results,
+          region
+        );
+        if (provider) {
+          context.streamingProvider = provider.name;
+          context.streamingProviderId = provider.id;
         }
       }
     } catch (error) {

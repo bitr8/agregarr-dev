@@ -1670,6 +1670,16 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           { field: 'studio', label: 'Studio' },
         ],
       },
+      streaming: {
+        label: 'Streaming',
+        fields: [
+          { field: 'streamingProvider', label: 'Streaming Provider (Name)' },
+          {
+            field: 'streamingProviderId',
+            label: 'Streaming Provider (ID)',
+          },
+        ],
+      },
       language: {
         label: 'Languages',
         fields: [
