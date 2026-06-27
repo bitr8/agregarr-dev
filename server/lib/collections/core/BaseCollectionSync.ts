@@ -1189,7 +1189,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       plexClient,
       customLabel,
       libraryKey,
-      options.config
+      options.config,
+      collectionName
     );
 
     // BRANCH: Create EITHER smart collection OR regular collection, never both
@@ -1646,7 +1647,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     plexClient: PlexAPI,
     customLabel: string,
     libraryKey: string,
-    config?: CollectionConfig
+    config?: CollectionConfig,
+    collectionName?: string
   ): Promise<PlexCollection | null> {
     try {
       // First, try to find collection by stored ratingKey if available
@@ -1869,7 +1871,11 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       );
 
       // FALLBACK: Check for orphaned agregarr collection with matching title
-      if (config?.name) {
+      const titleCandidates = [config?.name, collectionName].filter(
+        Boolean
+      ) as string[];
+
+      if (titleCandidates.length > 0) {
         for (let i = 0; i < metadataResults.length; i++) {
           const result = metadataResults[i];
 
@@ -1877,18 +1883,30 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             const collection = result.value.collection;
             const labels = result.value.labels;
 
-            // Check if this is an orphaned agregarr collection with matching title
             const hasAgregarrLabel = labels.some((label: string) =>
               label.toLowerCase().startsWith('agregarr')
             );
 
-            if (collection.title === config.name && hasAgregarrLabel) {
-              // CRITICAL: Check if this is a smart collection vs base collection
+            const titleMatches = titleCandidates.includes(collection.title);
+
+            // Adopt if: (a) title matches AND has an agregarr label (orphaned
+            // from config ID change), or (b) title matches the per-user
+            // collection name AND collection is unlabeled (orphaned from a
+            // failed creation where the label was never applied).
+            const isOrphanedUserCollection =
+              !hasAgregarrLabel &&
+              collectionName &&
+              collection.title === collectionName;
+
+            if (
+              titleMatches &&
+              (hasAgregarrLabel || isOrphanedUserCollection)
+            ) {
               const isSmartCollection =
                 (collection as PlexCollectionWithSmart).smart === '1';
 
               logger.info(
-                `Found orphaned collection by title: "${collection.title}" - updating label`,
+                `Found orphaned collection by title: "${collection.title}" - adopting with label`,
                 {
                   label: 'Base Collection Sync',
                   collectionTitle: collection.title,
@@ -1896,16 +1914,18 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                   collectionType: isSmartCollection ? 'smart' : 'regular',
                   oldLabels: labels,
                   newLabel: customLabel,
+                  hadAgregarrLabel: hasAgregarrLabel,
                 }
               );
 
-              // Update the collection's label to match the new config ID
               try {
                 await plexClient.addLabelToCollection(
                   collection.ratingKey,
                   customLabel
                 );
-                logger.info(`Updated collection label to match new config ID`);
+                logger.info(
+                  `Applied label "${customLabel}" to adopted collection`
+                );
               } catch (labelError) {
                 logger.warn(`Failed to update collection label, continuing`, {
                   error:

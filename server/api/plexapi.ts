@@ -950,10 +950,47 @@ class PlexAPI {
       let collectionRatingKey: string | null = null;
       if (result && typeof result === 'object' && 'MediaContainer' in result) {
         const resultObj = result as {
-          MediaContainer?: { Metadata?: PlexCollection[] };
+          MediaContainer?: {
+            Metadata?: Record<string, unknown>[];
+          };
         };
-        if (resultObj.MediaContainer?.Metadata?.[0]) {
-          collectionRatingKey = resultObj.MediaContainer.Metadata[0].ratingKey;
+        const metadata = resultObj.MediaContainer?.Metadata?.[0];
+        if (metadata) {
+          // Handle both JSON (flat properties) and xml2js (nested under .attributes)
+          collectionRatingKey =
+            (metadata.ratingKey as string) ||
+            (metadata.attributes as Record<string, string> | undefined)
+              ?.ratingKey ||
+            null;
+        }
+      }
+
+      if (!collectionRatingKey) {
+        logger.warn(
+          `POST to create collection "${title}" returned no ratingKey — verifying via lookup`,
+          {
+            label: 'Plex API',
+            title,
+            libraryKey,
+            resultType: typeof result,
+            hasMediaContainer:
+              result &&
+              typeof result === 'object' &&
+              'MediaContainer' in result,
+          }
+        );
+
+        // Plex may have created the collection but returned an unparseable
+        // response (e.g. charset in Content-Type breaks plex-api's strict
+        // equality check, or XML response nests ratingKey differently).
+        // Confirm by looking up the collection we just asked Plex to create.
+        const found = await this.getCollectionByName(title, libraryKey);
+        if (found) {
+          collectionRatingKey = found.ratingKey;
+          logger.info(
+            `Recovered ratingKey ${collectionRatingKey} for "${title}" via title lookup`,
+            { label: 'Plex API' }
+          );
         }
       }
 
