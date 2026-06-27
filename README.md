@@ -138,7 +138,7 @@ Plex's show-level metadata doesn't always reflect what's on disk -- a show with 
 
 Enable per library: **Overlays > library config > "Use episode files for quality badges"** (show libraries only).
 
-![Episode scanning toggle](docs/episode-scanning-toggle.png)
+![Episode scanning toggle](public/images/episode-scanning-toggle.png)
 
 | Aspect | Before (Plex metadata) | After (episode scanning) |
 | --- | --- | --- |
