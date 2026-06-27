@@ -126,6 +126,10 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 **Root Folder Filtering** -- Coming Soon monitored settings now include optional root folder dropdowns, populated from Radarr/Sonarr. Movies filter by path prefix, TV shows by `rootFolderPath` equality. Useful when multiple libraries point to different root folders on the same \*arr instance.
 
+### Additional Overlay Variables
+
+**TV Season Counts** -- Two new variables for TV show overlays: `totalSeasons` (from TMDB) and `seasonsAvailable` (seasons in your Plex library). Useful for overlays like "Season 2 of 5" or conditional overlays on incomplete shows. Available as both template variables and condition fields. *(Contributed by [Bergasha](https://github.com/Bergasha))*
+
 ## Upstream PRs
 
 ### Open
