@@ -1,18 +1,24 @@
 # Agregarr (bitr8 fork)
 
-Active fork of [Agregarr](https://github.com/agregarr/agregarr) packaging performance fixes, placeholder lifecycle improvements, and open upstream PRs into a single Docker image. Builds automatically to `bitr8/agregarr:develop` on Docker Hub.
+Active fork of [Agregarr](https://github.com/agregarr/agregarr) packaging performance fixes, placeholder lifecycle improvements, and open upstream PRs into a single Docker image. Available as `bitr8/agregarr` on Docker Hub.
 
 ## Docker Image
 
-Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agregarr). `develop` and `latest` tags are identical — both track the develop branch with all fork features included. Rebuilds on every push.
+Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agregarr).
 
-**Multi-arch** — supports amd64 and arm64 (Apple Silicon, Raspberry Pi 4+).
+| Tag | What it tracks |
+|-----|----------------|
+| `:latest` | Stable releases. Recommended for most users. |
+| `:2.5.0` (etc.) | Pinned to a specific release. |
+| `:develop` | Bleeding edge. Builds on every push to develop, may break. |
 
-**Switching from upstream?** Replace the image line in your existing compose file — config volumes are compatible:
+**Multi-arch** — release tags support amd64 and arm64 (Apple Silicon, Raspberry Pi 4+). The `:develop` tag builds amd64 only.
+
+**Switching from upstream?** Replace the image line in your existing compose file. Config volumes are compatible.
 
 ```diff
 -    image: agregarr/agregarr:latest
-+    image: bitr8/agregarr:develop
++    image: bitr8/agregarr:latest
 ```
 
 ### Compose example
@@ -20,7 +26,7 @@ Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agr
 ```yaml
 services:
   agregarr:
-    image: bitr8/agregarr:develop
+    image: bitr8/agregarr:latest
     container_name: agregarr
     volumes:
       - /path/to/config:/app/config
