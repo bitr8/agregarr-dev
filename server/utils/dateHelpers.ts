@@ -161,7 +161,10 @@ export function calculateDaysSince(date: Date | string): number {
  * @returns Formatted date string
  */
 export function formatDate(date: Date | string, format: string): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const dateObj =
+    typeof date === 'string'
+      ? parseDate(date)
+      : getCalendarDateInTimezone(date);
 
   // Month names for formatting
   const monthNames = [

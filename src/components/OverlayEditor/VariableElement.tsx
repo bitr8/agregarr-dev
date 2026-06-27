@@ -53,7 +53,12 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
 
   // Format date based on format string
   const formatDate = (date: Date | string, format: string): string => {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    // Parse as noon UTC to prevent timezone shift on calendar dates
+    const dateOnly =
+      typeof date === 'string'
+        ? date.split('T')[0]
+        : date.toISOString().split('T')[0];
+    const dateObj = new Date(dateOnly + 'T12:00:00.000Z');
 
     const monthNames = [
       'JAN',
@@ -94,13 +99,13 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
       'SATURDAY',
     ];
 
-    const year = dateObj.getFullYear();
-    const month = dateObj.getMonth() + 1;
-    const day = dateObj.getDate();
-    const monthName = monthNames[dateObj.getMonth()];
-    const monthNameFull = monthNamesFull[dateObj.getMonth()];
-    const dayName = dayNames[dateObj.getDay()];
-    const dayNameFull = dayNamesFull[dateObj.getDay()];
+    const year = dateObj.getUTCFullYear();
+    const month = dateObj.getUTCMonth() + 1;
+    const day = dateObj.getUTCDate();
+    const monthName = monthNames[dateObj.getUTCMonth()];
+    const monthNameFull = monthNamesFull[dateObj.getUTCMonth()];
+    const dayName = dayNames[dateObj.getUTCDay()];
+    const dayNameFull = dayNamesFull[dateObj.getUTCDay()];
 
     const pad = (n: number) => String(n).padStart(2, '0');
 
