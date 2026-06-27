@@ -38,6 +38,7 @@ export interface PlexLibraryItem {
   }[];
   Label?: { tag: string; id?: number }[]; // Item-level labels/tags in Plex
   type: 'movie' | 'show' | 'season' | 'episode';
+  childCount?: number; // Number of seasons for show-type items
   Media: Media[];
 }
 
