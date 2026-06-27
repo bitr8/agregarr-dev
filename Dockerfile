@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build_image
+FROM node:20.19.5-alpine AS build_image
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN apk add --no-cache \
   python3 make g++ gcc libc6-compat bash \
   build-base cairo-dev pango-dev jpeg-dev giflib-dev pixman-dev
 
-RUN yarn global add node-gyp
+RUN yarn global add node-gyp --ignore-engines
 
 COPY package.json yarn.lock ./
 RUN CYPRESS_INSTALL_BINARY=0 yarn install --frozen-lockfile --network-timeout 1000000
@@ -31,7 +31,7 @@ RUN mkdir -p config && touch config/DOCKER
 RUN echo "{\"commitTag\": \"${COMMIT_TAG}\"}" > committag.json
 
 
-FROM node:22-alpine
+FROM node:20.19.5-alpine
 
 WORKDIR /app
 
