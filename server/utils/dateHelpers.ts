@@ -161,10 +161,20 @@ export function calculateDaysSince(date: Date | string): number {
  * @returns Formatted date string
  */
 export function formatDate(date: Date | string, format: string): string {
-  const dateObj =
-    typeof date === 'string'
-      ? parseDate(date)
-      : getCalendarDateInTimezone(date);
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    if (date.includes('T')) {
+      // Full ISO datetime (e.g. Sonarr "2026-06-28T23:00:00Z"):
+      // convert to server timezone so 23:00 UTC becomes the next calendar day in UTC+1
+      dateObj = getCalendarDateInTimezone(new Date(date));
+    } else {
+      // Date-only (e.g. TMDB "2026-07-04"):
+      // nominal date — use noon UTC trick so timezone never shifts the calendar day
+      dateObj = parseDate(date);
+    }
+  } else {
+    dateObj = getCalendarDateInTimezone(date);
+  }
 
   // Month names for formatting
   const monthNames = [

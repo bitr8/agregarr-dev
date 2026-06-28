@@ -53,12 +53,22 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
 
   // Format date based on format string
   const formatDate = (date: Date | string, format: string): string => {
-    // Parse as noon UTC to prevent timezone shift on calendar dates
-    const dateOnly =
-      typeof date === 'string'
-        ? date.split('T')[0]
-        : date.toISOString().split('T')[0];
-    const dateObj = new Date(dateOnly + 'T12:00:00.000Z');
+    let dateObj: Date;
+    if (typeof date === 'string' && date.includes('T')) {
+      // Full ISO datetime (e.g. Sonarr "2026-06-28T23:00:00Z"):
+      // convert to browser's local calendar date so 23:00 UTC becomes
+      // the next day in UTC+1 timezones
+      const local = new Date(date);
+      dateObj = new Date(
+        Date.UTC(local.getFullYear(), local.getMonth(), local.getDate(), 12)
+      );
+    } else {
+      // Date-only (e.g. TMDB "2026-07-04") or Date object:
+      // noon UTC trick so timezone never shifts the calendar day
+      const dateOnly =
+        typeof date === 'string' ? date : date.toISOString().split('T')[0];
+      dateObj = new Date(dateOnly + 'T12:00:00.000Z');
+    }
 
     const monthNames = [
       'JAN',
