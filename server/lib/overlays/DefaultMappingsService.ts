@@ -59,10 +59,14 @@ function getAvailableLanguageCodes(): string[] {
   }
 }
 
+let _cachedNetworks: string[] | null = null;
+
 /**
- * Get all available network names from the networks directory
+ * Get all available network names from the networks directory.
+ * Result is cached for process lifetime (icons are static assets).
  */
-function getAvailableNetworks(): string[] {
+export function getAvailableNetworks(): string[] {
+  if (_cachedNetworks !== null) return _cachedNetworks;
   try {
     const networksDir = path.join(
       process.cwd(),
@@ -72,12 +76,14 @@ function getAvailableNetworks(): string[] {
       'networks'
     );
     if (!fs.existsSync(networksDir)) {
+      _cachedNetworks = [];
       return [];
     }
     const files = fs.readdirSync(networksDir);
-    return files
+    _cachedNetworks = files
       .filter((f) => f.endsWith('.png'))
       .map((f) => f.replace('.png', ''));
+    return _cachedNetworks;
   } catch {
     return [];
   }
@@ -194,75 +200,165 @@ function buildNetworkMappings(): IconMapping[] {
   }));
 }
 
+// TMDB provider ID → icon filename. Covers major worldwide streaming services.
+// Only IDs whose icon file exists are included (checked at build time).
+const STREAMING_PROVIDER_ID_TO_ICON: Record<string, string> = {
+  // Netflix
+  '8': 'Netflix',
+  '1796': 'Netflix',
+  // Disney+
+  '337': 'Disney+',
+  '390': 'Disney+',
+  // Amazon Prime Video
+  '9': 'Prime Video',
+  '119': 'Prime Video',
+  // Apple TV+
+  '350': 'Apple TV+',
+  // Max / HBO
+  '1899': 'Max',
+  '384': 'Max',
+  // Hulu
+  '15': 'Hulu',
+  // Peacock
+  '386': 'Peacock',
+  '387': 'Peacock',
+  // Paramount+
+  '531': 'Paramount+',
+  '582': 'Paramount+',
+  '2303': 'Paramount+',
+  '2616': 'Paramount+',
+  // Crunchyroll
+  '283': 'Crunchyroll',
+  // Starz / Showtime / AMC+ / MGM+
+  '43': 'Starz',
+  '37': 'Showtime',
+  '526': 'AMC+',
+  '528': 'AMC+',
+  '1770': 'MGM+',
+  // discovery+ / BritBox / Freevee / Shudder
+  '584': 'discovery+',
+  '151': 'BritBox',
+  '636': 'BritBox',
+  '613': 'Freevee',
+  '99': 'Shudder',
+  // Criterion / Acorn / Curiosity Stream
+  '258': 'Criterion Channel',
+  '87': 'Acorn TV',
+  '190': 'Curiosity Stream',
+  // Regional: AU
+  '21': 'Stan',
+  '385': 'Binge',
+  // Regional: CA
+  '30': 'Crave',
+  // Regional: UK
+  '38': 'BBC iPlayer',
+  '41': 'ITVX',
+  // Regional: Other
+  '76': 'Viaplay',
+  '307': 'Globoplay',
+  '220': 'JioCinema',
+  '236': 'Shahid',
+  '619': 'STAR+',
+  '97': 'tving',
+  '232': 'ZEE5',
+  '581': 'iQiyi',
+  // Misc
+  '318': 'Adult Swim',
+  '73': 'tubi',
+  '207': 'The Roku Channel',
+  '444': 'Lionsgate+',
+  '55': 'Showmax',
+  '457': 'ViX+',
+  '428': 'ViX',
+  '192': 'YouTube',
+  '188': 'YouTube',
+  '29': 'Sky',
+  '381': 'Canal+',
+  '300': 'Crackle',
+  '175': 'Quibi',
+  '247': 'Pantaya',
+  '1875': 'BET+',
+  '11': 'Cinemax',
+};
+
 function buildStreamingProviderIdMappings(): IconMapping[] {
-  return [
-    { value: '8', iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png` },
-    { value: '1796', iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png` },
-    { value: '337', iconPath: `${MAPPED_ICONS_BASE}/networks/Disney+.png` },
-    { value: '9', iconPath: `${MAPPED_ICONS_BASE}/networks/Prime Video.png` },
-    { value: '350', iconPath: `${MAPPED_ICONS_BASE}/networks/Apple TV+.png` },
-    { value: '1899', iconPath: `${MAPPED_ICONS_BASE}/networks/Max.png` },
-    { value: '15', iconPath: `${MAPPED_ICONS_BASE}/networks/Hulu.png` },
-    { value: '386', iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png` },
-    { value: '387', iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png` },
-    { value: '2303', iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png` },
-    { value: '2616', iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png` },
-    { value: '283', iconPath: `${MAPPED_ICONS_BASE}/networks/Crunchyroll.png` },
-    { value: '21', iconPath: `${MAPPED_ICONS_BASE}/networks/Stan.png` },
-    { value: '385', iconPath: `${MAPPED_ICONS_BASE}/networks/Binge.png` },
-    { value: '318', iconPath: `${MAPPED_ICONS_BASE}/networks/Adult Swim.png` },
-  ];
+  const networks = getAvailableNetworks();
+  const availableIcons = new Set(networks.map((n) => n.toLowerCase()));
+  return Object.entries(STREAMING_PROVIDER_ID_TO_ICON)
+    .filter(([, iconName]) => availableIcons.has(iconName.toLowerCase()))
+    .map(([id, iconName]) => {
+      const match = networks.find(
+        (n) => n.toLowerCase() === iconName.toLowerCase()
+      );
+      return {
+        value: id,
+        iconPath: `${MAPPED_ICONS_BASE}/networks/${match ?? iconName}.png`,
+      };
+    });
 }
 
+// TMDB provider names that don't match icon filenames exactly
+const TMDB_NAME_TO_ICON_ALIAS: Record<string, string> = {
+  'Disney Plus': 'Disney+',
+  'Amazon Prime Video': 'Prime Video',
+  'Amazon Video': 'Prime Video',
+  'Netflix basic with Ads': 'Netflix',
+  'Netflix Standard with Ads': 'Netflix',
+  'Netflix ads': 'Netflix',
+  'HBO Max': 'Max',
+  'Peacock Premium': 'Peacock',
+  'Peacock Premium Plus': 'Peacock',
+  'Paramount Plus': 'Paramount+',
+  'Paramount Plus Premium': 'Paramount+',
+  'Paramount Plus Essential': 'Paramount+',
+  'Paramount+ with Showtime': 'Paramount+',
+  'Paramount+ Amazon Channel': 'Paramount+',
+  'Apple TV': 'Apple TV+',
+  'Apple TV Plus': 'Apple TV+',
+  'HBO Now': 'HBO',
+  'HBO Go': 'HBO',
+  'Max Amazon Channel': 'Max',
+  'discovery+ Amazon Channel': 'discovery+',
+  'Discovery Plus': 'discovery+',
+  'BritBox Amazon Channel': 'BritBox',
+  'AMC Plus': 'AMC+',
+  'AMC+ Amazon Channel': 'AMC+',
+  'MGM Plus': 'MGM+',
+  'Starz Amazon Channel': 'Starz',
+  'Showtime Amazon Channel': 'Showtime',
+  'BET Plus': 'BET+',
+  'Lionsgate Plus': 'Lionsgate+',
+};
+
+// Case-insensitive version built once at module load
+const TMDB_NAME_TO_ICON_ALIAS_LOWER = new Map(
+  Object.entries(TMDB_NAME_TO_ICON_ALIAS).map(([k, v]) => [k.toLowerCase(), v])
+);
+
 function buildStreamingProviderNameMappings(): IconMapping[] {
-  return [
-    { value: 'Netflix', iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png` },
-    {
-      value: 'Netflix Standard with Ads',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Netflix.png`,
-    },
-    {
-      value: 'Disney Plus',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Disney+.png`,
-    },
-    {
-      value: 'Amazon Prime Video',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Prime Video.png`,
-    },
-    {
-      value: 'Apple TV',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Apple TV+.png`,
-    },
-    { value: 'HBO Max', iconPath: `${MAPPED_ICONS_BASE}/networks/Max.png` },
-    { value: 'Max', iconPath: `${MAPPED_ICONS_BASE}/networks/Max.png` },
-    { value: 'Hulu', iconPath: `${MAPPED_ICONS_BASE}/networks/Hulu.png` },
-    {
-      value: 'Peacock Premium',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png`,
-    },
-    {
-      value: 'Peacock Premium Plus',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Peacock.png`,
-    },
-    {
-      value: 'Paramount Plus Premium',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png`,
-    },
-    {
-      value: 'Paramount Plus Essential',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Paramount+.png`,
-    },
-    {
-      value: 'Crunchyroll',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Crunchyroll.png`,
-    },
-    { value: 'Stan', iconPath: `${MAPPED_ICONS_BASE}/networks/Stan.png` },
-    { value: 'Binge', iconPath: `${MAPPED_ICONS_BASE}/networks/Binge.png` },
-    {
-      value: 'Adult Swim',
-      iconPath: `${MAPPED_ICONS_BASE}/networks/Adult Swim.png`,
-    },
-  ];
+  const networks = getAvailableNetworks();
+  const availableIcons = new Set(networks.map((n) => n.toLowerCase()));
+
+  // Start with all available network icons as direct name matches
+  const mappings: IconMapping[] = networks.map((network) => ({
+    value: network,
+    iconPath: `${MAPPED_ICONS_BASE}/networks/${network}.png`,
+  }));
+
+  // Add TMDB name aliases that map to different icon filenames
+  for (const [tmdbName, iconName] of Object.entries(TMDB_NAME_TO_ICON_ALIAS)) {
+    if (availableIcons.has(iconName.toLowerCase())) {
+      const match = networks.find(
+        (n) => n.toLowerCase() === iconName.toLowerCase()
+      );
+      mappings.push({
+        value: tmdbName,
+        iconPath: `${MAPPED_ICONS_BASE}/networks/${match ?? iconName}.png`,
+      });
+    }
+  }
+
+  return mappings;
 }
 
 /**
@@ -417,6 +513,35 @@ export function getFieldsWithDefaults(): string[] {
     .map((country) => `contentRating:${country}`);
 
   return [...staticFields, ...contentRatingFields];
+}
+
+/**
+ * Check if a streaming provider has a matching icon by name or ID.
+ * Used by OverlayContextBuilder to skip providers we can't display.
+ */
+export function hasStreamingProviderIcon(
+  providerName: string,
+  providerId: number
+): boolean {
+  const available = getAvailableNetworks();
+  const lowerSet = new Set(available.map((n) => n.toLowerCase()));
+
+  const idStr = String(providerId);
+  const idIcon = STREAMING_PROVIDER_ID_TO_ICON[idStr];
+  if (idIcon && lowerSet.has(idIcon.toLowerCase())) {
+    return true;
+  }
+
+  if (lowerSet.has(providerName.toLowerCase())) {
+    return true;
+  }
+
+  const alias = TMDB_NAME_TO_ICON_ALIAS_LOWER.get(providerName.toLowerCase());
+  if (alias && lowerSet.has(alias.toLowerCase())) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

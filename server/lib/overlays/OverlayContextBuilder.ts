@@ -15,6 +15,7 @@ import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
+import { hasStreamingProviderIcon } from './DefaultMappingsService';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
 const _langDisplayNames = new Intl.DisplayNames(['en'], { type: 'language' });
@@ -216,7 +217,7 @@ const rtInflightRequests = new Map<string, Promise<RTRating | null>>();
  *          When criticalApiFailed is true, callers should skip overlay application
  *          to avoid regenerating posters with incomplete data.
  */
-function extractStreamingProvider(
+export function extractStreamingProvider(
   watchProviderResults:
     | { [iso_3166_1: string]: TmdbWatchProviders }
     | undefined,
@@ -234,7 +235,16 @@ function extractStreamingProvider(
       a.provider_name.localeCompare(b.provider_name)
   );
 
-  return { name: sorted[0].provider_name, id: sorted[0].provider_id };
+  // Prefer a provider that has a matching icon to avoid empty overlays
+  for (const provider of sorted) {
+    if (
+      hasStreamingProviderIcon(provider.provider_name, provider.provider_id)
+    ) {
+      return { name: provider.provider_name, id: provider.provider_id };
+    }
+  }
+
+  return undefined;
 }
 
 export async function buildRenderContext(

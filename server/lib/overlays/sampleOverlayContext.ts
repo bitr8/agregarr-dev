@@ -134,6 +134,8 @@ export function createSampleOverlayContext(
     rtCriticsScore?: number;
     rtAudienceScore?: number;
     studio?: string;
+    streamingProvider?: string;
+    streamingProviderId?: number;
   }
 ): OverlayRenderContext {
   const context: OverlayRenderContext = {
@@ -147,6 +149,13 @@ export function createSampleOverlayContext(
     mediaType,
     isPlaceholder: false,
   };
+
+  if (tmdbOverrides?.streamingProvider !== undefined) {
+    context.streamingProvider = tmdbOverrides.streamingProvider;
+  }
+  if (tmdbOverrides?.streamingProviderId !== undefined) {
+    context.streamingProviderId = tmdbOverrides.streamingProviderId;
+  }
 
   if (mediaType === 'show') {
     Object.assign(context, EPISODE_AGGREGATION_FIELDS);

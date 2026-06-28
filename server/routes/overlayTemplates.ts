@@ -8,10 +8,11 @@ import type {
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import { extractStreamingProvider } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayTemplateRenderer } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { presetTemplateService } from '@server/lib/overlays/PresetTemplates';
 import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
-import { getTmdbLanguage } from '@server/lib/settings';
+import { getSettings, getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -48,6 +49,8 @@ async function fetchPreviewPosterMetadata(
   imdbRating?: number;
   rtCriticsScore?: number;
   rtAudienceScore?: number;
+  streamingProvider?: string;
+  streamingProviderId?: number;
 }> {
   const tmdbClient = new TheMovieDb({
     originalLanguage: await getTmdbLanguage(),
@@ -56,6 +59,8 @@ async function fetchPreviewPosterMetadata(
   let year: number | undefined;
   let imdbId: string | undefined;
   let studio: string | undefined;
+  let streamingProvider: string | undefined;
+  let streamingProviderId: number | undefined;
 
   try {
     if (mediaType === 'movie') {
@@ -66,6 +71,16 @@ async function fetchPreviewPosterMetadata(
         : undefined;
       imdbId = movieDetails.imdb_id || undefined;
       studio = movieDetails.production_companies?.[0]?.name;
+
+      const region = getSettings().overlays?.watchProviderRegion || 'US';
+      const provider = extractStreamingProvider(
+        movieDetails['watch/providers']?.results,
+        region
+      );
+      if (provider) {
+        streamingProvider = provider.name;
+        streamingProviderId = provider.id;
+      }
     } else {
       const showDetails = await tmdbClient.getTvShow({ tvId: tmdbId });
       title = showDetails.name;
@@ -74,6 +89,16 @@ async function fetchPreviewPosterMetadata(
         : undefined;
       imdbId = showDetails.external_ids?.imdb_id || undefined;
       studio = showDetails.production_companies?.[0]?.name;
+
+      const region = getSettings().overlays?.watchProviderRegion || 'US';
+      const provider = extractStreamingProvider(
+        showDetails['watch/providers']?.results,
+        region
+      );
+      if (provider) {
+        streamingProvider = provider.name;
+        streamingProviderId = provider.id;
+      }
     }
   } catch (err) {
     logger.debug('Failed to fetch TMDB metadata for preview', {
@@ -124,6 +149,8 @@ async function fetchPreviewPosterMetadata(
     imdbRating,
     rtCriticsScore,
     rtAudienceScore,
+    streamingProvider,
+    streamingProviderId,
   };
 }
 
@@ -745,6 +772,8 @@ router.get('/:id/preview', async (req, res, next) => {
         rtCriticsScore: tmdbData.rtCriticsScore,
         rtAudienceScore: tmdbData.rtAudienceScore,
         studio: tmdbData.studio,
+        streamingProvider: tmdbData.streamingProvider,
+        streamingProviderId: tmdbData.streamingProviderId,
       }
     );
 
@@ -884,6 +913,8 @@ router.post('/combined-preview', async (req, res, next) => {
         rtCriticsScore: tmdbData.rtCriticsScore,
         rtAudienceScore: tmdbData.rtAudienceScore,
         studio: tmdbData.studio,
+        streamingProvider: tmdbData.streamingProvider,
+        streamingProviderId: tmdbData.streamingProviderId,
       }
     );
 
