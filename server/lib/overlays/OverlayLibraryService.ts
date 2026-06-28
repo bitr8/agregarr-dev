@@ -717,6 +717,7 @@ class OverlayLibraryService {
                     nextEpisodeAirDate: nextEpisode.air_date,
                     seasonNumber: nextEpisode.season_number,
                     episodeNumber: nextEpisode.episode_number,
+                    tvdbId: showDetails.external_ids?.tvdb_id,
                   };
 
                   // Check for season premiere

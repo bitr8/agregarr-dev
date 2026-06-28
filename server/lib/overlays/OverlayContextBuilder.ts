@@ -1147,6 +1147,7 @@ export interface ReleaseDateInfo {
   nextSeasonAirDate?: string;
   seasonNumber?: number;
   episodeNumber?: number;
+  tvdbId?: number;
 }
 
 /**
@@ -1176,7 +1177,52 @@ export async function fetchReleaseDateInfo(
         mediaType,
         hasData: preloaded !== null,
       });
-      return preloaded ?? undefined;
+      if (!preloaded) return undefined;
+
+      // Prefetch stores TMDB's date-only air dates (e.g. "2026-07-03") which
+      // reflect the US broadcast date. For correct timezone rendering, enhance
+      // with Sonarr's precise datetime when available.
+      if (
+        preloaded.nextEpisodeAirDate &&
+        !preloaded.nextEpisodeAirDate.includes('T') &&
+        preloaded.tvdbId
+      ) {
+        const sonarrResult = await fetchNextEpisodeFromSonarr(
+          preloaded.tvdbId,
+          sonarrCache
+        );
+        if (sonarrResult?.nextEpisodeAirDate?.includes('T')) {
+          const tmdbDate = preloaded.nextEpisodeAirDate;
+          const sonarrDate = sonarrResult.nextEpisodeAirDate.split('T')[0];
+          const tmdbMs = new Date(tmdbDate).getTime();
+          const sonarrMs = new Date(sonarrDate).getTime();
+          const daysDiff =
+            Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
+          if (daysDiff <= 2) {
+            logger.debug(
+              'Enhanced preloaded TMDB date with Sonarr air time',
+              {
+                label: 'OverlayContextBuilder',
+                tmdbId,
+                originalDate: preloaded.nextEpisodeAirDate,
+                enhancedDate: sonarrResult.nextEpisodeAirDate,
+              }
+            );
+            return {
+              ...preloaded,
+              nextEpisodeAirDate: sonarrResult.nextEpisodeAirDate,
+              nextSeasonAirDate:
+                sonarrResult.episodeNumber === 1
+                  ? sonarrResult.nextEpisodeAirDate
+                  : undefined,
+              seasonNumber: sonarrResult.seasonNumber,
+              episodeNumber: sonarrResult.episodeNumber,
+            };
+          }
+        }
+      }
+
+      return preloaded;
     }
   }
 
