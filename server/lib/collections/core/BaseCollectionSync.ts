@@ -1469,10 +1469,25 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           // calls arrangeCollectionItemsInOrder internally, which reads item order
           // from Plex. Without custom sort, Plex returns release-date order,
           // causing the arrangement to operate against the wrong baseline.
-          await plexClient.updateCollectionContentSort(
-            collectionRatingKey,
-            'custom'
-          );
+          try {
+            await plexClient.updateCollectionContentSort(
+              collectionRatingKey,
+              'custom'
+            );
+          } catch (sortError) {
+            const sortErrorMsg = extractErrorMessage(sortError);
+            if (sortErrorMsg.includes('404')) {
+              logger.warn(
+                `Failed to set content sort for collection ${collectionName} (${collectionRatingKey}), continuing`,
+                {
+                  label: 'Collection Update',
+                  error: sortErrorMsg,
+                }
+              );
+            } else {
+              throw sortError;
+            }
+          }
 
           // Smart update: add new items, remove old ones
           const updateResult = await plexClient.updateCollectionContents(
@@ -1553,10 +1568,25 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       }
 
       // For regular collections: Set custom sort and arrange items
-      await plexClient.updateCollectionContentSort(
-        collectionRatingKey,
-        'custom'
-      );
+      try {
+        await plexClient.updateCollectionContentSort(
+          collectionRatingKey,
+          'custom'
+        );
+      } catch (sortError) {
+        const sortErrorMsg = extractErrorMessage(sortError);
+        if (sortErrorMsg.includes('404')) {
+          logger.warn(
+            `Failed to set content sort for collection ${collectionName} (${collectionRatingKey}), continuing`,
+            {
+              label: 'Collection Update',
+              error: sortErrorMsg,
+            }
+          );
+        } else {
+          throw sortError;
+        }
+      }
 
       if (plexItems.length > 1) {
         try {
@@ -1902,6 +1932,18 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               titleMatches &&
               (hasAgregarrLabel || isOrphanedUserCollection)
             ) {
+              // Validate the ratingKey is reachable before adopting
+              const adoptCheck = await plexClient.getCollectionMetadataSafe(
+                collection.ratingKey
+              );
+              if (!adoptCheck) {
+                logger.warn(
+                  `Title-matched collection "${collection.title}" (${collection.ratingKey}) returned no metadata — skipping adoption`,
+                  { label: 'Base Collection Sync' }
+                );
+                continue;
+              }
+
               const isSmartCollection =
                 (collection as PlexCollectionWithSmart).smart === '1';
 
@@ -1991,11 +2033,26 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
     // Update collection title to reflect any template changes
     if (collectionName) {
-      await plexClient.updateCollectionTitle(
-        collectionRatingKey,
-        collectionName,
-        libraryKey
-      );
+      try {
+        await plexClient.updateCollectionTitle(
+          collectionRatingKey,
+          collectionName,
+          libraryKey
+        );
+      } catch (titleError) {
+        const titleErrorMsg = extractErrorMessage(titleError);
+        if (titleErrorMsg.includes('404')) {
+          logger.warn(
+            `Failed to update title for collection ${collectionName} (${collectionRatingKey}), continuing`,
+            {
+              label: 'Collection Update',
+              error: titleErrorMsg,
+            }
+          );
+        } else {
+          throw titleError;
+        }
+      }
     }
 
     // Update sort title if needed - for Agregarr-created collections
