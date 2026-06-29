@@ -17,6 +17,7 @@ import logger from '@server/logger';
 import path from 'path';
 import {
   applyCollectionExclusions,
+  clearConfigRatingKey,
   createCollectionLabel,
   createSyncError,
   extractErrorMessage,
@@ -1478,72 +1479,92 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             const sortErrorMsg = extractErrorMessage(sortError);
             if (sortErrorMsg.includes('404')) {
               logger.warn(
-                `Failed to set content sort for collection ${collectionName} (${collectionRatingKey}), continuing`,
+                `Collection ${collectionName} (${collectionRatingKey}) returned 404 on mutation — deleting stale collection and recreating`,
                 {
                   label: 'Collection Update',
                   error: sortErrorMsg,
                 }
               );
+              try {
+                await plexClient.deleteCollection(collectionRatingKey);
+              } catch (deleteError) {
+                logger.debug(
+                  `Failed to delete stale collection ${collectionRatingKey}`,
+                  {
+                    label: 'Collection Update',
+                    error: extractErrorMessage(deleteError),
+                  }
+                );
+              }
+              if (options.config?.id) {
+                const libId = Array.isArray(options.config.libraryId)
+                  ? options.config.libraryId[0]
+                  : options.config.libraryId;
+                clearConfigRatingKey(options.config.id, libId);
+              }
+              collectionRatingKey = undefined;
             } else {
               throw sortError;
             }
           }
 
-          // Smart update: add new items, remove old ones
-          const updateResult = await plexClient.updateCollectionContents(
-            collectionRatingKey,
-            plexItems
-          );
-
-          // Label items that fell out of the collection as stale
-          if (updateResult.removedKeys.length > 0) {
-            for (const removedKey of updateResult.removedKeys) {
-              try {
-                await plexClient.addLabelToItem(removedKey, 'agregarr-stale');
-              } catch (error) {
-                logger.warn(
-                  `Failed to add agregarr-stale label to item ${removedKey}`,
-                  {
-                    label: 'Collection Update',
-                    error: extractErrorMessage(error),
-                  }
-                );
-              }
-            }
-            logger.info(
-              `Labeled ${updateResult.removedKeys.length} removed items as agregarr-stale in collection ${collectionName}`,
-              { label: 'Collection Update' }
+          if (collectionRatingKey) {
+            // Smart update: add new items, remove old ones
+            const updateResult = await plexClient.updateCollectionContents(
+              collectionRatingKey,
+              plexItems
             );
-          }
 
-          // Clean up stale labels for items still in this collection
-          const currentPlexKeys = new Set(
-            plexItems.map((item) => item.ratingKey)
-          );
-          const staleItems = await plexClient.getItemsWithLabel(
-            libraryKey,
-            'agregarr-stale'
-          );
-          for (const staleKey of staleItems) {
-            if (currentPlexKeys.has(staleKey)) {
-              try {
-                await plexClient.removeLabelFromItem(
-                  staleKey,
-                  'agregarr-stale'
-                );
-              } catch (error) {
-                logger.warn(
-                  `Failed to remove agregarr-stale label from item ${staleKey}`,
-                  {
-                    label: 'Collection Update',
-                    error: extractErrorMessage(error),
-                  }
-                );
+            // Label items that fell out of the collection as stale
+            if (updateResult.removedKeys.length > 0) {
+              for (const removedKey of updateResult.removedKeys) {
+                try {
+                  await plexClient.addLabelToItem(removedKey, 'agregarr-stale');
+                } catch (error) {
+                  logger.warn(
+                    `Failed to add agregarr-stale label to item ${removedKey}`,
+                    {
+                      label: 'Collection Update',
+                      error: extractErrorMessage(error),
+                    }
+                  );
+                }
+              }
+              logger.info(
+                `Labeled ${updateResult.removedKeys.length} removed items as agregarr-stale in collection ${collectionName}`,
+                { label: 'Collection Update' }
+              );
+            }
+
+            // Clean up stale labels for items still in this collection
+            const currentPlexKeys = new Set(
+              plexItems.map((item) => item.ratingKey)
+            );
+            const staleItems = await plexClient.getItemsWithLabel(
+              libraryKey,
+              'agregarr-stale'
+            );
+            for (const staleKey of staleItems) {
+              if (currentPlexKeys.has(staleKey)) {
+                try {
+                  await plexClient.removeLabelFromItem(
+                    staleKey,
+                    'agregarr-stale'
+                  );
+                } catch (error) {
+                  logger.warn(
+                    `Failed to remove agregarr-stale label from item ${staleKey}`,
+                    {
+                      label: 'Collection Update',
+                      error: extractErrorMessage(error),
+                    }
+                  );
+                }
               }
             }
-          }
 
-          updated = 1;
+            updated = 1;
+          }
         }
       }
 
@@ -1612,14 +1633,35 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     }
 
     // Apply metadata to the collection
-    await this.updateCollectionMetadata(
+    const metadataResult = await this.updateCollectionMetadata(
       plexClient,
       collectionRatingKey,
       options
     );
 
+    if (metadataResult.ratingKeyIsStale) {
+      try {
+        await plexClient.deleteCollection(collectionRatingKey);
+      } catch (deleteError) {
+        logger.debug(
+          `Failed to delete stale collection ${collectionRatingKey} during metadata self-heal`,
+          {
+            label: 'Collection Update',
+            error: extractErrorMessage(deleteError),
+          }
+        );
+      }
+      if (options.config?.id) {
+        const libId = Array.isArray(options.config.libraryId)
+          ? options.config.libraryId[0]
+          : options.config.libraryId;
+        clearConfigRatingKey(options.config.id, libId);
+      }
+      collectionRatingKey = undefined;
+    }
+
     // Track processed collection
-    if (options.processedCollectionKeys) {
+    if (collectionRatingKey && options.processedCollectionKeys) {
       options.processedCollectionKeys.add(collectionRatingKey);
     }
 
@@ -2017,7 +2059,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     plexClient: PlexAPI,
     collectionRatingKey: string,
     options: CollectionUpdateOptions
-  ): Promise<void> {
+  ): Promise<{ ratingKeyIsStale: boolean }> {
     const {
       customLabel,
       visibilityConfig,
@@ -2043,12 +2085,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         const titleErrorMsg = extractErrorMessage(titleError);
         if (titleErrorMsg.includes('404')) {
           logger.warn(
-            `Failed to update title for collection ${collectionName} (${collectionRatingKey}), continuing`,
+            `Collection ${collectionName} (${collectionRatingKey}) returned 404 on title update — marking stale for deletion and recreation`,
             {
               label: 'Collection Update',
               error: titleErrorMsg,
             }
           );
+          return { ratingKeyIsStale: true };
         } else {
           throw titleError;
         }
@@ -2521,6 +2564,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         }
       }
     }
+
+    return { ratingKeyIsStale: false };
   }
 
   /**

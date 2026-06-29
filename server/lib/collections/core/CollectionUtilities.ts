@@ -978,6 +978,44 @@ export function updateConfigWithRatingKey(
   }
 }
 
+export function clearConfigRatingKey(
+  configId: string,
+  libraryId?: string
+): void {
+  try {
+    const settings = getSettings();
+    const collectionConfigs = settings.plex.collectionConfigs || [];
+
+    const configIndex = collectionConfigs.findIndex(
+      (config) => config.id === configId
+    );
+
+    if (configIndex >= 0) {
+      const existingConfig = collectionConfigs[configIndex];
+
+      const configLibId = Array.isArray(existingConfig.libraryId)
+        ? existingConfig.libraryId[0]
+        : existingConfig.libraryId;
+      if (libraryId && configLibId !== libraryId) {
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { collectionRatingKey: _removed, ...updatedConfig } = existingConfig;
+
+      collectionConfigs[configIndex] = updatedConfig;
+      settings.plex.collectionConfigs = collectionConfigs;
+      settings.save();
+    }
+  } catch (error) {
+    logger.error(`Failed to clear config ${configId} rating key: ${error}`, {
+      label: 'Collection Utilities',
+      configId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /**
  * Update multiple configs with their rating keys in a batch
  */
