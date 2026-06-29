@@ -74,16 +74,42 @@ settingsRoutes.get('/main', (req, res, next) => {
     return next({ status: 400, message: 'User missing from request.' });
   }
 
-  res.status(200).json(filteredMainSettings(req.user, settings.main));
+  res.status(200).json({
+    ...filteredMainSettings(req.user, settings.main),
+    watchProviderRegion: settings.overlays?.watchProviderRegion ?? 'US',
+  });
 });
 
-settingsRoutes.post('/main', (req, res) => {
+settingsRoutes.post('/main', (req, res, next) => {
   const settings = getSettings();
 
-  settings.main = merge(settings.main, req.body);
+  const { watchProviderRegion: rawRegion, ...mainBody } = req.body;
+
+  if (rawRegion !== undefined) {
+    const region = String(rawRegion).trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(region)) {
+      return next({ status: 400, message: 'Invalid watch provider region.' });
+    }
+    if (!settings.overlays) {
+      settings.overlays = {
+        defaultPosterSource: 'tmdb',
+        initialSetupComplete: false,
+      };
+    }
+    settings.overlays.watchProviderRegion = region;
+  }
+
+  if (!req.user) {
+    return next({ status: 400, message: 'User missing from request.' });
+  }
+
+  settings.main = merge(settings.main, mainBody);
   settings.save();
 
-  return res.status(200).json(settings.main);
+  return res.status(200).json({
+    ...filteredMainSettings(req.user, settings.main),
+    watchProviderRegion: settings.overlays?.watchProviderRegion ?? 'US',
+  });
 });
 
 settingsRoutes.post('/main/regenerate', (req, res, next) => {

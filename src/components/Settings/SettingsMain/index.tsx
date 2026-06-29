@@ -49,6 +49,9 @@ const messages = defineMessages({
   locale: 'Display Language',
   tmdbLanguage: 'TMDB Language',
   tmdbLanguageTip: 'Language for TMDB posters',
+  watchProviderRegion: 'Watch Provider Region',
+  watchProviderRegionTip:
+    'Region used by the Streaming Provider overlay to determine available services',
   enableTmdbPosterCache: 'Enable TMDB Poster Cache',
   enableTmdbPosterCacheTip:
     'Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)',
@@ -64,6 +67,11 @@ const messages = defineMessages({
   toastResetFailure: 'Something went wrong while resetting collections.',
 });
 
+interface TmdbCountry {
+  iso_3166_1: string;
+  english_name: string;
+}
+
 const SettingsMain = () => {
   const { addToast } = useToasts();
   const { hasPermission: userHasPermission } = useUser();
@@ -74,7 +82,10 @@ const SettingsMain = () => {
     data,
     error,
     mutate: revalidate,
-  } = useSWR<MainSettings>('/api/v1/settings/main');
+  } = useSWR<MainSettings & { watchProviderRegion?: string }>(
+    '/api/v1/settings/main'
+  );
+  const { data: countriesData } = useSWR<TmdbCountry[]>('/api/v1/countries');
 
   const MainSettingsSchema = Yup.object().shape({
     applicationTitle: Yup.string().required(
@@ -154,6 +165,7 @@ const SettingsMain = () => {
             locale: data?.locale ?? 'en',
             tmdbLanguage: data?.tmdbLanguage ?? 'en',
             enableTmdbPosterCache: data?.enableTmdbPosterCache ?? true,
+            watchProviderRegion: data?.watchProviderRegion ?? 'US',
             trustProxy: data?.trustProxy,
           }}
           enableReinitialize
@@ -167,6 +179,7 @@ const SettingsMain = () => {
                 locale: values.locale,
                 tmdbLanguage: values.tmdbLanguage,
                 enableTmdbPosterCache: values.enableTmdbPosterCache,
+                watchProviderRegion: values.watchProviderRegion,
                 trustProxy: values.trustProxy,
               });
               mutate('/api/v1/settings/public');
@@ -309,6 +322,43 @@ const SettingsMain = () => {
                             {lang.name}
                           </option>
                         ))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="watchProviderRegion" className="text-label">
+                    {intl.formatMessage(messages.watchProviderRegion)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.watchProviderRegionTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field
+                        as="select"
+                        id="watchProviderRegion"
+                        name="watchProviderRegion"
+                        disabled={!countriesData}
+                      >
+                        {!countriesData && (
+                          <option value={values.watchProviderRegion}>
+                            Loading...
+                          </option>
+                        )}
+                        {countriesData
+                          ?.slice()
+                          .sort((a, b) =>
+                            a.english_name.localeCompare(b.english_name)
+                          )
+                          .map((country) => (
+                            <option
+                              key={country.iso_3166_1}
+                              value={country.iso_3166_1}
+                            >
+                              {country.english_name}
+                            </option>
+                          ))}
                       </Field>
                     </div>
                   </div>
