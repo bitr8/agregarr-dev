@@ -69,6 +69,9 @@ export interface PlexMetadata {
   type: 'movie' | 'show' | 'season' | 'episode';
   title: string;
   thumb?: string;
+  parentThumb?: string;
+  parentTitle?: string;
+  librarySectionID?: number;
   editionTitle?: string;
   Guid: {
     id: string;
@@ -2855,6 +2858,15 @@ class PlexAPI {
    */
   public async getCurrentPosterUrl(ratingKey: string): Promise<string | null> {
     return this.posterManager.getCurrentPosterUrl(ratingKey);
+  }
+
+  /**
+   * Build a token-authenticated absolute URL for a Plex image path
+   */
+  public getAuthenticatedImageUrl(
+    imagePath: string | undefined
+  ): string | null {
+    return this.posterManager.getAuthenticatedImageUrl(imagePath);
   }
 
   /**

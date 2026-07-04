@@ -1374,6 +1374,16 @@ router.get('/collection-posters/:id', async (req, res, next) => {
 
     // Fetch TMDB posters for each item
     const posterPromises = limitedItems.map(async (item) => {
+      // Season and episode Guids carry TMDB child-object IDs, which are in
+      // the wrong namespace for /tv/{id} lookups. Use their Plex artwork via
+      // the image proxy (keeps the Plex token server-side), falling back to
+      // the parent's poster.
+      if (item.type === 'season' || item.type === 'episode') {
+        const imagePath = item.thumb || item.parentThumb;
+        return imagePath
+          ? `/api/v1/plex/image?path=${encodeURIComponent(imagePath)}`
+          : null;
+      }
       const tmdbId = extractTmdbId(item.Guid);
       if (!tmdbId) return null;
 

@@ -668,16 +668,36 @@ export class HubSyncService {
                   return idMatch ? parseInt(idMatch[1], 10) : undefined;
                 };
 
-                posterItems = plexItems.slice(0, maxItems).map((item) => ({
-                  title: item.title || 'Unknown',
-                  type: item.type === 'movie' ? 'movie' : 'tv',
-                  tmdbId: extractTmdbId(item.Guid),
-                  year: undefined, // PlexMetadata doesn't include year field
-                  posterUrl: undefined, // Will be fetched by poster generation
-                  metadata: {
-                    libraryKey: preExistingConfig.libraryId,
-                  },
-                }));
+                posterItems = plexItems.slice(0, maxItems).map((item) => {
+                  // Season and episode Guids carry TMDB child-object IDs,
+                  // which are in the wrong namespace for /tv/{id} lookups.
+                  // Never pass them as tmdbId; use the item's own Plex
+                  // artwork instead, falling back to the parent's poster.
+                  const usesPlexArt =
+                    item.type === 'season' || item.type === 'episode';
+                  const plexPosterUrl = usesPlexArt
+                    ? plexClient.getAuthenticatedImageUrl(
+                        item.thumb || item.parentThumb
+                      )
+                    : null;
+                  return {
+                    title: item.title || 'Unknown',
+                    type:
+                      item.type === 'movie'
+                        ? ('movie' as const)
+                        : ('tv' as const),
+                    tmdbId: usesPlexArt ? undefined : extractTmdbId(item.Guid),
+                    year: undefined, // PlexMetadata doesn't include year field
+                    posterUrl: plexPosterUrl ?? undefined,
+                    metadata: {
+                      libraryKey: preExistingConfig.libraryId,
+                      // Stable identity for the poster input hash — seasons
+                      // and episodes have no usable tmdbId and ambiguous
+                      // titles ("Season 1").
+                      ratingKey: item.ratingKey,
+                    },
+                  };
+                });
               }
             } catch (itemsError) {
               logger.warn(
@@ -723,7 +743,13 @@ export class HubSyncService {
                 templateId: preExistingConfig.autoPosterTemplate || null,
                 templateData, // Include template content for change detection
                 itemIds: (posterItems || [])
-                  .map((item) => item.tmdbId?.toString() || item.title)
+                  .map(
+                    (item) =>
+                      item.tmdbId?.toString() ||
+                      (typeof item.metadata?.ratingKey === 'string'
+                        ? item.metadata.ratingKey
+                        : item.title)
+                  )
                   .slice(0, 50),
                 collectionName,
                 mediaType: preExistingConfig.mediaType,

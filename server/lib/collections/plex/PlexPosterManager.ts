@@ -264,6 +264,28 @@ class PlexPosterManager {
   }
 
   /**
+   * Build a token-authenticated absolute URL for a Plex image path
+   * (e.g. a season's thumb "/library/metadata/169733/thumb/1772480666").
+   * Returns null for empty paths. Already-absolute http(s) URLs pass through.
+   */
+  public getAuthenticatedImageUrl(
+    imagePath: string | undefined
+  ): string | null {
+    if (!imagePath) {
+      return null;
+    }
+    if (imagePath.startsWith('http')) {
+      return imagePath;
+    }
+    const settings = getSettings();
+    const baseUrl = `${settings.plex.useSsl ? 'https' : 'http'}://${
+      settings.plex.ip
+    }:${settings.plex.port}`;
+    const separator = imagePath.includes('?') ? '&' : '?';
+    return `${baseUrl}${imagePath}${separator}X-Plex-Token=${this.plexApi['plexToken']}`;
+  }
+
+  /**
    * Get current art/wallpaper URL for a Plex item
    * @param ratingKey The rating key of the item
    * @returns The current art URL or null if none
