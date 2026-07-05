@@ -129,6 +129,7 @@ class FlixPatrolAPI extends ExternalAPI {
         'amazon-prime',
         'apple-tv-store',
         'google-tv',
+        'discovery-plus',
       ];
 
       let basePlatform = platform;
@@ -210,6 +211,22 @@ class FlixPatrolAPI extends ExternalAPI {
           // Check if we got any data
           const hasData = result.movies.length > 0 || result.tvShows.length > 0;
 
+          if (!hasData && region === 'global') {
+            // Fires for ANY platform whose overview section is missing or
+            // empty. The /top10 overview only carries sections for major
+            // platforms; the rest (Crunchyroll, Discovery Plus, ...) publish
+            // on their own /top10/{platform}/ pages instead. For majors this
+            // doubles as resilience against overview layout drift.
+            const fallback = await this.fetchPlatformPageTop10(
+              basePlatform,
+              requestedMediaType,
+              contentFilter
+            );
+            if (fallback) {
+              return fallback;
+            }
+          }
+
           if (!hasData && dateInfo.isYesterday === false) {
             // Today's data is empty, try yesterday
             logger.warn(
@@ -275,6 +292,78 @@ class FlixPatrolAPI extends ExternalAPI {
         }`
       );
     }
+  }
+
+  /**
+   * Fetch top 10 data from a platform's own page (/top10/{platform}/...).
+   * Used when the /top10 overview has no section for the platform. The
+   * world page covers platforms with global charts (Crunchyroll, Discovery
+   * Plus); US-only services (Peacock, Hulu) publish no world list at all,
+   * so their United States page answers the global request.
+   */
+  private async fetchPlatformPageTop10(
+    basePlatform: string,
+    requestedMediaType?: 'movie' | 'tv' | 'both',
+    contentFilter?: 'kids'
+  ): Promise<FlixPatrolPlatformData | null> {
+    const slug = basePlatform.replace(/_/g, '-');
+    // Dateless URLs serve the latest available chart (world 301s to the
+    // canonical page; both fetch clients follow redirects)
+    const attempts = [{ regionSlug: 'world', parseRegion: 'global' }];
+
+    // US-only services publish no world chart, so their United States page
+    // answers the global request. Gated to known US-only platforms so a
+    // transient empty result for a global platform can never silently
+    // return US data labelled as global.
+    const usOnlyPlatforms = ['peacock', 'hulu'];
+    if (usOnlyPlatforms.includes(slug)) {
+      attempts.push({
+        regionSlug: 'united-states',
+        parseRegion: 'united-states',
+      });
+    }
+
+    for (const attempt of attempts) {
+      const url = `https://flixpatrol.com/top10/${slug}/${attempt.regionSlug}/`;
+      try {
+        logger.debug(`Trying platform page for ${basePlatform}`, {
+          label: 'FlixPatrol API',
+          basePlatform,
+          url,
+        });
+
+        const html = await this.fetchFlixPatrolPage(url);
+        const result = await this.parseStreamingOverviewHtml(
+          html,
+          basePlatform,
+          attempt.parseRegion,
+          requestedMediaType,
+          contentFilter
+        );
+
+        if (result.movies.length > 0 || result.tvShows.length > 0) {
+          logger.info(
+            `Fetched ${basePlatform} top 10 from its platform page (${attempt.regionSlug})`,
+            {
+              label: 'FlixPatrol API',
+              basePlatform,
+              movies: result.movies.length,
+              tvShows: result.tvShows.length,
+            }
+          );
+          return result;
+        }
+      } catch (error) {
+        logger.warn(`Platform page fetch failed for ${basePlatform}`, {
+          label: 'FlixPatrol API',
+          basePlatform,
+          url,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -1058,6 +1147,10 @@ class FlixPatrolAPI extends ExternalAPI {
       'apple-tv': ['Apple'],
       paramount: ['Paramount+'], // "TOP TV Shows on Paramount+ on September 6, 2025"
       amazon: ['Amazon'], // "TOP Movies on Amazon on September 6, 2025" (different from Prime)
+      crunchyroll: ['Crunchyroll'], // per-platform page: "TOP TV Shows on Crunchyroll on July 4, 2026"
+      'discovery-plus': ['Discovery Plus'], // per-platform page: "TOP TV Shows on Discovery Plus on July 4, 2026"
+      peacock: ['Peacock'], // US page: "Peacock TOP 10 in the United States on July 4, 2026"
+      hulu: ['Hulu'], // US page: "Hulu TOP 10 in the United States on July 4, 2026"
     };
 
     const normalized = platformId.toLowerCase().replace(/_/g, '-');
