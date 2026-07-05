@@ -1,6 +1,11 @@
 # Agregarr (bitr8 fork)
 
+[![Latest release](https://img.shields.io/github/v/release/bitr8/agregarr-dev?label=release&color=blue)](https://github.com/bitr8/agregarr-dev/releases/latest) [![Docker pulls](https://img.shields.io/docker/pulls/bitr8/agregarr)](https://hub.docker.com/r/bitr8/agregarr) [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+
 Active fork of [Agregarr](https://github.com/agregarr/agregarr) packaging performance fixes, placeholder lifecycle improvements, and open upstream PRs into a single Docker image. Available as `bitr8/agregarr` on Docker Hub.
+
+> [!TIP]
+> **Latest release: [v2.6.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.6.0)** — episode-file quality badges, fixed season poster grids, and FlixPatrol Top 10 collections working again. Full [release notes](https://github.com/bitr8/agregarr-dev/releases).
 
 ## Docker Image
 
@@ -50,7 +55,7 @@ For general Agregarr configuration (services, collections, overlays etc.), see t
 
 ## Relationship to upstream
 
-This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream go back as PRs (46 merged, 12 open). Fork-only features are documented separately — they rely on behaviour or trade-offs upstream may not want to adopt.
+This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream go back as PRs (46 merged, 13 open). Fork-only features are documented separately — they rely on behaviour or trade-offs upstream may not want to adopt.
 
 ## Fork-Only Features
 
