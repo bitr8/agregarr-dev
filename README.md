@@ -163,6 +163,7 @@ New template variables: `episodeCount`, `episode4kPercent`, `episodeHdrPercent`,
 
 | PR                                                    | Description                                                 | Depends On |
 | ----------------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| [#613](https://github.com/agregarr/agregarr/pull/613) | Don't dismiss modals when clicking portaled children        | -          |
 | [#607](https://github.com/agregarr/agregarr/pull/607) | Sort TMDB franchise parts by release date                   | -          |
 | [#606](https://github.com/agregarr/agregarr/pull/606) | Self-heal stale collectionRatingKey during label fallback   | -          |
 | [#605](https://github.com/agregarr/agregarr/pull/605) | Invalidate stale AWS WAF tokens and add solve backoff       | -          |
