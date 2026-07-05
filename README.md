@@ -9,7 +9,7 @@ Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agr
 | Tag | What it tracks |
 |-----|----------------|
 | `:latest` | Stable releases. Recommended for most users. |
-| `:2.5.0` (etc.) | Pinned to a specific release. |
+| `:2.6.0` (etc.) | Pinned to a specific release. |
 | `:develop` | Bleeding edge. Builds on every push to develop, may break. |
 
 **Multi-arch** — release tags support amd64 and arm64 (Apple Silicon, Raspberry Pi 4+). The `:develop` tag builds amd64 only.
