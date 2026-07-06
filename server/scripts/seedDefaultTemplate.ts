@@ -12,6 +12,36 @@ import logger from '@server/logger';
 import { seedSourceColors } from './seedSourceColors';
 
 /**
+ * Determines whether a template's stored templateData is broken and should be
+ * re-seeded (self-healing). Conservative by design: only clearly-invalid data
+ * is treated as broken (missing, unparseable, not an object, or with a missing/
+ * non-array elements field) so a valid user customization is never wiped. An
+ * empty elements array is a valid background-only design (the poster editor
+ * permits deleting every layer), so it is preserved, not repaired.
+ */
+function isTemplateDataBroken(
+  templateData: string | null | undefined
+): boolean {
+  if (templateData == null || templateData.trim() === '') {
+    return true;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(templateData);
+  } catch {
+    return true;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return true;
+  }
+
+  const elements = (parsed as { elements?: unknown }).elements;
+  return !Array.isArray(elements);
+}
+
+/**
  * Seeds the database with a default poster template
  * This recreates the current auto-poster design as a template
  */
@@ -217,13 +247,25 @@ async function seedDefaultTemplate() {
     });
 
     if (existingTemplate) {
-      // Update the existing template with new data
-      existingTemplate.setTemplateData(defaultTemplateData);
-      await templateRepository.save(existingTemplate);
-      logger.info('Default poster template refreshed', {
-        templateId: existingTemplate.id,
-        name: existingTemplate.name,
-      });
+      // Preserve user customizations - only re-seed templateData when the
+      // stored value is broken (self-healing). Design updates to the built-in
+      // template otherwise apply only to fresh installs.
+      if (isTemplateDataBroken(existingTemplate.templateData)) {
+        existingTemplate.setTemplateData(defaultTemplateData);
+        await templateRepository.save(existingTemplate);
+        logger.warn(
+          'Default poster template had invalid data, re-seeded to repair',
+          {
+            templateId: existingTemplate.id,
+            name: existingTemplate.name,
+          }
+        );
+      } else {
+        logger.debug('Default poster template already exists, skipping seed', {
+          templateId: existingTemplate.id,
+          name: existingTemplate.name,
+        });
+      }
     } else {
       const defaultTemplate = new PosterTemplate({
         name: 'Default Agregarr Template',
@@ -249,13 +291,24 @@ async function seedDefaultTemplate() {
     });
 
     if (existingPersonTemplate) {
+      // Keep metadata in sync but preserve templateData unless it is broken
+      // (self-healing) - it may contain user customizations
       existingPersonTemplate.name = personTemplateName;
-      existingPersonTemplate.setTemplateData(personTemplateData);
       existingPersonTemplate.isActive = true;
       existingPersonTemplate.description =
         'Full-bleed person portrait backdrop with bold title and collection label over a dark gradient, tuned for directors/people.';
+      if (isTemplateDataBroken(existingPersonTemplate.templateData)) {
+        existingPersonTemplate.setTemplateData(personTemplateData);
+        logger.warn(
+          'Person poster template had invalid data, re-seeded to repair',
+          {
+            templateId: existingPersonTemplate.id,
+            name: existingPersonTemplate.name,
+          }
+        );
+      }
       await templateRepository.save(existingPersonTemplate);
-      logger.info('Person poster template refreshed', {
+      logger.debug('Person poster template metadata refreshed', {
         templateId: existingPersonTemplate.id,
         name: existingPersonTemplate.name,
       });
@@ -284,14 +337,25 @@ async function seedDefaultTemplate() {
     });
 
     if (existingSeparatorTemplate) {
+      // Keep metadata in sync but preserve templateData unless it is broken
+      // (self-healing) - it may contain user customizations
       existingSeparatorTemplate.name = separatorTemplateName;
-      existingSeparatorTemplate.setTemplateData(separatorTemplateData);
       existingSeparatorTemplate.isActive = true;
       existingSeparatorTemplate.isDefault = false;
       existingSeparatorTemplate.description =
         'Dark gradient title card for separators that sit before auto-generated collections.';
+      if (isTemplateDataBroken(existingSeparatorTemplate.templateData)) {
+        existingSeparatorTemplate.setTemplateData(separatorTemplateData);
+        logger.warn(
+          'Separator poster template had invalid data, re-seeded to repair',
+          {
+            templateId: existingSeparatorTemplate.id,
+            name: existingSeparatorTemplate.name,
+          }
+        );
+      }
       await templateRepository.save(existingSeparatorTemplate);
-      logger.info('Separator poster template refreshed', {
+      logger.debug('Separator poster template metadata refreshed', {
         templateId: existingSeparatorTemplate.id,
         name: existingSeparatorTemplate.name,
       });
