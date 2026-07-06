@@ -15,7 +15,7 @@ interface RTAlgoliaHit {
   tmsId: string;
   type: string;
   title: string;
-  titles: string[];
+  titles?: string[];
   description: string;
   releaseYear: number;
   rating: string;
@@ -24,7 +24,7 @@ interface RTAlgoliaHit {
   isEmsSearchable: boolean;
   rtId: number;
   vanity: string;
-  aka: string[];
+  aka?: string[];
   posterImageUrl: string;
   rottenTomatoes?: {
     audienceScore: number;
@@ -159,6 +159,29 @@ class RottenTomatoes extends ExternalAPI {
   }
 
   /**
+   * Check whether any alternative title (`titles`/`aka`) matches the
+   * search name exactly (case-insensitive). Handles international
+   * titles, e.g. "Harry Potter and the Philosopher's Stone" vs RT's
+   * "Harry Potter and the Sorcerer's Stone".
+   *
+   * RT's `titles` array also contains fragments of the main title
+   * (e.g. "Harry", "Harry Potter and the"), so anything that is just a
+   * substring of the main title is ignored to avoid fragment matches.
+   *
+   * Only use this together with a year constraint - `aka` holds generic
+   * localized titles that are too ambiguous to match on their own.
+   */
+  private hasMatchingAltTitle(hit: RTAlgoliaHit, nameLower: string): boolean {
+    const titleLower = hit.title.toLowerCase();
+
+    return [...(hit.titles ?? []), ...(hit.aka ?? [])].some((altTitle) => {
+      const altLower = altTitle.toLowerCase();
+
+      return !titleLower.includes(altLower) && altLower === nameLower;
+    });
+  }
+
+  /**
    * Search the RT algolia api for the movie title
    *
    * We compare the release date to make sure its the correct
@@ -223,14 +246,36 @@ class RottenTomatoes extends ExternalAPI {
         );
       }
 
-      // 5. Exact case-insensitive title only (no year constraint)
+      // 5. Exact alternative title (titles/aka) + exact year, movies only
       if (!movie) {
         movie = contentResults.hits.find(
-          (movie) => movie.title.toLowerCase() === nameLower
+          (movie) =>
+            movie.type === 'movie' &&
+            movie.releaseYear === year &&
+            this.hasMatchingAltTitle(movie, nameLower)
         );
       }
 
-      // 6. Try Roman numeral conversion in both directions
+      // 6. Exact alternative title (titles/aka) + ±1 year, movies only
+      if (!movie) {
+        movie = contentResults.hits.find(
+          (movie) =>
+            movie.type === 'movie' &&
+            Math.abs(movie.releaseYear - year) <= 1 &&
+            this.hasMatchingAltTitle(movie, nameLower)
+        );
+      }
+
+      // 7. Exact case-insensitive title only (no year constraint).
+      // Restricted to movies so a same-named TV entry can't cross-match.
+      if (!movie) {
+        movie = contentResults.hits.find(
+          (movie) =>
+            movie.type === 'movie' && movie.title.toLowerCase() === nameLower
+        );
+      }
+
+      // 8. Try Roman numeral conversion in both directions
       if (!movie) {
         const nameWithArabic = this.convertRomanToArabic(nameLower);
         const nameWithRoman = this.convertArabicToRoman(nameLower);
@@ -241,6 +286,7 @@ class RottenTomatoes extends ExternalAPI {
           const titleWithRoman = this.convertArabicToRoman(titleLower);
 
           return (
+            movie.type === 'movie' &&
             Math.abs(movie.releaseYear - year) <= 1 &&
             (titleWithArabic === nameWithArabic ||
               titleWithRoman === nameWithRoman ||
@@ -340,14 +386,36 @@ class RottenTomatoes extends ExternalAPI {
           );
         }
 
-        // 5. Exact case-insensitive title only (no year constraint)
+        // 5. Exact alternative title (titles/aka) + exact year, TV only
         if (!tvshow) {
           tvshow = contentResults.hits.find(
-            (series) => series.title.toLowerCase() === nameLower
+            (series) =>
+              series.type === 'tv' &&
+              series.releaseYear === year &&
+              this.hasMatchingAltTitle(series, nameLower)
           );
         }
 
-        // 6. Try Roman numeral conversion in both directions
+        // 6. Exact alternative title (titles/aka) + ±1 year, TV only
+        if (!tvshow) {
+          tvshow = contentResults.hits.find(
+            (series) =>
+              series.type === 'tv' &&
+              Math.abs(series.releaseYear - year) <= 1 &&
+              this.hasMatchingAltTitle(series, nameLower)
+          );
+        }
+
+        // 7. Exact case-insensitive title only (no year constraint).
+        // Restricted to TV so a same-named movie can't cross-match.
+        if (!tvshow) {
+          tvshow = contentResults.hits.find(
+            (series) =>
+              series.type === 'tv' && series.title.toLowerCase() === nameLower
+          );
+        }
+
+        // 8. Try Roman numeral conversion in both directions
         if (!tvshow) {
           const nameWithArabic = this.convertRomanToArabic(nameLower);
           const nameWithRoman = this.convertArabicToRoman(nameLower);
@@ -358,6 +426,7 @@ class RottenTomatoes extends ExternalAPI {
             const titleWithRoman = this.convertArabicToRoman(titleLower);
 
             return (
+              series.type === 'tv' &&
               Math.abs(series.releaseYear - year) <= 1 &&
               (titleWithArabic === nameWithArabic ||
                 titleWithRoman === nameWithRoman ||
@@ -367,9 +436,11 @@ class RottenTomatoes extends ExternalAPI {
           });
         }
       } else {
-        // If no year provided, use exact case-insensitive title match
+        // If no year provided, use exact case-insensitive title match.
+        // Restricted to TV so a same-named movie can't cross-match.
         tvshow = contentResults.hits.find(
-          (series) => series.title.toLowerCase() === nameLower
+          (series) =>
+            series.type === 'tv' && series.title.toLowerCase() === nameLower
         );
 
         // Try Roman numeral conversion if no exact match
@@ -378,6 +449,10 @@ class RottenTomatoes extends ExternalAPI {
           const nameWithRoman = this.convertArabicToRoman(nameLower);
 
           tvshow = contentResults.hits.find((series) => {
+            if (series.type !== 'tv') {
+              return false;
+            }
+
             const titleLower = series.title.toLowerCase();
             const titleWithArabic = this.convertRomanToArabic(titleLower);
             const titleWithRoman = this.convertArabicToRoman(titleLower);
