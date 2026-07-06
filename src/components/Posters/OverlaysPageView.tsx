@@ -49,6 +49,8 @@ const messages = defineMessages({
   overlaySyncError: 'Failed to start overlay sync',
   testItem: 'Test Item',
   allTags: 'All',
+  showActiveOnly: 'Show Active only',
+  showAll: 'Show All',
 });
 
 interface OverlayTemplate {
@@ -96,6 +98,15 @@ const OverlaysPageView: React.FC = () => {
       return 'medium';
     }
   );
+  const [hideInactiveTemplates, setHideInactiveTemplates] = useState<boolean>(
+    () => {
+      // Load from localStorage if available
+      if (typeof window !== 'undefined') {
+        return localStorage.getItem('overlayHideInactive') === 'true';
+      }
+      return false;
+    }
+  );
   const fullSyncConfirmTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,6 +114,11 @@ const OverlaysPageView: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('overlayGridSize', gridSize);
   }, [gridSize]);
+
+  // Save inactive-template filter to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('overlayHideInactive', String(hideInactiveTemplates));
+  }, [hideInactiveTemplates]);
 
   const handleTabChange = (tab: TabKey) => {
     router.push({ pathname: router.pathname, query: { tab } }, undefined, {
@@ -152,28 +168,71 @@ const OverlaysPageView: React.FC = () => {
     initialSetupComplete: boolean;
   }>('/api/v1/overlay-settings');
 
+  // Fetch library configs to determine which templates are active somewhere
+  const { data: libraryConfigsData } = useSWR<{
+    configs: {
+      libraryId: string;
+      enabledOverlays: {
+        templateId: number;
+        enabled: boolean;
+        layerOrder: number;
+      }[];
+    }[];
+  }>('/api/v1/overlay-library-configs');
+
   const templates = useMemo(
     () => templatesData?.templates || [],
     [templatesData?.templates]
   );
 
-  // Extract unique tags from all templates
+  // Template ids enabled in at least one library configuration
+  const activeTemplateIds = useMemo(
+    () =>
+      new Set(
+        (libraryConfigsData?.configs ?? []).flatMap((config) =>
+          config.enabledOverlays
+            .filter((overlay) => overlay.enabled)
+            .map((overlay) => overlay.templateId)
+        )
+      ),
+    [libraryConfigsData?.configs]
+  );
+
+  // Templates shown in the grid. Only filter once library configs have
+  // loaded so a persisted filter doesn't flash an empty grid
+  const visibleTemplates = useMemo(() => {
+    if (!hideInactiveTemplates || !libraryConfigsData) {
+      return templates;
+    }
+    return templates.filter((template) => activeTemplateIds.has(template.id));
+  }, [templates, hideInactiveTemplates, libraryConfigsData, activeTemplateIds]);
+
+  // Extract unique tags from visible templates
   const uniqueTags = useMemo(() => {
     const tagsSet = new Set<string>();
-    templates.forEach((template) => {
+    visibleTemplates.forEach((template) => {
       template.tags?.forEach((tag) => tagsSet.add(tag));
     });
     return Array.from(tagsSet).sort();
-  }, [templates]);
+  }, [visibleTemplates]);
 
   // Count templates per tag
   const tagCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     uniqueTags.forEach((tag) => {
-      counts[tag] = templates.filter((t) => t.tags?.includes(tag)).length;
+      counts[tag] = visibleTemplates.filter((t) =>
+        t.tags?.includes(tag)
+      ).length;
     });
     return counts;
-  }, [templates, uniqueTags]);
+  }, [visibleTemplates, uniqueTags]);
+
+  // Clear tag selection if the active-only filter hides its last template
+  useEffect(() => {
+    if (selectedTag && !uniqueTags.includes(selectedTag)) {
+      setSelectedTag(null);
+    }
+  }, [selectedTag, uniqueTags]);
 
   // Show setup modal when navigating to Library Configuration tab if setup not complete
   useEffect(() => {
@@ -404,6 +463,26 @@ const OverlaysPageView: React.FC = () => {
 
         {activeTab === 'templates' && (
           <div className="flex items-center space-x-2">
+            {/* Toggle for hiding templates inactive in every library */}
+            <button
+              onClick={() => setHideInactiveTemplates(!hideInactiveTemplates)}
+              title={
+                hideInactiveTemplates
+                  ? 'Showing templates active in at least one library'
+                  : 'Showing all templates'
+              }
+              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                hideInactiveTemplates
+                  ? 'border-orange-500 bg-orange-600 text-white hover:bg-orange-700'
+                  : 'border-stone-600 bg-stone-800 text-stone-400 hover:bg-stone-700 hover:text-white'
+              }`}
+            >
+              {intl.formatMessage(
+                hideInactiveTemplates
+                  ? messages.showAll
+                  : messages.showActiveOnly
+              )}
+            </button>
             {/* Grid size control */}
             <div className="flex items-center rounded-md border border-stone-600 bg-stone-800 text-xs font-medium">
               {(['xs', 'small', 'medium', 'large'] as const).map(
@@ -519,7 +598,8 @@ const OverlaysPageView: React.FC = () => {
                     : 'bg-stone-700 text-stone-300 hover:bg-stone-600 hover:text-white'
                 }`}
               >
-                {intl.formatMessage(messages.allTags)} ({templates.length})
+                {intl.formatMessage(messages.allTags)} (
+                {visibleTemplates.length})
               </button>
               {uniqueTags.map((tag) => (
                 <button
@@ -542,7 +622,7 @@ const OverlaysPageView: React.FC = () => {
             </div>
           ) : (
             <OverlayTemplateGrid
-              templates={templates}
+              templates={visibleTemplates}
               onTemplateUpdate={mutateTemplates}
               selectedTag={selectedTag}
               gridSize={gridSize}
