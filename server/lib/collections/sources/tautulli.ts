@@ -135,10 +135,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     mediaType: 'movie' | 'tv'
   ): Promise<TautulliTemplateContext> {
     const timeRangeDays = this.getTimeRangeDays(config);
-    const statType = (config.tautulliStatType || 'plays') as
-      | 'plays'
-      | 'duration'
-      | 'users';
+    const statType = this.getStatTypeFromSubtype(config);
     const subtype = this.getSubtypeFromConfig(config);
 
     return {
@@ -162,7 +159,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
   ): Promise<TautulliSourceData[]> {
     const tautulli = await this.getTautulliClient();
     const timeRangeDays = this.getTimeRangeDays(config);
-    const statType = config.tautulliStatType || 'plays';
+    const statType = this.getStatTypeFromSubtype(config);
     const collectionType = this.getCollectionTypeFromSubtype(config);
 
     // For single media type processing, use the specified mediaType
@@ -467,6 +464,15 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     return 'most_popular';
   }
 
+  private getStatTypeFromSubtype(
+    config: CollectionConfig
+  ): 'plays' | 'duration' {
+    if (config.subtype?.endsWith('_duration')) {
+      return 'duration';
+    }
+    return config.tautulliStatType || 'plays';
+  }
+
   /**
    * Process 'both' media types with separate API calls
    */
@@ -481,7 +487,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
 
     const tautulli = await this.getTautulliClient();
     const timeRangeDays = this.getTimeRangeDays(config);
-    const statType = config.tautulliStatType || 'plays';
+    const statType = this.getStatTypeFromSubtype(config);
     const collectionType = this.getCollectionTypeFromSubtype(config);
 
     // Process Movies
