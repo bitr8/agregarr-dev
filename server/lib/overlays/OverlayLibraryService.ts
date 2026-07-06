@@ -20,16 +20,16 @@ import {
   getAdaptiveTtl,
   getNullRatingTtl,
 } from './adaptiveTtl';
+import type {
+  AggregatedMediaInfo,
+  EpisodeMediaInfo,
+} from './episodeMediaTypes';
 import {
   buildRenderContext,
   checkMonitoringStatus,
   fetchReleaseDateInfo,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
-import type {
-  AggregatedMediaInfo,
-  EpisodeMediaInfo,
-} from './episodeMediaTypes';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 import {
   evaluateCondition,
@@ -1326,11 +1326,7 @@ class OverlayLibraryService {
 
       // Episode media scanning: aggregate episode-level resolution/HDR/DV to show posters
       if (config.enableEpisodeScanning && config.mediaType === 'show') {
-        await this.runEpisodeScan(
-          plexApi,
-          libraryId,
-          requiredContextFields
-        );
+        await this.runEpisodeScan(plexApi, libraryId, requiredContextFields);
       }
 
       // Process each item
@@ -2068,10 +2064,30 @@ class OverlayLibraryService {
         const basePosterSourceChanged =
           metadata?.basePosterSource !== posterSource;
 
+        // For local poster source, stat the local poster file so a new or
+        // updated poster.jpg is picked up even when nothing else changed.
+        // Cheap check (directory listing + stat) - no download, no file read.
+        let localPosterChanged = false;
+        if (posterSource === 'local' && tmdbId) {
+          const { plexBasePosterManager } = await import(
+            '@server/lib/overlays/PlexBasePosterManager'
+          );
+          localPosterChanged =
+            await plexBasePosterManager.hasLocalPosterChanged(
+              libraryId,
+              libraryName,
+              item.title,
+              item.year,
+              tmdbId,
+              metadata?.localPosterModifiedTime
+            );
+        }
+
         if (
           !overlayInputsChanged &&
           !plexPosterMissing &&
-          !basePosterSourceChanged
+          !basePosterSourceChanged &&
+          !localPosterChanged
         ) {
           logger.debug('Nothing changed, skipping overlay application', {
             label: 'OverlayLibrary',
@@ -2080,6 +2096,7 @@ class OverlayLibraryService {
             overlayInputsChanged: false,
             plexPosterMissing: false,
             basePosterSourceChanged: false,
+            localPosterChanged: false,
           });
           return { skipped: true }; // Skip this item - no need to download poster
         }
@@ -2090,6 +2107,7 @@ class OverlayLibraryService {
           overlayInputsChanged,
           plexPosterMissing,
           basePosterSourceChanged,
+          localPosterChanged,
         });
       } catch (metaError) {
         logger.warn('Metadata check failed, proceeding with overlay', {
@@ -2326,9 +2344,7 @@ class OverlayLibraryService {
     const { PlexEpisodeMediaScanner } = await import(
       './PlexEpisodeMediaScanner'
     );
-    const { EpisodeMediaAggregator } = await import(
-      './EpisodeMediaAggregator'
-    );
+    const { EpisodeMediaAggregator } = await import('./EpisodeMediaAggregator');
     const { EpisodeMediaCacheService } = await import(
       './EpisodeMediaCacheService'
     );
@@ -2356,19 +2372,15 @@ class OverlayLibraryService {
       false
     );
 
-    const {
-      episodes: cachedEpisodes,
-      hasStreamDetail: cachedHasStreamDetail,
-    } = await cacheService.getCachedEpisodes(serverId, libraryId);
+    const { episodes: cachedEpisodes, hasStreamDetail: cachedHasStreamDetail } =
+      await cacheService.getCachedEpisodes(serverId, libraryId);
 
     // Compare against cache to find stale/missing entries
     const staleKeys = cacheService.getStaleRatingKeys(
       cachedEpisodes,
       freshLightweight
     );
-    const cachedByKey = new Map(
-      cachedEpisodes.map((c) => [c.ratingKey, c])
-    );
+    const cachedByKey = new Map(cachedEpisodes.map((c) => [c.ratingKey, c]));
     const currentKeys = new Set(freshLightweight.map((e) => e.ratingKey));
 
     // If templates now need stream detail but cache was saved without it,
@@ -2389,7 +2401,10 @@ class OverlayLibraryService {
         libraryId,
         cachedCount: episodes.length,
       });
-    } else if (needsStreamDetail && (staleKeys.size > 0 || needsDetailUpgrade)) {
+    } else if (
+      needsStreamDetail &&
+      (staleKeys.size > 0 || needsDetailUpgrade)
+    ) {
       // Fetch stream detail for stale or detail-upgrade episodes
       const keysToFetch = needsDetailUpgrade
         ? freshLightweight.map((e) => e.ratingKey)
@@ -2430,12 +2445,7 @@ class OverlayLibraryService {
       // No stream detail needed — use lightweight data
       episodes = freshLightweight;
       if (staleKeys.size > 0) {
-        await cacheService.saveEpisodes(
-          serverId,
-          libraryId,
-          episodes,
-          false
-        );
+        await cacheService.saveEpisodes(serverId, libraryId, episodes, false);
       }
     }
 

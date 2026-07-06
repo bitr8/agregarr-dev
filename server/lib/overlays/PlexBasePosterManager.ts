@@ -76,12 +76,15 @@ class PlexBasePosterManager {
     // Cache miss - create Promise for TMDB API call
     // Store Promise immediately to coalesce concurrent requests
     // Wrap with error handling to remove failed entries from cache
-    const fetchPromise = this.fetchTmdbPosterUrl(tmdbId, mediaType, language)
-      .catch((error) => {
-        // Remove failed entry so future calls can retry
-        this.tmdbUrlCache.delete(cacheKey);
-        throw error;
-      });
+    const fetchPromise = this.fetchTmdbPosterUrl(
+      tmdbId,
+      mediaType,
+      language
+    ).catch((error) => {
+      // Remove failed entry so future calls can retry
+      this.tmdbUrlCache.delete(cacheKey);
+      throw error;
+    });
 
     this.tmdbUrlCache.set(cacheKey, fetchPromise);
 
@@ -285,7 +288,10 @@ class PlexBasePosterManager {
   /**
    * Store TMDB poster in cache
    */
-  private async storeTmdbCachedPoster(posterUrl: string, buffer: Buffer): Promise<void> {
+  private async storeTmdbCachedPoster(
+    posterUrl: string,
+    buffer: Buffer
+  ): Promise<void> {
     const filename = this.getTmdbCacheFilename(posterUrl);
     const cachePath = path.join(TMDB_POSTER_CACHE_DIR, filename);
 
@@ -630,7 +636,11 @@ class PlexBasePosterManager {
 
       // Get TMDB poster URL using cached lookup
       const language = await getTmdbLanguage(libraryId);
-      const posterUrl = await this.getTmdbPosterUrl(tmdbId, mediaType, language);
+      const posterUrl = await this.getTmdbPosterUrl(
+        tmdbId,
+        mediaType,
+        language
+      );
 
       if (!posterUrl) {
         throw new Error('No TMDB poster available');
@@ -640,6 +650,61 @@ class PlexBasePosterManager {
       const tmdbUrlChanged = metadata.originalPlexPosterUrl !== posterUrl;
       return tmdbUrlChanged;
     }
+  }
+
+  /**
+   * Check if the local poster file has changed WITHOUT reading it
+   * Stat-only variant of scanLocalPoster for the pre-download skip check:
+   * no folder creation, no buffer read - just a directory listing and a stat.
+   * Returns true if a local poster appeared, disappeared, or its mtime differs
+   * from the stored value.
+   */
+  async hasLocalPosterChanged(
+    libraryId: string,
+    libraryName: string,
+    itemTitle: string,
+    itemYear: number | undefined,
+    tmdbId: number,
+    previousModTime: number | undefined
+  ): Promise<boolean> {
+    const { findImageFile, getFileModTime, validateImageFile } = await import(
+      '@server/utils/fileSystemHelpers'
+    );
+
+    const localPosterPath = await this.buildLocalPosterPath(
+      libraryId,
+      libraryName,
+      itemTitle,
+      itemYear,
+      tmdbId
+    );
+
+    const imageFilePath = await findImageFile(localPosterPath);
+
+    if (!imageFilePath) {
+      // No local poster on disk - changed only if we previously used one
+      // (file was removed, need to fall back to TMDB)
+      return !!previousModTime;
+    }
+
+    // The apply path (scanLocalPoster) rejects invalid files (too large,
+    // non-regular, unreadable) and falls back to TMDB, which stores no mtime.
+    // Mirror that here so an invalid-but-present file is treated as "no usable
+    // local poster" instead of looking perpetually changed and reprocessing
+    // every sync.
+    if (!(await validateImageFile(imageFilePath))) {
+      return !!previousModTime;
+    }
+
+    const fileModTime = await getFileModTime(imageFilePath);
+
+    if (fileModTime === null) {
+      // File listed but stat failed - let the full scan downstream decide
+      return true;
+    }
+
+    // Changed if no mtime was stored yet (new file dropped) or mtime differs
+    return !previousModTime || previousModTime !== fileModTime;
   }
 
   /**
@@ -894,12 +959,19 @@ class PlexBasePosterManager {
         itemType: item.type,
         tmdbId: resolvedTmdbId,
         mediaType,
-        endpoint: mediaType === 'movie' ? `/movie/${resolvedTmdbId}` : `/tv/${resolvedTmdbId}`,
+        endpoint:
+          mediaType === 'movie'
+            ? `/movie/${resolvedTmdbId}`
+            : `/tv/${resolvedTmdbId}`,
       });
 
       // Get TMDB poster URL using cached lookup
       const language = await getTmdbLanguage(libraryId);
-      const posterUrl = await this.getTmdbPosterUrl(resolvedTmdbId, mediaType, language);
+      const posterUrl = await this.getTmdbPosterUrl(
+        resolvedTmdbId,
+        mediaType,
+        language
+      );
 
       if (!posterUrl) {
         throw new Error('No TMDB poster available');
