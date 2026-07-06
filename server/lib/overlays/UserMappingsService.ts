@@ -28,21 +28,51 @@ function ensureMappingsDir(): void {
   }
 }
 
+// Cache of the parsed mappings file, guarded by mtime/size so external
+// edits are still picked up. Avoids a blocking read+parse on every call —
+// getMergedMappings() runs in the overlay render hot path (snapshot-miss
+// fallback), which can mean thousands of calls per sync.
+let cachedMappings: UserMappingsData | null = null;
+let cachedMtimeMs: number | null = null;
+let cachedSize: number | null = null;
+
+function invalidateMappingsCache(): void {
+  cachedMappings = null;
+  cachedMtimeMs = null;
+  cachedSize = null;
+}
+
 /**
  * Load user mapping customizations from disk
+ * Re-reads only when the file's mtime/size changes; otherwise serves the
+ * cached parse. Callers must not mutate the returned object directly —
+ * write paths persist via saveUserMappings(), which invalidates the cache.
  */
 function loadUserMappings(): UserMappingsData {
   try {
-    if (!fs.existsSync(USER_MAPPINGS_FILE)) {
+    const stats = fs.statSync(USER_MAPPINGS_FILE, { throwIfNoEntry: false });
+    if (!stats) {
+      invalidateMappingsCache();
       return {};
     }
+    if (
+      cachedMappings &&
+      cachedMtimeMs === stats.mtimeMs &&
+      cachedSize === stats.size
+    ) {
+      return cachedMappings;
+    }
     const data = fs.readFileSync(USER_MAPPINGS_FILE, 'utf-8');
-    return JSON.parse(data) as UserMappingsData;
+    cachedMappings = JSON.parse(data) as UserMappingsData;
+    cachedMtimeMs = stats.mtimeMs;
+    cachedSize = stats.size;
+    return cachedMappings;
   } catch (error) {
     logger.error('Failed to load user mappings', {
       label: 'UserMappingsService',
       error: error instanceof Error ? error.message : String(error),
     });
+    invalidateMappingsCache();
     return {};
   }
 }
@@ -64,6 +94,11 @@ function saveUserMappings(data: UserMappingsData): void {
       error: error instanceof Error ? error.message : String(error),
     });
     throw error;
+  } finally {
+    // Always drop the cache: on success so the next read reflects the new
+    // file even if mtime resolution is coarse; on failure so a mutated
+    // in-memory object is never served in place of what's on disk.
+    invalidateMappingsCache();
   }
 }
 

@@ -191,13 +191,34 @@ function buildLanguageMappings(): IconMapping[] {
 /**
  * Build network mappings
  * Maps TV network names to network logo icons
+ * TMDB network names don't always match icon filenames (e.g. network 2552 is
+ * named "Apple TV" but the icon file is "Apple TV+.png"), so alias entries
+ * from TMDB_NAME_TO_ICON_ALIAS are added alongside the direct name matches.
  */
 function buildNetworkMappings(): IconMapping[] {
   const networks = getAvailableNetworks();
-  return networks.map((network) => ({
+  const availableIcons = new Set(networks.map((n) => n.toLowerCase()));
+
+  // Start with all available network icons as direct name matches
+  const mappings: IconMapping[] = networks.map((network) => ({
     value: network, // Network name (e.g., "HBO", "Netflix", "ABC")
     iconPath: `${MAPPED_ICONS_BASE}/networks/${network}.png`,
   }));
+
+  // Add TMDB name aliases that map to different icon filenames
+  for (const [tmdbName, iconName] of Object.entries(TMDB_NAME_TO_ICON_ALIAS)) {
+    if (availableIcons.has(iconName.toLowerCase())) {
+      const match = networks.find(
+        (n) => n.toLowerCase() === iconName.toLowerCase()
+      );
+      mappings.push({
+        value: tmdbName,
+        iconPath: `${MAPPED_ICONS_BASE}/networks/${match ?? iconName}.png`,
+      });
+    }
+  }
+
+  return mappings;
 }
 
 // TMDB provider ID → icon filename. Covers major worldwide streaming services.

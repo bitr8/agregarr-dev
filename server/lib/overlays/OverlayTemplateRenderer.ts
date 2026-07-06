@@ -1,5 +1,6 @@
 import type {
   ApplicationCondition,
+  IconMapping,
   OverlayElement,
   OverlayMappedIconElementProps,
   OverlayRasterElementProps,
@@ -13,6 +14,7 @@ import logger from '@server/logger';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import { getMergedMappings } from './UserMappingsService';
 
 /**
  * Evaluate an application condition against the render context
@@ -1295,11 +1297,24 @@ class OverlayTemplateRendererService {
       : [String(fieldValue)];
 
     // Match values against mappings (case-insensitive)
+    // Element mappings are snapshotted into the template JSON when the
+    // element is saved, so they go stale when the default mappings gain new
+    // entries (e.g. TMDB network 2552 is named "Apple TV" while the icon
+    // file is "Apple TV+.png"). For values the snapshot doesn't cover, fall
+    // back to the current merged mappings (user overrides, else defaults) so
+    // existing elements pick up mapping fixes without a manual re-save.
     const matchedMappings: { value: string; iconPath: string }[] = [];
+    let currentMappings: IconMapping[] | null = null;
     for (const value of values) {
-      const mapping = props.mappings.find(
+      let mapping = props.mappings.find(
         (m) => m.value.toLowerCase() === value.toLowerCase()
       );
+      if (!mapping) {
+        currentMappings ??= getMergedMappings(props.field);
+        mapping = currentMappings.find(
+          (m) => m.value.toLowerCase() === value.toLowerCase()
+        );
+      }
       if (mapping) {
         matchedMappings.push(mapping);
       }
