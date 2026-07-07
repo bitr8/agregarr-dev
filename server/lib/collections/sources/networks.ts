@@ -318,12 +318,46 @@ export class NetworksCollectionSync extends BaseCollectionSync<'networks'> {
           }),
         ]);
 
+        // FlixPatrol rows carry no year, so two same-title entries (e.g.
+        // "The Addams Family" 1991 vs 2019) look identical to a title-only
+        // search and the more popular one wins. On such a same-title
+        // collision, fetch the authoritative release year from the FlixPatrol
+        // detail page (schema.org dateCreated) and use it to disambiguate.
+        // Unique titles skip the fetch entirely.
+        let preferredYear: number | undefined;
+        if (
+          this.hasSameTitleCollision(
+            movieResults.results || [],
+            tvResults.results || [],
+            item.title,
+            mediaType
+          )
+        ) {
+          preferredYear =
+            (await this.flixpatrolClient.getTitleReleaseYear(
+              item.flixpatrolUrl || ''
+            )) ?? undefined;
+
+          if (preferredYear) {
+            logger.debug(
+              `Same-title collision for "${item.title}" - disambiguating by FlixPatrol year ${preferredYear}`,
+              {
+                label: 'Networks Collections',
+                title: item.title,
+                preferredYear,
+                flixpatrolUrl: item.flixpatrolUrl,
+              }
+            );
+          }
+        }
+
         // Find the best match between movie and TV results
         const bestMatch = this.chooseBestTmdbMatch(
           movieResults.results || [],
           tvResults.results || [],
           item.title,
-          mediaType // Collection media type from library
+          mediaType, // Collection media type from library
+          preferredYear
         );
 
         if (bestMatch) {
@@ -606,7 +640,8 @@ export class NetworksCollectionSync extends BaseCollectionSync<'networks'> {
       id: number;
     }[],
     originalTitle: string,
-    collectionMediaType: 'movie' | 'tv'
+    collectionMediaType: 'movie' | 'tv',
+    preferredYear?: number
   ): {
     result: {
       title?: string;
@@ -669,6 +704,28 @@ export class NetworksCollectionSync extends BaseCollectionSync<'networks'> {
         const year = parseInt(releaseDate.split('-')[0]);
         if (year >= 2020) score += 10; // Recent content bonus
         if (year >= 2010) score += 5; // Modern content bonus
+      }
+
+      // Year disambiguation (only set for same-title collisions). Decisively
+      // prefer the same-type, same-title result whose year matches FlixPatrol.
+      // Gated on media type + exact title so it can only break a genuine
+      // same-title tie, never pull in an unrelated same-year title or the
+      // wrong media type. Linear decay tolerates a small year drift (regional
+      // vs production dates) while still favouring the closest match.
+      if (
+        preferredYear !== undefined &&
+        mediaType === collectionMediaType &&
+        tmdbTitle &&
+        tmdbTitle.toLowerCase() === originalTitle.toLowerCase() &&
+        releaseDate
+      ) {
+        const resultYear = parseInt(releaseDate.split('-')[0], 10);
+        if (!Number.isNaN(resultYear)) {
+          score += Math.max(
+            0,
+            1000 - Math.abs(resultYear - preferredYear) * 200
+          );
+        }
       }
 
       return score;
@@ -743,6 +800,52 @@ export class NetworksCollectionSync extends BaseCollectionSync<'networks'> {
       result: bestMatch.result,
       mediaType: bestMatch.mediaType,
     };
+  }
+
+  /**
+   * Detect a same-title collision that a title-only TMDB search cannot
+   * resolve: two or more results of the collection's media type share the
+   * exact title but can't be told apart by year (e.g. "The Addams Family"
+   * 1991 vs 2019). Only these need the extra FlixPatrol year lookup. A pair
+   * that shares one identical year, or that has no usable year at all, can't
+   * be disambiguated by year, so it does not count.
+   */
+  private hasSameTitleCollision(
+    movieResults: { title: string; release_date?: string }[],
+    tvResults: { name: string; first_air_date?: string }[],
+    originalTitle: string,
+    collectionMediaType: 'movie' | 'tv'
+  ): boolean {
+    const target = originalTitle.trim().toLowerCase();
+
+    const dated =
+      collectionMediaType === 'movie'
+        ? movieResults.map((r) => ({ title: r.title, date: r.release_date }))
+        : tvResults.map((r) => ({ title: r.name, date: r.first_air_date }));
+
+    const titleMatches = dated.filter(
+      (r) => r.title && r.title.trim().toLowerCase() === target
+    );
+
+    if (titleMatches.length < 2) {
+      return false;
+    }
+
+    const knownYears = new Set<number>();
+    let hasUndatedMatch = false;
+    for (const r of titleMatches) {
+      const year = r.date ? parseInt(r.date.slice(0, 4), 10) : NaN;
+      if (Number.isNaN(year)) {
+        hasUndatedMatch = true;
+      } else {
+        knownYears.add(year);
+      }
+    }
+
+    // Ambiguous when the same-title results span more than one known year, or
+    // a known year sits alongside a dateless sibling (which the detail-page
+    // year can then match against).
+    return knownYears.size >= 2 || (knownYears.size >= 1 && hasUndatedMatch);
   }
 
   /**

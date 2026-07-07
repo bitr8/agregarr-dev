@@ -367,6 +367,98 @@ class FlixPatrolAPI extends ExternalAPI {
   }
 
   /**
+   * Resolve a title's release year from its FlixPatrol detail page.
+   *
+   * The ranked-list rows carry only a title, so two same-named entries
+   * (e.g. "The Addams Family" 1991 vs 2019) are indistinguishable there. The
+   * detail page embeds a schema.org JSON-LD block whose `dateCreated` field
+   * holds the release date, which disambiguates them. Result (including a
+   * miss) is cached for 7 days since a title's release year is immutable.
+   *
+   * @param flixpatrolPath a "/title/..." path or a full FlixPatrol URL
+   * @returns the 4-digit release year, or null if it can't be determined
+   */
+  public async getTitleReleaseYear(
+    flixpatrolPath: string
+  ): Promise<number | null> {
+    if (!flixpatrolPath) {
+      return null;
+    }
+
+    const url = flixpatrolPath.startsWith('http')
+      ? flixpatrolPath
+      : `https://flixpatrol.com${flixpatrolPath}`;
+
+    const cacheKey = `flixpatrol:title-year:${url}`;
+    const cached = this.cache?.get<number | null>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    try {
+      const html = await this.fetchFlixPatrolPage(url);
+      const year = this.extractYearFromTitleHtml(html);
+
+      // Cache the year (and misses) for 7 days.
+      this.cache?.set(cacheKey, year, 604800);
+
+      logger.debug(`Resolved FlixPatrol title year`, {
+        label: 'FlixPatrol API',
+        url,
+        year,
+      });
+
+      return year;
+    } catch (error) {
+      logger.warn(`Failed to resolve FlixPatrol title year`, {
+        label: 'FlixPatrol API',
+        url,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Extract a release year from a FlixPatrol title detail page by reading the
+   * schema.org JSON-LD `dateCreated` field.
+   */
+  private extractYearFromTitleHtml(html: string): number | null {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+
+    const ldScripts = document.querySelectorAll(
+      'script[type="application/ld+json"]'
+    );
+
+    for (const script of ldScripts) {
+      const raw = script.textContent;
+      if (!raw) {
+        continue;
+      }
+
+      try {
+        const parsed = JSON.parse(raw);
+        const entries = Array.isArray(parsed) ? parsed : [parsed];
+
+        for (const entry of entries) {
+          const dateCreated = entry?.dateCreated;
+          if (typeof dateCreated === 'string') {
+            const yearMatch = dateCreated.match(/(?:19|20)\d{2}/);
+            if (yearMatch) {
+              return parseInt(yearMatch[0], 10);
+            }
+          }
+        }
+      } catch {
+        // Malformed JSON-LD block - try the next one
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Get dates to try (today and yesterday) for FlixPatrol data fetching
    */
   private getDatesToTry(
