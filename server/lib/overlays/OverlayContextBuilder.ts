@@ -1196,18 +1196,14 @@ export async function fetchReleaseDateInfo(
           const sonarrDate = sonarrResult.nextEpisodeAirDate.split('T')[0];
           const tmdbMs = new Date(tmdbDate).getTime();
           const sonarrMs = new Date(sonarrDate).getTime();
-          const daysDiff =
-            Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
+          const daysDiff = Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
           if (daysDiff <= 2) {
-            logger.debug(
-              'Enhanced preloaded TMDB date with Sonarr air time',
-              {
-                label: 'OverlayContextBuilder',
-                tmdbId,
-                originalDate: preloaded.nextEpisodeAirDate,
-                enhancedDate: sonarrResult.nextEpisodeAirDate,
-              }
-            );
+            logger.debug('Enhanced preloaded TMDB date with Sonarr air time', {
+              label: 'OverlayContextBuilder',
+              tmdbId,
+              originalDate: preloaded.nextEpisodeAirDate,
+              enhancedDate: sonarrResult.nextEpisodeAirDate,
+            });
             return {
               ...preloaded,
               nextEpisodeAirDate: sonarrResult.nextEpisodeAirDate,
@@ -1238,8 +1234,11 @@ export async function fetchReleaseDateInfo(
         const { extractReleaseDates, determineReleaseDate } = await import(
           '@server/utils/dateHelpers'
         );
+        const preferredRegion =
+          getSettings().overlays?.watchProviderRegion || 'US';
         const extracted = extractReleaseDates(
-          movieDetails.release_dates.results
+          movieDetails.release_dates.results,
+          preferredRegion
         );
 
         const determined = determineReleaseDate(

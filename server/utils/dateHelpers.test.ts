@@ -140,6 +140,97 @@ describe('dateHelpers with TZ=Australia/Sydney', () => {
       ]);
       expect(result.digitalRelease).toBe('2026-02-08T00:00:00.000Z');
     });
+
+    it('prefers the given region over a timezone-outlier territory (#534)', () => {
+      // Real TMDB shape from Peaky Blinders 875828: UTC-11 Pacific territories
+      // dated a day early, the rest of the world (incl. US/GB) a day later.
+      const result = extractReleaseDates(
+        [
+          {
+            iso_3166_1: 'AS', // American Samoa (UTC-11), TMDB dates it a day early
+            release_dates: [
+              { type: 4, release_date: '2026-03-19T00:00:00.000Z' },
+            ],
+          },
+          {
+            iso_3166_1: 'US',
+            release_dates: [
+              { type: 4, release_date: '2026-03-20T00:00:00.000Z' },
+            ],
+          },
+          {
+            iso_3166_1: 'GB',
+            release_dates: [
+              { type: 4, release_date: '2026-03-20T00:00:00.000Z' },
+            ],
+          },
+        ],
+        'US'
+      );
+      expect(result.digitalRelease).toBe('2026-03-20T00:00:00.000Z');
+    });
+
+    it('without a region, still returns the global earliest (back-compat)', () => {
+      const result = extractReleaseDates([
+        {
+          iso_3166_1: 'AS',
+          release_dates: [
+            { type: 4, release_date: '2026-03-19T00:00:00.000Z' },
+          ],
+        },
+        {
+          iso_3166_1: 'US',
+          release_dates: [
+            { type: 4, release_date: '2026-03-20T00:00:00.000Z' },
+          ],
+        },
+      ]);
+      expect(result.digitalRelease).toBe('2026-03-19T00:00:00.000Z');
+    });
+
+    it('falls back to the global earliest when the region lacks that type', () => {
+      // US has only a theatrical date; digital exists only elsewhere.
+      const result = extractReleaseDates(
+        [
+          {
+            iso_3166_1: 'US',
+            release_dates: [
+              { type: 3, release_date: '2026-01-01T00:00:00.000Z' },
+            ],
+          },
+          {
+            iso_3166_1: 'FR',
+            release_dates: [
+              { type: 4, release_date: '2026-02-05T00:00:00.000Z' },
+            ],
+          },
+        ],
+        'US'
+      );
+      expect(result.digitalRelease).toBe('2026-02-05T00:00:00.000Z'); // FR fallback
+      expect(result.inCinemas).toBe('2026-01-01T00:00:00.000Z'); // US theatrical
+    });
+
+    it('matches the region case-insensitively', () => {
+      const result = extractReleaseDates(
+        [
+          {
+            iso_3166_1: 'US',
+            release_dates: [
+              { type: 4, release_date: '2026-03-20T00:00:00.000Z' },
+            ],
+          },
+          {
+            iso_3166_1: 'AS',
+            release_dates: [
+              { type: 4, release_date: '2026-03-19T00:00:00.000Z' },
+            ],
+          },
+        ],
+        'us'
+      );
+      expect(result.digitalRelease).toBe('2026-03-20T00:00:00.000Z');
+    });
   });
 
   describe('determineReleaseDate', () => {

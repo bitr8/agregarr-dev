@@ -382,7 +382,10 @@ export class PlaceholderContextService {
     tmdbId: number,
     mediaType: 'movie' | 'tv'
   ): Promise<ReleaseInfo> {
-    const cacheKey = `${mediaType}-${tmdbId}`;
+    // Region is part of the key: release dates are region-preferred (a change to
+    // watchProviderRegion must not be masked by a stale cache entry).
+    const preferredRegion = getSettings().overlays?.watchProviderRegion || 'US';
+    const cacheKey = `${mediaType}-${tmdbId}-${preferredRegion}`;
     const cached = this.tmdbCache.get(cacheKey);
 
     // Use cache if less than 24 hours old
@@ -415,7 +418,10 @@ export class PlaceholderContextService {
           const { extractReleaseDates } = await import(
             '@server/utils/dateHelpers'
           );
-          const extracted = extractReleaseDates(movie.release_dates.results);
+          const extracted = extractReleaseDates(
+            movie.release_dates.results,
+            preferredRegion
+          );
 
           const determined = determineReleaseDate(
             extracted.digitalRelease,

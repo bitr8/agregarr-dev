@@ -798,8 +798,13 @@ export async function fetchTmdbComingSoonMovies(
             movieId: movie.id,
           });
 
-          // Extract digital/physical/theatrical release dates using shared helper
-          // This checks ALL countries, not just US, to catch anniversary re-releases
+          // Extract digital/physical/theatrical release dates using shared helper.
+          // Deliberately global (no preferredRegion): this date drives coming-soon
+          // window filtering + placeholder-creation timing, not the displayed
+          // overlay date (that is region-preferred via PlaceholderContextService /
+          // OverlayContextBuilder). A timezone-outlier territory only shifts the
+          // window boundary by ~1 day, negligible against the 30-360 day window,
+          // and the global scan still catches anniversary re-releases (#534).
           const extracted = movieDetails.release_dates?.results
             ? extractReleaseDates(movieDetails.release_dates.results)
             : {};
@@ -1208,7 +1213,11 @@ export async function enrichWithTMDBReleaseDates(
             movieId: item.tmdbId,
           });
 
-          // Extract release dates using shared helper (checks ALL countries, not just US)
+          // Extract release dates using shared helper. Deliberately global (no
+          // preferredRegion): enrichment feeds collection membership +
+          // placeholder-creation window checks, not the displayed overlay date
+          // (which is region-preferred via the overlay/placeholder context
+          // builders). See the #534 note on the other extractReleaseDates call.
           const extracted = movieDetails.release_dates?.results
             ? extractReleaseDates(movieDetails.release_dates.results)
             : {};

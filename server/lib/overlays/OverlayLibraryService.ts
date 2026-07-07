@@ -615,17 +615,25 @@ class OverlayLibraryService {
         return;
       }
 
+      // Release dates are region-preferred, so region is part of the persistent
+      // cache key: a change to watchProviderRegion (or a deploy that changes the
+      // extraction logic) must not be masked by entries keyed without it. The
+      // in-memory preload map stays keyed `${tmdbId}:${mediaType}` to match the
+      // lookup in fetchReleaseDateInfo.
+      const region = getSettings().overlays?.watchProviderRegion || 'US';
+
       // Check cache for existing entries
       const uncachedItems: typeof tmdbItems = [];
       let cacheHits = 0;
       let nullCacheHits = 0;
 
       for (const item of tmdbItems) {
-        const cacheKey = `${item.tmdbId}:${item.mediaType}`;
+        const mapKey = `${item.tmdbId}:${item.mediaType}`;
+        const cacheKey = `${mapKey}:${region}`;
         const cached = adaptiveCache.get<ReleaseDateInfo | null>(cacheKey);
 
         if (cached !== undefined) {
-          this.preloadedTmdbReleaseDates.set(cacheKey, cached);
+          this.preloadedTmdbReleaseDates.set(mapKey, cached);
           logger.debug('Prefetch: cache HIT', {
             label: 'OverlayLibrary',
             cacheKey,
@@ -663,7 +671,8 @@ class OverlayLibraryService {
           const batch = uncachedItems.slice(i, i + concurrency);
 
           const promises = batch.map(async ({ tmdbId, mediaType, year }) => {
-            const cacheKey = `${tmdbId}:${mediaType}`;
+            const mapKey = `${tmdbId}:${mediaType}`;
+            const cacheKey = `${mapKey}:${region}`;
             try {
               let releaseDateInfo: ReleaseDateInfo | null = null;
 
@@ -677,7 +686,8 @@ class OverlayLibraryService {
                   const { extractReleaseDates, determineReleaseDate } =
                     await import('@server/utils/dateHelpers');
                   const extracted = extractReleaseDates(
-                    movieDetails.release_dates.results
+                    movieDetails.release_dates.results,
+                    region
                   );
                   const determined = determineReleaseDate(
                     extracted.digitalRelease,
@@ -739,13 +749,13 @@ class OverlayLibraryService {
                 baseTtl
               );
               if (releaseDateInfo) {
-                preloadedMap?.set(cacheKey, releaseDateInfo);
+                preloadedMap?.set(mapKey, releaseDateInfo);
                 adaptiveCache.set(cacheKey, releaseDateInfo, ttl);
                 fetchSuccess++;
               } else {
                 // For movies without release dates, cache null
                 const nullTtl = getNullRatingTtl(year);
-                preloadedMap?.set(cacheKey, null);
+                preloadedMap?.set(mapKey, null);
                 adaptiveCache.set(cacheKey, null, nullTtl);
               }
             } catch (error) {
@@ -753,7 +763,7 @@ class OverlayLibraryService {
               // Only cache null for movies - TV shows need Sonarr fallback opportunity
               if (mediaType === 'movie') {
                 const nullTtl = getNullRatingTtl(year);
-                preloadedMap?.set(cacheKey, null);
+                preloadedMap?.set(mapKey, null);
                 adaptiveCache.set(cacheKey, null, nullTtl);
               }
               logger.debug('TMDB prefetch failed for item', {

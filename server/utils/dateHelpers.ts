@@ -278,30 +278,49 @@ export function formatDate(date: Date | string, format: string): string {
 
 /**
  * Extract release dates from TMDB release_dates API response
- * Finds earliest digital (type 4), physical (type 5), and theatrical (type 3) releases across ALL countries
+ * Finds digital (type 4), physical (type 5), and theatrical (type 3) releases.
+ *
+ * When `preferredRegion` is given and that country has a release of a type, that
+ * country's date wins for that type; otherwise it falls back to the earliest of
+ * that type across ALL countries. Region preference stops a single
+ * timezone-outlier territory (e.g. the UTC-11 Pacific territories that TMDB
+ * dates a day early) from overriding the near-universal release date. Omitting
+ * `preferredRegion` reproduces the earlier earliest-across-all-countries
+ * behaviour exactly.
  *
  * @param releaseDatesResults - TMDB release_dates.results array
- * @returns Object with extracted earliest release dates
+ * @param preferredRegion - Optional ISO 3166-1 alpha-2 country code to prefer (e.g. 'US')
+ * @returns Object with extracted release dates
  */
 export function extractReleaseDates(
   releaseDatesResults: {
     iso_3166_1: string;
     release_dates: { type: number; release_date?: string }[];
-  }[]
+  }[],
+  preferredRegion?: string
 ): {
   digitalRelease?: string;
   physicalRelease?: string;
   inCinemas?: string;
   earliestReleaseDate?: Date;
 } {
-  let earliestDigital: Date | null = null;
-  let earliestPhysical: Date | null = null;
-  let earliestTheatrical: Date | null = null;
-  let earliestOverall: Date | null = null;
+  const region = preferredRegion?.trim().toUpperCase() || undefined;
 
-  // Check all countries, not just US
+  // Earliest of each type across ALL countries (the global fallback).
+  let globalDigital: Date | null = null;
+  let globalPhysical: Date | null = null;
+  let globalTheatrical: Date | null = null;
+
+  // Earliest of each type within the preferred region only.
+  let regionDigital: Date | null = null;
+  let regionPhysical: Date | null = null;
+  let regionTheatrical: Date | null = null;
+
   for (const country of releaseDatesResults) {
     if (!country.release_dates) continue;
+
+    const isPreferred =
+      region !== undefined && country.iso_3166_1?.toUpperCase() === region;
 
     for (const rd of country.release_dates) {
       if (!rd.release_date) continue;
@@ -310,28 +329,46 @@ export function extractReleaseDates(
 
       // Type 4 = Digital
       if (rd.type === 4) {
-        if (!earliestDigital || releaseDate < earliestDigital) {
-          earliestDigital = releaseDate;
+        if (!globalDigital || releaseDate < globalDigital) {
+          globalDigital = releaseDate;
+        }
+        if (isPreferred && (!regionDigital || releaseDate < regionDigital)) {
+          regionDigital = releaseDate;
         }
       }
 
       // Type 5 = Physical
       if (rd.type === 5) {
-        if (!earliestPhysical || releaseDate < earliestPhysical) {
-          earliestPhysical = releaseDate;
+        if (!globalPhysical || releaseDate < globalPhysical) {
+          globalPhysical = releaseDate;
+        }
+        if (isPreferred && (!regionPhysical || releaseDate < regionPhysical)) {
+          regionPhysical = releaseDate;
         }
       }
 
       // Type 3 = Theatrical
       if (rd.type === 3) {
-        if (!earliestTheatrical || releaseDate < earliestTheatrical) {
-          earliestTheatrical = releaseDate;
+        if (!globalTheatrical || releaseDate < globalTheatrical) {
+          globalTheatrical = releaseDate;
+        }
+        if (
+          isPreferred &&
+          (!regionTheatrical || releaseDate < regionTheatrical)
+        ) {
+          regionTheatrical = releaseDate;
         }
       }
     }
   }
 
-  // Build result with earliest dates found
+  // Prefer the region's date per type; fall back to the global earliest when the
+  // region has no release of that type.
+  const digital = regionDigital ?? globalDigital;
+  const physical = regionPhysical ?? globalPhysical;
+  const theatrical = regionTheatrical ?? globalTheatrical;
+
+  // Build result with the selected dates.
   const result: {
     digitalRelease?: string;
     physicalRelease?: string;
@@ -339,22 +376,24 @@ export function extractReleaseDates(
     earliestReleaseDate?: Date;
   } = {};
 
-  if (earliestDigital) {
-    result.digitalRelease = earliestDigital.toISOString();
-    if (!earliestOverall || earliestDigital < earliestOverall) {
-      earliestOverall = earliestDigital;
+  let earliestOverall: Date | null = null;
+
+  if (digital) {
+    result.digitalRelease = digital.toISOString();
+    if (!earliestOverall || digital < earliestOverall) {
+      earliestOverall = digital;
     }
   }
 
-  if (earliestPhysical) {
-    result.physicalRelease = earliestPhysical.toISOString();
-    if (!earliestOverall || earliestPhysical < earliestOverall) {
-      earliestOverall = earliestPhysical;
+  if (physical) {
+    result.physicalRelease = physical.toISOString();
+    if (!earliestOverall || physical < earliestOverall) {
+      earliestOverall = physical;
     }
   }
 
-  if (earliestTheatrical) {
-    result.inCinemas = earliestTheatrical.toISOString();
+  if (theatrical) {
+    result.inCinemas = theatrical.toISOString();
   }
 
   if (earliestOverall) {
