@@ -1145,7 +1145,6 @@ collectionsRoutes.delete('/:id', isAuthenticated(), async (req, res) => {
         '@server/entity/PlaceholderItem'
       );
       const { Not, Like } = await import('typeorm');
-      const path = await import('path');
 
       const repository = getRepository(PlaceholderItem);
       let totalPlaceholdersRemoved = 0;
@@ -1196,26 +1195,35 @@ collectionsRoutes.delete('/:id', isAuthenticated(), async (req, res) => {
               });
 
               if (otherCollectionRecords.length === 0) {
-                // No other collections use this file - safe to delete
-                const { getPlaceholderRootFolder } = await import(
-                  '@server/lib/placeholders/helpers/placeholderPathHelpers'
+                // No other collections use this file - safe to delete.
+                // C2/C4: resolve from the record's OWN config root. Use the
+                // CAPTURED deletedConfig here, not rootOf(record.configId):
+                // settings.collectionConfigs was already saved without this
+                // config above, so rootOf would return undefined and strand the
+                // file record-less while still purging its DB record.
+                const { resolveRootFromLibraryId } = await import(
+                  '@server/lib/placeholders/services/PlaceholderCleanup'
                 );
-                const libraryPath = getPlaceholderRootFolder(
+                const root = resolveRootFromLibraryId(
                   deletedConfig.libraryId,
                   record.mediaType
                 );
 
-                if (libraryPath) {
-                  const fullPath = path.join(
-                    libraryPath,
+                if (root) {
+                  const { removePlaceholder, resolveRecordPath } = await import(
+                    '@server/lib/placeholders/placeholderManager'
+                  );
+                  const fullPath = resolveRecordPath(
+                    root,
                     record.placeholderPath
                   );
 
                   try {
-                    const { removePlaceholder } = await import(
-                      '@server/lib/placeholders/placeholderManager'
-                    );
-                    await removePlaceholder(fullPath, record.mediaType);
+                    await removePlaceholder(fullPath, record.mediaType, {
+                      source: 'db-record',
+                      record,
+                      recordAbsPath: fullPath,
+                    });
                     fileDeleted = true;
                     totalFilesRemoved++;
                   } catch (error) {

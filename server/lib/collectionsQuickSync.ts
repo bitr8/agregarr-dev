@@ -2,9 +2,9 @@ import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { CollectionMissingItems } from '@server/entity/CollectionMissingItems';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
+import type { GhostDeletion } from '@server/lib/placeholders/services/PlaceholderCleanup';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import path from 'path';
 
 /**
  * Match between a recently added Plex item and a stored missing item
@@ -111,7 +111,7 @@ class CollectionsQuickSync {
     let collectionsUpdated = 0;
     let itemsAdded = 0;
     let placeholdersDeleted = 0;
-    const foldersNeedingScanByLibrary = new Map<string, string[]>();
+    const foldersNeedingScanByLibrary = new Map<string, GhostDeletion[]>();
 
     try {
       logger.info('Starting Collections Quick Sync', {
@@ -223,11 +223,11 @@ class CollectionsQuickSync {
           );
 
           placeholdersDeleted += cleanupResult.deletedCount;
-          if (cleanupResult.cleanedFolders.length > 0) {
+          if (cleanupResult.cleanedEntries.length > 0) {
             const existing = foldersNeedingScanByLibrary.get(library.key) || [];
             foldersNeedingScanByLibrary.set(library.key, [
               ...existing,
-              ...cleanupResult.cleanedFolders,
+              ...cleanupResult.cleanedEntries,
             ]);
           }
 
@@ -263,7 +263,7 @@ class CollectionsQuickSync {
             logger.info('Triggered Plex scan after placeholder deletion', {
               label: 'Collections Quick Sync',
               libraryId,
-              folders: folders.length,
+              ghosts: folders.length,
             });
           } catch (error) {
             logger.warn(
@@ -322,38 +322,47 @@ class CollectionsQuickSync {
   ): Promise<{
     deletedCount: number;
     affectedLibraries: Set<string>;
-    cleanedFolders: string[];
+    cleanedEntries: GhostDeletion[];
   }> {
     const placeholderRepository = getRepository(ComingSoonItem);
     const { placeholderContextService } = await import(
       '@server/lib/placeholders/services/PlaceholderContextService'
     );
-    const { removePlaceholder } = await import(
+    const { removePlaceholder, resolveRecordPath } = await import(
       '@server/lib/placeholders/placeholderManager'
+    );
+    const { rootOf } = await import(
+      '@server/lib/placeholders/services/PlaceholderCleanup'
     );
 
     let deletedCount = 0;
     const affectedLibraries = new Set<string>();
-    const cleanedFolders: string[] = [];
+    const cleanedEntries: GhostDeletion[] = [];
 
     // Get all placeholders for this library
     const settings = getSettings();
+    // C5: a movie tmdbId N and a TV tmdbId N are unrelated titles - scope every
+    // record query/delete to THIS library's media type.
+    const library = settings.plex.libraries?.find((l) => l.key === libraryId);
+    const libraryMediaType: 'movie' | 'tv' =
+      library?.type === 'show' ? 'tv' : 'movie';
     const collectionsForLibrary = settings.plex.collectionConfigs?.filter(
       (c) => c.libraryId === libraryId && c.createPlaceholdersForMissing
     );
 
     if (!collectionsForLibrary || collectionsForLibrary.length === 0) {
-      return { deletedCount: 0, affectedLibraries, cleanedFolders };
+      return { deletedCount: 0, affectedLibraries, cleanedEntries };
     }
 
     const configIds = collectionsForLibrary.map((c) => c.id);
+    const configIdSet = new Set(configIds);
     const placeholders = await placeholderRepository
       .createQueryBuilder('placeholder')
       .where('placeholder.configId IN (:...configIds)', { configIds })
       .getMany();
 
     if (placeholders.length === 0) {
-      return { deletedCount: 0, affectedLibraries, cleanedFolders };
+      return { deletedCount: 0, affectedLibraries, cleanedEntries };
     }
 
     logger.info('Checking recently added items against placeholders', {
@@ -436,51 +445,56 @@ class CollectionsQuickSync {
         });
       }
 
-      // Get ALL placeholder records for this TMDB ID across all collections
+      // Get ALL placeholder records for this TMDB ID across all collections,
+      // scoped to this library's media type (C5).
       const allPlaceholderRecords = await placeholderRepository.find({
-        where: { tmdbId },
+        where: { tmdbId, mediaType: libraryMediaType },
       });
 
       if (allPlaceholderRecords.length === 0) {
         continue;
       }
 
-      // Get the placeholder file path (should be same for all records)
-      const placeholderPath = allPlaceholderRecords[0].placeholderPath;
-      const mediaType = allPlaceholderRecords[0].mediaType;
+      // Resolve the file from a record whose config is on THIS library (C2/§7),
+      // not allPlaceholderRecords[0] blindly (its root may differ).
+      const recordForFile =
+        allPlaceholderRecords.find((r) =>
+          configIdSet.has(r.configId.replace(/-source-\d+$/, ''))
+        ) ?? allPlaceholderRecords[0];
+      const placeholderPath = recordForFile.placeholderPath;
 
       // Delete the placeholder file once
       let fileDeleted = false;
       if (placeholderPath) {
-        const { getPlaceholderRootFolder } = await import(
-          '@server/lib/placeholders/helpers/placeholderPathHelpers'
-        );
-        const libraryPath = getPlaceholderRootFolder(libraryId, mediaType);
+        // C2/C4: resolve from the record's OWN config root (legacy-absolute safe).
+        const root = rootOf(recordForFile.configId, libraryMediaType);
 
-        if (!libraryPath) {
+        if (!root) {
           logger.warn('Library path not configured - skipping file deletion', {
             label: 'Collections Quick Sync',
             title: recentItem.title,
-            mediaType,
+            mediaType: libraryMediaType,
             libraryId,
           });
           continue;
         }
 
-        // Construct full path
-        const fullPath = path.join(libraryPath, placeholderPath);
+        const fullPath = resolveRecordPath(root, placeholderPath);
 
         try {
-          await removePlaceholder(fullPath, mediaType);
+          await removePlaceholder(fullPath, libraryMediaType, {
+            source: 'db-record',
+            record: recordForFile,
+            recordAbsPath: fullPath,
+          });
           fileDeleted = true;
           affectedLibraries.add(libraryId);
-          // TV placeholder files live in <show>/Season 00/ — scope the
-          // ghost-entry scan to the show folder
-          cleanedFolders.push(
-            mediaType === 'tv'
-              ? path.dirname(path.dirname(fullPath))
-              : path.dirname(fullPath)
-          );
+          // No ratingKey: the record's plexRatingKey may BE the merged real
+          // item; let the Sink-2 gate resolve the ghost safely by path.
+          cleanedEntries.push({
+            filePath: fullPath,
+            mediaType: libraryMediaType,
+          });
           logger.info('Deleted placeholder file (real content exists)', {
             label: 'Collections Quick Sync',
             title: recentItem.title,
@@ -488,18 +502,18 @@ class CollectionsQuickSync {
             affectedCollections: allPlaceholderRecords.length,
           });
         } catch (error) {
-          if (
-            error instanceof Error &&
-            'code' in error &&
-            (error as NodeJS.ErrnoException).code === 'ENOENT'
-          ) {
+          const code =
+            error instanceof Error && 'code' in error
+              ? (error as NodeJS.ErrnoException).code
+              : undefined;
+          if (code === 'ENOENT') {
             // File doesn't exist - that's fine, proceed with database cleanup.
             // Clean up the leftover .comingsoon marker and empty directories
             // so placeholder discovery doesn't re-detect this item every sync.
             const { cleanupPlaceholderRemnants } = await import(
               '@server/lib/placeholders/services/PlaceholderCleanup'
             );
-            await cleanupPlaceholderRemnants(fullPath, mediaType);
+            await cleanupPlaceholderRemnants(fullPath, libraryMediaType);
             fileDeleted = true;
             logger.debug('Placeholder file already deleted', {
               label: 'Collections Quick Sync',
@@ -507,6 +521,7 @@ class CollectionsQuickSync {
               path: fullPath,
             });
           } else {
+            // EOWNERSHIP or other: keep ALL DB records (fail-safe).
             logger.error(
               'Failed to delete placeholder file - keeping all database records',
               {
@@ -557,7 +572,7 @@ class CollectionsQuickSync {
       });
     }
 
-    return { deletedCount, affectedLibraries, cleanedFolders };
+    return { deletedCount, affectedLibraries, cleanedEntries };
   }
 
   /**

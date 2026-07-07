@@ -467,6 +467,7 @@ class CollectionsSync {
         const {
           cleanupOrphanedPlaceholderRecords,
           cleanupOrphanedPlaceholderFiles,
+          backfillAllTrackedPlaceholderMarkers,
         } = await import(
           '@server/lib/placeholders/services/PlaceholderCleanup'
         );
@@ -481,6 +482,15 @@ class CollectionsSync {
           label: 'Collections Sync',
           filesRemoved: cleanupResult.filesRemoved,
         });
+
+        // Step 3: Back-fill markers for ALL tracked placeholders missing them.
+        // The orphan-adoption scan that also back-fills only reaches a library's
+        // first page (getLibraryContents default size), so most legacy
+        // placeholders never converge onto markers. This DB-record-driven pass
+        // covers every tracked placeholder. Additive and independent of the
+        // deletion paths above: it writes only absent markers and changes no
+        // deletion decision this sync (its markers are read by the next sync).
+        await backfillAllTrackedPlaceholderMarkers();
       } catch (error) {
         logger.warn('Orphaned placeholder cleanup failed - continuing', {
           label: 'Collections Sync',

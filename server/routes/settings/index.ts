@@ -1370,9 +1370,6 @@ settingsRoutes.post('/reset', async (_req, res, next) => {
       const { PlaceholderItem } = await import(
         '@server/entity/PlaceholderItem'
       );
-      const path = await import('path');
-      const settings = getSettings();
-
       const repository = getRepository(PlaceholderItem);
       const allPlaceholders = await repository.find();
 
@@ -1386,59 +1383,57 @@ settingsRoutes.post('/reset', async (_req, res, next) => {
         );
 
         let filesRemoved = 0;
-        const filesToDelete = new Set<string>(); // Track unique file paths
-        const { getPlaceholderRootFolder } = await import(
-          '@server/lib/placeholders/helpers/placeholderPathHelpers'
+        // fullPath -> record (first record wins for shared paths). Carrying the
+        // record lets us delete with db-record ownership (C2 root-bound) instead
+        // of inferring mediaType from the filename.
+        const filesToDelete = new Map<
+          string,
+          (typeof allPlaceholders)[number]
+        >();
+        const { rootOf } = await import(
+          '@server/lib/placeholders/services/PlaceholderCleanup'
+        );
+        const { removePlaceholder, resolveRecordPath } = await import(
+          '@server/lib/placeholders/placeholderManager'
         );
 
-        // Collect unique file paths to delete from ALL libraries
+        // Resolve each record's ONE own-config-root path (C2/C4). rootOf handles
+        // -source-N IDs and legacy array libraryId; resolveRecordPath handles
+        // legacy absolute rows. A record whose config is gone can't be proven -
+        // skip it (leak-safe) rather than guess a path across other libraries.
         for (const record of allPlaceholders) {
-          if (record.placeholderPath) {
-            // Try to find placeholder in any library with configured folder
-            for (const library of settings.plex.libraries) {
-              if (library.type !== record.mediaType) continue;
-
-              const libraryPath = getPlaceholderRootFolder(
-                library.key,
-                record.mediaType
-              );
-              if (libraryPath) {
-                const fullPath = path.join(libraryPath, record.placeholderPath);
-                filesToDelete.add(fullPath);
-              }
-            }
+          if (!record.placeholderPath) continue;
+          const root = rootOf(record.configId, record.mediaType);
+          if (!root) continue;
+          const fullPath = resolveRecordPath(root, record.placeholderPath);
+          if (!filesToDelete.has(fullPath)) {
+            filesToDelete.set(fullPath, record);
           }
         }
 
-        // Delete all unique placeholder files
-        if (filesToDelete.size > 0) {
-          const { removePlaceholder } = await import(
-            '@server/lib/placeholders/placeholderManager'
-          );
-
-          for (const fullPath of filesToDelete) {
-            try {
-              // Determine media type from filename pattern
-              const mediaType = fullPath.includes('{edition-Trailer}')
-                ? 'movie'
-                : 'tv';
-              await removePlaceholder(fullPath, mediaType);
-              filesRemoved++;
-            } catch (error) {
-              // File might already be gone - that's ok
-              const isFileNotFound =
-                error instanceof Error &&
-                'code' in error &&
-                (error as NodeJS.ErrnoException).code === 'ENOENT';
-              if (!isFileNotFound) {
-                logger.warn('Failed to remove placeholder file during reset', {
-                  label: 'Settings Reset',
-                  path: fullPath,
-                  error: error instanceof Error ? error.message : String(error),
-                });
-              } else {
-                filesRemoved++; // File doesn't exist - consider it removed
-              }
+        // Delete each unique placeholder file with db-record ownership.
+        for (const [fullPath, record] of filesToDelete) {
+          try {
+            await removePlaceholder(fullPath, record.mediaType, {
+              source: 'db-record',
+              record,
+              recordAbsPath: fullPath,
+            });
+            filesRemoved++;
+          } catch (error) {
+            const code =
+              error instanceof Error && 'code' in error
+                ? (error as NodeJS.ErrnoException).code
+                : undefined;
+            if (code === 'ENOENT') {
+              filesRemoved++; // File doesn't exist - consider it removed
+            } else {
+              // EOWNERSHIP or other: keep the file (fail-safe).
+              logger.warn('Failed to remove placeholder file during reset', {
+                label: 'Settings Reset',
+                path: fullPath,
+                error: error instanceof Error ? error.message : String(error),
+              });
             }
           }
         }

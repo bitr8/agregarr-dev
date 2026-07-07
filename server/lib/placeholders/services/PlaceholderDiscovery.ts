@@ -197,7 +197,9 @@ export async function discoverPlaceholdersFromMarkers(
       let effectiveTvdbId = marker.tvdbId;
       if (!effectiveTvdbId) {
         const dbRecord = await repository.findOne({
-          where: { tmdbId: marker.tmdbId },
+          // C5: scope by mediaType so a cross-namespace TMDB id collision
+          // (movie N vs TV N) can't feed a wrong tvdbId into a cleanup signal.
+          where: { tmdbId: marker.tmdbId, mediaType: 'tv' },
           select: ['tvdbId'],
         });
         if (dbRecord?.tvdbId) {

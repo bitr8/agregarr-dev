@@ -15,6 +15,7 @@ import type { CollectionConfig, Library } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import path from 'path';
+import type { GhostDeletion } from './PlaceholderCleanup';
 import { ensurePlaceholderEpisodeTitle } from './PlaceholderTitleFixer';
 import {
   clearUnmatchedPlaceholder,
@@ -380,30 +381,31 @@ function missingItemsToPlaceholderSourceData(
  * Create a single placeholder file without scanning or applying overlays
  * Returns the path to the created file
  */
+/**
+ * Create (or resume) a placeholder file. Tri-state on the computed destination:
+ *  - (a) our own placeholder already on disk (size > 0, matching marker):
+ *        RESUME - no download, no copy; return the path so discovery retries.
+ *  - (b) a file exists with no matching Agregarr marker:
+ *        REFUSE - never download over it, never manage it; return null (the
+ *        caller skips it, so the unmatched-cleanup path can never delete a real
+ *        user file that happens to sit at a computed placeholder path).
+ *  - (c) our own zero-byte crashed copy: unlink and re-create.
+ *  - (d) nothing there: normal download + create.
+ *
+ * Returns the placeholder path, or null when refusing to manage an existing
+ * unmarked file.
+ */
 async function createPlaceholderFile(
   sourceItem: ComingSoonSourceData,
   libraryKey: string,
   sonarrFolderName?: string
-): Promise<string> {
-  const { downloadTrailer } = await import(
-    '@server/lib/placeholders/trailerDownload'
-  );
-  const { createPlaceholder } = await import(
-    '@server/lib/placeholders/placeholderManager'
-  );
-
-  // 1. Download trailer
-  const trailerPath = await downloadTrailer(
-    sourceItem.title,
-    sourceItem.year,
-    sourceItem.mediaType
-  );
-
-  // 2. Get library-specific placeholder root folder
+): Promise<string | null> {
   const { getPlaceholderRootFolder } = await import(
     '@server/lib/placeholders/helpers/placeholderPathHelpers'
   );
 
+  // Resolve the destination FIRST - a misconfigured root must fail before we
+  // spend a YouTube search + yt-dlp on a trailer we cannot place.
   const libraryPath = getPlaceholderRootFolder(
     libraryKey,
     sourceItem.mediaType
@@ -423,6 +425,107 @@ async function createPlaceholderFile(
     );
   }
 
+  const {
+    createPlaceholder,
+    resolvePlaceholderPaths,
+    readPlaceholderMarker,
+    clearMarkerOrphaned,
+  } = await import('@server/lib/placeholders/placeholderManager');
+  const { markPlaceholderWanted } = await import(
+    '@server/lib/placeholders/services/PlaceholderCleanup'
+  );
+  const fs = await import('fs/promises');
+
+  // Single source of truth for the computed destination (shared with the
+  // creators), so "where we look" can never drift from "where we write".
+  const { destinationPath } = resolvePlaceholderPaths({
+    tmdbId: sourceItem.tmdbId,
+    tvdbId: sourceItem.tvdbId,
+    title: sourceItem.title,
+    year: sourceItem.year,
+    mediaType: sourceItem.mediaType,
+    libraryPath,
+    sonarrFolderName,
+  });
+  const markerDir = path.dirname(destinationPath);
+  const relativePath = path.relative(libraryPath, destinationPath);
+
+  let existingSize: number | null = null;
+  try {
+    existingSize = (await fs.stat(destinationPath)).size;
+  } catch {
+    existingSize = null; // ENOENT (or unreadable) -> normal creation flow (d)
+  }
+
+  if (existingSize !== null) {
+    const marker = await readPlaceholderMarker(markerDir);
+    const markerMatches =
+      marker !== null &&
+      (marker.tmdbId === undefined || marker.tmdbId === sourceItem.tmdbId);
+
+    if (existingSize > 0 && markerMatches) {
+      // (a) RESUME
+      let ageDays: number | undefined;
+      if (marker?.createdAt) {
+        const created = new Date(marker.createdAt).getTime();
+        if (!Number.isNaN(created)) {
+          ageDays = Math.floor((Date.now() - created) / (24 * 60 * 60 * 1000));
+        }
+      }
+      logger.info(
+        'Placeholder already on disk - skipping trailer download, awaiting Plex discovery',
+        {
+          label: 'PlaceholderService',
+          title: sourceItem.title,
+          tmdbId: sourceItem.tmdbId,
+          mediaType: sourceItem.mediaType,
+          path: destinationPath,
+          ageDays,
+        }
+      );
+      // Proof the item is still wanted: clear any orphan stamp and keep the
+      // sweep off it this run (so it can never age out or re-download).
+      await clearMarkerOrphaned(markerDir);
+      markPlaceholderWanted(libraryKey, sourceItem.mediaType, relativePath);
+      return destinationPath;
+    }
+
+    if (existingSize === 0 && markerMatches) {
+      // (c) our own crashed zero-byte copy: remove it and fall through to a
+      // clean re-create (keeps COPYFILE_EXCL unconditional).
+      try {
+        await fs.unlink(destinationPath);
+      } catch {
+        // best-effort; the EXCL copy below surfaces any genuine problem
+      }
+    } else {
+      // (b) REFUSE-TO-MANAGE: an unmarked file (or a marker for a different
+      // tmdbId) sits at the computed path. Do not download over it, adopt it,
+      // or add it to createdPlaceholders.
+      logger.warn(
+        'File exists at computed placeholder path without a matching Agregarr marker - not downloading, not overwriting, not managing',
+        {
+          label: 'PlaceholderService',
+          title: sourceItem.title,
+          tmdbId: sourceItem.tmdbId,
+          mediaType: sourceItem.mediaType,
+          path: destinationPath,
+        }
+      );
+      return null;
+    }
+  }
+
+  // (d) Normal flow: download the trailer, then create the placeholder.
+  const { downloadTrailer } = await import(
+    '@server/lib/placeholders/trailerDownload'
+  );
+  const trailerPath = await downloadTrailer(
+    sourceItem.title,
+    sourceItem.year,
+    sourceItem.mediaType
+  );
+
   logger.debug(
     `Using configured ${sourceItem.mediaType} root folder for placeholder creation`,
     {
@@ -432,7 +535,6 @@ async function createPlaceholderFile(
     }
   );
 
-  // 3. Create placeholder file in library
   const result = await createPlaceholder({
     tmdbId: sourceItem.tmdbId,
     tvdbId: sourceItem.tvdbId,
@@ -444,86 +546,169 @@ async function createPlaceholderFile(
     sonarrFolderName,
   });
 
+  markPlaceholderWanted(libraryKey, sourceItem.mediaType, relativePath);
   return result.placeholderPath;
 }
 
 /**
- * Remove placeholders that Plex failed to match to TMDB metadata
+ * Quarantine placeholders that were created THIS run but never appeared in
+ * Plex during the discovery poll.
+ *
+ * These files are provably ours (we just created them), yet Plex never
+ * indexed them - which is exactly the unproven-#0b case: a scoped
+ * `refresh?path=` on a brand-new folder may not index it. Deleting them here
+ * (the old behaviour) produced a create -> undiscovered -> delete -> recreate
+ * churn loop on every sync. So we DO NOT delete: the file stays on disk and
+ * discovery is re-attempted on the next sync. This is what makes the
+ * scoped-scan change churn-safe REGARDLESS of the #0b result - the guard, not
+ * #0b, provides the safety; #0b only decides how fast discovery succeeds.
+ *
+ * Self-heal: the moment Plex indexes the folder (via the scoped scan, its
+ * "partial scan on change" folder watcher, or a later full maintenance scan),
+ * the next sync's orphan-adoption scan finds the item and adopts it (it
+ * carries a `.comingsoon` marker), creating the DB record. No re-download in
+ * that path.
+ *
+ * Deliberately NOT negative-cached (recordUnmatchedPlaceholder): caching would
+ * suppress the re-attempt for the TTL window. We want each subsequent sync to
+ * retry discovery until it self-heals. The only cost while a folder stays
+ * unindexed is a re-copied trailer per sync, which stops as soon as the item
+ * is indexed and no longer reported missing. Never data loss, never a
+ * delete/recreate loop.
  */
-async function removeUnmatchedPlaceholders(
+async function quarantineUndiscoveredPlaceholders(
   placeholders: {
     sourceItem: ComingSoonSourceData;
     placeholderPath: string;
   }[],
-  config: CollectionConfig,
-  plexClient: PlexAPI
+  config: CollectionConfig
 ): Promise<void> {
-  const { removePlaceholder } = await import(
-    '@server/lib/placeholders/placeholderManager'
-  );
-
   if (placeholders.length === 0) {
     return;
   }
 
-  let removedCount = 0;
-  const removedFolders: string[] = [];
-
   for (const { sourceItem, placeholderPath } of placeholders) {
-    try {
-      await removePlaceholder(placeholderPath, sourceItem.mediaType);
-      removedCount += 1;
-      // TV placeholder files live in <show>/Season 00/ — scope the
-      // ghost-entry scan to the show folder
-      removedFolders.push(
-        sourceItem.mediaType === 'tv'
-          ? path.dirname(path.dirname(placeholderPath))
-          : path.dirname(placeholderPath)
-      );
-
-      await recordUnmatchedPlaceholder(config.libraryId, sourceItem);
-
-      logger.warn('Removed placeholder that Plex could not match', {
+    // One diagnosable line per stuck item so a user whose folder never
+    // indexes is debuggable from the logs.
+    logger.warn(
+      'Placeholder still awaiting Plex discovery - keeping file on disk, will retry next sync (not deleted)',
+      {
         label: 'PlaceholderService',
         title: sourceItem.title,
         tmdbId: sourceItem.tmdbId,
         mediaType: sourceItem.mediaType,
         placeholderPath,
-      });
-    } catch (error) {
-      logger.error('Failed to remove unmatched placeholder', {
+        libraryId: config.libraryId,
+      }
+    );
+  }
+}
+
+/**
+ * Self-heal: write the `.comingsoon` marker for a DB-tracked placeholder that
+ * is missing it on disk (e.g. a movie placeholder created before movie
+ * markers existed). A `coming_soon_item` DB record is PROOF of Agregarr
+ * ownership, so this is safe and non-destructive: it only ever creates an
+ * absent marker (flag 'wx' never clobbers an existing one) and never touches
+ * media. Making ownership consistently identifiable lets the marker gate and
+ * the normal grace-period cleanup manage the placeholder. Ownership is NEVER
+ * inferred from filename tokens here - only the DB record authorises a
+ * back-fill, which is the exact false-positive path being guarded against.
+ *
+ * The marker lives beside the placeholder file for both media types (movie:
+ * the movie folder; tv: Season 00), i.e. dirname(placeholderPath).
+ */
+export async function backfillPlaceholderMarker(record: {
+  configId: string;
+  placeholderPath: string;
+  title: string;
+  year?: number;
+  tmdbId: number;
+  tvdbId?: number;
+  mediaType: 'movie' | 'tv';
+}): Promise<boolean> {
+  // Resolve the placeholder's ABSOLUTE path from the record's OWN config root.
+  // The stored path is relative; the previous code wrote the marker beside a
+  // path resolved against cwd, so writeFile ENOENT'd and the back-fill was dead
+  // code. rootOf handles multi-source (-source-N) IDs and legacy array
+  // libraryId; resolveRecordPath handles legacy absolute rows (no double-join).
+  const { resolveRecordPath } = await import(
+    '@server/lib/placeholders/placeholderManager'
+  );
+  const { rootOf } = await import(
+    '@server/lib/placeholders/services/PlaceholderCleanup'
+  );
+  const root = rootOf(record.configId, record.mediaType);
+  if (!root) {
+    logger.debug('Cannot back-fill marker - no placeholder root for config', {
+      label: 'PlaceholderService',
+      title: record.title,
+      tmdbId: record.tmdbId,
+      configId: record.configId,
+    });
+    return false;
+  }
+  const abs = resolveRecordPath(root, record.placeholderPath);
+  const markerPath = path.join(path.dirname(abs), '.comingsoon');
+
+  const fs = await import('fs/promises');
+  // Access-first gate: only back-fill when the placeholder file is actually
+  // present under this root (steady state = one stat per adopted record/sync;
+  // also avoids writing an orphan marker beside a non-existent file).
+  try {
+    await fs.access(abs);
+  } catch {
+    return false;
+  }
+  try {
+    await fs.access(markerPath);
+    return false; // marker already present
+  } catch {
+    // absent - back-fill below
+  }
+
+  try {
+    // 'wx' (create-only, never clobber). Deliberately NOT writeMarkerAtomic:
+    // rename would overwrite a manual marker; the create-only contract is the
+    // point.
+    await fs.writeFile(
+      markerPath,
+      JSON.stringify({
+        createdAt: new Date().toISOString(),
+        title: record.title,
+        year: record.year,
+        tmdbId: record.tmdbId,
+        tvdbId: record.tvdbId,
+        backfilled: true,
+      }),
+      { encoding: 'utf-8', flag: 'wx' }
+    );
+    logger.info(
+      'Back-filled missing .comingsoon marker for DB-tracked placeholder',
+      {
         label: 'PlaceholderService',
-        title: sourceItem.title,
-        tmdbId: sourceItem.tmdbId,
-        placeholderPath,
+        title: record.title,
+        tmdbId: record.tmdbId,
+        markerPath,
+      }
+    );
+    return true;
+  } catch (error) {
+    const alreadyExists =
+      error instanceof Error &&
+      'code' in error &&
+      (error as NodeJS.ErrnoException).code === 'EEXIST';
+    if (!alreadyExists) {
+      // Directory gone or unwritable - non-fatal, will retry next sync.
+      logger.debug('Could not back-fill .comingsoon marker', {
+        label: 'PlaceholderService',
+        title: record.title,
+        tmdbId: record.tmdbId,
+        markerPath,
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }
-
-  if (removedCount > 0) {
-    logger.info('Triggering Plex scan to clean up unmatched placeholders', {
-      label: 'PlaceholderService',
-      libraryId: config.libraryId,
-      removedCount,
-    });
-
-    try {
-      const { removeGhostEntries } = await import(
-        '@server/lib/placeholders/services/PlaceholderCleanup'
-      );
-      await removeGhostEntries(plexClient, config.libraryId, removedFolders);
-    } catch (error) {
-      logger.warn(
-        'Failed to trigger cleanup scan after removing unmatched placeholders',
-        {
-          label: 'PlaceholderService',
-          libraryId: config.libraryId,
-          removedCount,
-          error: error instanceof Error ? error.message : String(error),
-        }
-      );
-    }
+    return false;
   }
 }
 
@@ -682,19 +867,24 @@ async function handleUnmatchedPlaceholders(
     );
 
     let deletedCount = 0;
-    const deletedFolders: string[] = [];
+    const ghostDeletions: GhostDeletion[] = [];
     for (const file of filesToDelete) {
       try {
-        await removePlaceholder(file.path, file.mediaType);
+        // created-this-run: these paths flow only from createPlaceholderFile
+        // return values within this run, and the tri-state guarantees each is a
+        // freshly-created or marker-verified placeholder (a refused real file
+        // returns null and never enters filesToDelete).
+        await removePlaceholder(file.path, file.mediaType, {
+          source: 'created-this-run',
+        });
         excludedUnmatched.add(file.tmdbId);
         deletedCount++;
-        // TV placeholder files live in <show>/Season 00/ — scope the
-        // ghost-entry scan to the show folder
-        deletedFolders.push(
-          file.mediaType === 'tv'
-            ? path.dirname(path.dirname(file.path))
-            : path.dirname(file.path)
-        );
+        // Enqueue the file itself; the Sink-2 gate resolves the ghost Plex
+        // entry and refuses to touch any real/merged item.
+        ghostDeletions.push({
+          filePath: file.path,
+          mediaType: file.mediaType,
+        });
 
         await recordUnmatchedPlaceholder(config.libraryId, {
           tmdbId: file.tmdbId,
@@ -735,7 +925,7 @@ async function handleUnmatchedPlaceholders(
         const { removeGhostEntries } = await import(
           '@server/lib/placeholders/services/PlaceholderCleanup'
         );
-        await removeGhostEntries(plexClient, config.libraryId, deletedFolders);
+        await removeGhostEntries(plexClient, config.libraryId, ghostDeletions);
       } catch (error) {
         logger.error('Failed to trigger cleanup scan after deletions', {
           label: 'PlaceholderService',
@@ -1075,8 +1265,102 @@ async function verifyPlexPosters(
 }
 
 /**
+ * Trigger directory-scoped Plex scans for newly created placeholder files.
+ *
+ * Scans only the folders that received new placeholders instead of the whole
+ * library, so unrelated unavailable items (e.g. from a network mount that
+ * dropped mid-sync) can't be marked missing and purged by servers with
+ * "Empty trash automatically after every scan" enabled. Mirrors the
+ * removeGhostEntries pattern in PlaceholderCleanup.ts, minus its emptyTrash
+ * logic - this path must never touch the trash.
+ *
+ * #0b live test only decides discovery QUALITY, not safety: scoped
+ * `refresh?path=` is proven to re-index existing/emptied folders (3e79245),
+ * but indexing a BRAND-NEW folder is unconfirmed. Safety does NOT depend on
+ * that result - quarantineUndiscoveredPlaceholders never deletes a
+ * just-created placeholder that fails to appear, so the worst case if #0b
+ * fails is a placeholder that sits on disk and retries discovery each sync
+ * until Plex's "partial scan on change" folder watcher (or a later scan)
+ * indexes it. There is no create/delete/recreate churn and no data loss
+ * regardless of the #0b outcome; a passing #0b test just makes discovery
+ * immediate instead of watcher-latency-bound.
+ *
+ * Deliberately never falls back to a full library scan (that is the
+ * mass-purge risk this change removes). When a folder can't be scoped-scanned
+ * (outside the section paths as Plex sees them, or the refresh call fails),
+ * the Plex folder watcher is the remaining discovery path and the quarantine
+ * guard keeps the file safe in the meantime.
+ */
+async function scanNewPlaceholderDirectories(
+  plexClient: PlexAPI,
+  libraryId: string,
+  createdPlaceholders: {
+    sourceItem: ComingSoonSourceData;
+    placeholderPath: string;
+  }[]
+): Promise<void> {
+  // TV placeholder files live in <show>/Season 00/ - scan the show folder so
+  // the brand-new show directory itself gets indexed. Movie placeholders sit
+  // directly in the movie folder.
+  const directories = createdPlaceholders.map(
+    ({ sourceItem, placeholderPath }) =>
+      sourceItem.mediaType === 'tv'
+        ? path.dirname(path.dirname(placeholderPath))
+        : path.dirname(placeholderPath)
+  );
+  const uniqueDirectories = [...new Set(directories)];
+  if (uniqueDirectories.length === 0) {
+    return;
+  }
+
+  // A directory only produces a useful scoped scan if Plex can resolve it,
+  // i.e. it sits strictly below one of the section's configured locations.
+  // Placeholder roots are assumed to be mounted identically in Agregarr and
+  // Plex - the same assumption removeGhostEntries relies on.
+  const sectionPaths = await plexClient.getLibrarySectionPaths(libraryId);
+  const isInsideSection = (directory: string): boolean =>
+    sectionPaths.length === 0 ||
+    sectionPaths.some(
+      (root) =>
+        directory !== root &&
+        directory.startsWith(root.endsWith('/') ? root : `${root}/`)
+    );
+
+  const scopedDirectories = uniqueDirectories.filter(isInsideSection);
+  const outsideSection = uniqueDirectories.length - scopedDirectories.length;
+
+  if (outsideSection > 0) {
+    logger.warn(
+      'Some new placeholder directories are outside the Plex section locations - relying on the Plex folder watcher instead of a full library scan (a full scan risks mass-purging real items on servers that auto-empty trash)',
+      {
+        label: 'PlaceholderService',
+        libraryId,
+        outsideSection,
+        sectionPaths,
+      }
+    );
+  }
+
+  for (const directory of scopedDirectories) {
+    try {
+      await plexClient.scanLibrary(libraryId, directory);
+    } catch (error) {
+      logger.warn(
+        'Scoped Plex scan failed for new placeholder directory - relying on the Plex folder watcher and discovery polling',
+        {
+          label: 'PlaceholderService',
+          libraryId,
+          directory,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+    }
+  }
+}
+
+/**
  * Create placeholders for missing items
- * Strategy: Create ALL files first, then trigger ONE scan, then apply overlays
+ * Strategy: Create ALL files first, then trigger scoped scans, then apply overlays
  * Returns the discovered placeholder items as CollectionItems
  */
 async function createPlaceholders(
@@ -1192,6 +1476,86 @@ async function createPlaceholders(
   const existingRecords = await placeholderRepository.find();
   const existingByTmdbId = new Map(existingRecords.map((r) => [r.tmdbId, r]));
 
+  // Deletion safety: this scan only knows the CURRENT config's source items,
+  // so a record-less placeholder that isn't in sourceMap may still belong to
+  // another placeholder-enabled config (whose source can't be enumerated
+  // without running its sync). Count the other configs that could own
+  // placeholders visible in this library's placeholder roots - deletion is
+  // only allowed when this config is provably the sole possible owner.
+  const { getPlaceholderRootFolder } = await import(
+    '@server/lib/placeholders/helpers/placeholderPathHelpers'
+  );
+  const allCollectionConfigs = getSettings().plex.collectionConfigs || [];
+  // config.libraryId can legacy-be an array - normalise both sides.
+  const currentLibraries = Array.isArray(config.libraryId)
+    ? config.libraryId
+    : [config.libraryId];
+
+  // Normalise a root path for comparison: unify separators, strip a trailing
+  // separator, lower-case. Case-insensitivity is the FAIL-CLOSED direction
+  // here - it can only make two roots look more alike, which can only ADD
+  // possible owners and therefore SKIP more deletions, never delete more.
+  // Best-effort against bind-mount / SMB case-fold aliases; a
+  // symlink alias that shares no textual prefix still can't be caught here,
+  // but the on-disk `.comingsoon` marker gate is the real backstop.
+  const normaliseRoot = (root: string): string =>
+    root.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+  const pathsOverlap = (a: string, b: string): boolean =>
+    a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+
+  const countOtherPossibleOwners = (mediaType: 'movie' | 'tv'): number => {
+    const currentRoots = currentLibraries
+      .map((library) => getPlaceholderRootFolder(library, mediaType))
+      .filter((root): root is string => !!root)
+      .map(normaliseRoot);
+
+    // Fail closed: if we cannot resolve ANY placeholder root for the current
+    // config (e.g. array-shaped libraryId, misconfig), we cannot prove sole
+    // ownership - treat as if another owner exists so deletion is skipped.
+    if (currentRoots.length === 0) {
+      return 1;
+    }
+
+    return allCollectionConfigs.filter((other) => {
+      if (other.id === config.id) {
+        return false;
+      }
+      // Intentional: we do NOT also require other.isActive. An inactive but
+      // placeholder-flagged config still counts as a possible owner, so a
+      // record-less orphan it owns is left alone rather than deleted. Safe
+      // re: data loss (it only leaks disk, never deletes); the alternative
+      // (ignoring inactive configs) could delete a real co-owned placeholder.
+      if (other.createPlaceholdersForMissing !== true) {
+        return false;
+      }
+      const otherLibraries = Array.isArray(other.libraryId)
+        ? other.libraryId
+        : [other.libraryId];
+      // Shares one of this scan's libraries directly.
+      if (
+        otherLibraries.some((library) => currentLibraries.includes(library))
+      ) {
+        return true;
+      }
+      // A config on another library can still own placeholders visible in
+      // this scan when its placeholder root overlaps one of ours (equal,
+      // ancestor, or descendant).
+      return otherLibraries.some((library) => {
+        const otherRoot = getPlaceholderRootFolder(library, mediaType);
+        if (!otherRoot) {
+          return false;
+        }
+        const normalisedOther = normaliseRoot(otherRoot);
+        return currentRoots.some((root) => pathsOverlap(root, normalisedOther));
+      });
+    }).length;
+  };
+  const otherPossibleOwnerCounts = {
+    movie: countOtherPossibleOwners('movie'),
+    tv: countOtherPossibleOwners('tv'),
+  };
+
   // Check each library item to see if it's an orphaned placeholder
   for (const item of libraryItems.items) {
     // Check if this is a placeholder using PlaceholderContextService
@@ -1267,7 +1631,29 @@ async function createPlaceholders(
       // Check if this placeholder is in our source data
       const sourceItem = sourceMap.get(tmdbId);
       if (!sourceItem) {
-        // Orphaned placeholder not in our source - DELETE IMMEDIATELY
+        const orphanMediaType: 'movie' | 'tv' =
+          itemExtended.type === 'movie' ? 'movie' : 'tv';
+
+        // Not in THIS config's source, but another placeholder-enabled
+        // config's source may still contain it - deleting here would strand
+        // that config's placeholder. Leave it for its owner's sync to adopt.
+        const otherPossibleOwners = otherPossibleOwnerCounts[orphanMediaType];
+        if (otherPossibleOwners > 0) {
+          logger.info(
+            'Found record-less placeholder not in this source - leaving it for other placeholder-enabled configs to adopt',
+            {
+              label: 'PlaceholderService',
+              title: item.title,
+              tmdbId,
+              ratingKey: item.ratingKey,
+              otherPossibleOwners,
+            }
+          );
+          continue;
+        }
+
+        // Orphaned placeholder not in any placeholder-enabled config's
+        // possible ownership - delete it
         logger.warn('Found orphaned placeholder - deleting immediately', {
           label: 'PlaceholderService',
           title: item.title,
@@ -1317,14 +1703,9 @@ async function createPlaceholders(
             const { removePlaceholder } = await import(
               '@server/lib/placeholders/placeholderManager'
             );
-            const { getPlaceholderRootFolder } = await import(
-              '@server/lib/placeholders/helpers/placeholderPathHelpers'
-            );
-            const mediaType: 'movie' | 'tv' =
-              itemExtended.type === 'movie' ? 'movie' : 'tv';
             const libraryPath = getPlaceholderRootFolder(
               config.libraryId,
-              mediaType
+              orphanMediaType
             );
 
             if (libraryPath) {
@@ -1344,16 +1725,51 @@ async function createPlaceholders(
 
               const fullPath = path.join(libraryPath, relativePath);
 
-              await removePlaceholder(
-                fullPath,
-                itemExtended.type === 'movie' ? 'movie' : 'tv'
-              );
-              deletedOrphanCount++;
-              logger.info('Deleted orphaned placeholder file', {
-                label: 'PlaceholderService',
-                title: item.title,
-                path: relativePath,
-              });
+              // Never delete on heuristic detection alone. `marker` ownership
+              // makes the sink verify an Agregarr-authored `.comingsoon` marker
+              // (+ matching tmdbId) inside itself and throw EOWNERSHIP if it
+              // cannot prove authorship. This protects users whose placeholder
+              // root is the same folder as their real media from
+              // isPlaceholderItemAsync false positives.
+              //
+              // INTENTIONAL: a record-less AND marker-less orphan is left on
+              // disk (EOWNERSHIP), never auto-deleted. We cannot prove
+              // ownership, so any auto-delete would reintroduce the real-media
+              // deletion risk. This only affects pre-existing or
+              // externally-created placeholders; every placeholder created after
+              // this ships carries a marker, and DB-tracked ones get theirs
+              // back-filled above, so this untracked set is bounded and shrinks
+              // over time. Absolutely no time-based auto-delete.
+              try {
+                await removePlaceholder(fullPath, orphanMediaType, {
+                  source: 'marker',
+                  expectedTmdbId: tmdbId,
+                });
+                deletedOrphanCount++;
+                logger.info('Deleted orphaned placeholder file', {
+                  label: 'PlaceholderService',
+                  title: item.title,
+                  path: relativePath,
+                });
+              } catch (ownershipError) {
+                if (
+                  (ownershipError as NodeJS.ErrnoException).code ===
+                  'EOWNERSHIP'
+                ) {
+                  logger.warn(
+                    'Skipping orphaned placeholder deletion - no positive placeholder marker on disk (item may be real media misdetected as a placeholder, or a legacy/externally-created placeholder we cannot prove we own)',
+                    {
+                      label: 'PlaceholderService',
+                      title: item.title,
+                      tmdbId,
+                      path: fullPath,
+                    }
+                  );
+                  continue;
+                }
+                // ENOENT / other: fall through to the outer catch (unchanged).
+                throw ownershipError;
+              }
             }
           }
         } catch (error) {
@@ -1385,6 +1801,17 @@ async function createPlaceholders(
         continue; // Skip to next item - orphan has been deleted
       }
     } else {
+      // Has database record = PROVEN Agregarr ownership. Self-heal: back-fill
+      // the `.comingsoon` marker if it's missing on disk (e.g. a movie
+      // placeholder created before movie markers existed). Non-destructive,
+      // never clobbers an existing marker, keyed off the DB record - never
+      // off filename tokens. Makes the placeholder consistently identifiable
+      // so the marker gate and grace-period cleanup can manage it.
+      const trackedRecord = existingByTmdbId.get(tmdbId);
+      if (trackedRecord?.placeholderPath) {
+        await backfillPlaceholderMarker(trackedRecord);
+      }
+
       // Has database record - check if it's in our source
       const sourceItem = sourceMap.get(tmdbId);
       if (!sourceItem) {
@@ -1671,6 +2098,7 @@ async function createPlaceholders(
     sourceItem: ComingSoonSourceData;
     placeholderPath: string;
   }[] = [];
+  let skippedRefusedCount = 0;
 
   for (const missingItem of itemsNeedingPlaceholders) {
     const sourceItem = sourceMap.get(missingItem.tmdbId);
@@ -1691,6 +2119,22 @@ async function createPlaceholders(
         sonarrFolderName
       );
 
+      if (placeholderPath === null) {
+        // Refuse-to-manage: an unmarked file already sits at the computed path.
+        // Not created, not tracked - never enters createdPlaceholders, so the
+        // unmatched-cleanup path can never delete it.
+        skippedRefusedCount++;
+        logger.info(
+          'Skipped placeholder creation - existing file at path has no Agregarr marker',
+          {
+            label: 'PlaceholderService',
+            title: sourceItem.title,
+            tmdbId: sourceItem.tmdbId,
+          }
+        );
+        continue;
+      }
+
       createdPlaceholders.push({ sourceItem, placeholderPath });
 
       logger.info('Created placeholder file', {
@@ -1705,6 +2149,17 @@ async function createPlaceholders(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  if (skippedRefusedCount > 0) {
+    logger.info(
+      'Skipped placeholder creation for files without an Agregarr marker',
+      {
+        label: 'PlaceholderService',
+        configName: config.name,
+        skipped: skippedRefusedCount,
+      }
+    );
   }
 
   // Check if we have any work to do (created or orphaned placeholders)
@@ -1747,7 +2202,10 @@ async function createPlaceholders(
     return [];
   }
 
-  // Step 2: Trigger ONE Plex library scan for newly created files (skip if only orphaned)
+  // Step 2: Trigger directory-scoped Plex scans for newly created files
+  // (skip if only orphaned). Never a whole-library scan on this path - with
+  // "Empty trash automatically after every scan" enabled on the Plex server,
+  // a full scan during a mount blip marks real items missing and purges them.
   let discoveredItemsMap = new Map<
     number,
     { ratingKey: string; title: string }
@@ -1755,13 +2213,17 @@ async function createPlaceholders(
   let excludedUnmatchedSet = new Set<number>(); // Track items already deleted by fallback
 
   if (createdPlaceholders.length > 0) {
-    logger.info('Triggering Plex library scan for newly created placeholders', {
+    logger.info('Triggering scoped Plex scans for newly created placeholders', {
       label: 'PlaceholderService',
       libraryId: config.libraryId,
       fileCount: createdPlaceholders.length,
     });
 
-    await plexClient.scanLibrary(config.libraryId);
+    await scanNewPlaceholderDirectories(
+      plexClient,
+      config.libraryId,
+      createdPlaceholders
+    );
 
     // Step 3: Poll for ALL items to be discovered
     const discoveryResult = await waitForPlexDiscovery(
@@ -1808,11 +2270,7 @@ async function createPlaceholders(
   );
 
   if (unmatchedPlaceholders.length > 0) {
-    await removeUnmatchedPlaceholders(
-      unmatchedPlaceholders,
-      config,
-      plexClient
-    );
+    await quarantineUndiscoveredPlaceholders(unmatchedPlaceholders, config);
   }
 
   // Step 4: Apply overlays to ALL placeholders (newly created + orphaned)
@@ -1955,6 +2413,22 @@ async function createPlaceholders(
             (o) => o.sourceItem.tmdbId === sourceItem.tmdbId
           ),
         });
+      }
+
+      // Staleness guard: a record now exists for this path, so clear any stale
+      // `orphanedAt` the sweep may have stamped while the item was record-less.
+      // Prevents an ancient stamp from short-circuiting the grace window years
+      // later if the config is disabled and the file goes record-less again.
+      // Persist is once-per-lifecycle, so this costs one marker read per newly
+      // persisted item. Resolve the ABSOLUTE marker dir: adopted-orphan
+      // placeholderPath is relative, so dirname(placeholderPath) would resolve
+      // against cwd and silently no-op (the only class this guard serves).
+      if (libraryPath) {
+        const { clearMarkerOrphaned, resolveRecordPath } = await import(
+          '@server/lib/placeholders/placeholderManager'
+        );
+        const absPlaceholderPath = resolveRecordPath(libraryPath, relativePath);
+        await clearMarkerOrphaned(path.dirname(absPlaceholderPath));
       }
     } catch (error) {
       logger.error('Failed to set metadata markers for placeholder', {

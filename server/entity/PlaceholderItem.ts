@@ -38,7 +38,9 @@ export class PlaceholderItem {
   public source: ItemProducingSource;
 
   @Column({ type: 'varchar' })
-  public placeholderPath: string; // Full filesystem path to placeholder file
+  // Path relative to the library's placeholder root (legacy rows may hold an
+  // absolute path; resolveRecordPath handles both without double-joining).
+  public placeholderPath: string;
 
   @Column({ type: 'varchar', nullable: true })
   public plexRatingKey?: string; // Plex item ID (once discovered)

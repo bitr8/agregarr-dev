@@ -13,6 +13,7 @@ import type {
   CollectionSource,
   SyncResult,
 } from '@server/lib/collections/core/types';
+import type { GhostDeletion } from '@server/lib/placeholders/services/PlaceholderCleanup';
 import type {
   DiscoveredMoviePlaceholder,
   DiscoveredPlaceholder,
@@ -25,7 +26,6 @@ import type {
 } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import path from 'path';
 import { syncCacheService } from './SyncCacheService';
 
 /**
@@ -180,25 +180,30 @@ export class CollectionSyncService {
           let labelsFixed = 0;
           let titlesFixes = 0;
           let titleFixFailures = 0;
-          const cleanedFolders: string[] = [];
+          const ghostDeletions: GhostDeletion[] = [];
 
           for (const { plexItem, needsTitleFix, marker } of discovered) {
             // Cleanup triggers when needsTitleFix is false (real content detected via Plex OR *arr)
             // This works even without a plexItem (content downloaded to different library)
             if (!needsTitleFix && marker.tmdbId) {
-              await cleanupPlaceholderForRealContent(
+              const fileDeleted = await cleanupPlaceholderForRealContent(
                 marker.tmdbId,
                 marker.placeholderPath,
                 'tv',
                 plexClient,
                 plexItem?.ratingKey
               );
-              cleanedUp++;
-              // placeholderPath is <show>/Season 00/S00E00.Trailer.mp4 — scope
-              // the ghost-entry scan to the show folder
-              cleanedFolders.push(
-                path.dirname(path.dirname(marker.placeholderPath))
-              );
+              // Enqueue ghost cleanup ONLY when the file was actually removed
+              // (C1). On EOWNERSHIP the real file is kept, so the Sink-2 gate
+              // must not even be asked to touch it. No ratingKey: plexItem is
+              // the show, not the ghost episode; the gate resolves it by path.
+              if (fileDeleted) {
+                cleanedUp++;
+                ghostDeletions.push({
+                  filePath: marker.placeholderPath,
+                  mediaType: 'tv',
+                });
+              }
             } else if (needsTitleFix && plexItem) {
               // Still a placeholder - ensure label for filtered hub exclusion
               try {
@@ -275,7 +280,7 @@ export class CollectionSyncService {
           });
 
           // Scoped Plex scan of the cleaned show folders to remove ghost entries (fire-and-forget)
-          if (cleanedFolders.length > 0) {
+          if (ghostDeletions.length > 0) {
             const libraryId = tvLibraryId;
             logger.info(
               'Triggering scoped Plex scan to clean up deleted TV placeholders',
@@ -283,17 +288,17 @@ export class CollectionSyncService {
                 label: 'Collection Sync Service',
                 libraryId,
                 placeholdersDeleted: cleanedUp,
-                folders: cleanedFolders.length,
+                ghosts: ghostDeletions.length,
               }
             );
             // Fire-and-forget: don't block sync while Plex processes
             void (async () => {
               try {
-                await removeGhostEntries(plexClient, libraryId, cleanedFolders);
+                await removeGhostEntries(plexClient, libraryId, ghostDeletions);
                 logger.info('Plex placeholder cleanup complete', {
                   label: 'Collection Sync Service',
                   libraryId,
-                  folders: cleanedFolders.length,
+                  ghosts: ghostDeletions.length,
                 });
               } catch (cleanupError) {
                 logger.warn('Failed to complete Plex placeholder cleanup', {
@@ -368,21 +373,30 @@ export class CollectionSyncService {
           // Process discovered movie placeholders: cleanup real content
           let moviesCleanedUp = 0;
           let labelsFixed = 0;
-          const cleanedFolders: string[] = [];
+          const ghostDeletions: GhostDeletion[] = [];
 
           for (const { needsCleanup, movie, plexItem } of discovered) {
             // Cleanup triggers when needsCleanup is true (real content detected via Plex OR *arr)
             // This works even without a plexItem (content downloaded to different library)
             if (needsCleanup) {
-              await cleanupPlaceholderForRealContent(
+              const fileDeleted = await cleanupPlaceholderForRealContent(
                 movie.tmdbId,
                 movie.placeholderPath,
                 'movie',
                 plexClient,
                 plexItem?.ratingKey
               );
-              moviesCleanedUp++;
-              cleanedFolders.push(movie.folderPath);
+              // Enqueue ghost cleanup ONLY when the file was actually removed
+              // (C1). No ratingKey: on the real-content path the placeholder
+              // ratingKey may BE the merged real item; the gate resolves the
+              // ghost safely by path instead.
+              if (fileDeleted) {
+                moviesCleanedUp++;
+                ghostDeletions.push({
+                  filePath: movie.placeholderPath,
+                  mediaType: 'movie',
+                });
+              }
             } else if (plexItem) {
               // Still a placeholder - ensure label for filtered hub exclusion
               try {
@@ -410,7 +424,7 @@ export class CollectionSyncService {
           });
 
           // Scoped Plex scan of the cleaned movie folders to remove ghost entries (fire-and-forget)
-          if (cleanedFolders.length > 0) {
+          if (ghostDeletions.length > 0) {
             const libraryId = movieLibraryId;
             logger.info(
               'Triggering scoped Plex scan to clean up deleted movie placeholders',
@@ -418,17 +432,17 @@ export class CollectionSyncService {
                 label: 'Collection Sync Service',
                 libraryId,
                 placeholdersDeleted: moviesCleanedUp,
-                folders: cleanedFolders.length,
+                ghosts: ghostDeletions.length,
               }
             );
             // Fire-and-forget: don't block sync while Plex processes
             void (async () => {
               try {
-                await removeGhostEntries(plexClient, libraryId, cleanedFolders);
+                await removeGhostEntries(plexClient, libraryId, ghostDeletions);
                 logger.info('Plex placeholder cleanup complete', {
                   label: 'Collection Sync Service',
                   libraryId,
-                  folders: cleanedFolders.length,
+                  ghosts: ghostDeletions.length,
                 });
               } catch (cleanupError) {
                 logger.warn('Failed to complete Plex placeholder cleanup', {

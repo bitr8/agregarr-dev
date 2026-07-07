@@ -1,8 +1,65 @@
+import type { PlaceholderItem } from '@server/entity/PlaceholderItem';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { constants as fsConstants } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 import type { PlaceholderOptions, PlaceholderResult } from './types';
+
+/**
+ * Ownership proof required to delete a placeholder file. removePlaceholder
+ * refuses to unlink unless the caller declares HOW it knows the file is
+ * Agregarr's. There is NO default: TypeScript forces every current and future
+ * caller to pick one, which is the whole safety property - a delete cannot be
+ * added without declaring provenance.
+ *
+ * - db-record: a coming_soon_item row Agregarr wrote. The caller resolves the
+ *   record's absolute path from the RECORD'S OWN config root (not the current
+ *   scan root) and passes it as recordAbsPath; the sink requires the requested
+ *   path to equal it. Root-bound, so a record under one placeholder root can
+ *   never authorise deleting a same-relative-path file under another root.
+ * - created-this-run: a file this sync just created via createPlaceholder. Only
+ *   reachable from the creation flow, whose tri-state guarantees the path is a
+ *   freshly-created or marker-verified placeholder.
+ * - marker: verified inside the sink against the on-disk .comingsoon artifact
+ *   (plus filename token and, when known, tmdbId). The only proof heuristic
+ *   callers (orphan scans) may use.
+ */
+export type RemovalOwnership =
+  | {
+      source: 'db-record';
+      record: Pick<
+        PlaceholderItem,
+        'id' | 'tmdbId' | 'placeholderPath' | 'mediaType' | 'configId'
+      >;
+      recordAbsPath: string;
+    }
+  | { source: 'created-this-run' }
+  | { source: 'marker'; expectedTmdbId?: number };
+
+/**
+ * Thrown by removePlaceholder when ownership cannot be proven. Carries a .code
+ * so callers detect it the same way they detect ENOENT (the project's
+ * ".code not message" convention).
+ */
+export class PlaceholderOwnershipError extends Error {
+  public readonly code = 'EOWNERSHIP';
+  public readonly placeholderPath: string;
+  constructor(message: string, placeholderPath: string) {
+    super(message);
+    this.name = 'PlaceholderOwnershipError';
+    this.placeholderPath = placeholderPath;
+  }
+}
+
+/**
+ * Resolve a stored placeholderPath (relative to the library's placeholder root)
+ * to an absolute path. Legacy rows may hold an absolute path; path.join would
+ * double-join those ('/root' + '/abs' -> '/root/abs'), so branch on isAbsolute.
+ */
+export function resolveRecordPath(root: string, storedPath: string): string {
+  return path.isAbsolute(storedPath) ? storedPath : path.join(root, storedPath);
+}
 
 /**
  * Sanitize filename to remove invalid characters and decode HTML entities
@@ -25,22 +82,63 @@ function sanitizeFilename(filename: string): string {
 }
 
 /**
+ * Single source of truth for placeholder file/folder naming. Both creators AND
+ * the creation short-circuit consume this, so the path arithmetic (sanitize,
+ * year suffix, sonarrFolderName, Season 00) can never drift between "where we
+ * write it" and "where we later look for it".
+ */
+export interface ResolvedPlaceholderPaths {
+  folderName: string;
+  destinationPath: string;
+  markerPath: string;
+}
+
+export function resolvePlaceholderPaths(
+  options: Omit<PlaceholderOptions, 'trailerPath'>
+): ResolvedPlaceholderPaths {
+  const { title, year, tmdbId, mediaType, libraryPath, sonarrFolderName } =
+    options;
+
+  if (mediaType === 'movie') {
+    const yearStr = year ? ` (${year})` : '';
+    const folderName = `${sanitizeFilename(title)}${yearStr}`;
+    const movieFolder = path.join(libraryPath, folderName);
+    const filename = `${folderName} {tmdb-${tmdbId}} {edition-Trailer}.mp4`;
+    return {
+      folderName,
+      destinationPath: path.join(movieFolder, filename),
+      markerPath: path.join(movieFolder, '.comingsoon'),
+    };
+  }
+
+  // TV: sonarrFolderName wins verbatim (matches Sonarr's on-disk naming so Plex
+  // doesn't split the show); otherwise sanitized "Title (Year)".
+  let folderName: string;
+  if (sonarrFolderName) {
+    folderName = sonarrFolderName;
+  } else {
+    const yearStr = year ? ` (${year})` : '';
+    folderName = `${sanitizeFilename(title)}${yearStr}`;
+  }
+  const seasonDir = path.join(libraryPath, folderName, 'Season 00');
+  return {
+    folderName,
+    destinationPath: path.join(seasonDir, 'S00E00.Trailer.mp4'),
+    markerPath: path.join(seasonDir, '.comingsoon'),
+  };
+}
+
+/**
  * Create placeholder file for movie
  */
 async function createMoviePlaceholder(
   options: PlaceholderOptions
 ): Promise<PlaceholderResult> {
-  const { title, year, tmdbId, libraryPath, trailerPath } = options;
+  const { title, year, tmdbId, trailerPath } = options;
 
-  // Folder format: MovieName (Year)
-  const sanitizedTitle = sanitizeFilename(title);
-  const yearStr = year ? ` (${year})` : '';
-  const folderName = `${sanitizedTitle}${yearStr}`;
-  const movieFolder = path.join(libraryPath, folderName);
-
-  // Filename format: MovieName (Year) {tmdb-12345} {edition-Trailer}.mp4
-  const filename = `${folderName} {tmdb-${tmdbId}} {edition-Trailer}.mp4`;
-  const destinationPath = path.join(movieFolder, filename);
+  const { destinationPath, markerPath } = resolvePlaceholderPaths(options);
+  const movieFolder = path.dirname(destinationPath);
+  const filename = path.basename(destinationPath);
 
   logger.debug('Creating movie placeholder', {
     label: 'PlaceholderService',
@@ -53,8 +151,23 @@ async function createMoviePlaceholder(
   // Create movie folder
   await fs.mkdir(movieFolder, { recursive: true });
 
-  // Copy trailer to movie folder
-  await fs.copyFile(trailerPath, destinationPath);
+  // Copy trailer to movie folder. COPYFILE_EXCL: never clobber a file already
+  // at the destination (a real user file, or a concurrent create). The creation
+  // short-circuit checks for an existing destination first, so the normal path
+  // never hits EEXIST; if it does, it is a refusal, surfaced by the caller.
+  await fs.copyFile(trailerPath, destinationPath, fsConstants.COPYFILE_EXCL);
+
+  // Write the .comingsoon marker (atomic) for identification. Mirrors the TV
+  // path so there is ONE authoritative "Agregarr authored this" signal on disk
+  // - the gate the orphan-deletion path checks. The filename tokens
+  // ({tmdb-...}/{edition-Trailer}) are standard Plex conventions a real user
+  // can apply to their own media, so they cannot prove authorship alone.
+  await writeMarkerAtomic(markerPath, {
+    createdAt: new Date().toISOString(),
+    title,
+    year,
+    tmdbId,
+  });
 
   // Clean up temporary trailer file
   try {
@@ -89,26 +202,22 @@ async function createMoviePlaceholder(
 async function createTVPlaceholder(
   options: PlaceholderOptions
 ): Promise<PlaceholderResult> {
-  const { title, year, libraryPath, trailerPath, sonarrFolderName } = options;
+  const { title, year, trailerPath, sonarrFolderName } = options;
 
   // Directory format: ShowName (Year)/Season 00/S00E00.Trailer.mp4
-  // If Sonarr folder name is provided, use it to match Sonarr's naming convention
-  // This prevents Plex from merging placeholder folders with real content folders
-  let folderName: string;
+  // resolvePlaceholderPaths is the single source of truth for the layout
+  // (sonarrFolderName wins verbatim so Plex doesn't split the show).
+  const { destinationPath, markerPath } = resolvePlaceholderPaths(options);
+  const seasonDir = path.dirname(destinationPath);
+  const showDir = path.dirname(seasonDir);
+  const filename = path.basename(destinationPath);
   if (sonarrFolderName) {
-    folderName = sonarrFolderName;
     logger.debug('Using Sonarr folder name for TV placeholder', {
       label: 'PlaceholderService',
       title,
       sonarrFolderName,
     });
-  } else {
-    const sanitizedTitle = sanitizeFilename(title);
-    const yearStr = year ? ` (${year})` : '';
-    folderName = `${sanitizedTitle}${yearStr}`;
   }
-  const showDir = path.join(libraryPath, folderName);
-  const seasonDir = path.join(showDir, 'Season 00');
 
   logger.debug('Creating TV show placeholder', {
     label: 'PlaceholderService',
@@ -156,10 +265,8 @@ async function createTVPlaceholder(
     }
   }
 
-  // Create trailer file
-  const filename = 'S00E00.Trailer.mp4';
-  const destinationPath = path.join(seasonDir, filename);
-  await fs.copyFile(trailerPath, destinationPath);
+  // Copy trailer file (COPYFILE_EXCL: never clobber an existing file).
+  await fs.copyFile(trailerPath, destinationPath, fsConstants.COPYFILE_EXCL);
 
   // Clean up temporary trailer file
   try {
@@ -176,19 +283,14 @@ async function createTVPlaceholder(
     });
   }
 
-  // Create .comingsoon marker file for identification
-  const markerPath = path.join(seasonDir, '.comingsoon');
-  await fs.writeFile(
-    markerPath,
-    JSON.stringify({
-      createdAt: new Date().toISOString(),
-      title,
-      year,
-      tmdbId: options.tmdbId,
-      tvdbId: options.tvdbId,
-    }),
-    'utf-8'
-  );
+  // Create .comingsoon marker file for identification (atomic write)
+  await writeMarkerAtomic(markerPath, {
+    createdAt: new Date().toISOString(),
+    title,
+    year,
+    tmdbId: options.tmdbId,
+    tvdbId: options.tvdbId,
+  });
 
   logger.info('Created TV show placeholder', {
     label: 'PlaceholderService',
@@ -232,7 +334,8 @@ export async function createPlaceholder(
  */
 export async function removePlaceholder(
   placeholderPath: string,
-  mediaType: 'movie' | 'tv'
+  mediaType: 'movie' | 'tv',
+  ownership: RemovalOwnership
 ): Promise<void> {
   try {
     // Security: Validate path is within configured library roots to prevent path traversal
@@ -344,6 +447,53 @@ export async function removePlaceholder(
       throw new Error('Invalid placeholder path - missing placeholder markers');
     }
 
+    // Ownership gate: proven authorship required before the irreversible unlink.
+    // The invariants above (root containment, filename token) already passed for
+    // every ownership kind; this is the provenance proof a heuristic cannot fake.
+    // Throws PlaceholderOwnershipError (code EOWNERSHIP) on any doubt.
+    if (ownership.source === 'db-record') {
+      // Root-bound backstop: the caller resolves recordAbsPath from the RECORD'S
+      // OWN config root, so a same-relative-path file under a different root will
+      // not match. Compare the REAL paths of both (realPath is already the
+      // realpath of the file being deleted): resolving both the same way keeps a
+      // symlinked/mergerfs root (e.g. /mnt/user -> /mnt/diskN) matching for a
+      // correct caller, while catching any future caller whose recordAbsPath
+      // points at a different real file. recordAbsPath == the file here, so its
+      // realpath succeeds; fall back to path.resolve only if it somehow doesn't.
+      const norm = (p: string) => path.resolve(p).replace(/\\/g, '/');
+      let recordReal: string;
+      try {
+        recordReal = await fs.realpath(ownership.recordAbsPath);
+      } catch {
+        recordReal = ownership.recordAbsPath;
+      }
+      if (norm(realPath) !== norm(recordReal)) {
+        throw new PlaceholderOwnershipError(
+          'db-record ownership path does not match the file being deleted (cross-root or mismatched record)',
+          placeholderPath
+        );
+      }
+      if (mediaType !== ownership.record.mediaType) {
+        throw new PlaceholderOwnershipError(
+          'db-record ownership mediaType mismatch',
+          placeholderPath
+        );
+      }
+    } else if (ownership.source === 'marker') {
+      const proven = await verifyPlaceholderMarker(
+        realPath,
+        mediaType,
+        ownership.expectedTmdbId
+      );
+      if (!proven) {
+        throw new PlaceholderOwnershipError(
+          'no positive .comingsoon marker on disk - not provably an Agregarr placeholder',
+          placeholderPath
+        );
+      }
+    }
+    // created-this-run: no further check (single call site, tri-state guarded).
+
     logger.debug('Removing placeholder', {
       label: 'PlaceholderService',
       path: placeholderPath,
@@ -374,6 +524,15 @@ export async function removePlaceholder(
     // Clean up parent directories if empty
     if (mediaType === 'movie') {
       const movieDir = path.dirname(placeholderPath);
+
+      // Remove the .comingsoon marker written at creation time so the movie
+      // folder can be recognised as empty. It only exists for the placeholder.
+      const markerPath = path.join(movieDir, '.comingsoon');
+      try {
+        await fs.unlink(markerPath);
+      } catch {
+        // Marker file might not exist (legacy placeholder), ignore
+      }
 
       // Try to remove movie directory if it's empty
       try {
@@ -436,13 +595,14 @@ export async function removePlaceholder(
       path: placeholderPath,
     });
   } catch (error) {
-    // ENOENT is handled gracefully by callers (file already gone) — don't
-    // log it as a failure here
-    const isFileNotFound =
-      error instanceof Error &&
-      'code' in error &&
-      (error as NodeJS.ErrnoException).code === 'ENOENT';
-    if (!isFileNotFound) {
+    // ENOENT (file already gone) and EOWNERSHIP (deliberate refusal - the
+    // caller handles it with its own warn/skip) are both expected control-flow
+    // outcomes, not failures. Don't error-log them here.
+    const code =
+      error instanceof Error && 'code' in error
+        ? (error as NodeJS.ErrnoException).code
+        : undefined;
+    if (code !== 'ENOENT' && code !== 'EOWNERSHIP') {
       logger.error('Failed to remove placeholder', {
         label: 'PlaceholderService',
         error: error instanceof Error ? error.message : String(error),
@@ -462,6 +622,14 @@ export interface PlaceholderMarker {
   year?: number;
   tmdbId?: number; // Optional for backward compatibility with old markers
   tvdbId?: number;
+  // Set by the global orphan sweep on first sighting of a record-less but
+  // Agregarr-marked file; the deletion grace runs from here. Cleared by the
+  // creation short-circuit when the item is resumed (proof it is still wanted),
+  // so a still-wanted quarantined placeholder never ages out.
+  orphanedAt?: string;
+  // Set when the marker was back-filled onto a DB-tracked placeholder that
+  // predated markers (never inferred from filename tokens).
+  backfilled?: boolean;
 }
 
 /**
@@ -470,6 +638,140 @@ export interface PlaceholderMarker {
 export interface DiscoveredMarker extends PlaceholderMarker {
   filePath: string; // Path to the .comingsoon marker file
   placeholderPath: string; // Path to the S00E00.Trailer.mp4 file
+}
+
+/**
+ * Read and parse the .comingsoon marker in a directory. Returns null when the
+ * marker is missing OR unparseable (callers must not treat null as "deletable").
+ */
+export async function readPlaceholderMarker(
+  dir: string
+): Promise<PlaceholderMarker | null> {
+  try {
+    const raw = await fs.readFile(path.join(dir, '.comingsoon'), 'utf-8');
+    return JSON.parse(raw) as PlaceholderMarker;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write a marker atomically: write a sibling temp file then rename into place
+ * (atomic on POSIX within the same directory), so a concurrent reader never
+ * sees a torn JSON marker. Used by the creators, marker back-fill's callers,
+ * upgradeMarkerFile, and the orphan stamp/clear helpers.
+ */
+async function writeMarkerAtomic(
+  markerPath: string,
+  marker: PlaceholderMarker
+): Promise<void> {
+  const tmpPath = `${markerPath}.tmp-${process.pid}`;
+  await fs.writeFile(tmpPath, JSON.stringify(marker), 'utf-8');
+  await fs.rename(tmpPath, markerPath);
+}
+
+/**
+ * Positive on-disk marker check required before deleting a record-less orphaned
+ * placeholder. Heuristic detection (isPlaceholderItemAsync, filename tokens) can
+ * false-positive on real media, so deletion additionally requires the
+ * `.comingsoon` marker only Agregarr's creation flow writes. The marker is the
+ * AUTHORITATIVE gate; filename tokens are a secondary signal, never sufficient
+ * alone. Returns false on any doubt. (Moved here from PlaceholderCreation so the
+ * deletion sink verifies ownership itself.)
+ */
+export async function verifyPlaceholderMarker(
+  placeholderFilePath: string,
+  mediaType: 'movie' | 'tv',
+  expectedTmdbId?: number
+): Promise<boolean> {
+  const filename = path.basename(placeholderFilePath);
+  const markerDir = path.dirname(placeholderFilePath);
+
+  const marker = await readPlaceholderMarker(markerDir);
+  if (marker === null) {
+    // No marker OR a torn/unparseable one: fail closed either way. A corrupt
+    // marker downgrades to the leak tier, never to a delete - we cannot read
+    // its tmdbId to cross-check, so authorising deletion on filename tokens
+    // alone would defeat the marker gate. (Atomic writes mean Agregarr never
+    // produces a torn marker; the sweep likewise treats null as unproven.)
+    return false;
+  }
+  if (
+    expectedTmdbId !== undefined &&
+    marker.tmdbId !== undefined &&
+    marker.tmdbId !== expectedTmdbId
+  ) {
+    return false; // marker belongs to a different item
+  }
+
+  if (mediaType === 'movie') {
+    if (!filename.includes('{edition-Trailer}')) {
+      return false;
+    }
+    const tmdbMatch = filename.match(/\{tmdb-(\d+)\}/);
+    const filenameTmdbId = tmdbMatch ? parseInt(tmdbMatch[1], 10) : undefined;
+    // Bind the file being deleted to the marker's OWN identity. A movie marker
+    // sits in the folder and can be back-filled for the whole folder, so a
+    // sibling `*{edition-Trailer}*.mp4` that lacks a matching `{tmdb-N}` token
+    // must not be delete-authorised by another file's marker. Agregarr always
+    // writes `{tmdb-N}` matching the marker, so a genuine placeholder passes;
+    // this closes the gap where the global sweep supplies expectedTmdbId=
+    // undefined (it parses the id from the target's own filename, so a
+    // token-less sibling yields undefined and skips the cross-check).
+    if (marker.tmdbId !== undefined && filenameTmdbId !== marker.tmdbId) {
+      return false;
+    }
+    if (expectedTmdbId !== undefined && filenameTmdbId !== expectedTmdbId) {
+      return false;
+    }
+    return true;
+  }
+
+  // TV: filename must be our trailer file.
+  return filename.includes('S00E00') && filename.includes('Trailer');
+}
+
+/**
+ * Stamp `orphanedAt` on a record-less-but-marked placeholder's marker so the
+ * deletion grace can start. Returns false (and does NOT delete-authorise) when
+ * the marker is missing/unparseable or the write fails - fail-safe: no delete
+ * without a successfully persisted grace start.
+ */
+export async function stampMarkerOrphaned(dir: string): Promise<boolean> {
+  const marker = await readPlaceholderMarker(dir);
+  if (!marker) {
+    return false;
+  }
+  if (marker.orphanedAt) {
+    return true; // already stamped
+  }
+  try {
+    await writeMarkerAtomic(path.join(dir, '.comingsoon'), {
+      ...marker,
+      orphanedAt: new Date().toISOString(),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clear `orphanedAt` (item is wanted again). No-op when the marker is missing
+ * or already has no orphanedAt, so the steady state does zero marker writes.
+ */
+export async function clearMarkerOrphaned(dir: string): Promise<void> {
+  const marker = await readPlaceholderMarker(dir);
+  if (!marker || !marker.orphanedAt) {
+    return;
+  }
+  const rest = { ...marker };
+  delete rest.orphanedAt;
+  try {
+    await writeMarkerAtomic(path.join(dir, '.comingsoon'), rest);
+  } catch {
+    // best-effort
+  }
 }
 
 /**
@@ -562,19 +864,15 @@ export async function upgradeMarkerFile(
     const markerContent = await fs.readFile(markerPath, 'utf-8');
     const markerData = JSON.parse(markerContent) as PlaceholderMarker;
 
-    // Add tmdbId and tvdbId
+    // Add tmdbId and tvdbId (preserves unknown fields via the spread)
     const upgradedMarker = {
       ...markerData,
       tmdbId,
       tvdbId,
     };
 
-    // Write back to file
-    await fs.writeFile(
-      markerPath,
-      JSON.stringify(upgradedMarker, null, 2),
-      'utf-8'
-    );
+    // Write back to file atomically (markerPath is the .comingsoon file itself)
+    await writeMarkerAtomic(markerPath, upgradedMarker);
 
     logger.info('Upgraded marker file with TMDB ID', {
       label: 'PlaceholderManager',
