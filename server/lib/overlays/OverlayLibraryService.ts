@@ -2291,7 +2291,13 @@ class OverlayLibraryService {
                 originalPlexPosterUrl: basePosterResult.sourceUrl,
                 basePosterFilename: basePosterResult.filename,
                 localPosterModifiedTime: basePosterResult.fileModTime,
-              }
+              },
+              // Raw item.type on purpose - NOT actualMediaType. itemType must
+              // preserve the exact Plex kind ('movie' | 'show' | 'season') for
+              // the season cleanup lifecycle's exact-match query;
+              // actualMediaType deliberately collapses 'season' -> 'show' for
+              // TMDB namespace resolution and would erase that distinction.
+              item.type
             );
           }
         } catch (metaError) {

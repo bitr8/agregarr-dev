@@ -30,7 +30,9 @@ export interface MaintainerrCollection {
   manualCollectionName: string;
   listExclusions: boolean;
   forceOverseerr: boolean;
-  type: number;
+  // v3 (>=3.4.0) sends a string: 'movie' | 'show' | 'season' | 'episode'.
+  // v2 (<3.4.0) sent a numeric enum. Widened to accept both.
+  type: number | string;
   keepLogsForMonths: number;
   addDate: string;
   handledMediaAmount: number;

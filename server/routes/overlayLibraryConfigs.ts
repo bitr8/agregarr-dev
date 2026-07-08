@@ -149,6 +149,10 @@ router.post('/:libraryId', async (req, res, next) => {
       if ('enableEpisodeScanning' in req.body) {
         config.enableEpisodeScanning = !!req.body.enableEpisodeScanning;
       }
+      if ('enableMaintainerrSeasonOverlays' in req.body) {
+        config.enableMaintainerrSeasonOverlays =
+          !!req.body.enableMaintainerrSeasonOverlays;
+      }
     } else {
       // Create new
       config = new OverlayLibraryConfig({
@@ -158,6 +162,8 @@ router.post('/:libraryId', async (req, res, next) => {
         enabledOverlays,
         tmdbLanguage: tmdbLanguage || undefined,
         enableEpisodeScanning: !!req.body.enableEpisodeScanning,
+        enableMaintainerrSeasonOverlays:
+          !!req.body.enableMaintainerrSeasonOverlays,
       });
     }
 

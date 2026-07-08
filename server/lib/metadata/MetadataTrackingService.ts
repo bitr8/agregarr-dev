@@ -352,7 +352,8 @@ class MetadataTrackingService {
       originalPlexPosterUrl: string;
       basePosterFilename: string;
       localPosterModifiedTime?: number | null;
-    }
+    },
+    itemType?: string
   ): Promise<void> {
     const repo = getRepository(MediaItemMetadata);
 
@@ -365,6 +366,13 @@ class MetadataTrackingService {
         plexItemRatingKey: itemRatingKey,
         libraryKey: libraryKey,
       });
+    }
+
+    // Record the item kind ('movie' | 'show' | 'season') when the caller knows
+    // it. Only set when provided so callers that don't supply it (e.g. the
+    // poster-reset path) never wipe an existing value.
+    if (itemType !== undefined) {
+      metadata.itemType = itemType;
     }
 
     // Update overlay tracking
@@ -397,6 +405,30 @@ class MetadataTrackingService {
     return await repo.findOne({
       where: { plexItemRatingKey: itemRatingKey },
     });
+  }
+
+  /**
+   * All tracked season overlay rows for a library. Used by the season
+   * cleanup lifecycle to find rows whose season has departed its Maintainerr
+   * collection (or Plex) and restore/clear them.
+   */
+  async getOverlaidSeasonMetadata(
+    libraryKey: string
+  ): Promise<MediaItemMetadata[]> {
+    const repo = getRepository(MediaItemMetadata);
+    return await repo.find({
+      where: { libraryKey, itemType: 'season' },
+    });
+  }
+
+  /**
+   * Delete a single tracked metadata row by its Plex rating key. Used by the
+   * season cleanup lifecycle after a base poster is restored or the item is
+   * confirmed gone from Plex.
+   */
+  async deleteItemMetadata(itemRatingKey: string): Promise<void> {
+    const repo = getRepository(MediaItemMetadata);
+    await repo.delete({ plexItemRatingKey: itemRatingKey });
   }
 }
 
