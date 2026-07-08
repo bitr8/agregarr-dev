@@ -130,6 +130,21 @@ class OverlayLibraryService {
     Map<string, AggregatedMediaInfo>
   >();
 
+  // Memoised episode aggregation for the collection / quick-sync overlay path,
+  // keyed by libraryId. Deduplicates the many per-collection calls in one sync
+  // cycle so they don't each re-query and re-aggregate the whole library.
+  // Invalidated in runEpisodeScan (the sole writer of the episode media cache)
+  // for immediate freshness after a scan, and bounded by a short TTL so it can
+  // never outlive the underlying cache's own 7-day freshness window.
+  private aggregatedMediaCacheMemo = new Map<
+    string,
+    { at: number; aggregated: Map<string, AggregatedMediaInfo> | undefined }
+  >();
+
+  // Short enough to always be fresher than the 7-day episode cache TTL, long
+  // enough to cover one sync cycle's worth of per-collection calls.
+  private static readonly AGGREGATION_MEMO_TTL_MS = 10 * 60 * 1000;
+
   // Pre-fetched IMDb ratings for batch optimization (global, keyed by IMDb ID)
   // Maps IMDb ID to rating number (or null if no rating available).
   // Populated before item processing loop. Null means "checked, no rating".
@@ -1632,6 +1647,16 @@ class OverlayLibraryService {
           await this.prefetchTmdbReleaseDates(plexItems);
         }
 
+        // Load episode-derived quality data (resolution/HDR/DV) for show
+        // libraries from the persisted episode-media cache so background and
+        // collection syncs keep quality badges. runEpisodeScan is the
+        // authoritative writer; here we only read it (memoised per library, no
+        // Plex calls). See getAggregatedMediaFromCache for the trade-offs.
+        const aggregatedMedia =
+          config.enableEpisodeScanning && mediaType === 'show'
+            ? await this.getAggregatedMediaFromCache(libraryId)
+            : undefined;
+
         // Process each item
         let successCount = 0;
         let errorCount = 0;
@@ -1677,7 +1702,8 @@ class OverlayLibraryService {
                 mediaType,
                 libraryId,
                 config.libraryName,
-                contextOverrides
+                contextOverrides,
+                aggregatedMedia
               );
               successCount++;
             }
@@ -1722,7 +1748,8 @@ class OverlayLibraryService {
     configuredLibraryType: 'movie' | 'show',
     libraryId: string,
     libraryName: string,
-    contextOverrides?: Partial<OverlayRenderContext>
+    contextOverrides?: Partial<OverlayRenderContext>,
+    aggregatedMediaOverride?: Map<string, AggregatedMediaInfo>
   ): Promise<OverlayApplyResult> {
     try {
       // CRITICAL: Derive actual media type from item.type, not library config
@@ -1933,7 +1960,8 @@ class OverlayLibraryService {
 
       // Merge aggregated episode media info if available for this show
       let episodeAggregation: Partial<OverlayRenderContext> = {};
-      const aggregatedMap = this.aggregatedMediaByLibrary.get(libraryId);
+      const aggregatedMap =
+        aggregatedMediaOverride ?? this.aggregatedMediaByLibrary.get(libraryId);
       if (item.type === 'show') {
         episodeAggregation.episodeMediaSource = 'show';
       }
@@ -2465,6 +2493,9 @@ class OverlayLibraryService {
     const aggregated = aggregator.aggregateByShow(episodes);
 
     this.aggregatedMediaByLibrary.set(libraryId, aggregated);
+    // Fresh authoritative data written; drop the collection-path memo so it
+    // re-reads the updated cache on its next call.
+    this.aggregatedMediaCacheMemo.delete(libraryId);
 
     logger.info('Episode media aggregation complete', {
       label: 'EpisodeScanner',
@@ -2472,6 +2503,75 @@ class OverlayLibraryService {
       episodeCount: episodes.length,
       showCount: aggregated.size,
     });
+  }
+
+  /**
+   * Load per-show episode media aggregation from the persisted cache without
+   * re-scanning Plex. Used by the collection / quick-sync overlay path so
+   * show-level quality badges survive background syncs (the symptom of #32).
+   *
+   * Design notes / trade-offs vs. the full runEpisodeScan path:
+   * - No Plex API calls: reads only the cache runEpisodeScan already wrote. The
+   *   result is memoised per library (short TTL, plus invalidation whenever
+   *   runEpisodeScan rewrites the cache) so the many per-collection calls in one
+   *   sync cycle don't each re-query and re-aggregate the whole library.
+   * - Does NOT mutate the shared aggregatedMediaByLibrary map; the caller passes
+   *   the returned map straight to applyOverlaysToItem, so it cannot race a
+   *   concurrent full library scan writing that map.
+   * - Reflects the cache as of the last scan. It does not re-filter to
+   *   currently-existing episodes, so an episode deleted from Plex can still
+   *   count toward a badge until the next nightly scan self-heals it. Resolution
+   *   comes from the lightweight scan and is correct immediately; HDR/DV only
+   *   become correct once a full scan has written stream detail. Both windows
+   *   close at the next runEpisodeScan.
+   * - Returns undefined when the cache is empty (e.g. before the first scan), in
+   *   which case items fall back to base context exactly as before.
+   */
+  private async getAggregatedMediaFromCache(
+    libraryId: string
+  ): Promise<Map<string, AggregatedMediaInfo> | undefined> {
+    const memo = this.aggregatedMediaCacheMemo.get(libraryId);
+    if (
+      memo &&
+      Date.now() - memo.at < OverlayLibraryService.AGGREGATION_MEMO_TTL_MS
+    ) {
+      return memo.aggregated;
+    }
+
+    const { EpisodeMediaAggregator } = await import('./EpisodeMediaAggregator');
+    const { EpisodeMediaCacheService } = await import(
+      './EpisodeMediaCacheService'
+    );
+
+    const settings = getSettings();
+    const serverId = settings.plex?.machineId || 'default';
+
+    const cacheService = new EpisodeMediaCacheService();
+    const { episodes } = await cacheService.getCachedEpisodes(
+      serverId,
+      libraryId
+    );
+
+    const aggregated =
+      episodes.length === 0
+        ? undefined
+        : new EpisodeMediaAggregator().aggregateByShow(episodes);
+
+    this.aggregatedMediaCacheMemo.set(libraryId, {
+      at: Date.now(),
+      aggregated,
+    });
+
+    if (aggregated) {
+      logger.info('Loaded episode media aggregation from cache', {
+        label: 'OverlayLibrary',
+        libraryId,
+        episodeCount: episodes.length,
+        showCount: aggregated.size,
+      });
+    }
+
+    return aggregated;
   }
 }
 
