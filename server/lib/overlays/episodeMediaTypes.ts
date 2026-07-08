@@ -18,6 +18,11 @@ export interface EpisodeMediaInfo {
   audioChannels: number;
   bitDepth: number;
   mediaHash: string; // hash of Plex Media[] for change detection
+  // Whether HDR/DV/codec detail was actually extracted from a Part stream for
+  // this episode (a lightweight list scan, or a full scan that hit a partial
+  // getMetadataBatch failure, sets this false). Tracked per episode so a stale
+  // or lightweight-only row can't mask itself as detailed.
+  hasStreamDetail: boolean;
 }
 
 export interface AggregatedMediaInfo {

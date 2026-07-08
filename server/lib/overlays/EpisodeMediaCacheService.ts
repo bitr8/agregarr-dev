@@ -18,7 +18,12 @@ export class EpisodeMediaCacheService {
       .andWhere("emc.updatedAt > datetime('now', '-7 days')")
       .getMany();
 
-    const hasStreamDetail = rows.length > 0 && rows[0].hasStreamDetail;
+    // The set is only "detailed" when EVERY row has stream detail. A single
+    // lightweight-only row (e.g. from a partial getMetadataBatch failure)
+    // makes this false so the next scan re-fetches detail instead of trusting
+    // a poisoned cache. Reading rows[0] alone silently masked missing rows.
+    const hasStreamDetail =
+      rows.length > 0 && rows.every((row) => row.hasStreamDetail);
 
     return {
       episodes: rows.map((row) => ({
@@ -36,6 +41,7 @@ export class EpisodeMediaCacheService {
         audioChannels: row.audioChannels,
         bitDepth: row.bitDepth,
         mediaHash: row.mediaHash,
+        hasStreamDetail: row.hasStreamDetail,
       })),
       hasStreamDetail,
     };
@@ -44,8 +50,7 @@ export class EpisodeMediaCacheService {
   async saveEpisodes(
     serverId: string,
     libraryId: string,
-    episodes: EpisodeMediaInfo[],
-    hasStreamDetail: boolean
+    episodes: EpisodeMediaInfo[]
   ): Promise<void> {
     if (episodes.length === 0) return;
 
@@ -72,7 +77,7 @@ export class EpisodeMediaCacheService {
         entity.audioChannels = ep.audioChannels;
         entity.bitDepth = ep.bitDepth;
         entity.mediaHash = ep.mediaHash;
-        entity.hasStreamDetail = hasStreamDetail;
+        entity.hasStreamDetail = ep.hasStreamDetail;
         entity.updatedAt = now;
         return entity;
       });
@@ -85,7 +90,7 @@ export class EpisodeMediaCacheService {
       serverId,
       libraryId,
       episodeCount: episodes.length,
-      hasStreamDetail,
+      withStreamDetail: episodes.filter((ep) => ep.hasStreamDetail).length,
     });
   }
 
@@ -93,9 +98,7 @@ export class EpisodeMediaCacheService {
     cachedEpisodes: EpisodeMediaInfo[],
     freshEpisodes: EpisodeMediaInfo[]
   ): Set<string> {
-    const cachedByKey = new Map(
-      cachedEpisodes.map((c) => [c.ratingKey, c])
-    );
+    const cachedByKey = new Map(cachedEpisodes.map((c) => [c.ratingKey, c]));
     const stale = new Set<string>();
 
     for (const ep of freshEpisodes) {

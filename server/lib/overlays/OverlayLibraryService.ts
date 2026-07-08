@@ -2379,9 +2379,8 @@ class OverlayLibraryService {
     libraryId: string,
     requiredContextFields: Set<string>
   ): Promise<void> {
-    const { PlexEpisodeMediaScanner } = await import(
-      './PlexEpisodeMediaScanner'
-    );
+    const { PlexEpisodeMediaScanner, resolveFetchedEpisodeDetail } =
+      await import('./PlexEpisodeMediaScanner');
     const { EpisodeMediaAggregator } = await import('./EpisodeMediaAggregator');
     const { EpisodeMediaCacheService } = await import(
       './EpisodeMediaCacheService'
@@ -2448,11 +2447,11 @@ class OverlayLibraryService {
         ? freshLightweight.map((e) => e.ratingKey)
         : [...staleKeys];
       const batchMetadata = await plexApi.getMetadataBatch(keysToFetch);
-      const { extractMediaCapabilities } = await import(
-        '@server/utils/mediaCapabilities'
-      );
 
-      // Merge: use cached for fresh entries, updated data for stale entries
+      // Merge: reuse cached rows for fresh entries, and apply the freshly
+      // fetched stream detail (or lack of it) for stale / detail-upgrade
+      // entries. resolveFetchedEpisodeDetail owns the per-row hasStreamDetail
+      // decision so an empty or missing stream can't masquerade as detailed.
       episodes = freshLightweight.map((ep) => {
         if (
           !needsDetailUpgrade &&
@@ -2461,29 +2460,15 @@ class OverlayLibraryService {
         ) {
           return cachedByKey.get(ep.ratingKey)!;
         }
-        const metadata = batchMetadata.get(ep.ratingKey);
-        if (metadata?.Media?.[0]) {
-          const media = metadata.Media[0];
-          const streams = media.Part?.[0]?.Stream;
-          if (streams) {
-            const caps = extractMediaCapabilities(media, streams);
-            return { ...ep, ...caps };
-          }
-        }
-        return ep;
+        return resolveFetchedEpisodeDetail(ep, batchMetadata.get(ep.ratingKey));
       });
 
-      await cacheService.saveEpisodes(
-        serverId,
-        libraryId,
-        episodes,
-        needsStreamDetail
-      );
+      await cacheService.saveEpisodes(serverId, libraryId, episodes);
     } else {
       // No stream detail needed — use lightweight data
       episodes = freshLightweight;
       if (staleKeys.size > 0) {
-        await cacheService.saveEpisodes(serverId, libraryId, episodes, false);
+        await cacheService.saveEpisodes(serverId, libraryId, episodes);
       }
     }
 

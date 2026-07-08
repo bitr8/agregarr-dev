@@ -1,9 +1,12 @@
 import type PlexAPI from '@server/api/plexapi';
-import type { PlexLibraryItem } from '@server/api/plexapi';
+import type { PlexLibraryItem, PlexMetadata } from '@server/api/plexapi';
 import logger from '@server/logger';
 import { extractMediaCapabilities } from '@server/utils/mediaCapabilities';
 import { createHash } from 'crypto';
-import type { EpisodeMediaInfo, EpisodeMediaScanner } from './episodeMediaTypes';
+import type {
+  EpisodeMediaInfo,
+  EpisodeMediaScanner,
+} from './episodeMediaTypes';
 
 function computeMediaHash(mediaArray: unknown[]): string {
   return createHash('sha256')
@@ -33,7 +36,7 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
     if (!needsStreamDetail) {
       return episodes
         .filter((ep) => ep.Media?.[0])
-        .map((ep) => this.extractFromItem(ep));
+        .map((ep) => this.extractFromItem(ep, false));
     }
 
     const ratingKeys = episodes.map((ep) => ep.ratingKey);
@@ -58,7 +61,10 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
 
       if (!enrichedItem.Media?.[0]) continue;
 
-      results.push(this.extractFromItem(enrichedItem));
+      // Only count it as detail-fetched if the batch actually returned this
+      // item; a dropped item falls back to lightweight data and must be
+      // retried on the next scan.
+      results.push(this.extractFromItem(enrichedItem, !!metadata));
     }
 
     logger.info('Episode media scan complete', {
@@ -71,7 +77,10 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
     return results;
   }
 
-  private extractFromItem(ep: PlexLibraryItem): EpisodeMediaInfo {
+  private extractFromItem(
+    ep: PlexLibraryItem,
+    streamDetailFetched: boolean
+  ): EpisodeMediaInfo {
     const media = ep.Media[0];
     const streams = media.Part?.[0]?.Stream;
 
@@ -85,6 +94,49 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
       episodeNumber: ep.index ?? 0,
       ...caps,
       mediaHash: computeMediaHash(ep.Media),
+      // Owned by the caller: a lightweight list scan has not fetched stream
+      // detail (its caps are Plex-list defaults), so it passes false; the
+      // full-detail pass passes true. See resolveFetchedEpisodeDetail.
+      hasStreamDetail: streamDetailFetched,
     };
   }
+}
+
+/**
+ * Resolve one episode's media info after a stream-detail fetch pass.
+ *
+ * `metadata` is the item's getMetadataBatch response, or undefined when the
+ * batch call dropped it (a partial failure). The rules:
+ * - No response: leave the lightweight row untouched (hasStreamDetail stays
+ *   false), so the next scan retries the fetch for it.
+ * - Response with a usable video stream: extract real capabilities and mark it
+ *   detail-fetched.
+ * - Response with no usable stream (empty Part.Stream, unanalysed / optimised /
+ *   remote file): keep the lightweight values but still mark it detail-fetched,
+ *   so a genuinely stream-less item isn't re-fetched on every scan.
+ *
+ * Keeping the flag to mean "a fetch was completed" (not "a stream array was
+ * present") is what lets rows.every(hasStreamDetail) both self-heal transient
+ * failures and converge on items that will never have stream detail.
+ */
+export function resolveFetchedEpisodeDetail(
+  lightweightEp: EpisodeMediaInfo,
+  metadata: PlexMetadata | undefined
+): EpisodeMediaInfo {
+  if (!metadata) {
+    return lightweightEp;
+  }
+
+  const media = metadata.Media?.[0];
+  const streams = media?.Part?.[0]?.Stream;
+
+  if (media && streams && streams.length > 0) {
+    return {
+      ...lightweightEp,
+      ...extractMediaCapabilities(media, streams),
+      hasStreamDetail: true,
+    };
+  }
+
+  return { ...lightweightEp, hasStreamDetail: true };
 }

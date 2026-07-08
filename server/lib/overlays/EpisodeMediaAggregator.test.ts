@@ -18,6 +18,7 @@ function makeEpisode(
     audioChannels: 6,
     bitDepth: 8,
     mediaHash: 'abc123',
+    hasStreamDetail: true,
     ...overrides,
   };
 }
