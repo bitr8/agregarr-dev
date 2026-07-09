@@ -182,6 +182,8 @@ interface LibraryConfig {
   enabledOverlays: EnabledOverlay[];
   tmdbLanguage?: string;
   enableEpisodeScanning?: boolean;
+  enableMaintainerrSeasonOverlays?: boolean;
+  maintainerrConfigured?: boolean;
 }
 
 interface LibraryDetailConfigViewProps {
@@ -327,6 +329,8 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
     undefined
   );
   const [enableEpisodeScanning, setEnableEpisodeScanning] = useState(false);
+  const [enableMaintainerrSeasonOverlays, setEnableMaintainerrSeasonOverlays] =
+    useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -381,6 +385,11 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
     }
     if (configData?.enableEpisodeScanning !== undefined) {
       setEnableEpisodeScanning(configData.enableEpisodeScanning);
+    }
+    if (configData?.enableMaintainerrSeasonOverlays !== undefined) {
+      setEnableMaintainerrSeasonOverlays(
+        configData.enableMaintainerrSeasonOverlays
+      );
     }
     if (configData?.tmdbLanguage !== undefined) {
       setTmdbLanguage(configData.tmdbLanguage);
@@ -575,6 +584,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
             enabledOverlays,
             tmdbLanguage: tmdbLanguage || undefined,
             enableEpisodeScanning,
+            enableMaintainerrSeasonOverlays,
           }),
         }
       );
@@ -697,9 +707,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                   <input
                     type="checkbox"
                     checked={enableEpisodeScanning}
-                    onChange={(e) =>
-                      setEnableEpisodeScanning(e.target.checked)
-                    }
+                    onChange={(e) => setEnableEpisodeScanning(e.target.checked)}
                     className="peer sr-only"
                   />
                   <div className="peer h-5 w-9 rounded-full bg-stone-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-500 peer-checked:after:translate-x-full" />
@@ -713,6 +721,56 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                     HDR, and audio. More accurate than Plex&apos;s default show
                     metadata.
                   </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Maintainerr Season Countdown Toggle - Only for show libraries */}
+          {libraryType === 'show' && (
+            <div className="mt-4 border-t border-stone-700 pt-4">
+              <div className="flex items-center gap-3">
+                <label
+                  className={`relative inline-flex items-center ${
+                    configData?.maintainerrConfigured
+                      ? 'cursor-pointer'
+                      : 'cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enableMaintainerrSeasonOverlays}
+                    disabled={!configData?.maintainerrConfigured}
+                    onChange={(e) =>
+                      setEnableMaintainerrSeasonOverlays(e.target.checked)
+                    }
+                    className="peer sr-only"
+                  />
+                  <div className="peer h-5 w-9 rounded-full bg-stone-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-500 peer-checked:after:translate-x-full" />
+                </label>
+                <div>
+                  <span
+                    className={`text-sm font-medium ${
+                      configData?.maintainerrConfigured
+                        ? 'text-white'
+                        : 'text-stone-400'
+                    }`}
+                  >
+                    Season deletion countdown
+                  </span>
+                  <p className="text-xs text-stone-400">
+                    Applies deletion-countdown overlays to seasons in
+                    Maintainerr collections. Requires: a Maintainerr connection,
+                    a Maintainerr collection of type Season with a deletion
+                    schedule, and a countdown template enabled for this library.
+                    Season collections trigger a full-library scan in
+                    Maintainerr.
+                  </p>
+                  {!configData?.maintainerrConfigured && (
+                    <p className="mt-1 text-xs text-amber-500">
+                      Connect Maintainerr in Settings to enable this.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -689,6 +689,12 @@ export class HubSyncService {
                     tmdbId: usesPlexArt ? undefined : extractTmdbId(item.Guid),
                     year: undefined, // PlexMetadata doesn't include year field
                     posterUrl: plexPosterUrl ?? undefined,
+                    // `index` is the season number. (`parentIndex` on a season is
+                    // the show's index, not the season's.) Episodes get no badge.
+                    episodeInfo:
+                      item.type === 'season'
+                        ? { season: item.index }
+                        : undefined,
                     metadata: {
                       libraryKey: preExistingConfig.libraryId,
                       // Stable identity for the poster input hash — seasons
@@ -743,13 +749,20 @@ export class HubSyncService {
                 templateId: preExistingConfig.autoPosterTemplate || null,
                 templateData, // Include template content for change detection
                 itemIds: (posterItems || [])
-                  .map(
-                    (item) =>
+                  .map((item) => {
+                    const id =
                       item.tmdbId?.toString() ||
                       (typeof item.metadata?.ratingKey === 'string'
                         ? item.metadata.ratingKey
-                        : item.title)
-                  )
+                        : item.title);
+                    // The season badge is rendered from episodeInfo, so it has to
+                    // participate in the hash: otherwise an already-generated
+                    // collage never regenerates and the badge never appears.
+                    // Scoped to season items so movie collections don't rehash.
+                    return item.episodeInfo?.season != null
+                      ? `${id}:s${item.episodeInfo.season}`
+                      : id;
+                  })
                   .slice(0, 50),
                 collectionName,
                 mediaType: preExistingConfig.mediaType,
