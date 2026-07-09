@@ -1,11 +1,18 @@
 /**
  * Tests for dateHelpers timezone-aware date calculations.
- * Run with: TZ=Australia/Sydney bun test server/utils/dateHelpers.test.ts
  *
  * Reproduces the off-by-one debug scenario:
  * TMDB date "2026-02-10", server TZ=Australia/Sydney (AEDT, UTC+11),
  * overlay run at various UTC times on Feb 10.
+ *
+ * The timezone is pinned below rather than left to the caller's environment.
+ * These assertions are Sydney-specific, so an unset TZ made the suite fail or
+ * pass depending on how it was invoked. `getServerTimezone()` reads
+ * `process.env.TZ` at call time, and assigning it updates Node's local zone too,
+ * so setting it here covers both halves of `getCalendarDateInTimezone`.
  */
+process.env.TZ = 'Australia/Sydney';
+
 import {
   afterEach,
   beforeAll,
