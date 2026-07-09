@@ -408,6 +408,105 @@ class PlexBasePosterManager {
   }
 
   /**
+   * Recover the tracked original base poster directly from Plex, for the case
+   * where the local base cache is gone and Plex still shows our overlay.
+   *
+   * Only a content-addressed reference is safe to fetch. Plex serves
+   * `/library/metadata/{ratingKey}/file?url={ref}` as those exact bytes no matter
+   * which poster is selected, whereas a `/thumb/{version}` URL always resolves to
+   * the CURRENTLY selected poster - which here is our overlay. Fetching one would
+   * composite the overlay onto itself, and storeBasePoster would then bake it in
+   * as the base forever. seasonPosterRestore.ts documents the same failure mode.
+   *
+   * Restricted to plex-sourced rows on purpose: a tmdb/local row stores a TMDB or
+   * local:// sourceUrl in originalPlexPosterUrl, and recovering one here would
+   * leave the caller persisting basePosterSource:'plex' against a non-Plex URL
+   * (OverlayLibraryService.ts records the configured source, not the recovered one).
+   *
+   * @returns The original poster bytes, or null if it cannot be safely recovered.
+   */
+  private async recoverOriginalPlexPoster(
+    plexApi: PlexAPI,
+    ratingKey: string,
+    metadata: {
+      basePosterSource?: 'tmdb' | 'plex' | 'local';
+      originalPlexPosterUrl?: string;
+      ourOverlayPosterUrl?: string;
+    }
+  ): Promise<Buffer | null> {
+    if (metadata.basePosterSource !== 'plex') {
+      return null;
+    }
+
+    const { extractContentAddressedPosterRef, posterUrlsMatch } = await import(
+      '@server/utils/posterUrlHelpers'
+    );
+
+    const posterRef = extractContentAddressedPosterRef(
+      metadata.originalPlexPosterUrl
+    );
+    if (!posterRef) {
+      return null;
+    }
+
+    // Degenerate tracking: the recorded "original" is our own overlay.
+    if (posterUrlsMatch(posterRef, metadata.ourOverlayPosterUrl)) {
+      logger.warn(
+        'Tracked original poster is our overlay - refusing recovery',
+        {
+          label: 'PlexBasePosterManager',
+          ratingKey,
+        }
+      );
+      return null;
+    }
+
+    // Rebuild from the configured address and the live client's token rather
+    // than trusting the host and token baked into the stored URL, which may
+    // predate an address change or a token rotation.
+    const settings = getSettings();
+    const baseUrl = `${settings.plex.useSsl ? 'https' : 'http'}://${
+      settings.plex.ip
+    }:${settings.plex.port}`;
+    const fullUrl = `${baseUrl}/library/metadata/${ratingKey}/file?url=${encodeURIComponent(
+      posterRef
+    )}&X-Plex-Token=${plexApi['plexToken']}`;
+
+    try {
+      const response = await axios.get(fullUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+
+      const contentType = String(response.headers['content-type'] ?? '');
+      if (!contentType.startsWith('image/')) {
+        logger.warn('Recovered poster is not an image - refusing recovery', {
+          label: 'PlexBasePosterManager',
+          ratingKey,
+          contentType,
+        });
+        return null;
+      }
+
+      const posterBuffer = Buffer.from(response.data);
+      if (posterBuffer.length === 0) {
+        return null;
+      }
+
+      return posterBuffer;
+    } catch (error) {
+      // A pruned original 404s and a rotated token 401s. Both mean "cannot
+      // recover" - the caller throws so the item is counted as failed.
+      logger.warn('Failed to recover original poster from Plex', {
+        label: 'PlexBasePosterManager',
+        ratingKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /**
    * Download poster from TMDB
    */
   private async downloadFromTMDB(tmdbUrl: string): Promise<Buffer> {
@@ -906,9 +1005,42 @@ class PlexBasePosterManager {
             fileModTime: undefined,
           };
         }
-        // Cache missing but current poster is our overlay - DON'T download it as base!
+        // Cache missing but current poster is our overlay - DON'T download it as
+        // base. Recover the tracked original instead: it is content-addressed, so
+        // Plex serves those exact bytes even while the overlay is selected.
+        const recovered = await this.recoverOriginalPlexPoster(
+          plexApi,
+          item.ratingKey,
+          metadata
+        );
+
+        if (recovered) {
+          const filename = await this.storeBasePoster(
+            recovered,
+            libraryId,
+            item.ratingKey
+          );
+
+          logger.warn(
+            'Base poster cache missing - recovered original from Plex',
+            {
+              label: 'PlexBasePosterManager',
+              libraryId,
+              ratingKey: item.ratingKey,
+            }
+          );
+
+          return {
+            posterBuffer: recovered,
+            basePosterChanged: false,
+            sourceUrl: metadata.originalPlexPosterUrl as string,
+            filename,
+            fileModTime: undefined,
+          };
+        }
+
         throw new Error(
-          'Cannot use overlaid poster as base - cache missing. Please re-download base posters.'
+          'Cannot use overlaid poster as base - cache missing and the original could not be recovered from Plex. Please re-download base posters.'
         );
       }
 

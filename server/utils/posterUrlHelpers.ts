@@ -94,3 +94,53 @@ export function posterUrlsMatch(
 
   return id1 === id2;
 }
+
+/**
+ * Extract a content-addressed poster reference (`upload://…` / `metadata://…`)
+ * from a Plex poster URL, if it has one.
+ *
+ * Plex serves a content-addressed reference via
+ * `/library/metadata/{ratingKey}/file?url={ref}` and returns those exact bytes
+ * regardless of which poster is currently selected. That makes it the only URL
+ * form that can recover an original poster once a different one is selected.
+ *
+ * Returns null for every other form, each of which is unsafe as a base poster:
+ * - `/thumb/{version}` is decorative. Plex serves the CURRENTLY selected poster
+ *   for any version value, so it resolves to whatever overlay is on the item now.
+ * - `https://images.plex.tv/photo?…&url=https://image.tmdb.org/…` is a transcode
+ *   of a provider poster, downscaled to thumbnail dimensions (225x336).
+ *
+ * @param url - Any format of Plex poster URL
+ * @returns The `upload://` or `metadata://` reference, or null if absent
+ *
+ * @example
+ * extractContentAddressedPosterRef(
+ *   "http://plex:32400/library/metadata/815/file?url=upload%3A%2F%2Fposters%2Fabc&X-Plex-Token=x"
+ * ) // "upload://posters/abc"
+ * extractContentAddressedPosterRef("/library/metadata/815/thumb/1765149596") // null
+ */
+export function extractContentAddressedPosterRef(
+  url: string | null | undefined
+): string | null {
+  if (!url) {
+    return null;
+  }
+
+  if (isContentAddressedRef(url)) {
+    return url;
+  }
+
+  let embedded: string | null;
+  try {
+    // Relative paths need a base to parse against; the origin is discarded.
+    embedded = new URL(url, 'http://plex.invalid').searchParams.get('url');
+  } catch {
+    return null;
+  }
+
+  return embedded && isContentAddressedRef(embedded) ? embedded : null;
+}
+
+function isContentAddressedRef(value: string): boolean {
+  return value.startsWith('upload://') || value.startsWith('metadata://');
+}
