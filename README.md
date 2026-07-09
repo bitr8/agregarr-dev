@@ -5,7 +5,7 @@
 Active fork of [Agregarr](https://github.com/agregarr/agregarr) packaging performance fixes, placeholder lifecycle improvements, and open upstream PRs into a single Docker image. Available as `bitr8/agregarr` on Docker Hub.
 
 > [!TIP]
-> **Latest release: [v2.6.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.6.0)** — episode-file quality badges, fixed season poster grids, and FlixPatrol Top 10 collections working again. Full [release notes](https://github.com/bitr8/agregarr-dev/releases).
+> **Latest release: [v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0)** — Maintainerr deletion countdowns on season posters, season numbers on collection grids, and quality badges that stop flickering off between syncs. Full [release notes](https://github.com/bitr8/agregarr-dev/releases).
 
 ## Docker Image
 
@@ -14,7 +14,7 @@ Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agr
 | Tag | What it tracks |
 |-----|----------------|
 | `:latest` | Stable releases. Recommended for most users. |
-| `:2.6.0` (etc.) | Pinned to a specific release. |
+| `:2.7.0` (etc.) | Pinned to a specific release. |
 | `:develop` | Bleeding edge. Builds on every push to develop, may break. |
 
 **Multi-arch** — release tags support amd64 and arm64 (Apple Silicon, Raspberry Pi 4+). The `:develop` tag builds amd64 only.
