@@ -1,6 +1,6 @@
 import ImdbRatingsAPI from '@server/api/imdbRatings';
 import type { MaintainerrCollection } from '@server/api/maintainerr';
-import type { PlexLibraryItem } from '@server/api/plexapi';
+import type { PlexLibraryItem, PlexMetadata } from '@server/api/plexapi';
 import PlexAPI from '@server/api/plexapi';
 import type { RadarrMovie } from '@server/api/servarr/radarr';
 import type { SonarrSeries } from '@server/api/servarr/sonarr';
@@ -25,6 +25,10 @@ import type {
   EpisodeMediaInfo,
 } from './episodeMediaTypes';
 import {
+  collectSeasonCandidateKeys,
+  computeDaysUntilAction,
+} from './maintainerrCountdown';
+import {
   buildRenderContext,
   checkMonitoringStatus,
   fetchReleaseDateInfo,
@@ -35,6 +39,25 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
+
+/**
+ * Resolve the base poster source for an item.
+ *
+ * Seasons always use Plex. Their Plex guid carries a TMDB id in TMDB's *season*
+ * namespace, which resolves to an unrelated show on the endpoints the TMDB and
+ * local sources call, so those sources are structurally unreachable for a season.
+ * Both read sites in `applyOverlaysToItem` go through here so the value written to
+ * `basePosterSource` matches the one the `basePosterSourceChanged` gate compares
+ * against - otherwise every run would see a changed source and re-upload.
+ */
+function resolveBasePosterSource(
+  itemType: PlexLibraryItem['type'],
+  settings: ReturnType<typeof getSettings>
+): 'tmdb' | 'plex' | 'local' {
+  return itemType === 'season'
+    ? 'plex'
+    : settings.overlays?.defaultPosterSource || 'tmdb';
+}
 
 /**
  * Input for overlay application - either a simple rating key or with context overrides
@@ -121,6 +144,36 @@ interface OverlayApplyResult {
 type MaintainerrFetchResult =
   | { status: 'ok'; collections: MaintainerrCollection[] }
   | { status: 'unavailable' };
+
+/**
+ * Outcome of the Maintainerr season subpass. This is the contract the cleanup pass
+ * reads before restoring posters and deleting rows, so every field is stated in
+ * terms of what it authorises.
+ */
+interface SeasonSubpassResult {
+  /** Season ratingKeys that still have a live deletion countdown in this library. */
+  activeSeasonKeys: Set<string>;
+  /**
+   * True only when every candidate season key reached a definite answer: found in
+   * Plex, or a confirmed 404. False when any key ended ambiguous, when Maintainerr
+   * was unavailable, or when Maintainerr tracked a season it did not identify.
+   *
+   * Deliberately WHOLE-JOB scoped, not per-library: candidate keys are drawn from
+   * every Maintainerr season collection, which may span several Plex libraries, and
+   * a key that fails to resolve cannot be attributed to a library. So an ambiguous
+   * key belonging to library B also blocks library A's cleanup. That is the safe
+   * direction (a blocked cleanup retries next run; a wrong one destroys posters),
+   * but do not read this flag as "this library resolved cleanly".
+   */
+  resolutionComplete: boolean;
+  /**
+   * True when the job was cancelled partway through the subpass. Cleanup must check
+   * this before `resolutionComplete`: resolution can complete and the job still be
+   * cancelled before every active season was processed, which leaves the active set
+   * accurate but the run incomplete.
+   */
+  cancelled: boolean;
+}
 
 /**
  * Service for applying overlay templates to Plex library items
@@ -1508,6 +1561,26 @@ class OverlayLibraryService {
         }
       }
 
+      // Seasons never appear in the library listing above; Maintainerr nominates
+      // them by ratingKey. Opt-in, show libraries only.
+      if (
+        config.mediaType === 'show' &&
+        config.enableMaintainerrSeasonOverlays
+      ) {
+        const seasonResult = await this.applyMaintainerrSeasonOverlays(
+          plexApi,
+          libraryId,
+          config,
+          sortedTemplates,
+          maintainerrResult,
+          checkCancelled
+        );
+
+        if (seasonResult.cancelled) {
+          return; // Cancellation state already recorded by the subpass
+        }
+      }
+
       // Get final counts from progress
       const finalProgress = this.runningLibraries.get(libraryId);
       logger.info('Completed overlay application for library', {
@@ -1794,6 +1867,13 @@ class OverlayLibraryService {
    *
    * NOTE: configuredLibraryType is the library's configured type, but PlexBasePosterManager
    * will use item.type for TMDB API calls to prevent fetching wrong posters
+   *
+   * @param requireOverlayMatch - When true, an item whose conditions match no
+   *   template is skipped before any poster work. Callers that visit items only
+   *   because an external source nominated them (the Maintainerr season subpass)
+   *   must set this: without it a condition-miss still re-encodes, re-uploads and
+   *   locks the poster with no visible overlay. Existing callers omit it and keep
+   *   today's behaviour, where a zero-match item resets to its base poster.
    */
   private async applyOverlaysToItem(
     plexApi: PlexAPI,
@@ -1804,7 +1884,8 @@ class OverlayLibraryService {
     libraryName: string,
     maintainerrCollections: MaintainerrCollection[] | undefined,
     contextOverrides?: Partial<OverlayRenderContext>,
-    aggregatedMediaOverride?: Map<string, AggregatedMediaInfo>
+    aggregatedMediaOverride?: Map<string, AggregatedMediaInfo>,
+    requireOverlayMatch?: boolean
   ): Promise<OverlayApplyResult> {
     try {
       // CRITICAL: Derive actual media type from item.type, not library config
@@ -2074,6 +2155,19 @@ class OverlayLibraryService {
         return evaluateCondition(condition, context);
       });
 
+      // Nominated-item callers bail out here: no matching template means there is
+      // nothing to draw, and everything below (hash, base poster, upload, lock)
+      // would rewrite the poster for no visible gain.
+      if (requireOverlayMatch && matchingTemplates.length === 0) {
+        logger.debug('No template conditions matched, skipping item', {
+          label: 'OverlayLibrary',
+          itemTitle: item.title,
+          ratingKey: item.ratingKey,
+          itemType: item.type,
+        });
+        return { skipped: true };
+      }
+
       // Calculate overlay input hash for metadata tracking
       // Extract which context fields are actually used by MATCHING templates
       // CRITICAL: Hash uses matching template IDs + variable field values + condition field values
@@ -2153,7 +2247,7 @@ class OverlayLibraryService {
 
         // Also check if base poster source changed (TMDB vs Plex)
         const settings = getSettings();
-        const posterSource = settings.overlays?.defaultPosterSource || 'tmdb';
+        const posterSource = resolveBasePosterSource(item.type, settings);
         const basePosterSourceChanged =
           metadata?.basePosterSource !== posterSource;
 
@@ -2214,7 +2308,7 @@ class OverlayLibraryService {
       // ONLY download poster if we've determined changes exist
       // Get poster source preference (global setting)
       const settings = getSettings();
-      const posterSource = settings.overlays?.defaultPosterSource || 'tmdb';
+      const posterSource = resolveBasePosterSource(item.type, settings);
 
       // Get base poster with change detection
       const { plexBasePosterManager } = await import(
@@ -2430,6 +2524,277 @@ class OverlayLibraryService {
       throw error;
     }
   }
+
+  /**
+   * Apply deletion-countdown overlays to the seasons Maintainerr has scheduled for
+   * deletion.
+   *
+   * Plex's own library listing never surfaces seasons, so the main loop cannot see
+   * them. Maintainerr nominates them by ratingKey instead, which makes this a
+   * subpass rather than part of the main loop: it resolves each nominated key
+   * against Plex, keeps the ones that live in this library, and renders only the
+   * templates that actually consume `daysUntilAction`.
+   *
+   * Runs after the main loop so its progress counters extend an already-known
+   * total. Processing only - departed seasons are handled by the cleanup pass.
+   */
+  private async applyMaintainerrSeasonOverlays(
+    plexApi: PlexAPI,
+    libraryId: string,
+    config: OverlayLibraryConfig,
+    sortedTemplates: OverlayTemplate[],
+    maintainerrResult: MaintainerrFetchResult,
+    checkCancelled?: () => boolean
+  ): Promise<SeasonSubpassResult> {
+    // A Maintainerr outage tells us nothing about which seasons departed, so we
+    // neither process nor clean up. Leaving existing season overlays untouched is
+    // the only safe read of "no data".
+    if (maintainerrResult.status !== 'ok') {
+      logger.warn(
+        'Maintainerr unavailable - skipping season overlay subpass entirely',
+        { label: 'OverlayLibrary', libraryId }
+      );
+      return {
+        activeSeasonKeys: new Set(),
+        resolutionComplete: false,
+        cancelled: false,
+      };
+    }
+
+    const collections = maintainerrResult.collections;
+    const selection = collectSeasonCandidateKeys(collections);
+
+    if (selection.legacyTypedCollections > 0) {
+      // v2 users keep today's movie/show countdown and get no season overlays.
+      logger.info(
+        'Ignoring Maintainerr collections with a legacy numeric type; season overlays require Maintainerr 3.4.0+',
+        {
+          label: 'OverlayLibrary',
+          libraryId,
+          legacyTypedCollections: selection.legacyTypedCollections,
+        }
+      );
+    }
+
+    // A season Maintainerr tracks but does not identify is ambiguity, not absence.
+    // Letting it read as absence would tell cleanup that every tracked season had
+    // departed.
+    let resolutionComplete = selection.mediaWithoutKey === 0;
+    if (selection.mediaWithoutKey > 0) {
+      logger.warn(
+        'Maintainerr season collection has media entries without a Plex id; treating season resolution as incomplete',
+        {
+          label: 'OverlayLibrary',
+          libraryId,
+          mediaWithoutKey: selection.mediaWithoutKey,
+        }
+      );
+    }
+
+    const candidateKeys = selection.keys;
+
+    logger.info('Maintainerr season subpass - candidates', {
+      label: 'OverlayLibrary',
+      libraryId,
+      seasonCollections: selection.seasonCollections,
+      candidateKeys: candidateKeys.size,
+    });
+
+    if (candidateKeys.size === 0) {
+      // A healthy fetch with zero identifiable season members means every season
+      // this library once tracked has departed.
+      return {
+        activeSeasonKeys: new Set(),
+        resolutionComplete,
+        cancelled: false,
+      };
+    }
+
+    // Resolve candidates against Plex. getMetadataBatch swallows chunk errors into
+    // a silently short map, so every miss is retried individually to tell a genuine
+    // 404 apart from a transport failure.
+    const keys = Array.from(candidateKeys);
+    const batchMetadata = await plexApi.getMetadataBatch(keys);
+    const resolved: PlexMetadata[] = [];
+
+    for (const key of keys) {
+      const batched = batchMetadata.get(key);
+      if (batched) {
+        resolved.push(batched);
+        continue;
+      }
+
+      const safe = await plexApi.getMetadataSafe(key);
+      if (safe.status === 'ok') {
+        resolved.push(safe.meta);
+      } else if (safe.status === 'error') {
+        resolutionComplete = false;
+      }
+      // 'not_found' is a definite answer: the season is gone from Plex. It is not
+      // active, and cleanup will drop any row we still hold for it.
+    }
+
+    const seasons = resolved.filter(
+      (meta) =>
+        meta.type === 'season' &&
+        meta.librarySectionID?.toString() === libraryId
+    );
+
+    // Identical predicate to the one buildRenderContext uses for daysUntilAction,
+    // over the identical collection array, so a season can never be processed here
+    // and then render without a countdown.
+    const activeSeasons = seasons.filter(
+      (meta) => computeDaysUntilAction(collections, meta.ratingKey) !== null
+    );
+    const activeSeasonKeys = new Set(activeSeasons.map((s) => s.ratingKey));
+
+    // Only templates that consume daysUntilAction have anything to say about a
+    // season. Rendering the rest would stamp unrelated badges on season posters.
+    const { extractUsedContextFields } = await import(
+      '@server/utils/metadataHashing'
+    );
+    const seasonTemplates = sortedTemplates.filter((template) =>
+      extractUsedContextFields(
+        [template.getTemplateData()],
+        [template.getApplicationCondition()]
+      ).has('daysUntilAction')
+    );
+
+    logger.info('Maintainerr season subpass - resolved', {
+      label: 'OverlayLibrary',
+      libraryId,
+      resolvedInLibrary: seasons.length,
+      activeSeasons: activeSeasons.length,
+      seasonTemplates: seasonTemplates.length,
+      resolutionComplete,
+    });
+
+    if (seasonTemplates.length === 0 || activeSeasons.length === 0) {
+      // Nothing to draw. Still report the active set so cleanup can restore the
+      // seasons that have departed.
+      return { activeSeasonKeys, resolutionComplete, cancelled: false };
+    }
+
+    this.updateProgress(libraryId, (p) => {
+      p.totalItems += activeSeasons.length;
+    });
+
+    for (const meta of activeSeasons) {
+      if (checkCancelled && checkCancelled()) {
+        const progress = this.runningLibraries.get(libraryId);
+        if (progress) {
+          progress.state = 'cancelling';
+        }
+
+        logger.info('Overlay application cancelled during season subpass', {
+          label: 'OverlayLibrary',
+          libraryId,
+          processedItems: progress?.currentItem || 0,
+        });
+
+        if (progress) {
+          progress.state = 'cancelled';
+          progress.completedAt = Date.now();
+        }
+
+        return { activeSeasonKeys, resolutionComplete, cancelled: true };
+      }
+
+      // Display only. The item below keeps Plex's bare season title ("Season 1")
+      // so the `{title}` overlay variable, and the hash computed over it, stay
+      // exactly what Plex reports.
+      const displayTitle = meta.parentTitle
+        ? `${meta.parentTitle} - ${meta.title}`
+        : meta.title;
+
+      this.updateProgress(libraryId, (p) => {
+        p.currentTitle = displayTitle;
+      });
+
+      try {
+        // Guid is deliberately absent. A season's Plex Guid holds a TMDB id from
+        // TMDB's season namespace, which resolves to an unrelated show on the
+        // endpoints this code calls. Every TMDB and Sonarr branch downstream is
+        // gated on a tmdbId, so omitting it makes them all no-op.
+        const item: PlexLibraryItem = {
+          ratingKey: meta.ratingKey,
+          parentRatingKey: meta.parentRatingKey,
+          title: meta.title,
+          guid: '',
+          type: 'season',
+          addedAt: meta.addedAt,
+          updatedAt: meta.updatedAt,
+          // `index` is the season number. `parentIndex` is deliberately omitted:
+          // on a season Plex sets it to the SHOW's index (1 for Season 1 and for
+          // Season 6 alike), and buildRenderContext would read it as the season
+          // number. Leaving it out means a missing seasonNumber rather than a
+          // silently wrong one if the override below is ever dropped.
+          index: meta.index,
+          Label: meta.Label,
+          Media: [],
+        };
+
+        const result = await this.applyOverlaysToItem(
+          plexApi,
+          item,
+          seasonTemplates,
+          'show',
+          libraryId,
+          config.libraryName,
+          collections,
+          // buildRenderContext reads a show item's `index` as an episode number.
+          // Correct both fields here rather than withholding `index` from the item,
+          // so the context says what a season actually is. `episodeNumber` must be
+          // spread as an explicit undefined, not omitted, or the leaked value
+          // survives the merge. contextOverrides is the last writer for these two
+          // fields only because the spreads after it (releaseDateContext,
+          // monitoringContext) are tmdbId-gated and a season has no tmdbId.
+          { seasonNumber: meta.index, episodeNumber: undefined },
+          // Seasons carry no Media, so there is no episode aggregation to apply.
+          undefined,
+          // Maintainerr nominated this season; if no template condition matches it,
+          // leave its poster alone.
+          true
+        );
+
+        this.updateProgress(libraryId, (p) => {
+          p.currentItem++;
+
+          p._recentItemTimes.push(Date.now());
+          if (p._recentItemTimes.length > 20) {
+            p._recentItemTimes.shift();
+          }
+
+          if (result.skipped) {
+            p.skippedCount++;
+          } else {
+            p.successCount++;
+          }
+        });
+      } catch (error) {
+        this.updateProgress(libraryId, (p) => {
+          p.currentItem++;
+          p.errorCount++;
+
+          p._recentItemTimes.push(Date.now());
+          if (p._recentItemTimes.length > 20) {
+            p._recentItemTimes.shift();
+          }
+        });
+
+        logger.error('Failed to apply overlays to season', {
+          label: 'OverlayLibrary',
+          libraryId,
+          ratingKey: meta.ratingKey,
+          seasonTitle: displayTitle,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return { activeSeasonKeys, resolutionComplete, cancelled: false };
+  }
+
   /**
    * Run episode media scan for a show library and store aggregated results.
    * Always fetches the lightweight episode list to detect new/changed/deleted episodes.

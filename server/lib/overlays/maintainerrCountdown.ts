@@ -15,6 +15,90 @@ export interface MaintainerrCountdown {
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 /**
+ * True when a collection has a usable deletion schedule, i.e. a `deleteAfterDays`
+ * that can produce a real countdown rather than a NaN or a never-expiring one.
+ *
+ * `computeDaysUntilAction` applies this to every collection it considers, so
+ * callers that pre-filter collections before doing expensive work (the season
+ * subpass fetches Plex metadata for candidate keys) share the exact same test and
+ * cannot select an item the countdown would then reject.
+ */
+export function hasDeletionSchedule(
+  collection: MaintainerrCollection
+): boolean {
+  const { deleteAfterDays } = collection;
+  return (
+    typeof deleteAfterDays === 'number' &&
+    Number.isFinite(deleteAfterDays) &&
+    deleteAfterDays > 0
+  );
+}
+
+/** What `collectSeasonCandidateKeys` found in a Maintainerr payload. */
+export interface SeasonCandidateSelection {
+  /** Plex season ratingKeys to resolve. */
+  keys: Set<string>;
+  /** Season collections with a usable deletion schedule. */
+  seasonCollections: number;
+  /** Collections whose `type` was not a string (Maintainerr <3.4.0), all excluded. */
+  legacyTypedCollections: number;
+  /**
+   * Media entries in a season collection that carried neither `mediaServerId` nor
+   * `plexId`. Each is a season we know Maintainerr is tracking but cannot identify,
+   * so the selection is ambiguous rather than empty.
+   */
+  mediaWithoutKey: number;
+}
+
+/**
+ * Select the Plex season ratingKeys a Maintainerr payload nominates for a deletion
+ * countdown.
+ *
+ * Only collections that are typed `'season'` AND carry a usable deletion schedule
+ * contribute - the same test `computeDaysUntilAction` applies, so nothing is
+ * fetched that the countdown would then reject.
+ *
+ * `mediaWithoutKey` matters more than it looks: an empty key set means "every
+ * tracked season has departed", which is exactly the signal that authorises
+ * restoring posters and dropping rows. A payload whose media entries all lack ids
+ * would otherwise be indistinguishable from that. Counting them lets the caller
+ * treat an unjoinable entry as ambiguity instead of a departure.
+ */
+export function collectSeasonCandidateKeys(
+  collections: MaintainerrCollection[]
+): SeasonCandidateSelection {
+  const keys = new Set<string>();
+  let seasonCollections = 0;
+  let legacyTypedCollections = 0;
+  let mediaWithoutKey = 0;
+
+  for (const collection of collections) {
+    // Maintainerr <3.4.0 sent a numeric type whose season value was never
+    // verified. Excluded rather than guessed at.
+    if (typeof collection.type !== 'string') {
+      legacyTypedCollections++;
+      continue;
+    }
+
+    if (collection.type !== 'season' || !hasDeletionSchedule(collection)) {
+      continue;
+    }
+
+    seasonCollections++;
+    for (const media of collection.media) {
+      const key = media.mediaServerId || media.plexId?.toString();
+      if (key) {
+        keys.add(key);
+      } else {
+        mediaWithoutKey++;
+      }
+    }
+  }
+
+  return { keys, seasonCollections, legacyTypedCollections, mediaWithoutKey };
+}
+
+/**
  * Compute the Maintainerr deletion countdown for a Plex item.
  *
  * Joins the item's ratingKey against every collection's media list (v3
@@ -39,12 +123,7 @@ export function computeDaysUntilAction(
   const matches: MaintainerrCountdown[] = [];
 
   for (const collection of collections) {
-    const deleteAfterDays = collection.deleteAfterDays;
-    if (
-      typeof deleteAfterDays !== 'number' ||
-      !Number.isFinite(deleteAfterDays) ||
-      deleteAfterDays <= 0
-    ) {
+    if (!hasDeletionSchedule(collection)) {
       continue;
     }
 
@@ -62,7 +141,10 @@ export function computeDaysUntilAction(
     }
 
     const daysSinceAdded = Math.floor((Date.now() - addedTime) / MS_PER_DAY);
-    matches.push({ collection, days: deleteAfterDays - daysSinceAdded });
+    matches.push({
+      collection,
+      days: collection.deleteAfterDays - daysSinceAdded,
+    });
   }
 
   if (matches.length === 0) {
