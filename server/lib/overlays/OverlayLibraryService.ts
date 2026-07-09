@@ -39,6 +39,8 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
+import { classifySeasonCleanupAction } from './seasonCleanupPolicy';
+import { restoreSeasonBasePoster } from './seasonPosterRestore';
 
 /**
  * Resolve the base poster source for an item.
@@ -1258,11 +1260,65 @@ class OverlayLibraryService {
         libraryId,
       });
 
-      if (!config || config.enabledOverlays.length === 0) {
+      // Season cleanup has to run from the config-driven early returns below,
+      // which are reached before the Plex client used to exist. Resolving it
+      // lazily hoists it without cost: a library with no config and no tracked
+      // seasons does zero Plex work and never builds a client. A library that
+      // DOES have departed season rows will build one, so 'No admin user found'
+      // becomes reachable from those branches - correctly, since there is then
+      // real Plex work to do, and the throw happens before any deletion.
+      let plexApiInstance: PlexAPI | undefined;
+      const getPlexApi = async (): Promise<PlexAPI> => {
+        if (!plexApiInstance) {
+          const { getAdminUser } = await import(
+            '@server/lib/collections/core/CollectionUtilities'
+          );
+          const admin = await getAdminUser();
+
+          if (!admin) {
+            throw new Error('No admin user found');
+          }
+
+          plexApiInstance = new PlexAPI({ plexToken: admin.plexToken });
+        }
+
+        return plexApiInstance;
+      };
+
+      if (!config) {
+        logger.info('No overlay configuration for library', {
+          label: 'OverlayLibrary',
+          libraryId,
+        });
+
+        // Deleting the config row does not delete the season rows keyed to this
+        // library, and nothing else ever visits them - so without this the
+        // countdown poster would stay on Plex forever. `config` comes from a
+        // findOne, which returns null only for a confirmed absent row, so this is
+        // configuration, not a data read that could hiccup.
+        await this.cleanupDepartedSeasonOverlays(
+          getPlexApi,
+          libraryId,
+          new Set(),
+          checkCancelled
+        );
+        return;
+      }
+
+      if (config.enabledOverlays.length === 0) {
         logger.info('No overlays enabled for library', {
           label: 'OverlayLibrary',
           libraryId,
         });
+
+        // Configuration, not a data read: the user turned overlays off, so every
+        // season we still overlay has departed by definition.
+        await this.cleanupDepartedSeasonOverlays(
+          getPlexApi,
+          libraryId,
+          new Set(),
+          checkCancelled
+        );
         return;
       }
 
@@ -1279,6 +1335,28 @@ class OverlayLibraryService {
           label: 'OverlayLibrary',
           libraryId,
         });
+
+        // Gate cleanup on the config JSON, never on the query result. An empty
+        // enabledTemplateIds is the user disabling every overlay. An empty
+        // findByIds against a non-empty id list is a transient DB read, and
+        // restoring every season poster on the strength of one is not undoable.
+        if (enabledTemplateIds.length === 0) {
+          await this.cleanupDepartedSeasonOverlays(
+            getPlexApi,
+            libraryId,
+            new Set(),
+            checkCancelled
+          );
+        } else {
+          logger.warn(
+            'Enabled templates missing from database - skipping season cleanup',
+            {
+              label: 'OverlayLibrary',
+              libraryId,
+              enabledTemplateIds,
+            }
+          );
+        }
         return;
       }
 
@@ -1342,16 +1420,7 @@ class OverlayLibraryService {
           : undefined;
 
       // Get library items from Plex
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-
-      if (!admin) {
-        throw new Error('No admin user found');
-      }
-
-      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+      const plexApi = await getPlexApi();
 
       // Build collection membership map for condition evaluation
       // Only build if any enabled template uses a 'collection' condition field
@@ -1406,6 +1475,10 @@ class OverlayLibraryService {
           label: 'OverlayLibrary',
           libraryId,
         });
+        // Deliberately no season cleanup here. This is a *data* read, and a Plex
+        // hiccup that returns an empty listing is indistinguishable from a truly
+        // empty library - restoring every tracked season poster off the back of
+        // one would be a mass, unrecoverable write.
         return;
       }
 
@@ -1576,9 +1649,40 @@ class OverlayLibraryService {
           checkCancelled
         );
 
+        // Cancellation is checked BEFORE resolutionComplete: a run can resolve
+        // every candidate key and still be cancelled before it processed each
+        // active season, which leaves the active set accurate but the run
+        // incomplete. Cleaning up from there is a write we never asked for.
         if (seasonResult.cancelled) {
           return; // Cancellation state already recorded by the subpass
         }
+
+        if (seasonResult.resolutionComplete) {
+          await this.cleanupDepartedSeasonOverlays(
+            getPlexApi,
+            libraryId,
+            seasonResult.activeSeasonKeys,
+            checkCancelled
+          );
+        } else {
+          logger.info(
+            'Skipping season overlay cleanup - season resolution was incomplete',
+            {
+              label: 'MaintainerrSeasonOverlay',
+              libraryId,
+              activeSeasons: seasonResult.activeSeasonKeys.size,
+            }
+          );
+        }
+      } else {
+        // The toggle is off (or this is not a show library), which is a
+        // deterministic statement of intent: restore anything we still track.
+        await this.cleanupDepartedSeasonOverlays(
+          getPlexApi,
+          libraryId,
+          new Set(),
+          checkCancelled
+        );
       }
 
       // Get final counts from progress
@@ -2793,6 +2897,171 @@ class OverlayLibraryService {
     }
 
     return { activeSeasonKeys, resolutionComplete, cancelled: false };
+  }
+
+  /**
+   * Restore the base poster of every season this library still tracks that no
+   * longer has a live Maintainerr countdown, then stop tracking it.
+   *
+   * Recovery data - the metadata row and the stored base poster - is destroyed
+   * only on a confirmed restore or a confirmed 404. Anything ambiguous keeps
+   * both and retries next run. This mirrors Maintainerr's own revertItemInternal,
+   * including its refinement that an *inconclusive* existence check still
+   * attempts the restore: a redundant upload is cheap, a discarded base poster is
+   * permanent. The one divergence is the no-backup case, where Maintainerr stops
+   * tracking and we keep the row and retry - a stuck poster is the same outcome
+   * either way, and keeping the row is the only version that can still heal.
+   *
+   * The restore reads the stored base poster directly (see restoreSeasonBasePoster)
+   * rather than re-resolving it from the live Plex poster, so a row with a stale
+   * ourOverlayPosterUrl can never have its own countdown overlay mistaken for a
+   * base and written back as one.
+   *
+   * The CALLER decides whether running this is safe at all. An empty active set
+   * means "restore everything", so it must only ever be reached from a
+   * configuration-driven decision, never from a data read that could come back
+   * empty because Plex or Maintainerr hiccuped.
+   */
+  private async cleanupDepartedSeasonOverlays(
+    getPlexApi: () => Promise<PlexAPI>,
+    libraryId: string,
+    activeSeasonKeys: Set<string>,
+    checkCancelled?: () => boolean
+  ): Promise<void> {
+    const metadataService = (
+      await import('@server/lib/metadata/MetadataTrackingService')
+    ).default;
+
+    // Every tracked season, with no filter on the poster URL fields: the row is
+    // the tracking, and a row whose fields were cleared by an earlier reset still
+    // owns a stored base poster that has to be collected.
+    const tracked = await metadataService.getOverlaidSeasonMetadata(libraryId);
+    const departed = tracked.filter(
+      (row) => !activeSeasonKeys.has(row.plexItemRatingKey)
+    );
+
+    if (departed.length === 0) {
+      return;
+    }
+
+    logger.info('Restoring departed season overlays', {
+      label: 'MaintainerrSeasonOverlay',
+      libraryId,
+      trackedSeasons: tracked.length,
+      departedSeasons: departed.length,
+    });
+
+    // Only now is a Plex client worth building: the common case is a library that
+    // has never tracked a season and returns above after one indexed query.
+    const plexApi = await getPlexApi();
+    const { plexBasePosterManager } = await import(
+      '@server/lib/overlays/PlexBasePosterManager'
+    );
+
+    let restored = 0;
+    let untracked = 0;
+    let deferred = 0;
+    let mismatched = 0;
+
+    for (const row of departed) {
+      const ratingKey = row.plexItemRatingKey;
+
+      if (checkCancelled?.()) {
+        logger.info('Season overlay cleanup cancelled', {
+          label: 'MaintainerrSeasonOverlay',
+          libraryId,
+          restored,
+          untracked,
+          deferred,
+          mismatched,
+          remaining:
+            departed.length - restored - untracked - deferred - mismatched,
+        });
+        return;
+      }
+
+      try {
+        const existence = await plexApi.getMetadataSafe(ratingKey);
+        const decision = classifySeasonCleanupAction(existence, libraryId);
+
+        if (decision.action === 'untrack') {
+          // Confirmed gone from Plex. Nothing to restore it onto, and nothing
+          // will ever ask again, so the recovery data goes too.
+          await plexBasePosterManager.deleteStoredBasePoster(
+            libraryId,
+            ratingKey
+          );
+          await metadataService.deleteItemMetadata(ratingKey);
+          untracked++;
+
+          logger.info(
+            'Season no longer in Plex - stopped tracking its overlay',
+            {
+              label: 'MaintainerrSeasonOverlay',
+              libraryId,
+              ratingKey,
+            }
+          );
+          continue;
+        }
+
+        if (decision.action === 'mismatch') {
+          mismatched++;
+          logger.warn(
+            'Tracked season ratingKey no longer resolves to this season - skipping restore',
+            {
+              label: 'MaintainerrSeasonOverlay',
+              libraryId,
+              ratingKey,
+              foundType: decision.foundType,
+              foundLibrarySectionID: decision.foundLibrarySectionID,
+            }
+          );
+          continue;
+        }
+
+        // Restore, including on an ambiguous existence check. This throws on any
+        // failure of the critical path, landing in the catch below with the row
+        // and the stored poster both intact.
+        await restoreSeasonBasePoster(
+          plexApi,
+          libraryId,
+          ratingKey,
+          decision.title
+        );
+
+        // The upload succeeded, so Plex now holds the base poster and the stored
+        // copy is no longer the only one. Delete the file BEFORE the row: it
+        // throws on a real IO error, and a surviving file with no row would let a
+        // stale base be baked into a future overlay via the first-time path.
+        await plexBasePosterManager.deleteStoredBasePoster(
+          libraryId,
+          ratingKey
+        );
+        await metadataService.deleteItemMetadata(ratingKey);
+        restored++;
+      } catch (error) {
+        deferred++;
+        logger.warn(
+          'Failed to restore departed season overlay - keeping recovery data to retry next run',
+          {
+            label: 'MaintainerrSeasonOverlay',
+            libraryId,
+            ratingKey,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+    }
+
+    logger.info('Season overlay cleanup complete', {
+      label: 'MaintainerrSeasonOverlay',
+      libraryId,
+      restored,
+      untracked,
+      deferred,
+      mismatched,
+    });
   }
 
   /**

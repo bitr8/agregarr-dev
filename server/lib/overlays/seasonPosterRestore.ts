@@ -1,6 +1,4 @@
 import type PlexAPI from '@server/api/plexapi';
-import type { PlexLibraryItem } from '@server/api/plexapi';
-import type { MediaItemMetadata } from '@server/entity/MediaItemMetadata';
 import logger from '@server/logger';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
@@ -10,65 +8,70 @@ import sharp from 'sharp';
 
 /**
  * Restore a season's original (pre-overlay) base poster to Plex, THROWING on
- * any failure of the critical restore path (base-poster resolution, image
- * processing, or upload).
+ * any failure of the critical restore path (missing backup, image processing,
+ * or upload).
  *
  * Used by the Maintainerr season-overlay cleanup lifecycle: the caller deletes
  * the tracked metadata row + stored base poster ONLY when this resolves, so a
  * transient failure must throw to preserve recovery data for the next run.
  *
- * Mirrors the mechanics of PosterResetJob.resetItemPoster but deliberately
- * differs in three ways:
- *  - throws instead of swallowing (the reset job's per-item loop swallows so
- *    one bad item doesn't abort the batch; here failure must reach the caller),
- *  - never re-writes the metadata row (the caller owns row deletion on success),
- *  - forces posterSource 'plex' (seasons always track a Plex base poster).
+ * The stored base poster IS the recovery data, so it is read directly rather
+ * than through getBasePosterForOverlay. That helper decides what counts as the
+ * base by matching the live Plex poster against the row's recorded URLs, and
+ * when neither matches it treats whatever Plex currently shows as the new base -
+ * downloading it and overwriting the stored original. A row whose
+ * `ourOverlayPosterUrl` has gone stale (the overlay upload succeeded but the
+ * write recording it did not: see the swallowed catch around
+ * `recordOverlayApplicationWithBasePoster` in OverlayLibraryService) lands in
+ * exactly that branch, so the "restore" would re-upload our own countdown
+ * poster, overwrite the real base with it, and report success - after which
+ * cleanup deletes the row and the file. Reading the backup directly cannot
+ * mistake an overlay for a base.
  *
- * The no-backup case is handled for us by getBasePosterForOverlay('plex'): if
- * the stored base poster is gone AND Plex still shows our overlaid poster, it
- * throws ("Cannot use overlaid poster as base") rather than baking the
- * countdown in as the new base. That throw propagates here, and the caller
- * keeps the row to retry (or, per the cleanup policy, clears a confirmed
- * no-backup row without a restore attempt).
+ * What that costs: if a user manually replaced the season's poster in Plex
+ * AFTER the overlay was applied, this reverts to the pre-overlay original
+ * instead of keeping their replacement. Rare, and they can simply set it again.
+ * Baking a countdown into the poster and destroying the only copy of the base
+ * is neither rare enough nor reversible.
+ *
+ * A missing backup throws. The caller keeps the row and retries, which is the
+ * one deliberate divergence from Maintainerr's revertItemInternal (which clears
+ * state and stops tracking). The poster is stuck either way; only keeping the
+ * row can still heal if the file comes back.
  *
  * Label removal is best-effort: the poster upload IS the recovery, so a failed
  * "Overlay" label removal is logged but does not block cleanup. Throwing on it
  * would re-run a full restore every cleanup pass for a cosmetic label - the
- * delete/recreate churn this codebase avoids elsewhere.
+ * delete/recreate churn this codebase avoids elsewhere. The trade is that a
+ * label whose removal fails is orphaned once the caller drops the row.
  */
 export async function restoreSeasonBasePoster(
   plexApi: PlexAPI,
-  item: PlexLibraryItem,
   libraryId: string,
-  libraryName: string,
-  metadata: MediaItemMetadata
+  ratingKey: string,
+  title: string
 ): Promise<void> {
   const { plexBasePosterManager } = await import(
     '@server/lib/overlays/PlexBasePosterManager'
   );
 
-  // Resolve the pre-overlay base poster. Forcing 'plex' matches how seasons are
-  // overlaid; the 'plex' branch reads only item.ratingKey (no Media/Guid/tmdb),
-  // so a season item (no Media, wrong-namespace Guid) is safe here.
-  const basePosterResult = await plexBasePosterManager.getBasePosterForOverlay(
-    plexApi,
-    item,
+  const basePoster = await plexBasePosterManager.getStoredBasePoster(
     libraryId,
-    libraryName,
-    'show',
-    'plex',
-    {
-      basePosterSource: metadata.basePosterSource,
-      originalPlexPosterUrl: metadata.originalPlexPosterUrl,
-      ourOverlayPosterUrl: metadata.ourOverlayPosterUrl,
-      basePosterFilename: metadata.basePosterFilename,
-      localPosterModifiedTime: metadata.localPosterModifiedTime,
-    },
-    undefined
+    ratingKey
   );
 
+  if (!basePoster) {
+    // getStoredBasePoster returns null for ANY read failure, not just ENOENT, so
+    // an unreadable file (EACCES, EIO, unmounted share) is indistinguishable from
+    // a missing one here. Both are "no recovery data right now", and both must
+    // reach the caller as a throw so it keeps the row and retries.
+    throw new Error(
+      `No readable stored base poster for season ${ratingKey} - missing or unreadable, nothing to restore from`
+    );
+  }
+
   // Normalise to the format/size Plex expects for an uploaded poster.
-  const posterBuffer = await sharp(basePosterResult.posterBuffer)
+  const posterBuffer = await sharp(basePoster)
     .resize(1000, 1500, { fit: 'cover', position: 'center' })
     .webp({ quality: 90 })
     .toBuffer();
@@ -77,7 +80,7 @@ export async function restoreSeasonBasePoster(
   // collide on the temp path and unlink each other's in-flight upload.
   const tempFilePath = path.join(
     os.tmpdir(),
-    `season-restore-${item.ratingKey}-${randomUUID()}.webp`
+    `season-restore-${ratingKey}-${randomUUID()}.webp`
   );
 
   await fs.writeFile(tempFilePath, posterBuffer);
@@ -85,24 +88,29 @@ export async function restoreSeasonBasePoster(
   try {
     // Critical: a failed upload must throw so the caller keeps the row + base
     // poster for the next run.
-    await plexApi.uploadPosterFromFile(item.ratingKey, tempFilePath);
+    await plexApi.uploadPosterFromFile(ratingKey, tempFilePath);
 
     // Best-effort: the poster is already restored; a lingering label is cosmetic.
     try {
-      await plexApi.removeLabelFromItem(item.ratingKey, 'Overlay');
+      await plexApi.removeLabelFromItem(ratingKey, 'Overlay');
     } catch (labelError) {
-      logger.warn('Season poster restored but Overlay label removal failed', {
-        label: 'MaintainerrSeasonOverlay',
-        ratingKey: item.ratingKey,
-        error:
-          labelError instanceof Error ? labelError.message : String(labelError),
-      });
+      logger.warn(
+        'Season poster restored but Overlay label removal failed - the label is now orphaned',
+        {
+          label: 'MaintainerrSeasonOverlay',
+          ratingKey,
+          error:
+            labelError instanceof Error
+              ? labelError.message
+              : String(labelError),
+        }
+      );
     }
 
     logger.info('Restored season base poster', {
       label: 'MaintainerrSeasonOverlay',
-      ratingKey: item.ratingKey,
-      title: item.title,
+      ratingKey,
+      title,
     });
   } finally {
     await fs.unlink(tempFilePath).catch(() => {

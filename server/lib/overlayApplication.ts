@@ -190,23 +190,57 @@ class OverlayApplication {
           config.enabledOverlays.some((o) => o.enabled)
       );
 
-      if (activeConfigs.length === 0) {
+      // A library whose config was deleted, or whose overlays were all switched
+      // off, drops out of activeConfigs and would never be visited again - so the
+      // season countdown posters it still carries would stay on Plex forever.
+      // Visiting it lets processLibraryOverlays reach its config-driven cleanup.
+      const metadataService = (
+        await import('@server/lib/metadata/MetadataTrackingService')
+      ).default;
+      const activeLibraryIds = new Set(activeConfigs.map((c) => c.libraryId));
+      const seasonCleanupOnlyIds = (
+        await metadataService.getLibraryKeysWithSeasonOverlays()
+      ).filter((libraryId) => !activeLibraryIds.has(libraryId));
+
+      if (seasonCleanupOnlyIds.length > 0) {
+        logger.info(
+          'Sweeping libraries that only need season overlay cleanup',
+          {
+            label: 'Overlay Application',
+            libraryIds: seasonCleanupOnlyIds,
+          }
+        );
+      }
+
+      const targets = [
+        ...activeConfigs.map((config) => ({
+          libraryId: config.libraryId,
+          libraryName: config.libraryName,
+        })),
+        ...seasonCleanupOnlyIds.map((libraryId) => ({
+          libraryId,
+          libraryName: libraryId,
+        })),
+      ];
+
+      if (targets.length === 0) {
         logger.info('No libraries with enabled overlays found', {
           label: 'Overlay Application',
         });
         return;
       }
 
-      this.totalLibraries = activeConfigs.length;
+      this.totalLibraries = targets.length;
       logger.info('Found libraries with overlays configured', {
         label: 'Overlay Application',
         libraryCount: activeConfigs.length,
+        seasonCleanupOnlyCount: seasonCleanupOnlyIds.length,
       });
 
       // Process each library
       let processed = 0;
 
-      for (const config of activeConfigs) {
+      for (const config of targets) {
         if (this.cancelled) {
           logger.info('Overlay application cancelled by user', {
             label: 'Overlay Application',
