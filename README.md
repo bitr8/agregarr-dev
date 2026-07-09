@@ -160,7 +160,9 @@ New template variables: `episodeCount`, `episode4kPercent`, `episodeHdrPercent`,
 
 ### Maintainerr Season Deletion Countdown
 
-Maintainerr knows a season is about to be deleted. It just doesn't put that on the poster. This fork reads Maintainerr's collection data and applies a countdown overlay to season posters, the same way the existing movie and show countdown already works.
+Maintainerr renders its own deletion overlays, seasons included, and does it well. But two tools writing and restoring the same Plex posters leaves neither one holding the truth about what the original looked like. If Agregarr manages your overlays you keep Maintainerr's rendering off, and season posters end up without a countdown.
+
+So this fork reads Maintainerr's collection data and draws the countdown itself, using your own templates, the same way the existing movie and show countdown already works.
 
 ![Season deletion countdown](public/images/maintainerr-season-countdown.png)
 

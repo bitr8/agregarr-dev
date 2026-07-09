@@ -11,7 +11,7 @@ Active fork of [Agregarr](https://github.com/agregarr/agregarr) packaging sync p
 | Tag | What it tracks |
 |-----|----------------|
 | `latest` | Stable releases. This is what you want. |
-| `2.6.0` (etc.) | Pinned to a specific release. |
+| `2.7.0` (etc.) | Pinned to a specific release. |
 | `develop` | Bleeding edge. Builds on every push, breaks sometimes. |
 
 Release tags ship amd64 and arm64 (Apple Silicon, Raspberry Pi 4+). The `develop` tag is amd64 only.
@@ -59,6 +59,7 @@ Two problem areas drove most of the changes: sync performance at scale (40+ coll
 - **Sync performance** — batch IMDb prefetch, adaptive TTL caching, collection sync caching, batch overlay metadata. Syncs that took hours drop to minutes.
 - **Placeholder lifecycle** — retroactive filter application, self-healing stuck records, direct Plex deletion for stale entries, TV episode cleanup, Sonarr folder naming, download-status awareness.
 - **Episode media scanning** — quality badges built from the actual episode files (majority vote), not Plex's show-level guess.
+- **Maintainerr deletion countdowns on seasons** — Maintainerr renders its own overlays, but if Agregarr manages yours you keep its rendering off. This draws the countdown with your own templates instead, stashing the original poster first and restoring it when the season leaves the collection.
 - **Season poster grids, Coming Soon date fixes, FlixPatrol Top 10, streaming provider overlays**, and more.
 
 The [full README](https://github.com/bitr8/agregarr-dev#readme) documents every feature. Changes that fit upstream go back as PRs (46 merged, 13 open). GPL-3.0, same as upstream.
