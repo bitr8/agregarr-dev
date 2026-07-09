@@ -1,5 +1,5 @@
 // @server/api/animeIds.ts
-// Loads PlexAniBridge Anime ID mappings (improved over Kometa's Anime-IDs)
+// Loads PlexAniBridge Anime ID mappings
 // https://github.com/eliasbenb/PlexAniBridge-Mappings
 
 export type AnimeIdsRow = {
