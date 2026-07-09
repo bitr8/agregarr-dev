@@ -158,6 +158,32 @@ Season 0 specials are excluded from aggregation (they're usually low-quality ext
 
 New template variables: `episodeCount`, `episode4kPercent`, `episodeHdrPercent`, `episodeDvPercent`, and all `show*` raw fields. Available in both variable text and application conditions.
 
+### Maintainerr Season Deletion Countdown
+
+Maintainerr knows a season is about to be deleted. It just doesn't put that on the poster. This fork reads Maintainerr's collection data and applies a countdown overlay to season posters, the same way the existing movie and show countdown already works.
+
+![Season deletion countdown](public/images/maintainerr-season-countdown.png)
+
+Enable per library: **Overlays > library config > "Season deletion countdown"** (show libraries only, greyed out until Maintainerr is connected).
+
+What you need:
+
+- Maintainerr 3.4.0 or newer. Older versions report the collection type as a number, so season collections get skipped and your movie/show countdowns carry on unchanged.
+- A Maintainerr collection of type Season, with a deletion schedule.
+- An overlay template that uses `daysUntilAction`, enabled for that library. The `Maintainerr Deleting Soon` preset works as-is.
+
+Maintainerr's own overlay feature stays off. Agregarr reads `/api/collections/overlay-data` for the dates and renders the poster itself, so season posters match everything else in your library.
+
+**Cleanup.** Agregarr saves each season's original poster before it overlays anything. Remove a season from the Maintainerr collection, switch the toggle off, or delete the library's overlay config entirely, and the original poster goes back and the `Overlay` label comes off. That last case is easy to get wrong: a library with no overlay config is normally never visited again, so it gets swept specifically to clean up seasons it still tracks.
+
+If Maintainerr is unreachable, nothing happens at all. An empty response from a healthy Maintainerr means every season genuinely left the collection. An outage means we don't know, so the posters are left alone.
+
+**Cost:** a Season-type collection makes Maintainerr rescan the whole library on every rule run (roughly 8 minutes on mine). That's Maintainerr's behaviour rather than anything this fork adds, but you should know before pointing one at a 20K-episode library.
+
+**Nothing appeared?** Either the Maintainerr collection isn't type Season, or no `daysUntilAction` template is enabled for that library. Grep the logs for `MaintainerrSeasonOverlay`.
+
+Season tiles in generated collection posters now carry an `S{n}` badge. Six tiles captioned "Season 1" through "Season 6" are impossible to tell apart at thumbnail size.
+
 ### Additional Overlay Variables
 
 **TV Season Counts** -- Two new variables for TV show overlays: `totalSeasons` (from TMDB) and `seasonsAvailable` (seasons in your Plex library). Useful for overlays like "Season 2 of 5" or conditional overlays on incomplete shows. Available as both template variables and condition fields. *(Contributed by [Bergasha](https://github.com/Bergasha))*

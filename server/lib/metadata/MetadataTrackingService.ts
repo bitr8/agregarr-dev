@@ -352,7 +352,8 @@ class MetadataTrackingService {
       originalPlexPosterUrl: string;
       basePosterFilename: string;
       localPosterModifiedTime?: number | null;
-    }
+    },
+    itemType?: string
   ): Promise<void> {
     const repo = getRepository(MediaItemMetadata);
 
@@ -365,6 +366,13 @@ class MetadataTrackingService {
         plexItemRatingKey: itemRatingKey,
         libraryKey: libraryKey,
       });
+    }
+
+    // Record the item kind ('movie' | 'show' | 'season') when the caller knows
+    // it. Only set when provided so callers that don't supply it (e.g. the
+    // poster-reset path) never wipe an existing value.
+    if (itemType !== undefined) {
+      metadata.itemType = itemType;
     }
 
     // Update overlay tracking
@@ -397,6 +405,48 @@ class MetadataTrackingService {
     return await repo.findOne({
       where: { plexItemRatingKey: itemRatingKey },
     });
+  }
+
+  /**
+   * All tracked season overlay rows for a library. Used by the season
+   * cleanup lifecycle to find rows whose season has departed its Maintainerr
+   * collection (or Plex) and restore/clear them.
+   */
+  async getOverlaidSeasonMetadata(
+    libraryKey: string
+  ): Promise<MediaItemMetadata[]> {
+    const repo = getRepository(MediaItemMetadata);
+    return await repo.find({
+      where: { libraryKey, itemType: 'season' },
+    });
+  }
+
+  /**
+   * Every library key that still has a tracked season overlay row.
+   *
+   * The overlay job only visits libraries whose config has an enabled overlay, so
+   * a library whose config was deleted - or whose overlays were all switched off -
+   * would never be visited again, and its season countdown posters would stay on
+   * Plex forever. The job unions this list with its active configs so cleanup
+   * stays reachable for exactly those libraries.
+   */
+  async getLibraryKeysWithSeasonOverlays(): Promise<string[]> {
+    const repo = getRepository(MediaItemMetadata);
+    // Season rows are few (one per season carrying a countdown), so dedupe in
+    // memory rather than putting a raw DISTINCT on the overlay job's critical
+    // path.
+    const rows = await repo.find({ where: { itemType: 'season' } });
+    return Array.from(new Set(rows.map((row) => row.libraryKey)));
+  }
+
+  /**
+   * Delete a single tracked metadata row by its Plex rating key. Used by the
+   * season cleanup lifecycle after a base poster is restored or the item is
+   * confirmed gone from Plex.
+   */
+  async deleteItemMetadata(itemRatingKey: string): Promise<void> {
+    const repo = getRepository(MediaItemMetadata);
+    await repo.delete({ plexItemRatingKey: itemRatingKey });
   }
 }
 

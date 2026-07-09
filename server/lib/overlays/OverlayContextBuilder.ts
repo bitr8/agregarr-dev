@@ -16,6 +16,7 @@ import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import { hasStreamingProviderIcon } from './DefaultMappingsService';
+import { computeDaysUntilAction } from './maintainerrCountdown';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
 const _langDisplayNames = new Intl.DisplayNames(['en'], { type: 'language' });
@@ -1073,57 +1074,29 @@ export async function buildRenderContext(
     );
   }
 
-  // Maintainerr integration - calculate daysUntilAction
-  // Use cached collections if provided, otherwise fetch them
+  // Maintainerr integration - calculate daysUntilAction via the shared predicate
+  // (single source of truth so the render context and the season subpass
+  // active-set cannot drift).
   if (
     item.ratingKey &&
     maintainerrCollections &&
     maintainerrCollections.length > 0
   ) {
     try {
-      // Find ALL collections containing this item
-      const matchingCollections: {
-        collection: MaintainerrCollection;
-        daysUntilAction: number;
-      }[] = [];
+      const selected = computeDaysUntilAction(
+        maintainerrCollections,
+        item.ratingKey
+      );
 
-      for (const collection of maintainerrCollections) {
-        const mediaItem = collection.media.find((m) => {
-          const id = m.mediaServerId || m.plexId?.toString();
-          return id === item.ratingKey;
-        });
-
-        if (mediaItem && collection.deleteAfterDays) {
-          // Calculate days since item was added to collection
-          const addedDate = new Date(mediaItem.addDate);
-          const now = new Date();
-          const daysSinceAdded = Math.floor(
-            (now.getTime() - addedDate.getTime()) / (1000 * 60 * 60 * 24)
-          );
-
-          // Calculate days until action: deleteAfterDays - daysSinceAdded
-          // Positive = days remaining, negative = overdue
-          const daysUntilAction = collection.deleteAfterDays - daysSinceAdded;
-
-          matchingCollections.push({ collection, daysUntilAction });
-        }
-      }
-
-      // If item is in multiple collections, use the one with LOWEST daysUntilAction
-      if (matchingCollections.length > 0) {
-        const selected = matchingCollections.reduce((min, curr) =>
-          curr.daysUntilAction < min.daysUntilAction ? curr : min
-        );
-
-        context.daysUntilAction = selected.daysUntilAction;
+      if (selected) {
+        context.daysUntilAction = selected.days;
 
         logger.debug('Calculated Maintainerr daysUntilAction', {
           label: 'OverlayContextBuilder',
           ratingKey: item.ratingKey,
           title: item.title,
-          matchingCollections: matchingCollections.length,
           selectedCollection: selected.collection.title,
-          daysUntilAction: selected.daysUntilAction,
+          daysUntilAction: selected.days,
         });
       }
     } catch (error) {

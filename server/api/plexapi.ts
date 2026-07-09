@@ -1,3 +1,8 @@
+import type { PlexMetadataSafeResult } from '@server/api/plexMetadataClassify';
+import {
+  classifyPlexMetadataResponse,
+  isPlexNotFoundError,
+} from '@server/api/plexMetadataClassify';
 import type { PlexHubManagementResponse } from '@server/interfaces/api/plexInterfaces';
 import PlexHubManager from '@server/lib/collections/plex/PlexHubManager';
 import PlexPosterManager from '@server/lib/collections/plex/PlexPosterManager';
@@ -7,6 +12,11 @@ import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { registerLogSecrets } from '@server/utils/logRedaction';
 import NodePlexAPI from 'plex-api';
+
+// Re-export so existing consumers can keep importing the result type from the
+// Plex client module; the classifiers themselves live in a dep-free sibling so
+// they stay unit-testable without the full client graph.
+export type { PlexMetadataSafeResult };
 
 // Extended interface for type-safe Plex API HTTP methods
 interface ExtendedPlexAPI extends NodePlexAPI {
@@ -476,6 +486,55 @@ class PlexAPI {
     );
 
     return response.MediaContainer.Metadata[0];
+  }
+
+  /**
+   * Guarded single-item metadata fetch that never throws. Classifies the
+   * outcome so callers can safely distinguish a confirmed deletion from an
+   * ambiguous transport failure:
+   *   - 'ok'        item exists, metadata returned
+   *   - 'not_found' Plex confirmed the key is gone (HTTP 404, or a well-formed
+   *                 Plex MediaContainer with no item) — safe to treat as deleted
+   *   - 'error'     ambiguous (network/auth/5xx/non-Plex 2xx) — callers MUST
+   *                 NOT delete on it
+   *
+   * plex-api (v5.3.2) exposes NO structured status code (verified: statusCode /
+   * code / status are all undefined); the HTTP status is only in the Error
+   * message as "response code: <n>". We parse that exact number rather than
+   * substring-matching "404", so a ratingKey or URL that happens to contain the
+   * digits 404 can never be misread as a deletion. Any other failure, and any
+   * successful-but-non-Plex body (a reverse proxy / auth / captive-portal page
+   * arrives as a string/Buffer or an object with no MediaContainer), is
+   * ambiguous -> 'error'. The 'not_found' branch gates a destructive cleanup, so
+   * it must only fire on a genuine, unambiguous absence.
+   */
+  public async getMetadataSafe(key: string): Promise<PlexMetadataSafeResult> {
+    let response: unknown;
+    try {
+      response = await this.plexClient.query<PlexMetadataResponse>(
+        `/library/metadata/${key}`
+      );
+    } catch (error) {
+      const errorMessage = (error as Error).message ?? '';
+      if (isPlexNotFoundError(errorMessage)) {
+        return { status: 'not_found' };
+      }
+      logger.warn('Ambiguous Plex metadata fetch failure', {
+        label: 'Plex API',
+        key,
+        error: errorMessage,
+      });
+      return { status: 'error' };
+    }
+
+    const result = classifyPlexMetadataResponse(response);
+    if (result.status === 'error') {
+      logger.warn('Unexpected non-Plex response for metadata fetch', {
+        label: 'Plex API',
+        key,
+      });
+    }
+    return result;
   }
 
   /**

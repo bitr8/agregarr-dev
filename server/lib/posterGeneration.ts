@@ -1095,6 +1095,56 @@ async function generateTemplateTextElements(
 }
 
 /**
+ * Render the `S{n}` badge overlaid on a season tile in a content grid.
+ *
+ * Every season of a show is captioned "Season 1", "Season 2"... but at collage
+ * thumbnail size the caption is unreadable, so a grid of seasons is six visually
+ * identical tiles. The badge is what tells them apart.
+ *
+ * Geometry is derived from the tile so the badge scales with the grid: the font
+ * follows the same rule the placeholder caption uses, and the badge is pinned to
+ * the tile's bottom-left corner.
+ *
+ * Exported for testing: the surrounding grid builder needs a database and network
+ * to reach, and this is the only new markup.
+ */
+export function renderSeasonBadge(
+  season: number,
+  itemWidth: number,
+  itemHeight: number
+): string {
+  const fontSize = Math.min(itemWidth / 8, itemHeight / 12);
+  const label = `S${season}`;
+  const padX = fontSize * 0.5;
+  const padY = fontSize * 0.32;
+  // Approximate advance width for bold sans - the rect only has to enclose the
+  // text, and over-estimating leaves harmless padding rather than clipping.
+  const badgeWidth = fontSize * 0.62 * label.length + padX * 2;
+  const badgeHeight = fontSize + padY * 2;
+  const margin = Math.max(4, itemWidth * 0.04);
+  const badgeY = itemHeight - margin - badgeHeight;
+
+  return `
+          <!-- Season badge -->
+          <g transform="translate(${margin}, ${badgeY})">
+            <rect x="0" y="0"
+                  width="${badgeWidth}"
+                  height="${badgeHeight}"
+                  fill="rgba(0,0,0,0.72)"
+                  stroke="rgba(255,255,255,0.2)"
+                  stroke-width="1"
+                  rx="${badgeHeight / 4}"/>
+            <text x="${badgeWidth / 2}" y="${badgeHeight / 2}"
+                  font-family="Helvetica Neue, Segoe UI, Arial, sans-serif"
+                  font-size="${fontSize}"
+                  font-weight="700"
+                  text-anchor="middle"
+                  fill="#ffffff"
+                  dominant-baseline="central">${escapeXml(label)}</text>
+          </g>`;
+}
+
+/**
  * Generate content grid from template data
  */
 async function generateTemplateContentGrid(
@@ -1130,6 +1180,11 @@ async function generateTemplateContentGrid(
     const itemX = x + col * (itemWidth + spacing);
     const itemY = y + row * (itemHeight + spacing);
 
+    const badge =
+      item.episodeInfo?.season != null
+        ? renderSeasonBadge(item.episodeInfo.season, itemWidth, itemHeight)
+        : '';
+
     if (item.posterUrl) {
       gridElements.push(`
         <g transform="translate(${itemX}, ${itemY})" filter="url(#contentShadow)">
@@ -1152,7 +1207,7 @@ async function generateTemplateContentGrid(
                 fill="none"
                 stroke="rgba(255,255,255,0.15)"
                 stroke-width="1"
-                rx="${cornerRadius}"/>
+                rx="${cornerRadius}"/>${badge}
         </g>
       `);
     } else {

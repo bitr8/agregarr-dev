@@ -25,6 +25,11 @@ export class MediaItemMetadata {
   @Index()
   public libraryKey: string;
 
+  // Kind of Plex item this row tracks ('movie' | 'show' | 'season'). Nullable:
+  // backfilled on the next overlay application for existing movie/show rows.
+  @Column({ type: 'varchar', nullable: true })
+  public itemType?: string;
+
   // === OVERLAY METADATA ===
   @Column({ type: 'varchar', length: 64, nullable: true })
   public lastOverlayInputHash?: string;

@@ -45,6 +45,9 @@ export class OverlayLibraryConfig {
   @Column({ type: 'boolean', default: false })
   public enableEpisodeScanning: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  public enableMaintainerrSeasonOverlays: boolean;
+
   @CreateDateColumn()
   public createdAt: Date;
 

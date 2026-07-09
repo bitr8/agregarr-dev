@@ -464,6 +464,39 @@ class PlexBasePosterManager {
   }
 
   /**
+   * Delete a stored base poster file. No-op if it was never stored. Uses the
+   * same filename scheme as storeBasePoster so the delete targets the exact
+   * file.
+   *
+   * ENOENT (already gone) resolves silently. Any OTHER IO error (EACCES, EBUSY)
+   * THROWS: a residual base-poster file is NOT harmless — once the caller
+   * deletes the metadata row, the Plex-source first-time path trusts whatever
+   * cached file remains (getBasePosterForOverlay firstTime branch), so a stale
+   * base could later be baked into a fresh overlay. Throwing lets the cleanup
+   * caller keep the row (and retry) instead of orphaning the file.
+   */
+  async deleteStoredBasePoster(
+    libraryId: string,
+    ratingKey: string
+  ): Promise<void> {
+    const filepath = this.getFilePath(libraryId, ratingKey);
+
+    try {
+      await fs.unlink(filepath);
+      logger.debug('Deleted stored base poster', {
+        label: 'PlexBasePosterManager',
+        libraryId,
+        ratingKey,
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return; // Nothing stored — nothing to delete.
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Build folder path for local poster storage
    * Format: /config/plex-base-posters/{libraryName}-{libraryId}/{title} ({year}) tmdb-{tmdbId}/
    */

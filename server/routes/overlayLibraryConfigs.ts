@@ -3,6 +3,7 @@ import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import overlayApplication from '@server/lib/overlayApplication';
 import { overlayLibraryService } from '@server/lib/overlays/OverlayLibraryService';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -83,18 +84,27 @@ router.get('/:libraryId', async (req, res, next) => {
       where: { libraryId },
     });
 
+    // The season overlay toggle is meaningless without a Maintainerr connection,
+    // so the client needs to know whether one exists. Send a boolean, never the
+    // hostname or apiKey.
+    const { maintainerr } = getSettings();
+    const maintainerrConfigured = !!(
+      maintainerr?.hostname && maintainerr?.apiKey
+    );
+
     if (!config) {
       // Return empty config if not found
       return res.status(200).json({
         libraryId,
         enabledOverlays: [],
+        maintainerrConfigured,
       });
     }
 
     // Clean orphaned references before returning
     const cleanedConfig = await cleanOrphanedOverlayReferences(config);
 
-    return res.status(200).json(cleanedConfig);
+    return res.status(200).json({ ...cleanedConfig, maintainerrConfigured });
   } catch (error) {
     logger.error('Failed to fetch overlay library config:', error);
     return next({
@@ -149,6 +159,10 @@ router.post('/:libraryId', async (req, res, next) => {
       if ('enableEpisodeScanning' in req.body) {
         config.enableEpisodeScanning = !!req.body.enableEpisodeScanning;
       }
+      if ('enableMaintainerrSeasonOverlays' in req.body) {
+        config.enableMaintainerrSeasonOverlays =
+          !!req.body.enableMaintainerrSeasonOverlays;
+      }
     } else {
       // Create new
       config = new OverlayLibraryConfig({
@@ -158,6 +172,8 @@ router.post('/:libraryId', async (req, res, next) => {
         enabledOverlays,
         tmdbLanguage: tmdbLanguage || undefined,
         enableEpisodeScanning: !!req.body.enableEpisodeScanning,
+        enableMaintainerrSeasonOverlays:
+          !!req.body.enableMaintainerrSeasonOverlays,
       });
     }
 
