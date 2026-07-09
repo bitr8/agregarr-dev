@@ -194,13 +194,29 @@ class OverlayApplication {
       // off, drops out of activeConfigs and would never be visited again - so the
       // season countdown posters it still carries would stay on Plex forever.
       // Visiting it lets processLibraryOverlays reach its config-driven cleanup.
-      const metadataService = (
-        await import('@server/lib/metadata/MetadataTrackingService')
-      ).default;
+      //
+      // Failing this lookup must never take the whole overlay job down with it:
+      // the sweep is a janitorial extra, and the libraries that actually have
+      // overlays enabled still deserve their run. Degrade to no sweep and warn.
       const activeLibraryIds = new Set(activeConfigs.map((c) => c.libraryId));
-      const seasonCleanupOnlyIds = (
-        await metadataService.getLibraryKeysWithSeasonOverlays()
-      ).filter((libraryId) => !activeLibraryIds.has(libraryId));
+      let seasonCleanupOnlyIds: string[] = [];
+
+      try {
+        const metadataService = (
+          await import('@server/lib/metadata/MetadataTrackingService')
+        ).default;
+        seasonCleanupOnlyIds = (
+          await metadataService.getLibraryKeysWithSeasonOverlays()
+        ).filter((libraryId) => !activeLibraryIds.has(libraryId));
+      } catch (error) {
+        logger.warn(
+          'Could not determine libraries needing season overlay cleanup - skipping the cleanup sweep',
+          {
+            label: 'Overlay Application',
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
 
       if (seasonCleanupOnlyIds.length > 0) {
         logger.info(

@@ -3034,11 +3034,34 @@ class OverlayLibraryService {
         // copy is no longer the only one. Delete the file BEFORE the row: it
         // throws on a real IO error, and a surviving file with no row would let a
         // stale base be baked into a future overlay via the first-time path.
+        // The reverse order would trade that for a silently wrong poster, which
+        // is the worse failure.
         await plexBasePosterManager.deleteStoredBasePoster(
           libraryId,
           ratingKey
         );
-        await metadataService.deleteItemMetadata(ratingKey);
+
+        try {
+          await metadataService.deleteItemMetadata(ratingKey);
+        } catch (rowError) {
+          // The only unrecoverable ordering branch: poster restored, backup gone,
+          // row still here. Every later run will attempt a restore that can no
+          // longer find a backup and defer forever. Nothing is wrong on Plex - the
+          // season already has its base poster - but the row needs a human. Say so
+          // loudly rather than leaving an unexplained warn on every run.
+          logger.error(
+            'Season poster restored and its stored base poster deleted, but the tracked row could not be removed - delete it by hand or cleanup will defer on it every run',
+            {
+              label: 'MaintainerrSeasonOverlay',
+              libraryId,
+              ratingKey,
+              error:
+                rowError instanceof Error ? rowError.message : String(rowError),
+            }
+          );
+          throw rowError;
+        }
+
         restored++;
       } catch (error) {
         deferred++;
