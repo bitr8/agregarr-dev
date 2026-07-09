@@ -113,6 +113,16 @@ interface OverlayApplyResult {
 }
 
 /**
+ * Job-local result of fetching Maintainerr collections. `unavailable` covers a
+ * failed or unconfigured Maintainerr connection, or a response missing usable
+ * media arrays (e.g. the <3.4.0 fallback endpoint). Callers must NOT treat it as
+ * "zero collections" — that would erase every item's deletion countdown.
+ */
+type MaintainerrFetchResult =
+  | { status: 'ok'; collections: MaintainerrCollection[] }
+  | { status: 'unavailable' };
+
+/**
  * Service for applying overlay templates to Plex library items
  */
 class OverlayLibraryService {
@@ -120,7 +130,6 @@ class OverlayLibraryService {
   // These are shared across libraries since Radarr/Sonarr data is the same regardless of Plex library
   private radarrMoviesCache?: Map<string, RadarrMovie[]>;
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
-  private maintainerrCollectionsCache?: MaintainerrCollection[];
   // Maps item ratingKey → array of collection IDs the item belongs to
   private collectionMembershipCache?: Map<string, string[]>;
 
@@ -244,14 +253,63 @@ class OverlayLibraryService {
           this.sonarrSeriesCache ? 'sonarr' : null,
           this.preloadedImdbRatings ? 'imdb' : null,
           this.preloadedTmdbReleaseDates ? 'tmdb' : null,
-          this.maintainerrCollectionsCache ? 'maintainerr' : null,
         ].filter(Boolean),
       });
       this.radarrMoviesCache = undefined;
       this.sonarrSeriesCache = undefined;
-      this.maintainerrCollectionsCache = undefined;
       this.preloadedImdbRatings = undefined;
       this.preloadedTmdbReleaseDates = undefined;
+    }
+  }
+
+  /**
+   * Fetch Maintainerr collections for one overlay job as a discriminated result.
+   * Returns `unavailable` (never an empty list masquerading as success) when
+   * Maintainerr isn't configured, the request fails, or the response is missing
+   * usable media arrays — so downstream code can tell "no collections" apart from
+   * "couldn't reach Maintainerr" and never wipe a countdown on a transient error.
+   */
+  private async fetchMaintainerrCollections(
+    settings: ReturnType<typeof getSettings>
+  ): Promise<MaintainerrFetchResult> {
+    const maintainerr = settings.maintainerr;
+    if (!maintainerr?.hostname || !maintainerr?.apiKey) {
+      logger.debug('Maintainerr not configured; skipping collection fetch', {
+        label: 'OverlayLibrary',
+      });
+      return { status: 'unavailable' };
+    }
+
+    try {
+      const MaintainerrAPI = (await import('@server/api/maintainerr')).default;
+      const maintainerrClient = new MaintainerrAPI(maintainerr);
+      const collections = await maintainerrClient.getCollections();
+
+      // The <3.4.0 fallback endpoint (/api/collections) can omit `media`. A
+      // collection without a media array can't be joined by ratingKey, so treat
+      // any such response as unavailable rather than dropping every countdown.
+      if (
+        !Array.isArray(collections) ||
+        collections.some((c) => !Array.isArray(c.media))
+      ) {
+        logger.warn(
+          'Maintainerr response missing media arrays; treating as unavailable',
+          { label: 'OverlayLibrary' }
+        );
+        return { status: 'unavailable' };
+      }
+
+      logger.info('Fetched Maintainerr collections for overlay job', {
+        label: 'OverlayLibrary',
+        collectionsCount: collections.length,
+      });
+      return { status: 'ok', collections };
+    } catch (error) {
+      logger.error('Failed to fetch Maintainerr collections', {
+        label: 'OverlayLibrary',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { status: 'unavailable' };
     }
   }
 
@@ -929,7 +987,8 @@ class OverlayLibraryService {
     if (!this.sonarrSeriesCache) {
       this.sonarrSeriesCache = new Map();
     }
-    // maintainerrCollectionsCache, collectionMembershipCache and preloadedImdbRatings are initialized on-demand
+    // collectionMembershipCache and preloadedImdbRatings are initialized on-demand
+    // (Maintainerr collections are fetched job-locally, not cached on the instance)
     // requiredContextFieldsByLibrary is already initialized as a Map
   }
 
@@ -1217,27 +1276,17 @@ class OverlayLibraryService {
         needsRtRatings,
       });
 
-      // Fetch Maintainerr collections once for the entire job
+      // Fetch Maintainerr collections once for the entire job. Kept job-local (a
+      // local var, not an instance field) so concurrent library jobs can't read
+      // each other's collections. `unavailable` is distinct from an empty list.
       const settings = getSettings();
-      if (settings.maintainerr?.hostname && settings.maintainerr?.apiKey) {
-        try {
-          const MaintainerrAPI = (await import('@server/api/maintainerr'))
-            .default;
-          const maintainerrClient = new MaintainerrAPI(settings.maintainerr);
-          this.maintainerrCollectionsCache =
-            await maintainerrClient.getCollections();
-          logger.info('Fetched Maintainerr collections for overlay job', {
-            label: 'OverlayLibrary',
-            collectionsCount: this.maintainerrCollectionsCache.length,
-          });
-        } catch (error) {
-          logger.error('Failed to fetch Maintainerr collections', {
-            label: 'OverlayLibrary',
-            error: error instanceof Error ? error.message : String(error),
-          });
-          this.maintainerrCollectionsCache = [];
-        }
-      }
+      const maintainerrResult = await this.fetchMaintainerrCollections(
+        settings
+      );
+      const maintainerrCollections =
+        maintainerrResult.status === 'ok'
+          ? maintainerrResult.collections
+          : undefined;
 
       // Get library items from Plex
       const { getAdminUser } = await import(
@@ -1415,7 +1464,8 @@ class OverlayLibraryService {
             sortedTemplates,
             config.mediaType,
             libraryId,
-            config.libraryName
+            config.libraryName,
+            maintainerrCollections
           );
 
           // Update counts AFTER outcome is known
@@ -1702,6 +1752,10 @@ class OverlayLibraryService {
                 mediaType,
                 libraryId,
                 config.libraryName,
+                // This path never fetches Maintainerr collections; passing
+                // undefined removes the old cross-job contamination where it
+                // read whatever a concurrent library job left in the shared cache.
+                undefined,
                 contextOverrides,
                 aggregatedMedia
               );
@@ -1748,6 +1802,7 @@ class OverlayLibraryService {
     configuredLibraryType: 'movie' | 'show',
     libraryId: string,
     libraryName: string,
+    maintainerrCollections: MaintainerrCollection[] | undefined,
     contextOverrides?: Partial<OverlayRenderContext>,
     aggregatedMediaOverride?: Map<string, AggregatedMediaInfo>
   ): Promise<OverlayApplyResult> {
@@ -1833,7 +1888,7 @@ class OverlayLibraryService {
         item,
         actualMediaType,
         isPlaceholder,
-        this.maintainerrCollectionsCache,
+        maintainerrCollections,
         this.preloadedImdbRatings,
         this.requiredContextFieldsByLibrary.get(libraryId)
       );
