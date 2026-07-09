@@ -1328,6 +1328,23 @@ class PlexAPI {
           throw new Error(`Collection ${collectionRatingKey} not found`);
         }
 
+        // A stale or mispointed ratingKey can name a movie or show rather than a
+        // collection. Labelling it would strip that item's other Agregarr labels
+        // (see cleanAgregarrCollectionLabels) and leave a locked label behind,
+        // so refuse instead. The caller finds out the key is wrong when its next
+        // collection-scoped write returns 404.
+        //
+        // Only refuse on a type we actually read. If Plex ever omits it, fall
+        // through and label as before: a missing field must not silently stop
+        // Agregarr labelling every collection it owns.
+        if (collectionMeta.type && collectionMeta.type !== 'collection') {
+          logger.warn(
+            `Refusing to label ${collectionRatingKey}: it is a ${collectionMeta.type}, not a collection`,
+            { label: 'Plex API', collectionRatingKey }
+          );
+          return false;
+        }
+
         // Check if label already exists first (case-insensitive comparison since Plex auto-formats labels)
         const existingLabels = collectionMeta.labels || [];
         const labelExistsIndex = existingLabels.findIndex(

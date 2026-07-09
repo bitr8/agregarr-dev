@@ -56,3 +56,67 @@ export function classifyPlexMetadataResponse(
   const meta = container.Metadata?.[0];
   return meta ? { status: 'ok', meta } : { status: 'not_found' };
 }
+
+/**
+ * What a collection ratingKey turned out to be when we read it back.
+ *
+ * 'ambiguous' must be handled exactly like 'present': we could not verify the
+ * key, so nothing destructive may follow.
+ */
+export type CollectionKeyState =
+  | 'present'
+  | 'absent'
+  | 'not-a-collection'
+  | 'ambiguous';
+
+/** Plex item types a collection ratingKey could be confused with. */
+const MEDIA_ITEM_TYPES = new Set<string>([
+  'movie',
+  'show',
+  'season',
+  'episode',
+]);
+
+/**
+ * Decide what a ratingKey is from a guarded metadata read.
+ *
+ * Callers reach for this after a WRITE to a collection failed with 404. A failed
+ * write never proves the collection is gone. Verified against a live Plex
+ * server: `PUT /library/sections/{section}/all?type=18&id={key}` returns 404
+ * when the *section* does not exist, even for a healthy populated collection,
+ * and `PUT /library/collections/{key}/prefs` returns 404 when the key is not a
+ * collection at all. Only a read can tell those apart from a real absence, and
+ * only 'absent' or 'not-a-collection' may be acted on.
+ *
+ * Plex reports `type: "collection"` for collections. PlexMetadata models media
+ * items so the literal is absent from its union; it is read as a plain string
+ * rather than widening that type across every overlay call site.
+ */
+export function classifyCollectionKey(
+  result: PlexMetadataSafeResult
+): CollectionKeyState {
+  if (result.status === 'not_found') {
+    return 'absent';
+  }
+  if (result.status === 'error') {
+    return 'ambiguous';
+  }
+
+  const plexType: string = result.meta.type;
+
+  if (plexType === 'collection') {
+    return 'present';
+  }
+
+  // Only a type we positively recognise as a media item may clear a stored key.
+  // An unknown or missing type (a Plex rename, a partial response, a playlist or
+  // music item on a reused ratingKey) is ambiguous, so the sync leaves the key
+  // alone rather than recreating over the top of it.
+  //
+  // The trade-off is deliberate: a key pointing at an unrecognised type is held
+  // forever and warns every cycle, rather than being cleared. Do not "fix" that
+  // by widening this set on a hunch — every type added here gains the power to
+  // discard a stored key, which is the class of assumption this module exists to
+  // prevent. Add a type only once you have confirmed what Plex returns for it.
+  return MEDIA_ITEM_TYPES.has(plexType) ? 'not-a-collection' : 'ambiguous';
+}

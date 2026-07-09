@@ -431,17 +431,30 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
       isActive: config.isActive ?? true,
     };
 
-    await this.updateCollectionMetadata(plexClient, collectionRatingKey, {
-      collectionName,
-      mediaType,
-      visibilityConfig,
-      customLabel,
-      sortOrderLibrary: config.sortOrderLibrary,
-      isLibraryPromoted: config.isLibraryPromoted,
-      customPoster: config.customPoster,
-      libraryKey: config.libraryId,
-      config,
-    });
+    const metadataResult = await this.updateCollectionMetadata(
+      plexClient,
+      collectionRatingKey,
+      {
+        collectionName,
+        mediaType,
+        visibilityConfig,
+        customLabel,
+        sortOrderLibrary: config.sortOrderLibrary,
+        isLibraryPromoted: config.isLibraryPromoted,
+        customPoster: config.customPoster,
+        libraryKey: config.libraryId,
+        config,
+      }
+    );
+
+    if (metadataResult.ratingKeyIsStale) {
+      // The key no longer names a collection and updateCollectionMetadata has
+      // already cleared it. Writing it back here would undo that every sync,
+      // and there is nothing left to generate a poster for.
+      const warning = `Collection ${collectionName} (${collectionRatingKey}) is no longer a usable collection in Plex and will be recreated on the next sync`;
+      logger.warn(warning, { label: 'Filtered Hub Collections' });
+      return { created: 0, updated: 0, warning };
+    }
 
     // Update config with rating key
     this.updateConfigWithRatingKey(config, collectionRatingKey);

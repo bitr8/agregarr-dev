@@ -978,9 +978,21 @@ export function updateConfigWithRatingKey(
   }
 }
 
+/**
+ * Remove a stored collection ratingKey from a config.
+ *
+ * Pass `staleRatingKey` to remove one specific key. The singular
+ * `collectionRatingKey` is then only cleared when it actually matches, so a
+ * config whose stored key differs from the one that just went stale keeps it.
+ * Multi-collection configs (Overseerr per-user, one key per user) also carry a
+ * `collectionRatingKeys` array; the named key is filtered out of it rather than
+ * the whole array being discarded. Omit `staleRatingKey` for the legacy
+ * behaviour of clearing the singular key unconditionally.
+ */
 export function clearConfigRatingKey(
   configId: string,
-  libraryId?: string
+  libraryId?: string,
+  staleRatingKey?: string
 ): void {
   try {
     const settings = getSettings();
@@ -1000,8 +1012,31 @@ export function clearConfigRatingKey(
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { collectionRatingKey: _removed, ...updatedConfig } = existingConfig;
+      const updatedConfig = { ...existingConfig };
+      let changed = false;
+
+      if (
+        updatedConfig.collectionRatingKey !== undefined &&
+        (!staleRatingKey ||
+          updatedConfig.collectionRatingKey === staleRatingKey)
+      ) {
+        delete updatedConfig.collectionRatingKey;
+        changed = true;
+      }
+
+      if (staleRatingKey && Array.isArray(updatedConfig.collectionRatingKeys)) {
+        const remaining = updatedConfig.collectionRatingKeys.filter(
+          (key) => key !== staleRatingKey
+        );
+        if (remaining.length !== updatedConfig.collectionRatingKeys.length) {
+          updatedConfig.collectionRatingKeys = remaining;
+          changed = true;
+        }
+      }
+
+      if (!changed) {
+        return;
+      }
 
       collectionConfigs[configIndex] = updatedConfig;
       settings.plex.collectionConfigs = collectionConfigs;

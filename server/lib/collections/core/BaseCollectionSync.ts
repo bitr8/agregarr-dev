@@ -1,5 +1,10 @@
 import ImdbRatingsAPI from '@server/api/imdbRatings';
 import type PlexAPI from '@server/api/plexapi';
+import type { CollectionKeyState } from '@server/api/plexMetadataClassify';
+import {
+  classifyCollectionKey,
+  isPlexNotFoundError,
+} from '@server/api/plexMetadataClassify';
 import { getRepository } from '@server/datasource';
 import { CollectionMetadata } from '@server/entity/CollectionMetadata';
 import { PosterTemplate } from '@server/entity/PosterTemplate';
@@ -1477,34 +1482,44 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             );
           } catch (sortError) {
             const sortErrorMsg = extractErrorMessage(sortError);
-            if (sortErrorMsg.includes('404')) {
+            if (!isPlexNotFoundError(sortErrorMsg)) {
+              throw sortError;
+            }
+
+            const keyState = await this.resolveCollectionKeyState(
+              plexClient,
+              collectionRatingKey
+            );
+
+            if (keyState === 'present' || keyState === 'ambiguous') {
               logger.warn(
-                `Collection ${collectionName} (${collectionRatingKey}) returned 404 on mutation — deleting stale collection and recreating`,
+                `Content sort returned 404 for collection ${collectionName} (${collectionRatingKey}) but the collection is still there — leaving it alone and continuing`,
                 {
                   label: 'Collection Update',
                   error: sortErrorMsg,
+                  keyState,
                 }
               );
-              try {
-                await plexClient.deleteCollection(collectionRatingKey);
-              } catch (deleteError) {
-                logger.debug(
-                  `Failed to delete stale collection ${collectionRatingKey}`,
-                  {
-                    label: 'Collection Update',
-                    error: extractErrorMessage(deleteError),
-                  }
-                );
-              }
+            } else {
+              logger.warn(
+                `Stored ratingKey ${collectionRatingKey} for ${collectionName} is ${keyState} — clearing it and recreating the collection`,
+                {
+                  label: 'Collection Update',
+                  error: sortErrorMsg,
+                  keyState,
+                }
+              );
               if (options.config?.id) {
                 const libId = Array.isArray(options.config.libraryId)
                   ? options.config.libraryId[0]
                   : options.config.libraryId;
-                clearConfigRatingKey(options.config.id, libId);
+                clearConfigRatingKey(
+                  options.config.id,
+                  libId,
+                  collectionRatingKey
+                );
               }
               collectionRatingKey = undefined;
-            } else {
-              throw sortError;
             }
           }
 
@@ -1596,7 +1611,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         );
       } catch (sortError) {
         const sortErrorMsg = extractErrorMessage(sortError);
-        if (sortErrorMsg.includes('404')) {
+        if (isPlexNotFoundError(sortErrorMsg)) {
           logger.warn(
             `Failed to set content sort for collection ${collectionName} (${collectionRatingKey}), continuing`,
             {
@@ -1640,23 +1655,16 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     );
 
     if (metadataResult.ratingKeyIsStale) {
-      try {
-        await plexClient.deleteCollection(collectionRatingKey);
-      } catch (deleteError) {
-        logger.debug(
-          `Failed to delete stale collection ${collectionRatingKey} during metadata self-heal`,
-          {
-            label: 'Collection Update',
-            error: extractErrorMessage(deleteError),
-          }
-        );
-      }
-      if (options.config?.id) {
-        const libId = Array.isArray(options.config.libraryId)
-          ? options.config.libraryId[0]
-          : options.config.libraryId;
-        clearConfigRatingKey(options.config.id, libId);
-      }
+      // updateCollectionMetadata only reports staleness once a read has
+      // confirmed the key is absent (or is not a collection), and it has
+      // already cleared the stored key. There is nothing to delete here, and
+      // nothing was really created or updated this run.
+      logger.warn(
+        `Collection ${collectionName} (${collectionRatingKey}) is no longer a usable collection in Plex — it will be recreated on the next sync`,
+        { label: 'Collection Update' }
+      );
+      created = 0;
+      updated = 0;
       collectionRatingKey = undefined;
     }
 
@@ -1681,7 +1689,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     items: CollectionItem[],
     targetLibraryKey: string
   ): CollectionItem[] {
-    return items.filter((item) => {
+    const filtered = items.filter((item) => {
       // Check if item has library information
       if (
         item.metadata &&
@@ -1694,6 +1702,27 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       // For items without library metadata, include them (they'll be filtered out later if invalid)
       return true;
     });
+
+    // Discarding every item leaves an empty collection behind with no other
+    // symptom, and the usual cause is a config pointing at the wrong library.
+    if (items.length > 0 && filtered.length === 0) {
+      logger.warn(
+        `All ${items.length} items were filtered out because none belong to library ${targetLibraryKey} — the collection will be empty. Check the library configured for this collection`,
+        {
+          label: 'Collection Update',
+          targetLibraryKey,
+          itemLibraryKeys: [
+            ...new Set(
+              items
+                .map((item) => item.metadata?.libraryKey)
+                .filter((key): key is string => typeof key === 'string')
+            ),
+          ],
+        }
+      );
+    }
+
+    return filtered;
   }
 
   /**
@@ -2055,6 +2084,27 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     }));
   }
 
+  /**
+   * Read a ratingKey back to find out what it really is, after a write to it
+   * failed with 404. See classifyCollectionKey in plexMetadataClassify.
+   */
+  private async resolveCollectionKeyState(
+    plexClient: PlexAPI,
+    collectionRatingKey: string
+  ): Promise<CollectionKeyState> {
+    return classifyCollectionKey(
+      await plexClient.getMetadataSafe(collectionRatingKey)
+    );
+  }
+
+  /**
+   * Apply label, title, sort title, visibility and poster to a collection.
+   *
+   * Returns `ratingKeyIsStale` only when a read has confirmed the stored key no
+   * longer names a collection. The stored key is cleared here rather than by the
+   * caller, so the call sites that ignore the return value still end up with
+   * clean settings; the flag exists so a caller can also drop its local copy.
+   */
   protected async updateCollectionMetadata(
     plexClient: PlexAPI,
     collectionRatingKey: string,
@@ -2083,17 +2133,64 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         );
       } catch (titleError) {
         const titleErrorMsg = extractErrorMessage(titleError);
-        if (titleErrorMsg.includes('404')) {
+        if (!isPlexNotFoundError(titleErrorMsg)) {
+          throw titleError;
+        }
+
+        const keyState = await this.resolveCollectionKeyState(
+          plexClient,
+          collectionRatingKey
+        );
+
+        if (keyState === 'present' || keyState === 'ambiguous') {
+          // The title endpoint is section-scoped, so a 404 here usually means
+          // libraryKey is not a real Plex section — the collection is fine.
           logger.warn(
-            `Collection ${collectionName} (${collectionRatingKey}) returned 404 on title update — marking stale for deletion and recreation`,
+            `Title update returned 404 for collection ${collectionName} (${collectionRatingKey}) but the collection is still there. Check that libraryKey ${libraryKey} is a real Plex section`,
             {
               label: 'Collection Update',
               error: titleErrorMsg,
+              libraryKey,
+              keyState,
             }
           );
-          return { ratingKeyIsStale: true };
         } else {
-          throw titleError;
+          logger.warn(
+            `Stored ratingKey ${collectionRatingKey} for ${collectionName} is ${keyState} — clearing it so the collection is recreated`,
+            {
+              label: 'Collection Update',
+              error: titleErrorMsg,
+              keyState,
+            }
+          );
+
+          if (keyState === 'not-a-collection' && customLabel) {
+            // addLabelToCollection refuses non-collections now, but earlier
+            // builds did not, so a media item may already be carrying this
+            // label. Take it back off; nothing else ever will.
+            try {
+              await plexClient.removeLabelFromItem(
+                collectionRatingKey,
+                customLabel
+              );
+            } catch (labelError) {
+              logger.warn(
+                `Failed to remove label ${customLabel} from non-collection item ${collectionRatingKey}`,
+                {
+                  label: 'Collection Update',
+                  error: extractErrorMessage(labelError),
+                }
+              );
+            }
+          }
+
+          if (options.config?.id) {
+            const libId = Array.isArray(options.config.libraryId)
+              ? options.config.libraryId[0]
+              : options.config.libraryId;
+            clearConfigRatingKey(options.config.id, libId, collectionRatingKey);
+          }
+          return { ratingKeyIsStale: true };
         }
       }
     }

@@ -1,8 +1,19 @@
+import type { PlexMetadata } from '@server/api/plexapi';
 import {
+  classifyCollectionKey,
   classifyPlexMetadataResponse,
   isPlexNotFoundError,
 } from '@server/api/plexMetadataClassify';
 import { describe, expect, it } from 'vitest';
+
+const meta = (type: string, ratingKey = '398348'): PlexMetadata =>
+  ({
+    ratingKey,
+    type,
+    title: 'x',
+    guid: '',
+    Guid: [],
+  } as unknown as PlexMetadata);
 
 /**
  * These classifiers gate a DESTRUCTIVE cleanup (a 'not_found' verdict deletes a
@@ -98,5 +109,67 @@ describe('classifyPlexMetadataResponse', () => {
     expect(classifyPlexMetadataResponse(null).status).toBe('error');
     expect(classifyPlexMetadataResponse(undefined).status).toBe('error');
     expect(classifyPlexMetadataResponse(42).status).toBe('error');
+  });
+});
+
+/**
+ * classifyCollectionKey decides whether a collection sync may discard a stored
+ * ratingKey after a WRITE to it returned 404. Only 'absent' and
+ * 'not-a-collection' are actionable. A collection whose section-scoped title
+ * PUT 404s (because the section is wrong) reads back as 'present' and must be
+ * left completely alone — that path previously deleted it.
+ */
+describe('classifyCollectionKey', () => {
+  it('reports a real collection as present', () => {
+    expect(
+      classifyCollectionKey({ status: 'ok', meta: meta('collection') })
+    ).toBe('present');
+  });
+
+  it('reports a confirmed absence', () => {
+    expect(classifyCollectionKey({ status: 'not_found' })).toBe('absent');
+  });
+
+  it('never reports absent for an ambiguous read', () => {
+    // 5xx, auth failure, captive portal, socket hang up.
+    expect(classifyCollectionKey({ status: 'error' })).toBe('ambiguous');
+  });
+
+  it('reports a key pointing at a media item as not-a-collection', () => {
+    // /library/collections/{key}/prefs 404s for a movie ratingKey while the
+    // movie itself reads back fine. Clearing the key is right; deleting the
+    // movie is not.
+    for (const type of ['movie', 'show', 'season', 'episode']) {
+      expect(classifyCollectionKey({ status: 'ok', meta: meta(type) })).toBe(
+        'not-a-collection'
+      );
+    }
+  });
+
+  it('treats an unrecognised or missing type as ambiguous, never actionable', () => {
+    // If Plex ever renames the literal, we must not decide the key is junk and
+    // recreate a duplicate over the top of a healthy collection.
+    for (const type of ['Collection', 'playlist', 'artist', '']) {
+      expect(classifyCollectionKey({ status: 'ok', meta: meta(type) })).toBe(
+        'ambiguous'
+      );
+    }
+    expect(
+      classifyCollectionKey({
+        status: 'ok',
+        meta: { ratingKey: '1' } as unknown as PlexMetadata,
+      })
+    ).toBe('ambiguous');
+  });
+
+  it('treats a healthy collection as present even when a write just 404d', () => {
+    // Reproduces the fork#5 shape: PUT /library/sections/99/all?type=18&id=X
+    // returns 404 because section 99 does not exist, though X is populated.
+    const state = classifyCollectionKey({
+      status: 'ok',
+      meta: meta('collection', '181765'),
+    });
+    expect(state).toBe('present');
+    expect(state).not.toBe('absent');
   });
 });
