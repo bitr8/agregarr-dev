@@ -2,6 +2,7 @@ import type PlexAPI from '@server/api/plexapi';
 import type { PlexLibraryItem } from '@server/api/plexapi';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isWebpBuffer } from '@server/utils/imageFormat';
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -953,6 +954,10 @@ class PlexBasePosterManager {
         throw new Error('Item has no poster in Plex');
       }
 
+      // Normalized poster URL comparison, used throughout this branch.
+      const { extractContentAddressedPosterRef, posterUrlsMatch } =
+        await import('@server/utils/posterUrlHelpers');
+
       // Check if we switched from a different source (e.g., TMDB → Plex) OR first time
       const switchedFromDifferentSource =
         metadata.basePosterSource && metadata.basePosterSource !== 'plex';
@@ -974,21 +979,38 @@ class PlexBasePosterManager {
             currentSource: 'plex',
           });
 
+          // These bytes came from the bulk base-poster download, which stores the
+          // file and never records where it came from, so we cannot name this
+          // base from our own state. The poster Plex is showing may be our own
+          // overlay - a source switch leaves the previous source's overlay
+          // selected, and a first overlay run whose metadata write was swallowed
+          // leaves no row at all. Recording an overlay as the tracked original is
+          // what turns this into permanent corruption: a later cache loss then
+          // composites on top of it.
+          //
+          // Every overlay Agregarr uploads goes through uploadPosterFromFile and
+          // lands under `upload://`, so a `metadata://` (agent) or `https://`
+          // (provider) poster is provably not one of ours and is safe to record.
+          // An `upload://` poster is ambiguous - ours or one the user uploaded -
+          // so report the original as unknown instead. Recovery is then
+          // unavailable for that row until a download path names a real original,
+          // which fails loudly rather than silently.
+          const currentRef =
+            extractContentAddressedPosterRef(currentPlexPosterUrl);
+          const currentMayBeOurs = currentRef?.startsWith('upload://') ?? false;
+
           return {
             posterBuffer: cachedPoster,
             basePosterChanged: true, // Force TRUE - source changed or first time
-            sourceUrl: currentPlexPosterUrl,
+            sourceUrl: currentMayBeOurs
+              ? metadata.originalPlexPosterUrl ?? ''
+              : currentPlexPosterUrl,
             filename: this.generateFilename(libraryId, item.ratingKey),
             fileModTime: undefined,
           };
         }
         // No cache - fall through to download
       }
-
-      // Check if poster changed using normalized URL comparison
-      const { posterUrlsMatch } = await import(
-        '@server/utils/posterUrlHelpers'
-      );
 
       if (posterUrlsMatch(currentPlexPosterUrl, metadata.ourOverlayPosterUrl)) {
         // Plex still has our overlaid poster - use cached base
@@ -1000,7 +1022,9 @@ class PlexBasePosterManager {
           return {
             posterBuffer: cachedPoster,
             basePosterChanged: false,
-            sourceUrl: metadata.originalPlexPosterUrl || currentPlexPosterUrl,
+            // currentPlexPosterUrl is our overlay in this branch, so it must
+            // never be recorded as the original - not even as a fallback.
+            sourceUrl: metadata.originalPlexPosterUrl ?? '',
             filename: metadata.basePosterFilename || '',
             fileModTime: undefined,
           };
@@ -1083,6 +1107,88 @@ class PlexBasePosterManager {
         currentPlexPosterUrl,
         item.ratingKey
       );
+
+      // Adopting the current poster as the new base is only safe when it really
+      // is a poster Plex owns. Every poster Agregarr uploads is WebP, so a WebP
+      // poster on an item we have already overlaid is very likely our own
+      // overlay whose tracking went stale - the overlay upload can succeed while
+      // the write recording ourOverlayPosterUrl does not (OverlayLibraryService
+      // swallows that failure, and seasonPosterRestore.ts documents the same
+      // window). Storing it would bake the overlay in as the base and every
+      // later run would composite on top of it. Prefer the tracked base.
+      //
+      // The inference only holds one way: a user CAN upload a WebP poster, and
+      // then we keep the old base until they reset it. That is recoverable;
+      // baking in an overlay is not.
+      const isTrackedOriginal = posterUrlsMatch(
+        currentPlexPosterUrl,
+        metadata.originalPlexPosterUrl
+      );
+
+      if (
+        !isTrackedOriginal &&
+        metadata.ourOverlayPosterUrl &&
+        isWebpBuffer(posterBuffer)
+      ) {
+        logger.warn(
+          'Unrecognised WebP poster on an overlaid item - refusing to adopt it as the base',
+          {
+            label: 'PlexBasePosterManager',
+            libraryId,
+            ratingKey: item.ratingKey,
+          }
+        );
+
+        // Written atomically with ourOverlayPosterUrl, so it should always be
+        // present here. Fail loudly rather than fall through to adopting the
+        // overlay if that invariant ever breaks.
+        const trackedOriginal = metadata.originalPlexPosterUrl;
+        if (!trackedOriginal) {
+          throw new Error(
+            'Cannot use the current Plex poster as base - it appears to be our own overlay and no original poster is tracked. Please re-download base posters.'
+          );
+        }
+
+        const cachedPoster = await this.getStoredBasePoster(
+          libraryId,
+          item.ratingKey
+        );
+        if (cachedPoster) {
+          return {
+            posterBuffer: cachedPoster,
+            basePosterChanged: false,
+            sourceUrl: trackedOriginal,
+            filename: metadata.basePosterFilename || '',
+            fileModTime: undefined,
+          };
+        }
+
+        const recovered = await this.recoverOriginalPlexPoster(
+          plexApi,
+          item.ratingKey,
+          metadata
+        );
+        if (recovered) {
+          const recoveredFilename = await this.storeBasePoster(
+            recovered,
+            libraryId,
+            item.ratingKey
+          );
+
+          return {
+            posterBuffer: recovered,
+            basePosterChanged: false,
+            sourceUrl: trackedOriginal,
+            filename: recoveredFilename,
+            fileModTime: undefined,
+          };
+        }
+
+        throw new Error(
+          'Cannot use the current Plex poster as base - it appears to be our own overlay, and the original could not be recovered. Please re-download base posters.'
+        );
+      }
+
       const filename = await this.storeBasePoster(
         posterBuffer,
         libraryId,
