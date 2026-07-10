@@ -8,6 +8,11 @@ import type {
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import {
+  buildReorderedConfigs,
+  partitionForReorder,
+  type ReorderableConfig,
+} from '@server/utils/reorderPartition';
 import { Router, type Response } from 'express';
 
 // Mixed item types from frontend (original config + metadata)
@@ -36,6 +41,36 @@ function isPreExistingConfig(
   config: CollectionConfig | PlexHubConfig | PreExistingCollectionConfig
 ): config is PreExistingCollectionConfig {
   return 'collectionRatingKey' in config;
+}
+
+/**
+ * A reorder payload only carries items from the library being reordered. Items
+ * belonging elsewhere are refused rather than applied, since their sort order
+ * is meaningful only against their own library.
+ */
+function logRejectedReorderItems(
+  configType: 'collection' | 'hub' | 'preExisting',
+  libraryId: string,
+  rejected: ReorderableConfig[],
+  duplicateIds: string[]
+) {
+  if (rejected.length > 0) {
+    logger.warn('Ignoring reorder items that do not belong to this library', {
+      label: 'Universal Reorder API',
+      configType,
+      libraryId,
+      rejectedIds: rejected.map((item) => item.id),
+    });
+  }
+
+  if (duplicateIds.length > 0) {
+    logger.warn('Saved config ids are duplicated', {
+      label: 'Universal Reorder API',
+      configType,
+      libraryId,
+      duplicateIds,
+    });
+  }
 }
 
 const reorderRoutes = Router();
@@ -160,6 +195,11 @@ async function handleManualReordering(
   let finalHubConfigs: PlexHubConfig[] | undefined;
   let finalPreExistingConfigs: PreExistingCollectionConfig[] | undefined;
 
+  // Counts of payload items actually applied, excluding any the partition refused
+  let collectionsApplied = 0;
+  let hubsApplied = 0;
+  let preExistingApplied = 0;
+
   // Split mixed items by type
   const collectionsToUpdate: CollectionConfig[] = [];
   const hubsToUpdate: PlexHubConfig[] = [];
@@ -219,115 +259,69 @@ async function handleManualReordering(
   // Process collections if any
   if (collectionsToUpdate.length > 0) {
     const allCollectionConfigs = settings.plex.collectionConfigs || [];
+    const { accepted, otherLibrary, hidden, rejected, duplicateIds } =
+      partitionForReorder(allCollectionConfigs, collectionsToUpdate, libraryId);
 
-    // Get all items from other libraries
-    const otherLibraryConfigs = allCollectionConfigs.filter(
-      (config: CollectionConfig) => {
-        const configLibraryId = Array.isArray(config.libraryId)
-          ? config.libraryId[0]
-          : config.libraryId;
-        return configLibraryId !== libraryId;
-      }
+    logRejectedReorderItems('collection', libraryId, rejected, duplicateIds);
+
+    const finalConfigs = buildReorderedConfigs(
+      allCollectionConfigs,
+      accepted,
+      hidden,
+      libraryId,
+      sortOrderField
     );
 
-    // Get hidden items from current library
-    const visibleIds = new Set(collectionsToUpdate.map((item) => item.id));
-    const hiddenCurrentLibraryConfigs = allCollectionConfigs.filter(
-      (config: CollectionConfig) => {
-        const configLibraryId = Array.isArray(config.libraryId)
-          ? config.libraryId[0]
-          : config.libraryId;
-        return configLibraryId === libraryId && !visibleIds.has(config.id);
-      }
-    );
-
-    // Combine visible + hidden and preserve original fields
-    const allCurrentLibraryConfigs = [
-      ...collectionsToUpdate,
-      ...hiddenCurrentLibraryConfigs,
-    ];
-    const finalConfigs = allCurrentLibraryConfigs.map(
-      (config: CollectionConfig, index: number) => {
-        const originalConfig = allCollectionConfigs.find(
-          (original) => original.id === config.id
-        );
-        return {
-          ...(originalConfig || config),
-          ...config,
-          [sortOrderField]: config[sortOrderField] ?? index,
-        };
-      }
-    );
-
-    finalCollectionConfigs = [...otherLibraryConfigs, ...finalConfigs];
-    totalUpdated += finalConfigs.length;
+    finalCollectionConfigs = [...otherLibrary, ...finalConfigs];
+    collectionsApplied = accepted.length;
+    totalUpdated += collectionsApplied;
   }
 
   // Process hubs if any
   if (hubsToUpdate.length > 0) {
     const allHubConfigs = defaultHubConfigService.getConfigs();
-    const otherLibraryHubs = allHubConfigs.filter(
-      (config) => config.libraryId !== libraryId
+    const { accepted, otherLibrary, hidden, rejected, duplicateIds } =
+      partitionForReorder(allHubConfigs, hubsToUpdate, libraryId);
+
+    logRejectedReorderItems('hub', libraryId, rejected, duplicateIds);
+
+    const finalHubs = buildReorderedConfigs(
+      allHubConfigs,
+      accepted,
+      hidden,
+      libraryId,
+      sortOrderField
     );
 
-    const visibleIds = new Set(hubsToUpdate.map((item) => item.id));
-    const hiddenCurrentLibraryHubs = allHubConfigs.filter(
-      (config) => config.libraryId === libraryId && !visibleIds.has(config.id)
-    );
-
-    const allCurrentLibraryHubs = [
-      ...hubsToUpdate,
-      ...hiddenCurrentLibraryHubs,
-    ];
-    const finalHubs = allCurrentLibraryHubs.map(
-      (config: PlexHubConfig, index: number) => {
-        const originalConfig = allHubConfigs.find(
-          (original) => original.id === config.id
-        );
-        return {
-          ...(originalConfig || config),
-          ...config,
-          [sortOrderField]: config[sortOrderField] ?? index,
-        };
-      }
-    );
-
-    finalHubConfigs = [...otherLibraryHubs, ...finalHubs];
-    totalUpdated += finalHubs.length;
+    finalHubConfigs = [...otherLibrary, ...finalHubs];
+    hubsApplied = accepted.length;
+    totalUpdated += hubsApplied;
   }
 
   // Process preexisting if any
   if (preExistingToUpdate.length > 0) {
     const allPreExistingConfigs =
       preExistingCollectionConfigService.getConfigs();
-    const otherLibraryPreExisting = allPreExistingConfigs.filter(
-      (config) => config.libraryId !== libraryId
+    const { accepted, otherLibrary, hidden, rejected, duplicateIds } =
+      partitionForReorder(
+        allPreExistingConfigs,
+        preExistingToUpdate,
+        libraryId
+      );
+
+    logRejectedReorderItems('preExisting', libraryId, rejected, duplicateIds);
+
+    const finalPreExisting = buildReorderedConfigs(
+      allPreExistingConfigs,
+      accepted,
+      hidden,
+      libraryId,
+      sortOrderField
     );
 
-    const visibleIds = new Set(preExistingToUpdate.map((item) => item.id));
-    const hiddenCurrentLibraryPreExisting = allPreExistingConfigs.filter(
-      (config) => config.libraryId === libraryId && !visibleIds.has(config.id)
-    );
-
-    const allCurrentLibraryPreExisting = [
-      ...preExistingToUpdate,
-      ...hiddenCurrentLibraryPreExisting,
-    ];
-    const finalPreExisting = allCurrentLibraryPreExisting.map(
-      (config: PreExistingCollectionConfig, index: number) => {
-        const originalConfig = allPreExistingConfigs.find(
-          (original) => original.id === config.id
-        );
-        return {
-          ...(originalConfig || config),
-          ...config,
-          [sortOrderField]: config[sortOrderField] ?? index,
-        };
-      }
-    );
-
-    finalPreExistingConfigs = [...otherLibraryPreExisting, ...finalPreExisting];
-    totalUpdated += finalPreExisting.length;
+    finalPreExistingConfigs = [...otherLibrary, ...finalPreExisting];
+    preExistingApplied = accepted.length;
+    totalUpdated += preExistingApplied;
   }
 
   // Apply all changes to settings and save once
@@ -353,9 +347,9 @@ async function handleManualReordering(
     mode: 'manual',
     visibleItems: mixedItems.length,
     totalItemsProcessed: totalUpdated,
-    collections: collectionsToUpdate.length,
-    hubs: hubsToUpdate.length,
-    preExisting: preExistingToUpdate.length,
+    collections: collectionsApplied,
+    hubs: hubsApplied,
+    preExisting: preExistingApplied,
   });
 
   return res.status(200).json({
@@ -363,9 +357,9 @@ async function handleManualReordering(
     message: `Successfully reordered ${totalUpdated} items (${mixedItems.length} visible items affected)`,
     mode: 'manual',
     totalItemsProcessed: totalUpdated,
-    collectionsUpdated: collectionsToUpdate.length,
-    hubsUpdated: hubsToUpdate.length,
-    preExistingUpdated: preExistingToUpdate.length,
+    collectionsUpdated: collectionsApplied,
+    hubsUpdated: hubsApplied,
+    preExistingUpdated: preExistingApplied,
   });
 }
 
