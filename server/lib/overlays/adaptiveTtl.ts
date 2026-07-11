@@ -105,8 +105,13 @@ export function capTtlForUpcomingDate(
   // give TMDB a few hours to advance next_episode_to_air, then expire.
   const bufferSeconds = 4 * 60 * 60; // 4 hours
   // Never cache a stale/past upcoming date for long, but avoid hammering TMDB
-  // when it is briefly behind on advancing the next episode.
-  const minTtlSeconds = 30 * 60; // 30 minutes
+  // when it is briefly behind on advancing the next episode. TMDB serves
+  // /tv/{id} from a server-side gateway cache with a ~2-6h floor (measured live
+  // from this deployment's egress: x-gateway-cache-status HIT, max-age
+  // 6823-22606s; a cache-busting param does not bypass it), so refetching
+  // faster just re-downloads the same bytes. Sonarr-first is the real freshness
+  // path for tracked shows; this floor only governs the post-air TMDB retry.
+  const minTtlSeconds = 4 * 60 * 60; // 4 hours
 
   const secondsUntil = Math.floor((target - Date.now()) / 1000);
   const cap = secondsUntil + bufferSeconds;

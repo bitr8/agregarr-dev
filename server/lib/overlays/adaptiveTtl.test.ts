@@ -39,16 +39,21 @@ describe('capTtlForUpcomingDate', () => {
     );
   });
 
-  it('caps a just-passed date to the 30-minute floor', () => {
-    // aired a full day ago: cap goes negative, floor to 30min
+  it('caps a just-passed date to the 4-hour floor', () => {
+    // aired a full day ago: cap goes negative, floor to 4h (the TMDB gateway
+    // cache floor - refetching faster returns the same bytes)
     expect(capTtlForUpcomingDate('2026-07-10T00:00:00Z', baseTtl)).toBe(
-      30 * 60
+      4 * HOUR
     );
   });
 
-  it('keeps the buffer alive shortly after air (still above the floor)', () => {
-    // aired 3h ago: -3h + 4h buffer = 1h, above the 30min floor
-    expect(capTtlForUpcomingDate('2026-07-10T21:00:00Z', baseTtl)).toBe(HOUR);
+  it('floors a recently-aired date to 4h (buffer no longer clears the floor)', () => {
+    // aired 3h ago: -3h + 4h buffer = 1h, below the 4h floor -> floors to 4h.
+    // With buffer == floor == 4h, any passed date holds a flat 4h; Sonarr-first
+    // supplies the next episode in the interim, so no countdown gap results.
+    expect(capTtlForUpcomingDate('2026-07-10T21:00:00Z', baseTtl)).toBe(
+      4 * HOUR
+    );
   });
 
   it('never returns more than a smaller baseTtl', () => {
@@ -59,7 +64,7 @@ describe('capTtlForUpcomingDate', () => {
   });
 
   it('is bounded by baseTtl even for the floor case', () => {
-    const tinyTtl = 10 * 60; // 10 min, smaller than the 30min floor
+    const tinyTtl = 10 * 60; // 10 min, smaller than the 4h floor
     expect(capTtlForUpcomingDate('2026-07-10T00:00:00Z', tinyTtl)).toBe(
       tinyTtl
     );
