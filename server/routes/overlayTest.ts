@@ -13,6 +13,7 @@ import {
   evaluateConditionDetailed,
   overlayTemplateRenderer,
 } from '@server/lib/overlays/OverlayTemplateRenderer';
+import { deriveReleaseDateContext } from '@server/lib/overlays/releaseDateContext';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
@@ -236,56 +237,10 @@ overlayTestRouter.post('/', async (req, res) => {
       );
 
       if (releaseDateInfo) {
-        const { calculateDaysSince } = await import(
-          '@server/utils/dateHelpers'
-        );
-        let daysUntilRelease: number | undefined;
-        let daysAgo: number | undefined;
-        let daysUntilNextEpisode: number | undefined;
-        let daysUntilNextSeason: number | undefined;
-        let daysAgoNextSeason: number | undefined;
-
-        if (releaseDateInfo.releaseDate) {
-          const daysSince = calculateDaysSince(releaseDateInfo.releaseDate);
-          if (daysSince < 0) {
-            daysUntilRelease = -daysSince;
-          } else {
-            daysAgo = daysSince;
-          }
-        }
-
-        if (releaseDateInfo.nextEpisodeAirDate) {
-          const daysSince = calculateDaysSince(
-            releaseDateInfo.nextEpisodeAirDate
-          );
-          if (daysSince <= 0) {
-            daysUntilNextEpisode = -daysSince;
-          }
-        }
-
-        if (releaseDateInfo.nextSeasonAirDate) {
-          const daysSince = calculateDaysSince(
-            releaseDateInfo.nextSeasonAirDate
-          );
-          if (daysSince <= 0) {
-            daysUntilNextSeason = -daysSince;
-          } else {
-            daysAgoNextSeason = daysSince;
-          }
-        }
-
-        releaseDateContext = {
-          releaseDate: releaseDateInfo.releaseDate,
-          daysUntilRelease,
-          daysAgo,
-          nextEpisodeAirDate: releaseDateInfo.nextEpisodeAirDate,
-          daysUntilNextEpisode,
-          nextSeasonAirDate: releaseDateInfo.nextSeasonAirDate,
-          daysUntilNextSeason,
-          daysAgoNextSeason,
-          seasonNumber: releaseDateInfo.seasonNumber,
-          episodeNumber: releaseDateInfo.episodeNumber,
-        };
+        // Same shared read-time derivation as the overlay sync path, so the
+        // test route and the real render can never diverge on a passed
+        // next-episode date (fork#35).
+        releaseDateContext = deriveReleaseDateContext(releaseDateInfo);
       }
     }
 

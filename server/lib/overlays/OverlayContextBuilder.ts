@@ -14,6 +14,7 @@ import TvdbAPI from '@server/api/tvdb';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { calculateDaysSince } from '@server/utils/dateHelpers';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import { hasStreamingProviderIcon } from './DefaultMappingsService';
 import { computeDaysUntilAction } from './maintainerrCountdown';
@@ -1123,6 +1124,39 @@ export interface ReleaseDateInfo {
   tvdbId?: number;
 }
 
+type SonarrNextEpisode = {
+  nextEpisodeAirDate: string;
+  nextSeasonAirDate?: string;
+  seasonNumber: number;
+  episodeNumber: number;
+};
+
+/**
+ * Discriminated Sonarr lookup result so callers can tell three cases apart
+ * instead of collapsing them to null (fork#35 Mechanism 2):
+ *  - 'found':  Sonarr has an upcoming episode for this series.
+ *  - 'none':   a responding Sonarr instance has the series with nothing
+ *              upcoming, or the series is not in Sonarr at all - an
+ *              authoritative "nothing to count down to".
+ *  - 'failed': every Sonarr instance that might have answered threw, so the
+ *              answer is UNKNOWN. Callers must not read this as "no upcoming
+ *              episode" - a transient outage would otherwise strip a countdown.
+ */
+type SonarrNextEpisodeResult =
+  | { kind: 'found'; episode: SonarrNextEpisode }
+  | { kind: 'none' }
+  | { kind: 'failed' };
+
+/**
+ * Whether a resolved record carries a next-episode date that is still upcoming
+ * (airs today or later). Used to decide when a Sonarr failure must skip the
+ * item rather than let read-time clearing strip the overlay on a blip.
+ */
+function hasUpcomingNextEpisode(info: ReleaseDateInfo | undefined): boolean {
+  if (!info?.nextEpisodeAirDate) return false;
+  return calculateDaysSince(info.nextEpisodeAirDate) <= 0;
+}
+
 /**
  * Fetch release date information from TMDB with Sonarr fallback for TV shows
  * For movies: Gets digital/physical/theatrical release dates
@@ -1158,46 +1192,21 @@ export async function fetchReleaseDateInfo(
       });
       if (!preloaded) return undefined;
 
-      // Prefetch stores TMDB's date-only air dates (e.g. "2026-07-03") which
-      // reflect the US broadcast date. For correct timezone rendering, enhance
-      // with Sonarr's precise datetime when available.
-      if (
-        preloaded.nextEpisodeAirDate &&
-        !preloaded.nextEpisodeAirDate.includes('T') &&
-        preloaded.tvdbId
-      ) {
-        const sonarrResult = await fetchNextEpisodeFromSonarr(
-          preloaded.tvdbId,
-          sonarrCache
-        );
-        if (sonarrResult?.nextEpisodeAirDate?.includes('T')) {
-          const tmdbDate = preloaded.nextEpisodeAirDate;
-          const sonarrDate = sonarrResult.nextEpisodeAirDate.split('T')[0];
-          const tmdbMs = new Date(tmdbDate).getTime();
-          const sonarrMs = new Date(sonarrDate).getTime();
-          const daysDiff = Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
-          if (daysDiff <= 2) {
-            logger.debug('Enhanced preloaded TMDB date with Sonarr air time', {
-              label: 'OverlayContextBuilder',
-              tmdbId,
-              originalDate: preloaded.nextEpisodeAirDate,
-              enhancedDate: sonarrResult.nextEpisodeAirDate,
-            });
-            return {
-              ...preloaded,
-              nextEpisodeAirDate: sonarrResult.nextEpisodeAirDate,
-              nextSeasonAirDate:
-                sonarrResult.episodeNumber === 1
-                  ? sonarrResult.nextEpisodeAirDate
-                  : undefined,
-              seasonNumber: sonarrResult.seasonNumber,
-              episodeNumber: sonarrResult.episodeNumber,
-            };
-          }
-        }
+      // Sonarr-first: let Sonarr override the volatile next-episode fields on the
+      // preloaded (TMDB-derived) record. This keeps the prefetch's avoided-fetch
+      // optimisation while making Sonarr the freshness authority, and subsumes
+      // the old date-only "enhance with Sonarr air time" path (fork#35).
+      const { info, sonarrFailed } = await applySonarrFirstNextEpisode(
+        preloaded,
+        preloaded.tvdbId,
+        sonarrCache
+      );
+      if (sonarrFailed && fetchStatus && !hasUpcomingNextEpisode(info)) {
+        // Sonarr blipped and no source has an upcoming date: skip rather than
+        // let read-time clearing strip the overlay on a transient outage.
+        fetchStatus.failed = true;
       }
-
-      return preloaded;
+      return info;
     }
   }
 
@@ -1242,108 +1251,44 @@ export async function fetchReleaseDateInfo(
     } else {
       // For TV shows
       const showDetails = await tmdbClient.getTvShow({ tvId: tmdbId });
-
-      // Get next episode info from TMDB
-      const nextEpisode = showDetails.next_episode_to_air;
-      if (nextEpisode?.air_date) {
-        const seasonNumber = nextEpisode.season_number;
-        const episodeNumber = nextEpisode.episode_number;
-        let airDate = nextEpisode.air_date;
-
-        // If TMDB returns a date-only string (no time component), try to get
-        // the precise air time from Sonarr for better timezone accuracy
-        // Also prefer Sonarr's season/episode numbering (handles anime with absolute numbering on TMDB)
-        let effectiveSeasonNumber = seasonNumber;
-        let effectiveEpisodeNumber = episodeNumber;
-
-        if (!airDate.includes('T')) {
-          const tvdbId = showDetails.external_ids?.tvdb_id;
-          if (tvdbId) {
-            const sonarrResult = await fetchNextEpisodeFromSonarr(
-              tvdbId,
-              sonarrCache
-            );
-            // Use Sonarr's datetime if it matches the same date (within 2 days tolerance)
-            if (sonarrResult?.nextEpisodeAirDate?.includes('T')) {
-              const tmdbDate = airDate.split('T')[0];
-              const sonarrDate = sonarrResult.nextEpisodeAirDate.split('T')[0];
-              // Check if dates are close (Sonarr might have slightly different date due to timezone)
-              const tmdbMs = new Date(tmdbDate).getTime();
-              const sonarrMs = new Date(sonarrDate).getTime();
-              const daysDiff =
-                Math.abs(tmdbMs - sonarrMs) / (1000 * 60 * 60 * 24);
-              if (daysDiff <= 2) {
-                airDate = sonarrResult.nextEpisodeAirDate;
-                // Prefer Sonarr's season/episode numbering when dates match
-                // This handles anime where TMDB uses absolute numbering (S1E48)
-                // but Sonarr uses proper seasons (S3E1)
-                effectiveSeasonNumber = sonarrResult.seasonNumber;
-                effectiveEpisodeNumber = sonarrResult.episodeNumber;
-                logger.debug('Enhanced TMDB date with Sonarr air time', {
-                  label: 'OverlayContextBuilder',
-                  tmdbId,
-                  originalDate: nextEpisode.air_date,
-                  enhancedDate: airDate,
-                  tmdbNumbering: `S${seasonNumber}E${episodeNumber}`,
-                  sonarrNumbering: `S${effectiveSeasonNumber}E${effectiveEpisodeNumber}`,
-                });
-              }
-            }
-          }
-        }
-
-        // nextSeasonAirDate is ONLY for season premieres (episode 1)
-        const nextSeasonAirDate =
-          effectiveEpisodeNumber === 1 ? airDate : undefined;
-
-        return {
-          releaseDate: showDetails.first_air_date || airDate,
-          nextEpisodeAirDate: airDate,
-          nextSeasonAirDate,
-          seasonNumber: effectiveSeasonNumber,
-          episodeNumber: effectiveEpisodeNumber,
-        };
-      }
-
-      // TMDB doesn't have next_episode_to_air - try Sonarr fallback
-      // This handles shows where TMDB data is incomplete but Sonarr has upcoming episodes
       const tvdbId = showDetails.external_ids?.tvdb_id;
-      if (tvdbId) {
-        const sonarrResult = await fetchNextEpisodeFromSonarr(
-          tvdbId,
-          sonarrCache
-        );
+      const nextEpisode = showDetails.next_episode_to_air;
 
-        if (sonarrResult) {
-          logger.debug('Using Sonarr fallback for next episode data', {
-            label: 'OverlayContextBuilder',
-            tmdbId,
-            tvdbId,
-            nextAiring: sonarrResult.nextEpisodeAirDate,
-            seasonNumber: sonarrResult.seasonNumber,
-            episodeNumber: sonarrResult.episodeNumber,
-          });
-
-          return {
-            releaseDate:
-              showDetails.first_air_date || sonarrResult.nextEpisodeAirDate,
-            nextEpisodeAirDate: sonarrResult.nextEpisodeAirDate,
-            nextSeasonAirDate: sonarrResult.nextSeasonAirDate,
-            seasonNumber: sonarrResult.seasonNumber,
-          };
-        }
+      // Build the TMDB-derived next-episode candidate (may be empty).
+      const tmdbBase: ReleaseDateInfo = {
+        releaseDate: showDetails.first_air_date || undefined,
+        tvdbId,
+      };
+      if (nextEpisode?.air_date) {
+        tmdbBase.releaseDate =
+          showDetails.first_air_date || nextEpisode.air_date;
+        tmdbBase.nextEpisodeAirDate = nextEpisode.air_date;
+        tmdbBase.seasonNumber = nextEpisode.season_number;
+        tmdbBase.episodeNumber = nextEpisode.episode_number;
+        tmdbBase.nextSeasonAirDate =
+          nextEpisode.episode_number === 1 ? nextEpisode.air_date : undefined;
       }
 
-      // Third fallback: Use TMDB seasons data for shows not in Sonarr
-      // This handles shows that are in Plex but not monitored in Sonarr
-      if (showDetails.seasons && showDetails.seasons.length > 0) {
-        const { isDateInFuture } = await import('@server/utils/dateHelpers');
+      // Sonarr-first: Sonarr's nextAiring + numbering wins when it tracks the
+      // show; TMDB is kept otherwise. This subsumes the old date-only "enhance
+      // with Sonarr air time" path and the separate Sonarr fallback into one
+      // authority (fork#35).
+      const { info, sonarrFailed } = await applySonarrFirstNextEpisode(
+        tmdbBase,
+        tvdbId,
+        sonarrCache
+      );
 
-        // Sort seasons by number to find the earliest upcoming one
+      let result: ReleaseDateInfo | undefined;
+      if (info.nextEpisodeAirDate) {
+        result = info;
+      } else if (showDetails.seasons && showDetails.seasons.length > 0) {
+        // Shows in Plex but not tracked in Sonarr / not yet in next_episode:
+        // use the earliest upcoming TMDB season air date as a premiere.
+        const { isDateInFuture } = await import('@server/utils/dateHelpers');
         const sortedSeasons = [...showDetails.seasons]
           .filter((s) => s.season_number > 0) // Exclude specials
           .sort((a, b) => a.season_number - b.season_number);
-
         for (const season of sortedSeasons) {
           if (season.air_date && isDateInFuture(season.air_date)) {
             logger.debug('Using TMDB seasons fallback for next season data', {
@@ -1352,24 +1297,32 @@ export async function fetchReleaseDateInfo(
               seasonNumber: season.season_number,
               airDate: season.air_date,
             });
-
-            return {
+            result = {
               releaseDate: showDetails.first_air_date || season.air_date,
               nextEpisodeAirDate: season.air_date,
-              // Season air date = episode 1 air date, so this is a premiere
+              // Season air date = episode 1 air date, so this is a premiere.
               nextSeasonAirDate: season.air_date,
               seasonNumber: season.season_number,
+              episodeNumber: 1,
             };
+            break;
           }
         }
       }
 
-      // No next episode from any source, use first_air_date if available
-      if (showDetails.first_air_date) {
-        return {
-          releaseDate: showDetails.first_air_date,
-        };
+      // Fall back to first_air_date when nothing upcoming was found.
+      if (!result && showDetails.first_air_date) {
+        result = { releaseDate: showDetails.first_air_date };
       }
+
+      // A Sonarr failure that left us without an upcoming next episode must skip
+      // the item (keep the last poster) rather than clear the countdown on a
+      // transient outage - the fork#35 Mechanism-2 guard.
+      if (sonarrFailed && fetchStatus && !hasUpcomingNextEpisode(result)) {
+        fetchStatus.failed = true;
+      }
+
+      return result;
     }
 
     return undefined;
@@ -1397,18 +1350,18 @@ export async function fetchReleaseDateInfo(
 async function fetchNextEpisodeFromSonarr(
   tvdbId: number,
   cache?: Map<string, SonarrSeries[]>
-): Promise<{
-  nextEpisodeAirDate: string;
-  nextSeasonAirDate?: string;
-  seasonNumber: number;
-  episodeNumber: number;
-} | null> {
+): Promise<SonarrNextEpisodeResult> {
   try {
     const settings = getSettings();
 
     if (!settings.sonarr || settings.sonarr.length === 0) {
-      return null;
+      return { kind: 'none' };
     }
+
+    // Track whether any instance errored (answer unknown -> 'failed') vs. a
+    // responding instance that simply had nothing upcoming ('none').
+    let anyInstanceFailed = false;
+    let seriesSeenWithoutUpcoming = false;
 
     // Check each Sonarr instance
     for (const sonarrSettings of settings.sonarr) {
@@ -1477,13 +1430,23 @@ async function fetchNextEpisodeFromSonarr(
             nextEpisodeNumber === 1 ? series.nextAiring : undefined;
 
           return {
-            nextEpisodeAirDate: series.nextAiring,
-            nextSeasonAirDate,
-            seasonNumber: nextSeasonNumber,
-            episodeNumber: nextEpisodeNumber,
+            kind: 'found',
+            episode: {
+              nextEpisodeAirDate: series.nextAiring,
+              nextSeasonAirDate,
+              seasonNumber: nextSeasonNumber,
+              episodeNumber: nextEpisodeNumber,
+            },
           };
         }
+
+        if (series) {
+          // Series is tracked in this responding instance but has no upcoming
+          // episode: an authoritative "nothing next", not a failure.
+          seriesSeenWithoutUpcoming = true;
+        }
       } catch (error) {
+        anyInstanceFailed = true;
         logger.debug('Failed to check Sonarr instance for next episode', {
           label: 'OverlayContextBuilder',
           hostname: sonarrSettings.hostname,
@@ -1494,15 +1457,101 @@ async function fetchNextEpisodeFromSonarr(
       }
     }
 
-    return null;
+    // No upcoming episode found. Distinguish an authoritative empty from an
+    // outage so a transient Sonarr failure does not read as "no upcoming
+    // episode" and strip a countdown (fork#35 Mechanism 2).
+    if (seriesSeenWithoutUpcoming) {
+      return { kind: 'none' };
+    }
+    if (anyInstanceFailed) {
+      return { kind: 'failed' };
+    }
+    return { kind: 'none' };
   } catch (error) {
     logger.debug('Failed to fetch next episode from Sonarr', {
       label: 'OverlayContextBuilder',
       tvdbId,
       error: error instanceof Error ? error.message : String(error),
     });
-    return null;
+    return { kind: 'failed' };
   }
+}
+
+/**
+ * Sonarr-first resolution of the volatile next-episode fields (fork#35).
+ *
+ * TMDB's `next_episode_to_air` lags behind reality (gateway cache + TMDB's own
+ * data pipeline) and can keep reporting a just-aired episode for hours, which is
+ * the flip-flop source. Sonarr is LAN-local and advances `nextAiring`
+ * mechanically at airtime, so when the show resolves to a Sonarr series it
+ * becomes the authority for the next-episode date and its season/episode
+ * numbering (which also fixes anime absolute numbering). TMDB still supplies
+ * identity, first_air_date, and the value for shows Sonarr does not track.
+ *
+ * Sonarr wins even when it disagrees with TMDB by more than the old 2-day
+ * tolerance: a large disagreement is exactly the stale-TMDB case the fix
+ * targets (TMDB shows the aired episode, Sonarr the next one). The disagreement
+ * is logged, not gated on.
+ *
+ * @returns the resolved info plus `sonarrFailed`, so the caller can engage the
+ *   skip-guard only when NO source produced an upcoming next episode.
+ */
+async function applySonarrFirstNextEpisode(
+  base: ReleaseDateInfo,
+  tvdbId: number | undefined,
+  sonarrCache?: Map<string, SonarrSeries[]>
+): Promise<{ info: ReleaseDateInfo; sonarrFailed: boolean }> {
+  if (!tvdbId) {
+    return { info: base, sonarrFailed: false };
+  }
+
+  const sonarr = await fetchNextEpisodeFromSonarr(tvdbId, sonarrCache);
+
+  if (sonarr.kind === 'found') {
+    const ep = sonarr.episode;
+    if (base.nextEpisodeAirDate) {
+      const tmdbDay = base.nextEpisodeAirDate.split('T')[0];
+      const sonarrDay = ep.nextEpisodeAirDate.split('T')[0];
+      const daysDiff =
+        Math.abs(new Date(tmdbDay).getTime() - new Date(sonarrDay).getTime()) /
+        (1000 * 60 * 60 * 24);
+      if (daysDiff > 2) {
+        logger.debug(
+          'Sonarr and TMDB disagree on next episode date; using Sonarr (freshness authority)',
+          {
+            label: 'OverlayContextBuilder',
+            tvdbId,
+            tmdbDate: base.nextEpisodeAirDate,
+            sonarrDate: ep.nextEpisodeAirDate,
+          }
+        );
+      }
+    }
+    return {
+      info: {
+        ...base,
+        releaseDate: base.releaseDate || ep.nextEpisodeAirDate,
+        nextEpisodeAirDate: ep.nextEpisodeAirDate,
+        nextSeasonAirDate: ep.nextSeasonAirDate,
+        seasonNumber: ep.seasonNumber,
+        episodeNumber: ep.episodeNumber,
+      },
+      sonarrFailed: false,
+    };
+  }
+
+  if (sonarr.kind === 'failed') {
+    // Sonarr could not answer. Keep TMDB's next episode if it has one; the
+    // caller marks the fetch failed only when no source yielded an upcoming
+    // date, so a Sonarr blip skips the item instead of stripping the overlay.
+    return { info: base, sonarrFailed: true };
+  }
+
+  // kind === 'none': Sonarr authoritatively has no upcoming episode (or the show
+  // is not in Sonarr). Keep TMDB's next episode if present - a newly-announced
+  // episode Sonarr has not synced yet - and let read-time derivation clear it if
+  // that date has already passed (episode aired, nothing next known).
+  return { info: base, sonarrFailed: false };
 }
 
 /**

@@ -40,6 +40,7 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
+import { deriveReleaseDateContext } from './releaseDateContext';
 import { shouldSkipOnReleaseDateFetchFailure } from './releaseDateFetchPolicy';
 import { classifySeasonCleanupAction } from './seasonCleanupPolicy';
 import { restoreSeasonBasePoster } from './seasonPosterRestore';
@@ -2146,67 +2147,23 @@ class OverlayLibraryService {
         }
 
         if (releaseDateInfo) {
-          // Calculate days until release and days ago
-          const { calculateDaysSince } = await import(
-            '@server/utils/dateHelpers'
-          );
-          let daysUntilRelease: number | undefined;
-          let daysAgo: number | undefined;
-          let daysUntilNextEpisode: number | undefined;
-          let daysUntilNextSeason: number | undefined;
-          let daysAgoNextSeason: number | undefined;
-
-          if (releaseDateInfo.releaseDate) {
-            const daysSince = calculateDaysSince(releaseDateInfo.releaseDate);
-            if (daysSince < 0) {
-              daysUntilRelease = -daysSince;
-            } else {
-              daysAgo = daysSince;
-            }
-            logger.debug('Release date calculation', {
-              label: 'OverlayLibrary',
-              itemTitle: item.title,
-              ratingKey: item.ratingKey,
-              releaseDate: releaseDateInfo.releaseDate,
-              computedDaysAgo: daysAgo,
-              computedDaysUntilRelease: daysUntilRelease,
-              serverTimezone: process.env.TZ,
-              nowUtc: new Date().toISOString(),
-            });
-          }
-
-          if (releaseDateInfo.nextEpisodeAirDate) {
-            const daysSince = calculateDaysSince(
-              releaseDateInfo.nextEpisodeAirDate
-            );
-            if (daysSince <= 0) {
-              daysUntilNextEpisode = -daysSince;
-            }
-          }
-
-          if (releaseDateInfo.nextSeasonAirDate) {
-            const daysSince = calculateDaysSince(
-              releaseDateInfo.nextSeasonAirDate
-            );
-            if (daysSince <= 0) {
-              daysUntilNextSeason = -daysSince;
-            } else {
-              daysAgoNextSeason = daysSince;
-            }
-          }
-
-          releaseDateContext = {
+          // Shared read-time derivation: clears a next-episode countdown whose
+          // date has already passed (fork#35), used identically here and by the
+          // overlay-test route so the two cannot diverge.
+          releaseDateContext = deriveReleaseDateContext(releaseDateInfo);
+          logger.debug('Release date calculation', {
+            label: 'OverlayLibrary',
+            itemTitle: item.title,
+            ratingKey: item.ratingKey,
             releaseDate: releaseDateInfo.releaseDate,
-            daysUntilRelease,
-            daysAgo,
-            nextEpisodeAirDate: releaseDateInfo.nextEpisodeAirDate,
-            daysUntilNextEpisode,
-            nextSeasonAirDate: releaseDateInfo.nextSeasonAirDate,
-            daysUntilNextSeason,
-            daysAgoNextSeason,
-            seasonNumber: releaseDateInfo.seasonNumber,
-            episodeNumber: releaseDateInfo.episodeNumber,
-          };
+            computedDaysAgo: releaseDateContext.daysAgo,
+            computedDaysUntilRelease: releaseDateContext.daysUntilRelease,
+            computedDaysUntilNextEpisode:
+              releaseDateContext.daysUntilNextEpisode,
+            nextEpisodeAirDate: releaseDateContext.nextEpisodeAirDate,
+            serverTimezone: process.env.TZ,
+            nowUtc: new Date().toISOString(),
+          });
         }
       }
 
