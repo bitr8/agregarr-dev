@@ -129,4 +129,15 @@ describe('deriveReleaseDateContext timezone boundary (TZ=Australia/Sydney)', () 
     expect(ctx.nextEpisodeAirDate).toBeUndefined();
     expect(ctx.daysUntilNextEpisode).toBeUndefined();
   });
+
+  it('clears a datetime that already aired earlier the same Sydney day', () => {
+    // now = 20:00 AEST; episode aired 19:00 AEST today. Same calendar day, but
+    // the airing instant has passed, so the countdown must clear (HIGH-3).
+    vi.setSystemTime(new Date('2026-07-11T10:00:00.000Z'));
+    const ctx = deriveReleaseDateContext({
+      nextEpisodeAirDate: '2026-07-11T09:00:00Z',
+    });
+    expect(ctx.nextEpisodeAirDate).toBeUndefined();
+    expect(ctx.daysUntilNextEpisode).toBeUndefined();
+  });
 });

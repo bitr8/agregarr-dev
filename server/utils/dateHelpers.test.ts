@@ -28,6 +28,7 @@ import {
   determineReleaseDate,
   extractReleaseDates,
   getToday,
+  isAirDateUpcoming,
   toServerCalendarDate,
 } from './dateHelpers';
 
@@ -373,5 +374,35 @@ describe('toServerCalendarDate (TZ=Australia/Sydney)', () => {
 
   it('returns an unparseable input unchanged', () => {
     expect(toServerCalendarDate('not-a-date')).toBe('not-a-date');
+  });
+});
+
+describe('isAirDateUpcoming (TZ=Australia/Sydney)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('bare date: future and today are upcoming, past is not', () => {
+    vi.setSystemTime(new Date('2026-07-11T12:00:00.000Z'));
+    expect(isAirDateUpcoming('2026-07-18')).toBe(true);
+    expect(isAirDateUpcoming('2026-07-11')).toBe(true);
+    expect(isAirDateUpcoming('2026-07-04')).toBe(false);
+  });
+
+  it('datetime: compares the absolute instant, not the calendar day', () => {
+    // now = 20:00 AEST (10:00 UTC); an episode that aired 19:00 AEST today
+    // (09:00 UTC) is NOT upcoming, though it is the same calendar day.
+    vi.setSystemTime(new Date('2026-07-11T10:00:00.000Z'));
+    expect(isAirDateUpcoming('2026-07-11T09:00:00Z')).toBe(false);
+    expect(isAirDateUpcoming('2026-07-11T11:00:00Z')).toBe(true);
+  });
+
+  it('datetime just after Sydney midnight is upcoming (fork#35 boundary)', () => {
+    // now = 12/07 00:30 AEST; episode airs 12/07 01:00 AEST, 30 min ahead.
+    vi.setSystemTime(new Date('2026-07-11T14:30:00.000Z'));
+    expect(isAirDateUpcoming('2026-07-11T15:00:00Z')).toBe(true);
   });
 });

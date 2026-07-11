@@ -15,7 +15,7 @@ import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import {
-  calculateDaysSince,
+  isAirDateUpcoming,
   toServerCalendarDate,
 } from '@server/utils/dateHelpers';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
@@ -133,15 +133,6 @@ async function getRadarrMovies(
 /**
  * Get all series from a Sonarr instance (with optional caching)
  */
-// Per-job negative cache of Sonarr instance URLs that failed, keyed by the job's
-// series-cache Map so it is garbage-collected with the job. A down instance then
-// costs one timeout per job instead of one per item; it still throws (preserving
-// the skip-not-strip failure semantics), just without re-hitting the network.
-const failedSonarrUrlsByCache = new WeakMap<
-  Map<string, SonarrSeries[]>,
-  Set<string>
->();
-
 async function getSonarrSeries(
   sonarrSettings: {
     hostname: string;
@@ -167,10 +158,6 @@ async function getSonarrSeries(
     if (cached) {
       return cached;
     }
-    // Fail fast if this instance already failed this job (no second timeout).
-    if (failedSonarrUrlsByCache.get(cache)?.has(cacheKey)) {
-      throw new Error(`Sonarr instance unavailable this job: ${url}`);
-    }
   }
 
   const sonarr = new SonarrAPI({
@@ -178,27 +165,13 @@ async function getSonarrSeries(
     apiKey: sonarrSettings.apiKey,
   });
 
-  let series: SonarrSeries[];
-  try {
-    series = await sonarr.getSeries();
-  } catch (error) {
-    if (cache) {
-      let failed = failedSonarrUrlsByCache.get(cache);
-      if (!failed) {
-        failed = new Set();
-        failedSonarrUrlsByCache.set(cache, failed);
-      }
-      failed.add(cacheKey);
-    }
-    // Operationally visible (once per job): a persistently down instance
-    // otherwise skips date items every sync with only a debug trace.
-    logger.warn('Sonarr series fetch failed; instance treated as unavailable', {
-      label: 'OverlayContextBuilder',
-      url,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
+  // NOTE: a fetch failure here throws (per-item). We deliberately do NOT
+  // negative-cache the failure: this cache is shared with checkMonitoringStatus
+  // (which reads a throw as "not in Sonarr"), and the cache spans concurrent
+  // library jobs, so a sticky failure marker would turn one transient blip into
+  // a job-wide strip of monitoring overlays. Bounding the retry cost of a
+  // persistently-down instance is a separate operational concern.
+  const series = await sonarr.getSeries();
 
   // Store in cache if provided
   if (cache) {
@@ -1184,22 +1157,13 @@ type SonarrNextEpisodeResult =
   | { kind: 'failed' };
 
 /**
- * Whether an air date (a bare date, or a Sonarr datetime carrying a UTC time)
- * is today or later in the server timezone. Time-zone aware so a date is not
- * misjudged as past near midnight (fork#35).
- */
-export function hasUpcomingAirDate(airDate: string): boolean {
-  return calculateDaysSince(toServerCalendarDate(airDate)) <= 0;
-}
-
-/**
  * Whether a resolved record carries a next-episode date that is still upcoming.
  * Used to decide when a Sonarr failure must skip the item rather than let
  * read-time clearing strip the overlay on a blip.
  */
 function hasUpcomingNextEpisode(info: ReleaseDateInfo | undefined): boolean {
   if (!info?.nextEpisodeAirDate) return false;
-  return hasUpcomingAirDate(info.nextEpisodeAirDate);
+  return isAirDateUpcoming(info.nextEpisodeAirDate);
 }
 
 /**
@@ -1474,20 +1438,26 @@ export async function fetchNextEpisodeFromSonarr(
           const nextSeasonAirDate =
             nextEpisodeNumber === 1 ? series.nextAiring : undefined;
 
-          return {
-            kind: 'found',
-            episode: {
-              nextEpisodeAirDate: series.nextAiring,
-              nextSeasonAirDate,
-              seasonNumber: nextSeasonNumber,
-              episodeNumber: nextEpisodeNumber,
-            },
-          };
+          // Only an UPCOMING nextAiring is authoritative. A stale/past nextAiring
+          // (Sonarr not yet advanced past a just-aired episode) must not shadow
+          // another instance that holds the real upcoming episode, so keep
+          // looking rather than returning it.
+          if (isAirDateUpcoming(series.nextAiring)) {
+            return {
+              kind: 'found',
+              episode: {
+                nextEpisodeAirDate: series.nextAiring,
+                nextSeasonAirDate,
+                seasonNumber: nextSeasonNumber,
+                episodeNumber: nextEpisodeNumber,
+              },
+            };
+          }
         }
-        // A responding instance without the series, or with the series but no
-        // upcoming episode, is an authoritative 'nothing next' for that
-        // instance - no bookkeeping needed; it only matters that no instance
-        // FAILED (checked below).
+        // A responding instance without the series, with no upcoming episode, or
+        // with only a stale/past nextAiring, is 'nothing next' for that instance
+        // - no bookkeeping needed; it only matters that no instance FAILED
+        // (checked below).
       } catch (error) {
         anyInstanceFailed = true;
         logger.debug('Failed to check Sonarr instance for next episode', {
@@ -1542,7 +1512,7 @@ export function resolveSonarrFirstNextEpisode(
 ): { info: ReleaseDateInfo; sonarrFailed: boolean } {
   if (
     sonarr.kind === 'found' &&
-    hasUpcomingAirDate(sonarr.episode.nextEpisodeAirDate)
+    isAirDateUpcoming(sonarr.episode.nextEpisodeAirDate)
   ) {
     const ep = sonarr.episode;
     return {
@@ -1583,7 +1553,7 @@ async function applySonarrFirstNextEpisode(
   if (
     sonarr.kind === 'found' &&
     base.nextEpisodeAirDate &&
-    hasUpcomingAirDate(sonarr.episode.nextEpisodeAirDate)
+    isAirDateUpcoming(sonarr.episode.nextEpisodeAirDate)
   ) {
     const tmdbDay = toServerCalendarDate(base.nextEpisodeAirDate);
     const sonarrDay = toServerCalendarDate(sonarr.episode.nextEpisodeAirDate);

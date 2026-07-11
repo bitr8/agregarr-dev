@@ -1,5 +1,6 @@
 import {
   calculateDaysSince,
+  isAirDateUpcoming,
   toServerCalendarDate,
 } from '@server/utils/dateHelpers';
 import type { ReleaseDateInfo } from './OverlayContextBuilder';
@@ -47,18 +48,19 @@ export function deriveReleaseDateContext(
     }
   }
 
-  // fork#35 read-time guarantee: clear a next-episode countdown whose date has
-  // already passed (episode aired, nothing next known). Sonarr-first upstream
-  // already had its chance to supply a fresher date.
+  // fork#35 read-time guarantee: clear a next-episode countdown that is no
+  // longer upcoming (a datetime past its airing instant, or a bare date past its
+  // calendar day). Sonarr-first upstream already had its chance to supply a
+  // fresher date, so this means the episode aired and nothing next is known.
   let nextEpisodeAirDate = info.nextEpisodeAirDate;
   if (nextEpisodeAirDate) {
-    const daysSince = calculateDaysSince(
-      toServerCalendarDate(nextEpisodeAirDate)
-    );
-    if (daysSince <= 0) {
-      // Math.max(0, ...) keeps the count a canonical non-negative integer
-      // (an airing-today date makes -daysSince a negative zero otherwise).
-      daysUntilNextEpisode = Math.max(0, -daysSince);
+    if (isAirDateUpcoming(nextEpisodeAirDate)) {
+      // Day-granular count (Math.max keeps an airing-today date a canonical 0,
+      // not negative zero).
+      daysUntilNextEpisode = Math.max(
+        0,
+        -calculateDaysSince(toServerCalendarDate(nextEpisodeAirDate))
+      );
     } else {
       nextEpisodeAirDate = undefined;
     }

@@ -76,11 +76,36 @@ export function toServerCalendarDate(airDate: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return airDate;
   }
-  // en-CA renders as YYYY-MM-DD; guard against any locale that does not.
-  const local = parsed.toLocaleDateString('en-CA', {
+  // formatToParts avoids depending on any locale rendering YYYY-MM-DD.
+  const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: getServerTimezone(),
-  });
-  return /^\d{4}-\d{2}-\d{2}$/.test(local) ? local : airDate;
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(parsed);
+  const year = parts.find((p) => p.type === 'year')?.value;
+  const month = parts.find((p) => p.type === 'month')?.value;
+  const day = parts.find((p) => p.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : airDate;
+}
+
+/**
+ * Whether an air date is still upcoming.
+ *
+ *  - A datetime (carries a time component) is compared by its absolute INSTANT:
+ *    it is upcoming only until the moment it airs, so a countdown is never
+ *    rendered from an episode that has already aired (even earlier the same day).
+ *  - A bare date has no known time, so its entire calendar air-day (in the server
+ *    timezone) counts as upcoming - the countdown shows "airs today" all day.
+ */
+export function isAirDateUpcoming(airDate: string): boolean {
+  if (airDate.includes('T')) {
+    const t = new Date(airDate).getTime();
+    if (!Number.isNaN(t)) {
+      return t > Date.now();
+    }
+  }
+  return calculateDaysSince(toServerCalendarDate(airDate)) <= 0;
 }
 
 /**

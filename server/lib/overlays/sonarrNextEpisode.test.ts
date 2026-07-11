@@ -21,7 +21,6 @@ vi.mock('@server/api/servarr/sonarr', () => ({
 
 import {
   fetchNextEpisodeFromSonarr,
-  hasUpcomingAirDate,
   resolveSonarrFirstNextEpisode,
 } from './OverlayContextBuilder';
 
@@ -35,22 +34,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
-});
-
-describe('hasUpcomingAirDate', () => {
-  it('is true for a future date', () => {
-    expect(hasUpcomingAirDate('2026-07-18')).toBe(true);
-  });
-  it('is true for today', () => {
-    expect(hasUpcomingAirDate('2026-07-11')).toBe(true);
-  });
-  it('is false for a past date', () => {
-    expect(hasUpcomingAirDate('2026-07-04')).toBe(false);
-  });
-  it('is true for a Sonarr datetime that is still future in Sydney', () => {
-    // 2026-07-11T09:00:00Z = 19:00 AEST today.
-    expect(hasUpcomingAirDate('2026-07-11T09:00:00Z')).toBe(true);
-  });
 });
 
 describe('resolveSonarrFirstNextEpisode', () => {
@@ -147,6 +130,23 @@ describe('fetchNextEpisodeFromSonarr aggregation', () => {
     ],
   };
   const seriesNoUpcoming = { tvdbId: 123, nextAiring: null, seasons: [] };
+  // nextAiring already in the past (before NOW = 2026-07-11): a stale Sonarr DB
+  // that has not yet advanced past a just-aired episode.
+  const seriesPastAiring = {
+    tvdbId: 123,
+    nextAiring: '2026-07-04T09:00:00Z',
+    seasons: [
+      {
+        monitored: true,
+        seasonNumber: 1,
+        statistics: {
+          nextAiring: '2026-07-04T09:00:00Z',
+          episodeFileCount: 59,
+          totalEpisodeCount: 60,
+        },
+      },
+    ],
+  };
 
   it('no Sonarr configured -> none', async () => {
     mockGetSettings.mockReturnValue({ sonarr: [] });
@@ -203,5 +203,48 @@ describe('fetchNextEpisodeFromSonarr aggregation', () => {
     });
     mockGetSeries.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     expect((await fetchNextEpisodeFromSonarr(123)).kind).toBe('none');
+  });
+
+  it('single instance with only a PAST nextAiring -> none (not found)', async () => {
+    mockGetSettings.mockReturnValue({ sonarr: [instance('a')] });
+    mockGetSeries.mockResolvedValueOnce([seriesPastAiring]);
+    expect((await fetchNextEpisodeFromSonarr(123)).kind).toBe('none');
+  });
+
+  it('HIGH-2: a stale-past instance A must not shadow an upcoming instance B', async () => {
+    mockGetSettings.mockReturnValue({
+      sonarr: [instance('a'), instance('b')],
+    });
+    // A has a stale past nextAiring; B has the real upcoming episode. The loop
+    // must keep looking past A and return B's found result.
+    mockGetSeries
+      .mockResolvedValueOnce([seriesPastAiring])
+      .mockResolvedValueOnce([seriesWithUpcoming]);
+    const r = await fetchNextEpisodeFromSonarr(123);
+    expect(r.kind).toBe('found');
+    if (r.kind === 'found') {
+      expect(r.episode.nextEpisodeAirDate).toBe('2026-07-18T09:00:00Z');
+      expect(r.episode.seasonNumber).toBe(2);
+    }
+  });
+
+  it('first instance throws, second is found -> found', async () => {
+    mockGetSettings.mockReturnValue({
+      sonarr: [instance('a'), instance('b')],
+    });
+    mockGetSeries
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce([seriesWithUpcoming]);
+    expect((await fetchNextEpisodeFromSonarr(123)).kind).toBe('found');
+  });
+
+  it('both instances throw -> failed', async () => {
+    mockGetSettings.mockReturnValue({
+      sonarr: [instance('a'), instance('b')],
+    });
+    mockGetSeries
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new Error('timeout'));
+    expect((await fetchNextEpisodeFromSonarr(123)).kind).toBe('failed');
   });
 });
