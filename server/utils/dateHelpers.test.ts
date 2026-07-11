@@ -28,6 +28,7 @@ import {
   determineReleaseDate,
   extractReleaseDates,
   getToday,
+  toServerCalendarDate,
 } from './dateHelpers';
 
 describe('dateHelpers with TZ=Australia/Sydney', () => {
@@ -338,5 +339,39 @@ describe('capTtlForRecentRelease', () => {
     expect(capTtlForRecentRelease('2026-02-10T00:00:00.000Z', THREE_DAYS)).toBe(
       2 * 60 * 60
     );
+  });
+});
+
+describe('toServerCalendarDate (TZ=Australia/Sydney)', () => {
+  it('leaves a bare date untouched', () => {
+    expect(toServerCalendarDate('2026-07-11')).toBe('2026-07-11');
+  });
+
+  it('converts a UTC datetime to its Sydney calendar date', () => {
+    // 2026-07-11T15:00:00Z is 2026-07-12 01:00 AEST - the NEXT calendar day.
+    expect(toServerCalendarDate('2026-07-11T15:00:00Z')).toBe('2026-07-12');
+  });
+
+  it('does not roll a same-day evening datetime forward', () => {
+    // 2026-07-11T09:00:00Z is 2026-07-11 19:00 AEST - still the 11th.
+    expect(toServerCalendarDate('2026-07-11T09:00:00Z')).toBe('2026-07-11');
+  });
+
+  it('feeding the converted date to calculateDaysSince fixes the boundary', () => {
+    // fork#35: at 12/07 00:30 AEST, a Sonarr episode airing 12/07 01:00 AEST
+    // (2026-07-11T15:00:00Z) is still 30 min in the FUTURE. Raw calculateDaysSince
+    // strips to the UTC date 2026-07-11 and wrongly reports it as 1 day past;
+    // via toServerCalendarDate it is correctly today (0).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-11T14:30:00.000Z')); // 12/07 00:30 AEST
+    expect(calculateDaysSince('2026-07-11T15:00:00Z')).toBe(1); // the bug
+    expect(
+      calculateDaysSince(toServerCalendarDate('2026-07-11T15:00:00Z'))
+    ).toBe(0); // the fix
+    vi.useRealTimers();
+  });
+
+  it('returns an unparseable input unchanged', () => {
+    expect(toServerCalendarDate('not-a-date')).toBe('not-a-date');
   });
 });

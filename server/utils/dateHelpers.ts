@@ -59,6 +59,31 @@ function getNow(): Date {
 }
 
 /**
+ * Convert an air date that may carry a time component (e.g. Sonarr's
+ * `2026-07-11T15:00:00Z`) to its calendar date in the server timezone, so
+ * day-count logic classifies it by the date it airs LOCALLY, not by its UTC
+ * date. Near midnight these differ by a day: a Sydney-evening episode stored as
+ * a UTC datetime would otherwise be read as the previous/next calendar day and
+ * a countdown could clear a day early. A bare date (no time component) already
+ * denotes a calendar date and is returned unchanged so it is never
+ * timezone-shifted.
+ */
+export function toServerCalendarDate(airDate: string): string {
+  if (!airDate.includes('T')) {
+    return airDate;
+  }
+  const parsed = new Date(airDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return airDate;
+  }
+  // en-CA renders as YYYY-MM-DD; guard against any locale that does not.
+  const local = parsed.toLocaleDateString('en-CA', {
+    timeZone: getServerTimezone(),
+  });
+  return /^\d{4}-\d{2}-\d{2}$/.test(local) ? local : airDate;
+}
+
+/**
  * Get today's date in server timezone (normalized to midnight)
  * @returns Date object representing today at midnight in server timezone
  */

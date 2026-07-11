@@ -14,7 +14,10 @@ import TvdbAPI from '@server/api/tvdb';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import { calculateDaysSince } from '@server/utils/dateHelpers';
+import {
+  calculateDaysSince,
+  toServerCalendarDate,
+} from '@server/utils/dateHelpers';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import { hasStreamingProviderIcon } from './DefaultMappingsService';
 import { computeDaysUntilAction } from './maintainerrCountdown';
@@ -130,6 +133,15 @@ async function getRadarrMovies(
 /**
  * Get all series from a Sonarr instance (with optional caching)
  */
+// Per-job negative cache of Sonarr instance URLs that failed, keyed by the job's
+// series-cache Map so it is garbage-collected with the job. A down instance then
+// costs one timeout per job instead of one per item; it still throws (preserving
+// the skip-not-strip failure semantics), just without re-hitting the network.
+const failedSonarrUrlsByCache = new WeakMap<
+  Map<string, SonarrSeries[]>,
+  Set<string>
+>();
+
 async function getSonarrSeries(
   sonarrSettings: {
     hostname: string;
@@ -155,6 +167,10 @@ async function getSonarrSeries(
     if (cached) {
       return cached;
     }
+    // Fail fast if this instance already failed this job (no second timeout).
+    if (failedSonarrUrlsByCache.get(cache)?.has(cacheKey)) {
+      throw new Error(`Sonarr instance unavailable this job: ${url}`);
+    }
   }
 
   const sonarr = new SonarrAPI({
@@ -162,7 +178,27 @@ async function getSonarrSeries(
     apiKey: sonarrSettings.apiKey,
   });
 
-  const series = await sonarr.getSeries();
+  let series: SonarrSeries[];
+  try {
+    series = await sonarr.getSeries();
+  } catch (error) {
+    if (cache) {
+      let failed = failedSonarrUrlsByCache.get(cache);
+      if (!failed) {
+        failed = new Set();
+        failedSonarrUrlsByCache.set(cache, failed);
+      }
+      failed.add(cacheKey);
+    }
+    // Operationally visible (once per job): a persistently down instance
+    // otherwise skips date items every sync with only a debug trace.
+    logger.warn('Sonarr series fetch failed; instance treated as unavailable', {
+      label: 'OverlayContextBuilder',
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 
   // Store in cache if provided
   if (cache) {
@@ -1148,13 +1184,22 @@ type SonarrNextEpisodeResult =
   | { kind: 'failed' };
 
 /**
- * Whether a resolved record carries a next-episode date that is still upcoming
- * (airs today or later). Used to decide when a Sonarr failure must skip the
- * item rather than let read-time clearing strip the overlay on a blip.
+ * Whether an air date (a bare date, or a Sonarr datetime carrying a UTC time)
+ * is today or later in the server timezone. Time-zone aware so a date is not
+ * misjudged as past near midnight (fork#35).
+ */
+export function hasUpcomingAirDate(airDate: string): boolean {
+  return calculateDaysSince(toServerCalendarDate(airDate)) <= 0;
+}
+
+/**
+ * Whether a resolved record carries a next-episode date that is still upcoming.
+ * Used to decide when a Sonarr failure must skip the item rather than let
+ * read-time clearing strip the overlay on a blip.
  */
 function hasUpcomingNextEpisode(info: ReleaseDateInfo | undefined): boolean {
   if (!info?.nextEpisodeAirDate) return false;
-  return calculateDaysSince(info.nextEpisodeAirDate) <= 0;
+  return hasUpcomingAirDate(info.nextEpisodeAirDate);
 }
 
 /**
@@ -1347,7 +1392,7 @@ export async function fetchReleaseDateInfo(
  * Fetch next episode information from Sonarr as fallback when TMDB is incomplete
  * Uses Sonarr's calendar data to find the next upcoming episode
  */
-async function fetchNextEpisodeFromSonarr(
+export async function fetchNextEpisodeFromSonarr(
   tvdbId: number,
   cache?: Map<string, SonarrSeries[]>
 ): Promise<SonarrNextEpisodeResult> {
@@ -1358,10 +1403,10 @@ async function fetchNextEpisodeFromSonarr(
       return { kind: 'none' };
     }
 
-    // Track whether any instance errored (answer unknown -> 'failed') vs. a
-    // responding instance that simply had nothing upcoming ('none').
+    // Any instance that errors leaves the aggregate answer UNKNOWN: unless some
+    // instance returned a 'found', a failure must not be reported as 'none',
+    // because a failed instance could be the one holding the upcoming episode.
     let anyInstanceFailed = false;
-    let seriesSeenWithoutUpcoming = false;
 
     // Check each Sonarr instance
     for (const sonarrSettings of settings.sonarr) {
@@ -1439,12 +1484,10 @@ async function fetchNextEpisodeFromSonarr(
             },
           };
         }
-
-        if (series) {
-          // Series is tracked in this responding instance but has no upcoming
-          // episode: an authoritative "nothing next", not a failure.
-          seriesSeenWithoutUpcoming = true;
-        }
+        // A responding instance without the series, or with the series but no
+        // upcoming episode, is an authoritative 'nothing next' for that
+        // instance - no bookkeeping needed; it only matters that no instance
+        // FAILED (checked below).
       } catch (error) {
         anyInstanceFailed = true;
         logger.debug('Failed to check Sonarr instance for next episode', {
@@ -1457,16 +1500,12 @@ async function fetchNextEpisodeFromSonarr(
       }
     }
 
-    // No upcoming episode found. Distinguish an authoritative empty from an
-    // outage so a transient Sonarr failure does not read as "no upcoming
-    // episode" and strip a countdown (fork#35 Mechanism 2).
-    if (seriesSeenWithoutUpcoming) {
-      return { kind: 'none' };
-    }
-    if (anyInstanceFailed) {
-      return { kind: 'failed' };
-    }
-    return { kind: 'none' };
+    // No instance returned a 'found'. If any instance errored, the answer is
+    // unknown ('failed') - a failed instance could hold the upcoming episode, so
+    // reporting 'none' here would strip a countdown on a transient outage
+    // (fork#35 Mechanism 2). Only when every instance responded is 'none'
+    // authoritative.
+    return anyInstanceFailed ? { kind: 'failed' } : { kind: 'none' };
   } catch (error) {
     logger.debug('Failed to fetch next episode from Sonarr', {
       label: 'OverlayContextBuilder',
@@ -1478,55 +1517,34 @@ async function fetchNextEpisodeFromSonarr(
 }
 
 /**
- * Sonarr-first resolution of the volatile next-episode fields (fork#35).
+ * Pure Sonarr-first resolution of the volatile next-episode fields (fork#35),
+ * given an already-fetched Sonarr result.
  *
- * TMDB's `next_episode_to_air` lags behind reality (gateway cache + TMDB's own
- * data pipeline) and can keep reporting a just-aired episode for hours, which is
- * the flip-flop source. Sonarr is LAN-local and advances `nextAiring`
- * mechanically at airtime, so when the show resolves to a Sonarr series it
- * becomes the authority for the next-episode date and its season/episode
- * numbering (which also fixes anime absolute numbering). TMDB still supplies
- * identity, first_air_date, and the value for shows Sonarr does not track.
+ * TMDB's `next_episode_to_air` lags reality (gateway cache + TMDB's data
+ * pipeline) and can report a just-aired episode for hours - the flip-flop
+ * source. Sonarr is LAN-local and advances `nextAiring` at airtime, so it is
+ * the freshness authority when it tracks the show. But only when Sonarr's own
+ * date is still UPCOMING: a stale Sonarr database can report a PAST nextAiring,
+ * which must never overwrite a valid future TMDB date.
  *
- * Sonarr wins even when it disagrees with TMDB by more than the old 2-day
- * tolerance: a large disagreement is exactly the stale-TMDB case the fix
- * targets (TMDB shows the aired episode, Sonarr the next one). The disagreement
- * is logged, not gated on.
- *
- * @returns the resolved info plus `sonarrFailed`, so the caller can engage the
- *   skip-guard only when NO source produced an upcoming next episode.
+ *  - found + upcoming -> Sonarr's date + numbering win (also fixes anime
+ *    absolute numbering). Wins even on a >2d disagreement with TMDB - that is
+ *    exactly the stale-TMDB case the fix targets.
+ *  - found + already past -> Sonarr is stale; keep TMDB's candidate.
+ *  - failed -> keep TMDB but report `sonarrFailed` so the caller can skip when
+ *    no source yields an upcoming date (skip beats stripping on a blip).
+ *  - none -> authoritative empty (or not in Sonarr); keep TMDB and let the
+ *    read-time derivation clear a passed date.
  */
-async function applySonarrFirstNextEpisode(
+export function resolveSonarrFirstNextEpisode(
   base: ReleaseDateInfo,
-  tvdbId: number | undefined,
-  sonarrCache?: Map<string, SonarrSeries[]>
-): Promise<{ info: ReleaseDateInfo; sonarrFailed: boolean }> {
-  if (!tvdbId) {
-    return { info: base, sonarrFailed: false };
-  }
-
-  const sonarr = await fetchNextEpisodeFromSonarr(tvdbId, sonarrCache);
-
-  if (sonarr.kind === 'found') {
+  sonarr: SonarrNextEpisodeResult
+): { info: ReleaseDateInfo; sonarrFailed: boolean } {
+  if (
+    sonarr.kind === 'found' &&
+    hasUpcomingAirDate(sonarr.episode.nextEpisodeAirDate)
+  ) {
     const ep = sonarr.episode;
-    if (base.nextEpisodeAirDate) {
-      const tmdbDay = base.nextEpisodeAirDate.split('T')[0];
-      const sonarrDay = ep.nextEpisodeAirDate.split('T')[0];
-      const daysDiff =
-        Math.abs(new Date(tmdbDay).getTime() - new Date(sonarrDay).getTime()) /
-        (1000 * 60 * 60 * 24);
-      if (daysDiff > 2) {
-        logger.debug(
-          'Sonarr and TMDB disagree on next episode date; using Sonarr (freshness authority)',
-          {
-            label: 'OverlayContextBuilder',
-            tvdbId,
-            tmdbDate: base.nextEpisodeAirDate,
-            sonarrDate: ep.nextEpisodeAirDate,
-          }
-        );
-      }
-    }
     return {
       info: {
         ...base,
@@ -1540,18 +1558,52 @@ async function applySonarrFirstNextEpisode(
     };
   }
 
-  if (sonarr.kind === 'failed') {
-    // Sonarr could not answer. Keep TMDB's next episode if it has one; the
-    // caller marks the fetch failed only when no source yielded an upcoming
-    // date, so a Sonarr blip skips the item instead of stripping the overlay.
-    return { info: base, sonarrFailed: true };
+  // found-but-past (stale Sonarr) or none: keep TMDB. failed: keep TMDB but flag
+  // it so the caller skips only when nothing upcoming exists from any source.
+  return { info: base, sonarrFailed: sonarr.kind === 'failed' };
+}
+
+/**
+ * I/O wrapper: fetch the Sonarr next episode for a show and apply
+ * {@link resolveSonarrFirstNextEpisode}. Logs a large TMDB/Sonarr disagreement
+ * (when Sonarr wins) so a persistent mismatch - e.g. a wrong TVDB numbering map
+ * - is discoverable rather than silent.
+ */
+async function applySonarrFirstNextEpisode(
+  base: ReleaseDateInfo,
+  tvdbId: number | undefined,
+  sonarrCache?: Map<string, SonarrSeries[]>
+): Promise<{ info: ReleaseDateInfo; sonarrFailed: boolean }> {
+  if (!tvdbId) {
+    return { info: base, sonarrFailed: false };
   }
 
-  // kind === 'none': Sonarr authoritatively has no upcoming episode (or the show
-  // is not in Sonarr). Keep TMDB's next episode if present - a newly-announced
-  // episode Sonarr has not synced yet - and let read-time derivation clear it if
-  // that date has already passed (episode aired, nothing next known).
-  return { info: base, sonarrFailed: false };
+  const sonarr = await fetchNextEpisodeFromSonarr(tvdbId, sonarrCache);
+
+  if (
+    sonarr.kind === 'found' &&
+    base.nextEpisodeAirDate &&
+    hasUpcomingAirDate(sonarr.episode.nextEpisodeAirDate)
+  ) {
+    const tmdbDay = toServerCalendarDate(base.nextEpisodeAirDate);
+    const sonarrDay = toServerCalendarDate(sonarr.episode.nextEpisodeAirDate);
+    const daysDiff =
+      Math.abs(new Date(tmdbDay).getTime() - new Date(sonarrDay).getTime()) /
+      (1000 * 60 * 60 * 24);
+    if (daysDiff > 2) {
+      logger.warn(
+        'Sonarr and TMDB disagree on next episode date by >2d; using Sonarr (freshness authority)',
+        {
+          label: 'OverlayContextBuilder',
+          tvdbId,
+          tmdbDate: base.nextEpisodeAirDate,
+          sonarrDate: sonarr.episode.nextEpisodeAirDate,
+        }
+      );
+    }
+  }
+
+  return resolveSonarrFirstNextEpisode(base, sonarr);
 }
 
 /**

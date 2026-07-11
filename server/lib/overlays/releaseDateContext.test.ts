@@ -95,3 +95,38 @@ describe('deriveReleaseDateContext', () => {
     expect(ctx.nextEpisodeAirDate).toBeUndefined();
   });
 });
+
+describe('deriveReleaseDateContext timezone boundary (TZ=Australia/Sydney)', () => {
+  const originalTz = process.env.TZ;
+
+  beforeEach(() => {
+    process.env.TZ = 'Australia/Sydney';
+    vi.useFakeTimers();
+    // 12/07 00:30 AEST - just past Sydney midnight.
+    vi.setSystemTime(new Date('2026-07-11T14:30:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    process.env.TZ = originalTz;
+  });
+
+  it('does not clear a Sonarr datetime still future in Sydney', () => {
+    // 2026-07-11T15:00:00Z = 12/07 01:00 AEST, 30 min in the future. Its UTC
+    // date (2026-07-11) reads as "yesterday" in Sydney; without the tz fix the
+    // read-time guard would clear it and strip the overlay before airing.
+    const ctx = deriveReleaseDateContext({
+      nextEpisodeAirDate: '2026-07-11T15:00:00Z',
+    });
+    expect(ctx.nextEpisodeAirDate).toBe('2026-07-11T15:00:00Z');
+    expect(ctx.daysUntilNextEpisode).toBe(0); // airs today in Sydney
+  });
+
+  it('still clears a genuinely past Sonarr datetime', () => {
+    const ctx = deriveReleaseDateContext({
+      nextEpisodeAirDate: '2026-07-09T09:00:00Z',
+    });
+    expect(ctx.nextEpisodeAirDate).toBeUndefined();
+    expect(ctx.daysUntilNextEpisode).toBeUndefined();
+  });
+});

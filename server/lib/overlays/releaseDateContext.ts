@@ -1,4 +1,7 @@
-import { calculateDaysSince } from '@server/utils/dateHelpers';
+import {
+  calculateDaysSince,
+  toServerCalendarDate,
+} from '@server/utils/dateHelpers';
 import type { ReleaseDateInfo } from './OverlayContextBuilder';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
@@ -31,8 +34,12 @@ export function deriveReleaseDateContext(
   let daysUntilNextSeason: number | undefined;
   let daysAgoNextSeason: number | undefined;
 
+  // A Sonarr air date carries a UTC time; classify it by its server-timezone
+  // calendar date so a countdown never clears a day early near midnight.
   if (info.releaseDate) {
-    const daysSince = calculateDaysSince(info.releaseDate);
+    const daysSince = calculateDaysSince(
+      toServerCalendarDate(info.releaseDate)
+    );
     if (daysSince < 0) {
       daysUntilRelease = -daysSince;
     } else {
@@ -45,7 +52,9 @@ export function deriveReleaseDateContext(
   // already had its chance to supply a fresher date.
   let nextEpisodeAirDate = info.nextEpisodeAirDate;
   if (nextEpisodeAirDate) {
-    const daysSince = calculateDaysSince(nextEpisodeAirDate);
+    const daysSince = calculateDaysSince(
+      toServerCalendarDate(nextEpisodeAirDate)
+    );
     if (daysSince <= 0) {
       // Math.max(0, ...) keeps the count a canonical non-negative integer
       // (an airing-today date makes -daysSince a negative zero otherwise).
@@ -56,7 +65,9 @@ export function deriveReleaseDateContext(
   }
 
   if (info.nextSeasonAirDate) {
-    const daysSince = calculateDaysSince(info.nextSeasonAirDate);
+    const daysSince = calculateDaysSince(
+      toServerCalendarDate(info.nextSeasonAirDate)
+    );
     if (daysSince <= 0) {
       daysUntilNextSeason = Math.max(0, -daysSince);
     } else {
