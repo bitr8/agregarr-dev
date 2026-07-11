@@ -35,8 +35,10 @@ export function deriveReleaseDateContext(
   let daysUntilNextSeason: number | undefined;
   let daysAgoNextSeason: number | undefined;
 
-  // A Sonarr air date carries a UTC time; classify it by its server-timezone
-  // calendar date so a countdown never clears a day early near midnight.
+  // releaseDate is a coarse "released / releases in N days" marker, effectively
+  // always a bare TMDB date, and it never clears an overlay (it only flips
+  // between daysUntil and daysAgo), so calendar-day granularity is intentional
+  // here. toServerCalendarDate keeps it correct if it ever carries a time.
   if (info.releaseDate) {
     const daysSince = calculateDaysSince(
       toServerCalendarDate(info.releaseDate)
@@ -66,14 +68,19 @@ export function deriveReleaseDateContext(
     }
   }
 
+  // Symmetric with nextEpisode: a season premiere past its airing instant flips
+  // to "days ago" rather than reporting "premieres today" for the rest of the
+  // local day. The day-granular counts still use the tz calendar date.
   if (info.nextSeasonAirDate) {
-    const daysSince = calculateDaysSince(
-      toServerCalendarDate(info.nextSeasonAirDate)
-    );
-    if (daysSince <= 0) {
-      daysUntilNextSeason = Math.max(0, -daysSince);
+    if (isAirDateUpcoming(info.nextSeasonAirDate)) {
+      daysUntilNextSeason = Math.max(
+        0,
+        -calculateDaysSince(toServerCalendarDate(info.nextSeasonAirDate))
+      );
     } else {
-      daysAgoNextSeason = daysSince;
+      daysAgoNextSeason = calculateDaysSince(
+        toServerCalendarDate(info.nextSeasonAirDate)
+      );
     }
   }
 

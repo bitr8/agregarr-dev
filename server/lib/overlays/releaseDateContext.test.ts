@@ -140,4 +140,15 @@ describe('deriveReleaseDateContext timezone boundary (TZ=Australia/Sydney)', () 
     expect(ctx.nextEpisodeAirDate).toBeUndefined();
     expect(ctx.daysUntilNextEpisode).toBeUndefined();
   });
+
+  it('flips a season premiere that aired earlier today to daysAgoNextSeason', () => {
+    // Symmetric with nextEpisode: past its airing instant, "premieres today"
+    // becomes "premiered today" rather than a stale forward count.
+    vi.setSystemTime(new Date('2026-07-11T10:00:00.000Z'));
+    const ctx = deriveReleaseDateContext({
+      nextSeasonAirDate: '2026-07-11T09:00:00Z',
+    });
+    expect(ctx.daysUntilNextSeason).toBeUndefined();
+    expect(ctx.daysAgoNextSeason).toBe(0);
+  });
 });

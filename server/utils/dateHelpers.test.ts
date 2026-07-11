@@ -405,4 +405,11 @@ describe('isAirDateUpcoming (TZ=Australia/Sydney)', () => {
     vi.setSystemTime(new Date('2026-07-11T14:30:00.000Z'));
     expect(isAirDateUpcoming('2026-07-11T15:00:00Z')).toBe(true);
   });
+
+  it('an unparseable datetime is treated as not upcoming (safe default)', () => {
+    vi.setSystemTime(new Date('2026-07-11T12:00:00.000Z'));
+    // NaN instant -> falls to the calendar branch -> NaN <= 0 is false, so it
+    // never renders a bogus countdown.
+    expect(isAirDateUpcoming('2026-13-99T00:00:00Z')).toBe(false);
+  });
 });

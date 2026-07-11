@@ -247,4 +247,24 @@ describe('fetchNextEpisodeFromSonarr aggregation', () => {
       .mockRejectedValueOnce(new Error('timeout'));
     expect((await fetchNextEpisodeFromSonarr(123)).kind).toBe('failed');
   });
+
+  it('stale-past A + failing B -> failed (B could hold the upcoming episode)', async () => {
+    mockGetSettings.mockReturnValue({
+      sonarr: [instance('a'), instance('b')],
+    });
+    mockGetSeries
+      .mockResolvedValueOnce([seriesPastAiring])
+      .mockRejectedValueOnce(new Error('timeout'));
+    expect((await fetchNextEpisodeFromSonarr(123)).kind).toBe('failed');
+  });
+
+  it('all instances stale-past -> none', async () => {
+    mockGetSettings.mockReturnValue({
+      sonarr: [instance('a'), instance('b')],
+    });
+    mockGetSeries
+      .mockResolvedValueOnce([seriesPastAiring])
+      .mockResolvedValueOnce([seriesPastAiring]);
+    expect((await fetchNextEpisodeFromSonarr(123)).kind).toBe('none');
+  });
 });
