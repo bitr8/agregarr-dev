@@ -377,6 +377,52 @@ describe('toServerCalendarDate (TZ=Australia/Sydney)', () => {
   });
 });
 
+describe('toServerCalendarDate survives the SSR Intl.DateTimeFormat polyfill (fork#35 prod regression)', () => {
+  // The running server installs the andyearnshaw `intl` polyfill for SSR, which
+  // replaces the global Intl.DateTimeFormat with an implementation that throws
+  // "timeZone is not supported." for any named timezone. Date.prototype
+  // .toLocaleString stays native. Native Node (where these tests run) has no such
+  // polyfill, so an earlier Intl.DateTimeFormat('en-CA') implementation passed
+  // every unit test yet threw for every Sonarr datetime in production, silently
+  // disabling Sonarr-first. Simulate the polyfill so this failure is caught here.
+  const RealDateTimeFormat = Intl.DateTimeFormat;
+  beforeEach(() => {
+    (Intl as unknown as { DateTimeFormat: unknown }).DateTimeFormat =
+      function BrokenDateTimeFormat() {
+        throw new RangeError('timeZone is not supported.');
+      };
+  });
+  afterEach(() => {
+    (Intl as unknown as { DateTimeFormat: unknown }).DateTimeFormat =
+      RealDateTimeFormat;
+    // Restore real timers here too, so a failing assertion in a fake-timer test
+    // below cannot leak fake time into later suites.
+    vi.useRealTimers();
+  });
+
+  it('converts a Sonarr UTC datetime without the global Intl.DateTimeFormat', () => {
+    // 2026-07-11T15:00:00Z is 2026-07-12 01:00 AEST - the next calendar day.
+    expect(toServerCalendarDate('2026-07-11T15:00:00Z')).toBe('2026-07-12');
+  });
+
+  it('a bare date is still returned untouched', () => {
+    expect(toServerCalendarDate('2026-07-11')).toBe('2026-07-11');
+  });
+
+  it('isAirDateUpcoming(datetime) still resolves at the Sydney-midnight boundary', () => {
+    // now = 12/07 00:30 AEST; a datetime airing 12/07 01:00 AEST is still ahead.
+    // isAirDateUpcoming's datetime branch and its toServerCalendarDate call must
+    // both survive the broken polyfill.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-11T14:30:00.000Z'));
+    expect(isAirDateUpcoming('2026-07-11T15:00:00Z')).toBe(true);
+    expect(
+      calculateDaysSince(toServerCalendarDate('2026-07-11T15:00:00Z'))
+    ).toBe(0);
+    // real timers restored by afterEach
+  });
+});
+
 describe('isAirDateUpcoming (TZ=Australia/Sydney)', () => {
   beforeEach(() => {
     vi.useFakeTimers();

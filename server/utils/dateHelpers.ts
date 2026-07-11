@@ -76,17 +76,20 @@ export function toServerCalendarDate(airDate: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return airDate;
   }
-  // formatToParts avoids depending on any locale rendering YYYY-MM-DD.
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: getServerTimezone(),
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(parsed);
-  const year = parts.find((p) => p.type === 'year')?.value;
-  const month = parts.find((p) => p.type === 'month')?.value;
-  const day = parts.find((p) => p.type === 'day')?.value;
-  return year && month && day ? `${year}-${month}-${day}` : airDate;
+  // Resolve the server-timezone calendar date via getCalendarDateInTimezone,
+  // which uses Date.prototype.toLocaleString. This MUST NOT use
+  // Intl.DateTimeFormat: at runtime the app installs the andyearnshaw `intl`
+  // SSR polyfill, which replaces the global Intl.DateTimeFormat with an
+  // implementation that throws "timeZone is not supported" for any named
+  // timezone (Date.prototype.toLocaleString stays native). An earlier
+  // formatToParts('en-CA') version passed every unit test (native Node has no
+  // polyfill) but threw for every Sonarr datetime in production, silently
+  // breaking Sonarr-first (fork#35).
+  const cal = getCalendarDateInTimezone(parsed);
+  const year = cal.getFullYear();
+  const month = String(cal.getMonth() + 1).padStart(2, '0');
+  const day = String(cal.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**

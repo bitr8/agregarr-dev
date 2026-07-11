@@ -50,6 +50,42 @@ module.exports = {
         'react/prop-types': 'off',
       },
     },
+    {
+      // The app replaces the global Intl object with the andyearnshaw `intl` SSR
+      // polyfill (src/pages/_app.tsx). Server code shares that global at runtime,
+      // where Intl.DateTimeFormat throws "timeZone is not supported" for named
+      // timezones and Intl.DisplayNames/ListFormat/PluralRules/Collator/
+      // RelativeTimeFormat are undefined. Native-Node tests pass while prod
+      // throws (fork#35). Ban these in server code; use Date.prototype
+      // .toLocaleString via server/utils/dateHelpers instead, or guard
+      // construction in a try/catch (see OverlayContextBuilder DisplayNames).
+      //
+      // Both construction forms are covered: `new Intl.X()` (NewExpression) and
+      // the call-as-function form `Intl.DateTimeFormat(...)` (CallExpression),
+      // which is legal ECMA-402 and hits the SAME polyfill throw. NOT covered
+      // (inherent to AST selectors, and won't be typed by accident): aliasing
+      // (`const D = Intl.DateTimeFormat; new D()`) and bracket access
+      // (`Intl['DateTimeFormat']`). This lint is the only pre-prod guard for
+      // this class, since native-Node tests pass while prod throws.
+      files: ['server/**/*.{ts,tsx}'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector:
+              "NewExpression[callee.object.name='Intl'][callee.property.name='DateTimeFormat'], CallExpression[callee.object.name='Intl'][callee.property.name='DateTimeFormat']",
+            message:
+              'Intl.DateTimeFormat is replaced by the SSR `intl` polyfill and throws "timeZone is not supported" for named timezones in production. Use Date.prototype.toLocaleString via server/utils/dateHelpers (toServerCalendarDate / getCalendarDateInTimezone).',
+          },
+          {
+            selector:
+              "NewExpression[callee.object.name='Intl'][callee.property.name=/^(DisplayNames|ListFormat|PluralRules|Collator|RelativeTimeFormat)$/], CallExpression[callee.object.name='Intl'][callee.property.name=/^(DisplayNames|ListFormat|PluralRules|Collator|RelativeTimeFormat)$/]",
+            message:
+              'This Intl constructor is not provided by the SSR `intl` polyfill (src/pages/_app.tsx) and throws "not a constructor"/"timeZone is not supported" server-side after the first SSR render. Guard construction in a try/catch, or avoid it.',
+          },
+        ],
+      },
+    },
   ],
   plugins: ['jsx-a11y', 'react-hooks', 'formatjs', 'no-relative-import-paths'],
   settings: {

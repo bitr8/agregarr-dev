@@ -23,14 +23,29 @@ import { hasStreamingProviderIcon } from './DefaultMappingsService';
 import { computeDaysUntilAction } from './maintainerrCountdown';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
-const _langDisplayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+// Captured defensively: the app replaces the global Intl with the andyearnshaw
+// `intl` SSR polyfill (src/pages/_app.tsx), which does NOT provide DisplayNames.
+// This server module currently loads before that swap so native DisplayNames is
+// available, but construct it under a guard so a future load-order change can
+// never turn this module-scope line into a crash (`Intl.DisplayNames is not a
+// constructor`). resolveLanguageName falls back to the raw value when it is
+// unavailable. The no-restricted-syntax rule below bans Intl constructors in
+// server code; this one guarded, caught use is the deliberate exception.
+const _langDisplayNames: Intl.DisplayNames | undefined = (() => {
+  try {
+    // eslint-disable-next-line no-restricted-syntax -- guarded + try/caught
+    return new Intl.DisplayNames(['en'], { type: 'language' });
+  } catch {
+    return undefined;
+  }
+})();
 
 /**
  * Convert an ISO 639-2 language code to its English display name.
  */
 function resolveLanguageName(code: string, fallback: string): string {
   try {
-    return _langDisplayNames.of(code) ?? fallback;
+    return _langDisplayNames?.of(code) ?? fallback;
   } catch {
     return fallback;
   }
@@ -1205,17 +1220,43 @@ export async function fetchReleaseDateInfo(
       // preloaded (TMDB-derived) record. This keeps the prefetch's avoided-fetch
       // optimisation while making Sonarr the freshness authority, and subsumes
       // the old date-only "enhance with Sonarr air time" path (fork#35).
-      const { info, sonarrFailed } = await applySonarrFirstNextEpisode(
-        preloaded,
-        preloaded.tvdbId,
-        sonarrCache
-      );
-      if (sonarrFailed && fetchStatus && !hasUpcomingNextEpisode(info)) {
-        // Sonarr blipped and no source has an upcoming date: skip rather than
-        // let read-time clearing strip the overlay on a transient outage.
-        fetchStatus.failed = true;
+      //
+      // Guarded because this branch runs BEFORE the main try below: an
+      // unexpected throw here (as the Intl.DateTimeFormat polyfill regression
+      // did) would otherwise escape fetchReleaseDateInfo uncaught, bypassing the
+      // Mechanism-2 skip-guard and surfacing as a generic per-item error instead
+      // of a preserved overlay. Treat any throw as a transient failure.
+      try {
+        const { info, sonarrFailed } = await applySonarrFirstNextEpisode(
+          preloaded,
+          preloaded.tvdbId,
+          sonarrCache
+        );
+        if (sonarrFailed && fetchStatus && !hasUpcomingNextEpisode(info)) {
+          // Sonarr blipped and no source has an upcoming date: skip rather than
+          // let read-time clearing strip the overlay on a transient outage.
+          fetchStatus.failed = true;
+        }
+        return info;
+      } catch (error) {
+        if (fetchStatus) {
+          fetchStatus.failed = true;
+        }
+        // warn, not debug: the throwable surface here is only the pure date
+        // helpers (fetchNextEpisodeFromSonarr catches its own errors), so a
+        // throw is unexpected and would be a fork#35-class regression - surface
+        // it above debug spam even though the overlay is safely preserved.
+        logger.warn(
+          'Unexpected error applying Sonarr-first to preloaded release date',
+          {
+            label: 'OverlayContextBuilder',
+            tmdbId,
+            mediaType,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+        return undefined;
       }
-      return info;
     }
   }
 
