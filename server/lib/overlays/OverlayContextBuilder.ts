@@ -1132,12 +1132,18 @@ export interface ReleaseDateInfo {
  * @param mediaType - Media type ('movie' or 'show')
  * @param sonarrCache - Optional cache for Sonarr series data (for performance)
  * @param preloadedTmdbReleaseDates - Optional preloaded release dates from batch prefetch
+ * @param fetchStatus - Optional out-param set to { failed: true } only when the
+ *   live fetch throws (a transient TMDB/Sonarr error), distinguishing it from a
+ *   successful "no upcoming date exists" result which also returns undefined.
+ *   Callers use this to skip overlay application instead of stripping a
+ *   date-driven overlay with incomplete data (fork#35 Mechanism 2).
  */
 export async function fetchReleaseDateInfo(
   tmdbId: number,
   mediaType: 'movie' | 'show',
   sonarrCache?: Map<string, SonarrSeries[]>,
-  preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>
+  preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>,
+  fetchStatus?: { failed: boolean }
 ): Promise<ReleaseDateInfo | undefined> {
   // Check preloaded data first (batch prefetch optimization)
   if (preloadedTmdbReleaseDates) {
@@ -1368,6 +1374,12 @@ export async function fetchReleaseDateInfo(
 
     return undefined;
   } catch (error) {
+    // fork#35 (Mechanism 2): a transient failure here is NOT the same as "no
+    // upcoming date exists" - both return undefined, but only this one should
+    // make the caller skip the item rather than strip a date-driven overlay.
+    if (fetchStatus) {
+      fetchStatus.failed = true;
+    }
     logger.debug('Failed to fetch release date info', {
       label: 'OverlayContextBuilder',
       tmdbId,

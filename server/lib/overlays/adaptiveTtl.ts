@@ -13,8 +13,12 @@ export function getAdaptiveTtl(
   releaseYear: number | undefined,
   maxDays?: number
 ): number {
-  const effectiveMaxDays =
-    maxDays ?? getSettings().main.ratingsCacheMaxDays ?? 30;
+  // Clamp: the setting is sometimes stored as a string ("14"), and 0 would make
+  // node-cache treat the TTL as "never expire" (the opposite of the intent).
+  const effectiveMaxDays = Math.max(
+    1,
+    Number(maxDays ?? getSettings().main.ratingsCacheMaxDays ?? 30) || 30
+  );
   const maxSeconds = effectiveMaxDays * 24 * 60 * 60;
 
   if (!releaseYear) {
@@ -73,6 +77,46 @@ export function capTtlForRecentRelease(
 }
 
 /**
+ * Cap TTL so a cached *upcoming* date (a show's next episode / next season air
+ * date) cannot outlive the date it describes.
+ *
+ * The adaptive TTL is derived from the content's release YEAR, so an ongoing
+ * show gets a multi-day TTL. But the value being cached is the next episode air
+ * date, which expires within days. Once that date passes, `daysUntilNextEpisode`
+ * silently computes to undefined and any overlay keyed on it drops until the TTL
+ * finally expires (or the process restarts, since this is an in-memory cache) -
+ * the fork#35 flip-flop. Expiring the entry shortly after the air date forces a
+ * refresh that picks up the new next-episode date instead.
+ *
+ * @param upcomingDate - ISO date string of the upcoming air date
+ * @param baseTtl - TTL in seconds from getAdaptiveTtl / capTtlForRecentRelease
+ * @returns Capped TTL in seconds (never longer than baseTtl)
+ */
+export function capTtlForUpcomingDate(
+  upcomingDate: string | undefined,
+  baseTtl: number
+): number {
+  if (!upcomingDate) return baseTtl;
+
+  const target = new Date(upcomingDate).getTime();
+  if (Number.isNaN(target)) return baseTtl;
+
+  // Keep the entry through the air day (when "days until" is still >= 0) and
+  // give TMDB a few hours to advance next_episode_to_air, then expire.
+  const bufferSeconds = 4 * 60 * 60; // 4 hours
+  // Never cache a stale/past upcoming date for long, but avoid hammering TMDB
+  // when it is briefly behind on advancing the next episode.
+  const minTtlSeconds = 30 * 60; // 30 minutes
+
+  const secondsUntil = Math.floor((target - Date.now()) / 1000);
+  const cap = secondsUntil + bufferSeconds;
+  if (cap <= minTtlSeconds) {
+    return Math.min(baseTtl, minTtlSeconds);
+  }
+  return Math.min(baseTtl, cap);
+}
+
+/**
  * Get adaptive TTL for null (no data) results based on content age.
  * Shorter for new/upcoming content (data may appear soon),
  * longer for old content (unlikely to get new data now).
@@ -86,8 +130,12 @@ export function getNullRatingTtl(
   releaseYear: number | undefined,
   maxDays?: number
 ): number {
-  const effectiveMaxDays =
-    maxDays ?? getSettings().main.ratingsCacheMaxDays ?? 30;
+  // Clamp: the setting is sometimes stored as a string ("14"), and 0 would make
+  // node-cache treat the TTL as "never expire" (the opposite of the intent).
+  const effectiveMaxDays = Math.max(
+    1,
+    Number(maxDays ?? getSettings().main.ratingsCacheMaxDays ?? 30) || 30
+  );
   // Null ratings max out at 24 hours regardless of setting
   // Scale from 2h to 24h based on content age
   const baseMaxHours = Math.min(24, effectiveMaxDays * 0.8);

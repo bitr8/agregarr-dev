@@ -17,6 +17,7 @@ import path from 'path';
 import type sharp from 'sharp';
 import {
   capTtlForRecentRelease,
+  capTtlForUpcomingDate,
   getAdaptiveTtl,
   getNullRatingTtl,
 } from './adaptiveTtl';
@@ -39,6 +40,7 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
+import { shouldSkipOnReleaseDateFetchFailure } from './releaseDateFetchPolicy';
 import { classifySeasonCleanupAction } from './seasonCleanupPolicy';
 import { restoreSeasonBasePoster } from './seasonPosterRestore';
 
@@ -766,6 +768,10 @@ class OverlayLibraryService {
             label: 'OverlayLibrary',
             cacheKey,
             releaseDate: cached?.releaseDate ?? 'null',
+            // fork#35: surface the time-sensitive dates so a stale next-episode
+            // entry is greppable in the logs, not just a code read.
+            nextEpisodeAirDate: cached?.nextEpisodeAirDate ?? 'none',
+            nextSeasonAirDate: cached?.nextSeasonAirDate ?? 'none',
           });
           if (cached === null) {
             nullCacheHits++;
@@ -872,10 +878,21 @@ class OverlayLibraryService {
 
               // Cache the result with adaptive TTL, capped for recent releases
               const baseTtl = getAdaptiveTtl(year);
-              const ttl = capTtlForRecentRelease(
+              let ttl = capTtlForRecentRelease(
                 releaseDateInfo?.releaseDate,
                 baseTtl
               );
+              // fork#35: the adaptive TTL is keyed on the show's release YEAR, but
+              // the value cached here is the next episode air date. Cap the TTL so
+              // the entry cannot outlive that date and serve a stale (undefined)
+              // daysUntilNextEpisode. nextSeasonAirDate, when present, equals
+              // nextEpisodeAirDate (season premiere), so this covers both.
+              if (releaseDateInfo?.nextEpisodeAirDate) {
+                ttl = capTtlForUpcomingDate(
+                  releaseDateInfo.nextEpisodeAirDate,
+                  ttl
+                );
+              }
               if (releaseDateInfo) {
                 preloadedMap?.set(mapKey, releaseDateInfo);
                 adaptiveCache.set(cacheKey, releaseDateInfo, ttl);
@@ -888,12 +905,12 @@ class OverlayLibraryService {
               }
             } catch (error) {
               fetchFailures++;
-              // Only cache null for movies - TV shows need Sonarr fallback opportunity
-              if (mediaType === 'movie') {
-                const nullTtl = getNullRatingTtl(year);
-                preloadedMap?.set(mapKey, null);
-                adaptiveCache.set(cacheKey, null, nullTtl);
-              }
+              // fork#35: a thrown fetch is NOT an authoritative "no release date"
+              // - caching it as null (for either media type) strips a date
+              // overlay until the null TTL expires AND makes the per-item path
+              // return a preloaded null without setting fetchStatus.failed, so
+              // the Mechanism-2 skip-guard is bypassed. Leave the item uncached
+              // so the per-item live fetch runs and can set failed -> skip.
               logger.debug('TMDB prefetch failed for item', {
                 label: 'OverlayLibrary',
                 tmdbId,
@@ -2095,12 +2112,38 @@ class OverlayLibraryService {
       // Uses preloaded data from batch prefetch when available
       let releaseDateContext: Partial<OverlayRenderContext> = {};
       if (tmdbId) {
+        const releaseDateFetch = { failed: false };
         const releaseDateInfo = await fetchReleaseDateInfo(
           tmdbId,
           actualMediaType,
           this.sonarrSeriesCache,
-          this.preloadedTmdbReleaseDates
+          this.preloadedTmdbReleaseDates,
+          releaseDateFetch
         );
+
+        // fork#35 (Mechanism 2): a transient TMDB/Sonarr failure returns
+        // undefined the same as "no upcoming date exists". If this library's
+        // overlays actually depend on a release-date field, skip the item rather
+        // than re-render without it and strip a date-driven overlay - mirroring
+        // the criticalApiFailed IMDb guard above. Scoped to required fields so a
+        // genuinely date-less show still clears and unrelated poster/quality
+        // updates are not blocked by an unrelated date-API blip.
+        if (
+          releaseDateFetch.failed &&
+          shouldSkipOnReleaseDateFetchFailure(
+            this.requiredContextFieldsByLibrary.get(libraryId)
+          )
+        ) {
+          logger.info(
+            'Skipping overlay application - release date fetch failed',
+            {
+              label: 'OverlayLibrary',
+              itemTitle: item.title,
+              ratingKey: item.ratingKey,
+            }
+          );
+          return { skipped: true };
+        }
 
         if (releaseDateInfo) {
           // Calculate days until release and days ago
@@ -2314,6 +2357,12 @@ class OverlayLibraryService {
           inSonarr: context.inSonarr,
           daysAgo: context.daysAgo,
           isPlaceholder: context.isPlaceholder,
+          // fork#35: the fields behind next-episode/next-season overlays, so a
+          // dropped date overlay is diagnosable from this line alone.
+          nextEpisodeAirDate: context.nextEpisodeAirDate,
+          daysUntilNextEpisode: context.daysUntilNextEpisode,
+          nextSeasonAirDate: context.nextSeasonAirDate,
+          daysUntilNextSeason: context.daysUntilNextSeason,
         },
       });
 
