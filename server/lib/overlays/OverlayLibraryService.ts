@@ -239,6 +239,12 @@ class OverlayLibraryService {
   // TTL for completed jobs (visible to UI before cleanup)
   private static readonly COMPLETED_TTL_MS = 10_000;
 
+  // Snapshot of last-completed job results per library (survives TTL cleanup)
+  private lastCompletedLibraries = new Map<
+    string,
+    LibraryStatus & { libraryId: string }
+  >();
+
   /**
    * Request cancellation of a library overlay job
    * Returns 'requested' if newly requested, 'already' if already cancelling, 'not_found' otherwise
@@ -291,6 +297,44 @@ class OverlayLibraryService {
         this.runningLibraries.delete(id);
       }
     }
+  }
+
+  private snapshotLastCompleted(
+    libraryId: string,
+    progress: LibraryProgress
+  ): void {
+    const runningFor = Math.round(
+      ((progress.completedAt ?? Date.now()) - progress.startTime) / 1000
+    );
+    this.lastCompletedLibraries.set(libraryId, {
+      libraryId,
+      running: false,
+      state: progress.state,
+      libraryName: progress.libraryName,
+      startTime: progress.startTime,
+      runningFor,
+      totalItems: progress.totalItems,
+      currentItem: progress.currentItem,
+      currentTitle: progress.currentTitle,
+      filteredCount: progress.filteredCount,
+      successCount: progress.successCount,
+      errorCount: progress.errorCount,
+      skippedCount: progress.skippedCount,
+      progressPercent:
+        progress.totalItems > 0
+          ? Math.min(
+              100,
+              Math.round((progress.currentItem / progress.totalItems) * 100)
+            )
+          : 100,
+      estimatedSecondsRemaining: null,
+    });
+  }
+
+  public getLastCompletedLibraries(): (LibraryStatus & {
+    libraryId: string;
+  })[] {
+    return Array.from(this.lastCompletedLibraries.values());
   }
 
   /**
@@ -1231,6 +1275,7 @@ class OverlayLibraryService {
         }
         // Always set completedAt for TTL cleanup
         progress.completedAt = Date.now();
+        this.snapshotLastCompleted(libraryId, progress);
       }
       resolveDeferred();
     } catch (error) {
@@ -1239,6 +1284,7 @@ class OverlayLibraryService {
       if (progress) {
         progress.state = 'failed';
         progress.completedAt = Date.now();
+        this.snapshotLastCompleted(libraryId, progress);
       }
       rejectDeferred(error instanceof Error ? error : new Error(String(error)));
       throw error;

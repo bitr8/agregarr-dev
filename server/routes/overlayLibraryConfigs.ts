@@ -405,6 +405,7 @@ router.get('/status/all', (_req, res) => {
     overlayApplication.status.pending && runningLibraries.length === 0;
   return res.status(200).json({
     runningLibraries,
+    lastCompleted: overlayLibraryService.getLastCompletedLibraries(),
     jobStatus: overlayApplication.status,
     pending,
   });

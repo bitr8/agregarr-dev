@@ -5,7 +5,11 @@ import type {
   SyncPhase,
   SyncProgressResponse,
 } from '@app/utils/collections/syncProgressTypes';
-import { formatDurationMs, formatTime } from '@app/utils/timeFormatters';
+import {
+  formatDurationMs,
+  formatTime,
+  formatTimeAgo,
+} from '@app/utils/timeFormatters';
 import {
   CheckIcon,
   ExclamationTriangleIcon,
@@ -457,15 +461,17 @@ const CollectionSyncCard: React.FC = () => {
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>
-          {status.phase === 'processing'
+          {active
             ? `Processed ${status.processedCollections} / ${status.totalCollections}`
             : `${formatTime(status.runningFor)} elapsed`}
         </span>
-        {eta && (
+        {active && eta ? (
           <span>
             ETA: <span className="text-gray-300">{eta}</span>
           </span>
-        )}
+        ) : !active && status.completedAt ? (
+          <span>{formatTimeAgo(status.completedAt)}</span>
+        ) : null}
       </div>
     </div>
   );

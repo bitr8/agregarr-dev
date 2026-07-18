@@ -1,5 +1,5 @@
 import Button from '@app/components/Common/Button';
-import { formatTime } from '@app/utils/timeFormatters';
+import { formatTime, formatTimeAgo } from '@app/utils/timeFormatters';
 import {
   CheckIcon,
   ExclamationTriangleIcon,
@@ -10,7 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import type React from 'react';
-import { useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
@@ -42,6 +42,7 @@ interface JobStatus {
 
 interface RunningLibrariesResponse {
   runningLibraries: LibraryStatus[];
+  lastCompleted: LibraryStatus[];
   jobStatus: JobStatus;
   pending: boolean;
 }
@@ -117,20 +118,18 @@ const OverlaySyncCard: React.FC = () => {
     }
   );
 
-  const liveLibs = data?.runningLibraries || [];
   const jobStatus = data?.jobStatus;
   const pending = data?.pending || false;
 
-  const lastSnapshotRef = useRef<LibraryStatus[]>([]);
-  if (liveLibs.length > 0) {
-    lastSnapshotRef.current = liveLibs;
-  }
-  const allLibs =
-    liveLibs.length > 0
-      ? liveLibs
-      : !jobStatus?.running && !pending
-      ? lastSnapshotRef.current
-      : [];
+  const allLibs = useMemo(() => {
+    const live = data?.runningLibraries ?? [];
+    const completed = data?.lastCompleted ?? [];
+    if (pending) return [];
+    const liveIds = new Set(live.map((l) => l.libraryId));
+    return [...live, ...completed.filter((l) => !liveIds.has(l.libraryId))];
+  }, [data?.runningLibraries, data?.lastCompleted, pending]);
+
+  const liveLibs = data?.runningLibraries ?? [];
 
   const activeLib = liveLibs.find(
     (lib) => lib.state === 'running' || lib.state === 'cancelling'
@@ -138,10 +137,10 @@ const OverlaySyncCard: React.FC = () => {
   const isActive = !!activeLib || !!jobStatus?.running || pending;
   const overallState: OverlayState = pending
     ? 'running'
-    : jobStatus?.running
-    ? activeLib?.state === 'cancelling'
-      ? 'cancelling'
-      : 'running'
+    : activeLib?.state === 'cancelling'
+    ? 'cancelling'
+    : activeLib?.state === 'running' || jobStatus?.running
+    ? 'running'
     : allLibs.some((l) => l.state === 'failed')
     ? 'failed'
     : allLibs.some((l) => l.state === 'cancelled')
@@ -221,12 +220,26 @@ const OverlaySyncCard: React.FC = () => {
   const totalProcessed =
     totalSuccess + totalErrors + totalSkipped + totalFiltered;
 
-  const overallProgress =
-    totalItems > 0
+  const overallProgress = (() => {
+    if (overallState === 'completed') return 100;
+    if (jobStatus?.running && jobStatus.totalLibraries > 0) {
+      const intraFraction =
+        activeLib && activeLib.totalItems > 0
+          ? activeLib.currentItem / activeLib.totalItems
+          : 0;
+      return Math.min(
+        99,
+        Math.round(
+          ((jobStatus.processedLibraries + intraFraction) /
+            jobStatus.totalLibraries) *
+            100
+        )
+      );
+    }
+    return totalItems > 0
       ? Math.min(100, Math.round((totalProcessed / totalItems) * 100))
-      : overallState === 'completed'
-      ? 100
       : 0;
+  })();
 
   const totalRunningFor = allLibs.reduce(
     (max, l) => Math.max(max, l.runningFor),
@@ -416,11 +429,17 @@ const OverlaySyncCard: React.FC = () => {
             ? `Processed ${totalProcessed} / ${totalItems}`
             : `${formatTime(totalRunningFor)} elapsed`}
         </span>
-        {eta && (
+        {isActive && eta ? (
           <span>
             ETA: <span className="text-gray-300">{eta}</span>
           </span>
-        )}
+        ) : !isActive && allLibs.length > 0 ? (
+          <span>
+            {formatTimeAgo(
+              Math.max(...allLibs.map((l) => l.startTime + l.runningFor * 1000))
+            )}
+          </span>
+        ) : null}
       </div>
     </div>
   );
