@@ -3146,8 +3146,7 @@ class PlexAPI {
       for (const item of items) {
         const roles = (item as { Role?: { tag?: string }[] }).Role;
         if (roles && Array.isArray(roles)) {
-          // Only consider the first few actors per item to avoid noisy long casts
-          for (const role of roles.slice(0, 5)) {
+          for (const role of roles) {
             if (role.tag) {
               const currentCount = actorCounts.get(role.tag) || 0;
               actorCounts.set(role.tag, currentCount + 1);
