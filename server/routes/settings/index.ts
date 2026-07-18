@@ -955,7 +955,15 @@ settingsRoutes.get('/plex/users', isAuthenticated(), async (req, res, next) => {
 
   try {
     const admin = await userRepository.findOneOrFail({
-      select: { id: true, plexToken: true },
+      select: {
+        id: true,
+        plexToken: true,
+        plexId: true,
+        plexUsername: true,
+        plexTitle: true,
+        email: true,
+        avatar: true,
+      },
       where: { id: 1 },
     });
     const plexApi = new PlexTvAPI(admin.plexToken ?? '');
@@ -964,7 +972,19 @@ settingsRoutes.get('/plex/users', isAuthenticated(), async (req, res, next) => {
     ).filter((user) => user.email);
 
     if (returnAll) {
-      return res.status(200).json(sortBy(plexUsers, 'username'));
+      const allUsers = sortBy(plexUsers, 'username');
+      if (admin.plexId) {
+        allUsers.unshift({
+          id: String(admin.plexId),
+          title: `${
+            admin.plexTitle || admin.plexUsername || admin.email
+          } (Owner)`,
+          username: admin.plexUsername || admin.email || '',
+          email: admin.email || '',
+          thumb: admin.avatar || '',
+        });
+      }
+      return res.status(200).json(allUsers);
     }
 
     const unimportedPlexUsers: {

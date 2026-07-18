@@ -316,8 +316,8 @@ const CollectionFormConfigForm = ({
     '/api/v1/settings/youtube-cookies-status'
   );
 
-  // Fetch Plex users for target user dropdown (all shared users + server owner)
-  const { data: sharedPlexUsers } = useSWR<
+  // Fetch Plex users for target user dropdown (server owner + all shared users)
+  const { data: plexUsers } = useSWR<
     {
       id: string;
       title: string;
@@ -326,33 +326,6 @@ const CollectionFormConfigForm = ({
       thumb: string;
     }[]
   >('/api/v1/settings/plex/users?all=true');
-
-  const plexUsers = useMemo(() => {
-    const users: {
-      id: string;
-      title: string;
-      username: string;
-      email: string;
-      thumb: string;
-    }[] = [];
-    if (currentUser?.plexId) {
-      users.push({
-        id: String(currentUser.plexId),
-        title: `${
-          currentUser.displayName ||
-          currentUser.plexUsername ||
-          currentUser.email
-        } (Owner)`,
-        username: currentUser.plexUsername || currentUser.email || '',
-        email: currentUser.email || '',
-        thumb: currentUser.avatar || '',
-      });
-    }
-    if (sharedPlexUsers) {
-      users.push(...sharedPlexUsers);
-    }
-    return users;
-  }, [currentUser, sharedPlexUsers]);
 
   // State for storing fetched titles and detected media types
   const [fetchedTitles, setFetchedTitles] = useState<{
