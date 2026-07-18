@@ -951,6 +951,7 @@ settingsRoutes.post('/serviceuser', async (req, res) => {
 settingsRoutes.get('/plex/users', isAuthenticated(), async (req, res, next) => {
   const userRepository = getRepository(User);
   const qb = userRepository.createQueryBuilder('user');
+  const returnAll = req.query.all === 'true';
 
   try {
     const admin = await userRepository.findOneOrFail({
@@ -961,6 +962,10 @@ settingsRoutes.get('/plex/users', isAuthenticated(), async (req, res, next) => {
     const plexUsers = (await plexApi.getUsers()).MediaContainer.User.map(
       (user) => user.$
     ).filter((user) => user.email);
+
+    if (returnAll) {
+      return res.status(200).json(sortBy(plexUsers, 'username'));
+    }
 
     const unimportedPlexUsers: {
       id: string;
