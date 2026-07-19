@@ -401,9 +401,24 @@ export class HubSyncService {
           const wasPromotedToHub = ratingKeys.length > 0;
 
           if (shouldBePromotedToHub) {
-            // Collection should be in hub management - update visibility
-            const plexVisibility =
-              this.convertCollectionToPlexVisibility(collectionConfig);
+            // Collection should be in hub management - use inactive visibility
+            // when time restrictions are not met (mirrors hub/pre-existing behaviour)
+            const effectiveVisibility = collectionConfig.isActive
+              ? collectionConfig.visibilityConfig
+              : collectionConfig.timeRestriction?.inactiveVisibilityConfig ?? {
+                  usersHome: false,
+                  serverOwnerHome: false,
+                  libraryRecommended: true,
+                };
+
+            const plexVisibility = {
+              promotedToOwnHome:
+                effectiveVisibility?.serverOwnerHome || false,
+              promotedToSharedHome:
+                effectiveVisibility?.usersHome || false,
+              promotedToRecommended:
+                effectiveVisibility?.libraryRecommended || false,
+            };
 
             await plexClient.updateHubVisibility(
               collectionConfig.libraryId,
