@@ -47,10 +47,13 @@ import TmdbAdvancedFiltersSection from '@app/components/Collections/FormSections
 import VisibilitySection from '@app/components/Collections/FormSections/VisibilitySection';
 import WallpaperUploadSection from '@app/components/Collections/FormSections/WallpaperUploadSection';
 import PreviewCollectionModal from '@app/components/Collections/PreviewCollectionModal';
+import { COLLECTION_PRESETS } from '@app/utils/collectionPresets';
 
 const messages = defineMessages({
   editCollection: 'Edit Collection Configuration',
   addCollection: 'Add New Collection',
+  startFromPreset: 'Start from Preset',
+  selectPreset: 'Choose a preset to pre-fill the form...',
   collectionType: 'Collection Type',
   collectionSubtype: 'Collection Sub-Type',
   selectSource: 'Select Source...',
@@ -310,6 +313,12 @@ const CollectionFormConfigForm = ({
     placeholderTVRootFolders?: Record<string, string>;
     skipYoutubeTrailerDownloads?: boolean;
   }>('/api/v1/settings/main');
+
+  // Fetch Trakt settings for preset filtering
+  const { data: traktSettings } = useSWR<{
+    clientId?: string;
+    apiKey?: string;
+  }>('/api/v1/settings/trakt');
 
   // Check if youtube-cookies.txt file exists
   const { data: youtubeCookiesStatus } = useSWR<{ exists: boolean }>(
@@ -2498,6 +2507,56 @@ const CollectionFormConfigForm = ({
                         </div>
                       )}
 
+                      {/* Start from Preset - only for new collections */}
+                      {isCollection && !config.name && (
+                        <div className="mb-2">
+                          <label className="text-sm font-medium text-gray-300">
+                            {intl.formatMessage(messages.startFromPreset)}
+                          </label>
+                          <select
+                            className="mt-1 block w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            defaultValue=""
+                            onChange={(e) => {
+                              const preset = COLLECTION_PRESETS.find(
+                                (p) => p.id === e.target.value
+                              );
+                              if (!preset) return;
+                              setFieldValue('type', preset.config.type);
+                              setFieldValue('subtype', preset.config.subtype);
+                              setFieldValue('template', preset.config.template);
+                              setFieldValue('maxItems', preset.config.maxItems);
+                              setFieldValue(
+                                'visibilityConfig',
+                                preset.config.visibilityConfig
+                              );
+                              setFieldValue(
+                                'networksCountry',
+                                preset.config.networksCountry || ''
+                              );
+                              setFieldValue('isMultiSource', false);
+                              setFieldValue(
+                                'createPlaceholdersForMissing',
+                                preset.config.type === 'comingsoon'
+                              );
+                            }}
+                          >
+                            <option value="" disabled>
+                              {intl.formatMessage(messages.selectPreset)}
+                            </option>
+                            {COLLECTION_PRESETS.filter(
+                              (p) =>
+                                p.config.type !== 'trakt' ||
+                                traktSettings?.clientId ||
+                                traktSettings?.apiKey
+                            ).map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
                       {/* Collection Type Section - appears above multi-source config */}
                       {isCollection && (
                         <CollectionTypeSection
@@ -3368,9 +3427,9 @@ const CollectionFormConfigForm = ({
                                   </Field>
                                 </div>
                                 <p className="mt-1 text-sm text-gray-400">
-                                  Only this user will see the collection.
-                                  The server owner always has visibility
-                                  over all collections.
+                                  Only this user will see the collection. The
+                                  server owner always has visibility over all
+                                  collections.
                                 </p>
                               </div>
                             </div>
@@ -4666,9 +4725,9 @@ const CollectionFormConfigForm = ({
                                 </Field>
                               </div>
                               <p className="mt-1 text-sm text-gray-400">
-                                Only this user will see the collection.
-                                The server owner always has visibility
-                                over all collections.
+                                Only this user will see the collection. The
+                                server owner always has visibility over all
+                                collections.
                               </p>
                             </div>
                           </div>
