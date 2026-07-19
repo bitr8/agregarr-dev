@@ -3367,6 +3367,11 @@ const CollectionFormConfigForm = ({
                                     ))}
                                   </Field>
                                 </div>
+                                <p className="mt-1 text-sm text-gray-400">
+                                  Only this user will see the collection.
+                                  The server owner always has visibility
+                                  over all collections.
+                                </p>
                               </div>
                             </div>
 
@@ -4660,6 +4665,11 @@ const CollectionFormConfigForm = ({
                                   ))}
                                 </Field>
                               </div>
+                              <p className="mt-1 text-sm text-gray-400">
+                                Only this user will see the collection.
+                                The server owner always has visibility
+                                over all collections.
+                              </p>
                             </div>
                           </div>
 
