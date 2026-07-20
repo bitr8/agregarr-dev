@@ -1999,23 +1999,39 @@ export class DiscoveryService {
    * Get the visibility config for Plex hub management
    */
   private getCollectionVisibilityConfig(config: {
+    isActive?: boolean;
     visibilityConfig?: {
       usersHome?: boolean;
       serverOwnerHome?: boolean;
       libraryRecommended?: boolean;
+    };
+    timeRestriction?: {
+      inactiveVisibilityConfig?: {
+        usersHome?: boolean;
+        serverOwnerHome?: boolean;
+        libraryRecommended?: boolean;
+      };
     };
   }): {
     promotedToOwnHome: boolean;
     promotedToSharedHome: boolean;
     promotedToRecommended: boolean;
   } | null {
-    if (!config.visibilityConfig) return null;
+    const effectiveConfig =
+      config.isActive === false
+        ? config.timeRestriction?.inactiveVisibilityConfig ?? {
+            usersHome: false,
+            serverOwnerHome: false,
+            libraryRecommended: true,
+          }
+        : config.visibilityConfig;
+
+    if (!effectiveConfig) return null;
 
     return {
-      promotedToOwnHome: config.visibilityConfig.serverOwnerHome || false,
-      promotedToSharedHome: config.visibilityConfig.usersHome || false,
-      promotedToRecommended:
-        config.visibilityConfig.libraryRecommended || false,
+      promotedToOwnHome: effectiveConfig.serverOwnerHome || false,
+      promotedToSharedHome: effectiveConfig.usersHome || false,
+      promotedToRecommended: effectiveConfig.libraryRecommended || false,
     };
   }
 

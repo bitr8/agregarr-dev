@@ -1995,12 +1995,28 @@ class PlexAPI {
         );
       }
 
-      // Initialize hub for collection visibility management
-      const hubInitUrl = `/hubs/sections/${librarySectionID}/manage?metadataItemId=${collectionRatingKey}`;
-      await this.safePostQuery(hubInitUrl);
+      const hubIdentifier = `custom.collection.${librarySectionID}.${collectionRatingKey}`;
+
+      // Only promote if not already in hub management — re-promoting resets
+      // visibility to all-on, undoing any inactive visibility that was set.
+      let alreadyManaged = false;
+      try {
+        const hubMgmt =
+          await this.hubManager.getHubManagement(librarySectionID);
+        alreadyManaged =
+          hubMgmt.MediaContainer?.Hub?.some(
+            (h: { identifier: string }) => h.identifier === hubIdentifier
+          ) ?? false;
+      } catch {
+        // Fall through to promote (same as pre-fix behaviour)
+      }
+
+      if (!alreadyManaged) {
+        const hubInitUrl = `/hubs/sections/${librarySectionID}/manage?metadataItemId=${collectionRatingKey}`;
+        await this.safePostQuery(hubInitUrl);
+      }
 
       // Update visibility settings
-      const hubIdentifier = `custom.collection.${librarySectionID}.${collectionRatingKey}`;
       const params = new URLSearchParams({
         promotedToRecommended: recommended ? '1' : '0',
         promotedToOwnHome: home ? '1' : '0',
