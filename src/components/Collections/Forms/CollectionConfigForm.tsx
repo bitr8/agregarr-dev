@@ -4674,6 +4674,25 @@ const CollectionFormConfigForm = ({
                         values.subtype === 'separator' &&
                         (values.libraryIds?.length > 0 || values.libraryId) && (
                           <>
+                            {/* Poster */}
+                            <div className="form-row">
+                              <div className="text-label">
+                                {intl.formatMessage(messages.customPoster)}
+                              </div>
+                              <div className="form-input-area">
+                                <PosterUploadSection
+                                  values={typedValues as CollectionFormConfig}
+                                  setFieldValue={setFieldValue}
+                                  addToast={addToast}
+                                  fieldId="customPoster"
+                                  libraries={libraries}
+                                  selectedLibraryIds={values.libraryIds || []}
+                                  isAgregarrCollection={true}
+                                  showOverlayToggle={false}
+                                />
+                              </div>
+                            </div>
+
                             {/* Visibility */}
                             <div className="form-row">
                               <div className="text-label">

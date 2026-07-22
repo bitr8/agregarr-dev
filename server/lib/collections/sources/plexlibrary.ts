@@ -584,8 +584,9 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
         });
       }
 
-      // Generate poster via pipeline using the Separator template; fall back to static poster on failure
-      const separatorTemplateId = await this.resolveSeparatorTemplateId();
+      // Generate poster via pipeline; use config template if set, fall back to built-in Separator
+      const separatorTemplateId =
+        config.autoPosterTemplate ?? (await this.resolveSeparatorTemplateId());
 
       if (separatorTemplateId) {
         try {
