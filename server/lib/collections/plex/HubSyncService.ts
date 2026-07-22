@@ -223,6 +223,9 @@ export class HubSyncService {
         orderingItemsByLibrary,
         onProgress
       );
+
+      // Convergence recovery re-promotes collections, resetting Plex visibility — restore it
+      await this.syncHubVisibility(plexClient, onProgress);
     } catch (error) {
       logger.error(
         `Unified ordering sync failed: ${extractErrorMessage(error)}`,
@@ -412,10 +415,8 @@ export class HubSyncService {
                 };
 
             const plexVisibility = {
-              promotedToOwnHome:
-                effectiveVisibility?.serverOwnerHome || false,
-              promotedToSharedHome:
-                effectiveVisibility?.usersHome || false,
+              promotedToOwnHome: effectiveVisibility?.serverOwnerHome || false,
+              promotedToSharedHome: effectiveVisibility?.usersHome || false,
               promotedToRecommended:
                 effectiveVisibility?.libraryRecommended || false,
             };
