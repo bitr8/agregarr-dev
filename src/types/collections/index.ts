@@ -993,6 +993,10 @@ export const SMART_COLLECTION_SORT_OPTIONS: readonly SmartCollectionSortOption[]
     { value: 'viewCount:desc', label: 'View Count (Most Watched)' },
     { value: 'addedAt', label: 'Date Added (Oldest First)' },
     { value: 'addedAt:desc', label: 'Date Added (Newest First)' },
+    {
+      value: 'episode.addedAt:desc',
+      label: 'Last Episode Added (Newest First)',
+    },
     { value: 'lastViewedAt', label: 'Last Viewed (Oldest First)' },
     { value: 'lastViewedAt:desc', label: 'Last Viewed (Newest First)' },
     { value: 'mediaHeight', label: 'Resolution (Lowest First)' },
