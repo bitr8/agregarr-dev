@@ -148,8 +148,9 @@ const PosterUploadSection = ({
       return;
     }
 
-    // Don't auto-select default template for pre-existing collections
-    if (isPreExisting) {
+    // Don't auto-select default template for pre-existing collections or separators
+    // (separators fall back to the built-in Separator template server-side)
+    if (isPreExisting || values.subtype === 'separator') {
       return;
     }
 
