@@ -563,9 +563,10 @@ const CollectionFormConfigForm = ({
       .transform((value) => value?.trim())
       .when(['type', 'subtype', 'useSeparator'], {
         is: (type?: string, subtype?: string, useSeparator?: boolean) =>
-          useSeparator === true &&
           type === 'plex' &&
-          (subtype === 'actors' || subtype === 'directors'),
+          (subtype === 'separator' ||
+            (useSeparator === true &&
+              (subtype === 'actors' || subtype === 'directors'))),
         then: (schema) =>
           schema
             .required(
@@ -1925,7 +1926,11 @@ const CollectionFormConfigForm = ({
         onSubmit={async (values, { setFieldError }) => {
           // Final validation before submission
           // Only validate template for regular collections, not hubs or pre-existing
-          if (isCollection && !values.template) {
+          if (
+            isCollection &&
+            !values.template &&
+            !(values.type === 'plex' && values.subtype === 'separator')
+          ) {
             setFieldError('template', 'Collection title template is required');
             return;
           }
@@ -2047,14 +2052,17 @@ const CollectionFormConfigForm = ({
           const isPersonCollection =
             values.type === 'plex' &&
             (values.subtype === 'directors' || values.subtype === 'actors');
+          const isStandaloneSeparator =
+            values.type === 'plex' && values.subtype === 'separator';
           const defaultSeparatorTitle =
             values.subtype === 'actors'
               ? 'Actor Collections'
               : 'Director Collections';
-          const separatorTitle =
-            isPersonCollection && values.useSeparator
-              ? optionalString(values.separatorTitle) || defaultSeparatorTitle
-              : undefined;
+          const separatorTitle = isStandaloneSeparator
+            ? optionalString(values.separatorTitle) || 'Separator'
+            : isPersonCollection && values.useSeparator
+            ? optionalString(values.separatorTitle) || defaultSeparatorTitle
+            : undefined;
 
           // Validate required template variables for multi-collection patterns
           if (isPersonCollection) {
@@ -2122,11 +2130,15 @@ const CollectionFormConfigForm = ({
               ? values.subtype === 'actors'
                 ? 'Auto Actor Collections'
                 : 'Auto Director Collections'
+              : isStandaloneSeparator
+              ? (separatorTitle as string)
               : values.type === 'tmdb' && values.subtype === 'auto_franchise'
               ? 'Auto Franchise Collections'
               : generateCollectionName(values as CollectionFormConfig),
             // Template is user-customizable, but validated below
-            template: values.template,
+            template: isStandaloneSeparator
+              ? (separatorTitle as string)
+              : values.template,
             useSeparator: isPersonCollection
               ? Boolean(values.useSeparator)
               : undefined,
@@ -2934,6 +2946,7 @@ const CollectionFormConfigForm = ({
                       {/* Regular Form - show full form for normal collections */}
                       {isCollection &&
                         values.type &&
+                        values.subtype !== 'separator' &&
                         (values.type === 'multi-source'
                           ? values.sources && values.sources.length >= 2
                           : values.type === 'radarrtag'
@@ -4652,6 +4665,47 @@ const CollectionFormConfigForm = ({
                                   </div>
                                 </div>
                               )}
+                          </>
+                        )}
+
+                      {/* Separator Form - minimal options for standalone separators */}
+                      {isCollection &&
+                        values.type === 'plex' &&
+                        values.subtype === 'separator' &&
+                        (values.libraryIds?.length > 0 || values.libraryId) && (
+                          <>
+                            {/* Visibility */}
+                            <div className="form-row">
+                              <div className="text-label">
+                                {intl.formatMessage(messages.visibility)}
+                              </div>
+                              <div className="form-input-area">
+                                <VisibilitySection
+                                  values={typedValues as CollectionFormConfig}
+                                  setFieldValue={setFieldValue}
+                                  isEnhancedForm={false}
+                                  isDefaultPlexHub={false}
+                                  restrictToLibraryOnly={false}
+                                  restrictToServerOwnerOnly={false}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Time Restrictions */}
+                            <div className="form-row">
+                              <label
+                                htmlFor="timeRestrictions"
+                                className="text-label"
+                              >
+                                {intl.formatMessage(messages.timeRestrictions)}
+                              </label>
+                              <div className="form-input-area">
+                                <TimeRestrictionsSection
+                                  values={typedValues as CollectionFormConfig}
+                                  setFieldValue={setFieldValue}
+                                />
+                              </div>
+                            </div>
                           </>
                         )}
 

@@ -391,10 +391,12 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
           }
         }
 
-        let processedName = templateEngine.processTemplate(
-          templateToProcess,
-          context
-        );
+        const isSeparator =
+          (req.body.subtype || existingConfig.subtype) === 'separator' &&
+          (req.body.type || existingConfig.type) === 'plex';
+        let processedName = isSeparator
+          ? templateToProcess
+          : templateEngine.processTemplate(templateToProcess, context);
 
         // Handle Overseerr user collections
         if (
@@ -557,10 +559,12 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
         }
       }
 
-      let processedName = templateEngine.processTemplate(
-        templateToProcess,
-        context
-      );
+      const isSeparator =
+        (req.body.subtype || configToUpdate.subtype) === 'separator' &&
+        (req.body.type || configToUpdate.type) === 'plex';
+      let processedName = isSeparator
+        ? templateToProcess
+        : templateEngine.processTemplate(templateToProcess, context);
 
       // Check for duplicate collection names within this library
       // Skip duplicate check for DYNAMIC_RANDOM_TITLE as each collection gets a unique title from the random list
@@ -1460,10 +1464,11 @@ collectionsRoutes.post('/create', isAuthenticated(), async (req, res) => {
         }
       }
 
-      let processedName = templateEngine.processTemplate(
-        templateToProcess,
-        context
-      );
+      const isSeparator =
+        req.body.subtype === 'separator' && req.body.type === 'plex';
+      let processedName = isSeparator
+        ? templateToProcess
+        : templateEngine.processTemplate(templateToProcess, context);
 
       // Check for duplicate collection names within this library
       // Skip duplicate check for DYNAMIC_RANDOM_TITLE as each collection gets a unique title from the random list

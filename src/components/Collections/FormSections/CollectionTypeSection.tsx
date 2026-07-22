@@ -43,6 +43,8 @@ const messages = defineMessages({
   separatorTitle: 'Separator Title',
   separatorTitleHelp:
     'Defaults to {defaultTitle}. This title is used for the separator collection and poster.',
+  standaloneSeparatorTitleHelp:
+    'This title appears on the separator poster and as the collection name in Plex.',
   actorCollections: 'Actor Collections',
   directorCollections: 'Director Collections',
   numberOfDays: 'Number of Days',
@@ -273,6 +275,12 @@ const CollectionTypeSection = ({
             label: 'Auto Actor Collections',
             description:
               'Automatically create smart collections for the top 5 actors in this library.',
+          },
+          {
+            value: 'separator',
+            label: 'Separator',
+            description:
+              'An empty collection with a title card poster for visual grouping.',
           },
         ];
       case 'imdb':
@@ -514,6 +522,18 @@ const CollectionTypeSection = ({
               const newSubtype = e.target.value;
               setFieldValue('subtype', newSubtype);
 
+              // Clear subtype-specific state when switching
+              if (newSubtype === 'separator') {
+                setFieldValue('personMinimumItems', undefined);
+                setFieldValue('useSeparator', undefined);
+                setFieldValue('template', undefined);
+              } else if (
+                values.subtype === 'separator' &&
+                newSubtype !== 'separator'
+              ) {
+                setFieldValue('separatorTitle', undefined);
+              }
+
               // Auto-set media type for movie-only collection types
               if (values.type === 'trakt' && newSubtype === 'boxoffice') {
                 setFieldValue('mediaType', 'movie');
@@ -695,6 +715,29 @@ const CollectionTypeSection = ({
             )}
           </div>
         )}
+
+      {/* Standalone separator title */}
+      {values.type === 'plex' && values.subtype === 'separator' && (
+        <div>
+          <label
+            htmlFor="separatorTitle"
+            className="mb-2 block text-sm text-gray-300"
+          >
+            {intl.formatMessage(messages.separatorTitle)}{' '}
+            <span className="text-red-500">*</span>
+          </label>
+          <Field
+            type="text"
+            id="separatorTitle"
+            name="separatorTitle"
+            placeholder="Genre Collections"
+            className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            {intl.formatMessage(messages.standaloneSeparatorTitleHelp)}
+          </p>
+        </div>
+      )}
 
       {/* Tautulli Configuration - appears when type='tautulli' and subtype is selected */}
       {values.type === 'tautulli' && values.subtype && (

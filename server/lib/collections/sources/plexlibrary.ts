@@ -63,17 +63,21 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     return `${labelType}-${configId}-`;
   }
 
-  private getSeparatorLabel(configId: string): string {
-    return `AgregarrPersonSeparator-${configId}`;
+  private getSeparatorLabel(config: CollectionConfig): string {
+    const prefix =
+      config.subtype === 'separator'
+        ? 'AgregarrSeparator'
+        : 'AgregarrPersonSeparator';
+    return `${prefix}-${config.id}`;
   }
 
   private getSeparatorTitle(config: CollectionConfig): string {
-    const fallback =
-      config.subtype === 'actors'
-        ? 'Actor Collections'
-        : 'Director Collections';
     const title = config.separatorTitle?.trim();
-    return title && title.length > 0 ? title : fallback;
+    if (title && title.length > 0) return title;
+    if (config.subtype === 'separator') return config.template || 'Separator';
+    return config.subtype === 'actors'
+      ? 'Actor Collections'
+      : 'Director Collections';
   }
 
   private normalizeLabel(label: string | PlexLabel): string {
@@ -490,7 +494,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     mediaType: 'movie' | 'tv',
     processedCollectionKeys?: Set<string>
   ): Promise<void> {
-    const separatorLabel = this.getSeparatorLabel(config.id);
+    const separatorLabel = this.getSeparatorLabel(config);
     const separatorTitle = this.getSeparatorTitle(config);
 
     try {
@@ -517,15 +521,9 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       }
 
       if (!ratingKey) {
-        logger.warn(
-          `Failed to create separator collection for ${config.subtype}`,
-          {
-            label: 'Plex Library Collections',
-            configId: config.id,
-            libraryId: config.libraryId,
-          }
+        throw new Error(
+          `Failed to create separator collection for ${config.subtype} (config ${config.id}, library ${config.libraryId})`
         );
-        return;
       }
 
       const separatorRatingKey = ratingKey as string;
@@ -642,6 +640,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
         libraryId: config.libraryId,
         error: error instanceof Error ? error.message : String(error),
       });
+      if (config.subtype === 'separator') throw error;
     }
   }
 
@@ -650,7 +649,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     plexClient: PlexAPI,
     allCollections: PlexCollection[]
   ): Promise<void> {
-    const separatorLabel = this.getSeparatorLabel(config.id).toLowerCase();
+    const separatorLabel = this.getSeparatorLabel(config).toLowerCase();
 
     const existing = allCollections.find((collection) => {
       if (collection.libraryKey !== config.libraryId) {
@@ -820,10 +819,31 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     void _options;
     const mediaType = getCollectionMediaType(config);
     const subtype = config.subtype;
+
+    if (subtype === 'separator') {
+      try {
+        await this.syncSeparatorCollection(
+          config,
+          plexClient,
+          allCollections,
+          mediaType,
+          processedCollectionKeys
+        );
+        return { created: 0, updated: 1, mutated: true };
+      } catch (error) {
+        return {
+          created: 0,
+          updated: 0,
+          error:
+            error instanceof Error ? error.message : 'Failed to sync separator',
+        };
+      }
+    }
+
     if (!subtype || (subtype !== 'directors' && subtype !== 'actors')) {
       throw this.createSyncError(
         CollectionSyncErrorType.CONFIGURATION_ERROR,
-        `Invalid plex subtype: ${subtype}. Currently only 'directors' and 'actors' are supported.`
+        `Invalid plex subtype: ${subtype}. Currently only 'directors', 'actors', and 'separator' are supported.`
       );
     }
 
