@@ -130,16 +130,13 @@ export async function cleanupPlaceholderRemnants(
   try {
     const parentDir = path.dirname(fullPath);
 
-    // The .comingsoon marker is always placeholder-owned (movie folder or TV
-    // Season 00) — remove it unconditionally for BOTH media types so discovery
-    // stops re-detecting this item, even when other remnants (e.g. a .trickplay
-    // sidecar) share the directory. Movies previously skipped this, so an
-    // externally-deleted movie .mp4 left the marker and the folder never read
-    // as empty, re-detecting every sync.
-    try {
-      await fs.unlink(path.join(parentDir, '.comingsoon'));
-    } catch {
-      // Marker already gone
+    // Remove placeholder-owned metadata files so the directory reads as empty.
+    for (const metaFile of ['.comingsoon', '.plexmatch']) {
+      try {
+        await fs.unlink(path.join(parentDir, metaFile));
+      } catch {
+        // File already gone or never created
+      }
     }
 
     // Clean up an orphaned .trickplay sidecar directory left for the

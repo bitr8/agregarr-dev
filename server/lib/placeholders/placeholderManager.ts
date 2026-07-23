@@ -151,6 +151,37 @@ async function createMoviePlaceholder(
   // Create movie folder
   await fs.mkdir(movieFolder, { recursive: true });
 
+  // Write .plexmatch so Plex assigns the TMDB GUID during scan rather than
+  // waiting for the metadata agent to parse the filename {tmdb-...} tag.
+  // Mirrors the TV path — same create-if-absent semantics.
+  const plexmatchPath = path.join(movieFolder, '.plexmatch');
+  const plexmatchTitle = title.replace(/[\r\n]+/g, ' ').trim();
+  const plexmatchLines = [`title: ${plexmatchTitle}`];
+  if (year) {
+    plexmatchLines.push(`year: ${year}`);
+  }
+  plexmatchLines.push(`tmdbid: ${tmdbId}`);
+  try {
+    await fs.writeFile(plexmatchPath, plexmatchLines.join('\n') + '\n', {
+      encoding: 'utf-8',
+      flag: 'wx',
+    });
+  } catch (error) {
+    const alreadyExists =
+      error instanceof Error &&
+      'code' in error &&
+      (error as NodeJS.ErrnoException).code === 'EEXIST';
+
+    if (!alreadyExists) {
+      logger.warn('Failed to write .plexmatch file', {
+        label: 'PlaceholderService',
+        title,
+        path: plexmatchPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // Copy trailer to movie folder. COPYFILE_EXCL: never clobber a file already
   // at the destination (a real user file, or a concurrent create). The creation
   // short-circuit checks for an existing destination first, so the normal path
@@ -525,13 +556,14 @@ export async function removePlaceholder(
     if (mediaType === 'movie') {
       const movieDir = path.dirname(placeholderPath);
 
-      // Remove the .comingsoon marker written at creation time so the movie
-      // folder can be recognised as empty. It only exists for the placeholder.
-      const markerPath = path.join(movieDir, '.comingsoon');
-      try {
-        await fs.unlink(markerPath);
-      } catch {
-        // Marker file might not exist (legacy placeholder), ignore
+      // Remove metadata files written at creation time so the movie
+      // folder can be recognised as empty.
+      for (const metaFile of ['.comingsoon', '.plexmatch']) {
+        try {
+          await fs.unlink(path.join(movieDir, metaFile));
+        } catch {
+          // File might not exist (legacy placeholder), ignore
+        }
       }
 
       // Try to remove movie directory if it's empty
