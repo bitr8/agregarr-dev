@@ -16,6 +16,12 @@ on:
       - '.gitignore'
       - 'LICENSE'
 
+# Keyed on the ref, never the workflow alone: a develop push must not be able to
+# cancel a release build mid-flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Lint & Test Build
