@@ -1109,17 +1109,15 @@ export class DiscoveryService {
                       active.serverOwnerHome &&
                       active.libraryRecommended;
                     if (!alreadyFull) {
-                      const inactive =
-                        existingPreExisting.timeRestriction
-                          .inactiveVisibilityConfig ?? {
-                          usersHome: false,
-                          serverOwnerHome: false,
-                          libraryRecommended: true,
-                        };
+                      const inactive = existingPreExisting.timeRestriction
+                        .inactiveVisibilityConfig ?? {
+                        usersHome: false,
+                        serverOwnerHome: false,
+                        libraryRecommended: true,
+                      };
                       if (
                         active.usersHome === inactive.usersHome &&
-                        active.serverOwnerHome ===
-                          inactive.serverOwnerHome &&
+                        active.serverOwnerHome === inactive.serverOwnerHome &&
                         active.libraryRecommended ===
                           inactive.libraryRecommended
                       ) {
@@ -1208,8 +1206,7 @@ export class DiscoveryService {
                             libraryRecommended: true,
                           };
                         if (
-                          activeVisibility.usersHome ===
-                            inactive.usersHome &&
+                          activeVisibility.usersHome === inactive.usersHome &&
                           activeVisibility.serverOwnerHome ===
                             inactive.serverOwnerHome &&
                           activeVisibility.libraryRecommended ===

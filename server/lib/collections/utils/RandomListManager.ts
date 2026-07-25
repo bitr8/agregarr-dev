@@ -537,7 +537,9 @@ https://letterboxd.com/dave/list/imdb-top-250/
 
     // For TMDB with library cache: use pre-filtered collections from user's library
     if (sourceType === 'tmdb' && libraryCache && targetMediaType === 'movie') {
-      const libraryUrls = await this.getTmdbCollectionsFromLibrary(libraryCache);
+      const libraryUrls = await this.getTmdbCollectionsFromLibrary(
+        libraryCache
+      );
       if (libraryUrls.length > 0) {
         const randomIndex = Math.floor(Math.random() * libraryUrls.length);
         const selectedUrl = libraryUrls[randomIndex];
@@ -1079,9 +1081,10 @@ https://letterboxd.com/dave/list/imdb-top-250/
       const movieToCollection = new Map<number, number>();
       const results = await Promise.allSettled(
         sample.map((tmdbId) =>
-          tmdbClient
-            .getMovie({ movieId: tmdbId })
-            .then((movie) => ({ tmdbId, collection: movie.belongs_to_collection }))
+          tmdbClient.getMovie({ movieId: tmdbId }).then((movie) => ({
+            tmdbId,
+            collection: movie.belongs_to_collection,
+          }))
         )
       );
 
@@ -1095,7 +1098,10 @@ https://letterboxd.com/dave/list/imdb-top-250/
 
       for (const result of results) {
         if (result.status === 'fulfilled' && result.value.collection?.id) {
-          movieToCollection.set(result.value.tmdbId, result.value.collection.id);
+          movieToCollection.set(
+            result.value.tmdbId,
+            result.value.collection.id
+          );
         }
       }
 
@@ -1110,14 +1116,12 @@ https://letterboxd.com/dave/list/imdb-top-250/
       // Fetch collection details to get all member movie IDs, then check against library
       const collectionResults = await Promise.allSettled(
         Array.from(collectionIds).map((collId) =>
-          tmdbClient
-            .getCollection({ collectionId: collId })
-            .then((coll) => ({
-              collId,
-              parts: (coll.parts || [])
-                .filter((p: { id?: number }) => p?.id)
-                .map((p: { id?: number }) => p.id as number),
-            }))
+          tmdbClient.getCollection({ collectionId: collId }).then((coll) => ({
+            collId,
+            parts: (coll.parts || [])
+              .filter((p: { id?: number }) => p?.id)
+              .map((p: { id?: number }) => p.id as number),
+          }))
         )
       );
 
@@ -1125,7 +1129,9 @@ https://letterboxd.com/dave/list/imdb-top-250/
       for (const result of collectionResults) {
         if (result.status !== 'fulfilled') continue;
         const { collId, parts } = result.value;
-        const matchCount = parts.filter((id: number) => movieTmdbIds.has(id)).length;
+        const matchCount = parts.filter((id: number) =>
+          movieTmdbIds.has(id)
+        ).length;
         if (matchCount >= 2) {
           validCollectionIds.push(collId);
         }

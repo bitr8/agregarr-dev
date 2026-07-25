@@ -2001,8 +2001,9 @@ class PlexAPI {
       // visibility to all-on, undoing any inactive visibility that was set.
       let alreadyManaged = false;
       try {
-        const hubMgmt =
-          await this.hubManager.getHubManagement(librarySectionID);
+        const hubMgmt = await this.hubManager.getHubManagement(
+          librarySectionID
+        );
         alreadyManaged =
           hubMgmt.MediaContainer?.Hub?.some(
             (h: { identifier: string }) => h.identifier === hubIdentifier

@@ -1,6 +1,6 @@
+import type { Media, PlexStream } from '@server/api/plexapi';
 import { describe, expect, it } from 'vitest';
 import { extractMediaCapabilities } from './mediaCapabilities';
-import type { Media, PlexStream } from '@server/api/plexapi';
 
 function makeMedia(overrides?: Partial<Media>): Media {
   return {
@@ -56,9 +56,7 @@ describe('extractMediaCapabilities', () => {
   });
 
   it('detects HDR from colorTrc arib (HLG)', () => {
-    const streams = [
-      makeStream({ streamType: 1, colorTrc: 'arib-std-b67' }),
-    ];
+    const streams = [makeStream({ streamType: 1, colorTrc: 'arib-std-b67' })];
     const caps = extractMediaCapabilities(makeMedia(), streams);
     expect(caps.hdr).toBe(true);
   });

@@ -142,7 +142,10 @@ export class MultiSourceOrchestrator {
           settings.plex.collectionConfigs = collectionConfigs;
           settings.save();
         }
-        configForSync = { ...configForSync, isActive: timeRestrictionResult.isActive };
+        configForSync = {
+          ...configForSync,
+          isActive: timeRestrictionResult.isActive,
+        };
       }
 
       // If collection is inactive and should be removed, handle removal
@@ -1373,27 +1376,28 @@ export class MultiSourceOrchestrator {
     const options: CollectionUpdateOptions = {
       collectionName: config.name,
       mediaType,
-      visibilityConfig: config.isActive === false
-        ? {
-            usersHome:
-              config.timeRestriction?.inactiveVisibilityConfig?.usersHome ??
-              false,
-            serverOwnerHome:
-              config.timeRestriction?.inactiveVisibilityConfig
-                ?.serverOwnerHome ?? false,
-            libraryRecommended:
-              config.timeRestriction?.inactiveVisibilityConfig
-                ?.libraryRecommended ?? true,
-            isActive: false,
-          }
-        : {
-            usersHome: config.visibilityConfig?.usersHome ?? true,
-            serverOwnerHome:
-              config.visibilityConfig?.serverOwnerHome ?? false,
-            libraryRecommended:
-              config.visibilityConfig?.libraryRecommended ?? true,
-            isActive: config.isActive,
-          },
+      visibilityConfig:
+        config.isActive === false
+          ? {
+              usersHome:
+                config.timeRestriction?.inactiveVisibilityConfig?.usersHome ??
+                false,
+              serverOwnerHome:
+                config.timeRestriction?.inactiveVisibilityConfig
+                  ?.serverOwnerHome ?? false,
+              libraryRecommended:
+                config.timeRestriction?.inactiveVisibilityConfig
+                  ?.libraryRecommended ?? true,
+              isActive: false,
+            }
+          : {
+              usersHome: config.visibilityConfig?.usersHome ?? true,
+              serverOwnerHome:
+                config.visibilityConfig?.serverOwnerHome ?? false,
+              libraryRecommended:
+                config.visibilityConfig?.libraryRecommended ?? true,
+              isActive: config.isActive,
+            },
       customLabel,
       sortOrderLibrary: config.sortOrderLibrary,
       isLibraryPromoted: config.isLibraryPromoted,

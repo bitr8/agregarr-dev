@@ -143,8 +143,7 @@ export class AutoRequestService {
 
       // Collect all Agregarr service user Overseerr IDs so the declined check
       // catches cross-source declines without blocking on unrelated human-user declines
-      const serviceUsers =
-        await this.serviceUserManager.listServiceUsers();
+      const serviceUsers = await this.serviceUserManager.listServiceUsers();
       const agregarrUserIds = new Set(
         serviceUsers
           .map((u) => u.externalOverseerrId)

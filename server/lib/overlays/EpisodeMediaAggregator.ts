@@ -144,12 +144,9 @@ export class EpisodeMediaAggregator {
       hdr: booleanMajority(episodes.map((ep) => ep.hdr)),
       dolbyVision: booleanMajority(episodes.map((ep) => ep.dolbyVision)),
       dolbyVisionProfile: majorityVote(dvProfiles),
-      videoCodec:
-        majorityVote(episodes.map((ep) => ep.videoCodec)) || '',
-      audioCodec:
-        majorityVote(episodes.map((ep) => ep.audioCodec)) || '',
-      audioChannels:
-        majorityVote(episodes.map((ep) => ep.audioChannels)) || 2,
+      videoCodec: majorityVote(episodes.map((ep) => ep.videoCodec)) || '',
+      audioCodec: majorityVote(episodes.map((ep) => ep.audioCodec)) || '',
+      audioChannels: majorityVote(episodes.map((ep) => ep.audioChannels)) || 2,
       bitDepth: majorityVote(episodes.map((ep) => ep.bitDepth)) || 8,
       episodeCount: count,
       episode4kCount: fourKCount,
