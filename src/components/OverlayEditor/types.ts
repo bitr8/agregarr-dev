@@ -558,7 +558,11 @@ export const AVAILABLE_VARIABLES = {
     },
   ],
   'show-raw': [
-    { field: 'showResolution', label: 'Show Resolution (Raw)', example: '1080' },
+    {
+      field: 'showResolution',
+      label: 'Show Resolution (Raw)',
+      example: '1080',
+    },
     { field: 'showHdr', label: 'Show HDR (Raw)', example: 'false' },
     { field: 'showDolbyVision', label: 'Show DV (Raw)', example: 'false' },
     {
@@ -566,9 +570,21 @@ export const AVAILABLE_VARIABLES = {
       label: 'Show DV Profile (Raw)',
       example: '7',
     },
-    { field: 'showAudioCodec', label: 'Show Audio Codec (Raw)', example: 'aac' },
-    { field: 'showAudioChannels', label: 'Show Audio Channels (Raw)', example: '6' },
-    { field: 'showVideoCodec', label: 'Show Video Codec (Raw)', example: 'h264' },
+    {
+      field: 'showAudioCodec',
+      label: 'Show Audio Codec (Raw)',
+      example: 'aac',
+    },
+    {
+      field: 'showAudioChannels',
+      label: 'Show Audio Channels (Raw)',
+      example: '6',
+    },
+    {
+      field: 'showVideoCodec',
+      label: 'Show Video Codec (Raw)',
+      example: 'h264',
+    },
     { field: 'showBitDepth', label: 'Show Bit Depth (Raw)', example: '8' },
   ],
 };
@@ -769,7 +785,11 @@ export const CONDITION_FIELD_CATEGORIES = {
       label: 'Media Source (aggregated/show)',
       example: 'aggregated',
     },
-    { field: 'showResolution', label: 'Show Resolution (Raw)', example: '1080' },
+    {
+      field: 'showResolution',
+      label: 'Show Resolution (Raw)',
+      example: '1080',
+    },
     { field: 'showHdr', label: 'Show HDR (Raw)', example: 'false' },
     { field: 'showDolbyVision', label: 'Show DV (Raw)', example: 'false' },
     {
@@ -777,9 +797,17 @@ export const CONDITION_FIELD_CATEGORIES = {
       label: 'Show DV Profile (Raw)',
       example: '7',
     },
-    { field: 'showAudioCodec', label: 'Show Audio Codec (Raw)', example: 'aac' },
+    {
+      field: 'showAudioCodec',
+      label: 'Show Audio Codec (Raw)',
+      example: 'aac',
+    },
     { field: 'showAudioChannels', label: 'Show Channels (Raw)', example: '6' },
-    { field: 'showVideoCodec', label: 'Show Video Codec (Raw)', example: 'h264' },
+    {
+      field: 'showVideoCodec',
+      label: 'Show Video Codec (Raw)',
+      example: 'h264',
+    },
     { field: 'showBitDepth', label: 'Show Bit Depth (Raw)', example: '8' },
   ],
 };

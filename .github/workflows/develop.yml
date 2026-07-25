@@ -22,10 +22,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  # Runs on every trigger, not just pull requests. Fork work pushes straight to
+  # develop, so a PR-only gate is no gate at all.
   test:
-    name: Lint & Test Build
-    if: github.event_name == 'pull_request'
+    name: Lint, Typecheck & Test
     runs-on: ubuntu-22.04
     container: node:20.19.5-alpine
     steps:
@@ -46,12 +50,17 @@ jobs:
         run: yarn typecheck
       - name: Formatting
         run: npx prettier --check .
+      - name: Test
+        run: yarn test
+      # On a push the Docker build runs yarn build anyway; only PRs need this.
       - name: Build
+        if: github.event_name == 'pull_request'
         run: yarn build
 
   build_develop:
     name: Build Develop
     if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+    needs: test
     runs-on: ubuntu-22.04
     steps:
       - name: Free disk space
@@ -100,6 +109,7 @@ jobs:
   build_release:
     name: Build ${{ matrix.platform }}
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: test
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -204,6 +214,10 @@ jobs:
           TAGS=$(echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n' | sed 's/^/-t /' | tr '\n' ' ')
           docker buildx imagetools create $TAGS \
             $(printf 'bitr8/agregarr@sha256:%s ' *)
+      # Inspect what this run actually pushed. Hardcoding :latest meant a
+      # pre-release printed the previous release and looked verified.
       - name: Inspect images
         run: |
-          docker buildx imagetools inspect bitr8/agregarr:latest
+          for t in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            docker buildx imagetools inspect "$t"
+          done
