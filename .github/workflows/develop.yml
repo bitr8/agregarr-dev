@@ -113,6 +113,12 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
+      # Explicit rather than relying on the runner image having npm, which
+      # differs between the x64 and arm64 runners.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
       # package.json stays 0.1.0 on develop so those builds self-identify as
       # develop-<sha>; the tag is the only source of a release version.
       - name: Set version from tag
