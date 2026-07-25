@@ -762,6 +762,10 @@ export class CollectionSyncService {
               id: config.id,
               name: config.name,
               type: 'multi-source',
+              // Dropping this here is how a whole recovery path goes dead: the
+              // individual scheduler spreads the config and keeps it, so the
+              // two sync routes behave differently.
+              collectionRatingKey: config.collectionRatingKey,
               visibilityConfig: config.visibilityConfig,
               mediaType: getCollectionMediaType(config),
               libraryId: config.libraryId,

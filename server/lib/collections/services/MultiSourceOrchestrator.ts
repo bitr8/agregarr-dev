@@ -1537,7 +1537,8 @@ export class MultiSourceOrchestrator {
       options.config.id,
       collectionName,
       options.libraryKey,
-      allCollections
+      allCollections,
+      options.config.collectionRatingKey
     );
 
     // BRANCH: Create EITHER smart collection OR regular collection
@@ -2492,8 +2493,35 @@ export class MultiSourceOrchestrator {
     configId: string,
     collectionName: string,
     libraryKey: string,
-    allCollections: PlexCollection[]
+    allCollections: PlexCollection[],
+    storedRatingKey?: string
   ): PlexCollection | null {
+    // 0. The stored key first. Steps 1 and 2 both require an agregarr label,
+    // so they cannot re-find a collection whose label never got applied — the
+    // state a create that failed part-way leaves behind. Only the key can.
+    if (storedRatingKey) {
+      const byKey = allCollections.find(
+        (collection) =>
+          String(collection.ratingKey) === String(storedRatingKey) &&
+          !(
+            collection.libraryKey &&
+            String(collection.libraryKey) !== String(libraryKey)
+          )
+      );
+      if (byKey) {
+        logger.debug(
+          `Found multi-source collection by stored ratingKey: ${storedRatingKey}`,
+          {
+            label: 'Multi-Source Orchestrator',
+            configId,
+            collectionTitle: byKey.title,
+            collectionRatingKey: byKey.ratingKey,
+          }
+        );
+        return byKey;
+      }
+    }
+
     // 1. Try to find by Agregarr label first (most reliable)
     for (const collection of allCollections) {
       // Must be in same library
