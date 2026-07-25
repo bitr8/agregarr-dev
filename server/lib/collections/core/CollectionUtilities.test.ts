@@ -26,7 +26,11 @@ vi.mock('@server/lib/settings', () => ({
   getSettings: () => settings,
 }));
 
-import { clearConfigRatingKey, hasAgregarrLabel } from './CollectionUtilities';
+import {
+  clearConfigRatingKey,
+  hasAgregarrLabel,
+  isMultiCollectionPattern,
+} from './CollectionUtilities';
 
 const config = (overrides: Partial<CollectionConfig>): CollectionConfig =>
   ({ id: 'cfg-1', libraryId: '4', ...overrides } as CollectionConfig);
@@ -145,5 +149,35 @@ describe('hasAgregarrLabel', () => {
     expect(hasAgregarrLabel(['favourites'])).toBe(false);
     expect(hasAgregarrLabel([])).toBe(false);
     expect(hasAgregarrLabel(undefined)).toBe(false);
+  });
+});
+
+describe('isMultiCollectionPattern', () => {
+  it('names the two configs that generate more than one collection', () => {
+    expect(
+      isMultiCollectionPattern({ type: 'overseerr', subtype: 'users' })
+    ).toBe(true);
+    expect(
+      isMultiCollectionPattern({ type: 'tmdb', subtype: 'auto_franchise' })
+    ).toBe(true);
+  });
+
+  // The presence half: everything else must store its key, or the create path
+  // has nothing to recover from.
+  it('lets ordinary configs store a key', () => {
+    expect(
+      isMultiCollectionPattern({ type: 'tmdb', subtype: 'trending' })
+    ).toBe(false);
+    expect(
+      isMultiCollectionPattern({ type: 'overseerr', subtype: 'requests' })
+    ).toBe(false);
+    expect(isMultiCollectionPattern({ type: 'plex' })).toBe(false);
+    expect(isMultiCollectionPattern(undefined)).toBe(false);
+  });
+
+  it('does not match on the subtype alone', () => {
+    expect(isMultiCollectionPattern({ type: 'plex', subtype: 'users' })).toBe(
+      false
+    );
   });
 });

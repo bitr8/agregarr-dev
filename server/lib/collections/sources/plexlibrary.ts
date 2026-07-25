@@ -482,8 +482,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       );
 
       // Label still matches on its own, so a renamed separator is still found.
-      // Only the title branch is narrowed: an unlabeled smart collection
-      // sharing the title is the user's own.
+      // Only the title branch narrows: an unlabeled collection is the user's.
       return (
         hasLabel ||
         (collection.title !== undefined &&
@@ -513,7 +512,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
 
       if (!existingCollection) {
         // getCollectionByName matches on title alone, so it would re-admit the
-        // user's own smart collection that findSeparatorCollection just refused.
+        // user's collection that findSeparatorCollection just refused.
         const byName = await plexClient.getCollectionByName(
           separatorTitle,
           config.libraryId
@@ -940,8 +939,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
 
           // Prefix check, not the exact person label: that label changes with
           // whether TMDB resolution succeeded, so matching on it would refuse
-          // our own collection and duplicate it. An unlabeled smart collection
-          // sharing the title is the user's own.
+          // our own collection and duplicate it.
           const existingCollection = allCollections.find(
             (c) =>
               c.title === collectionName &&

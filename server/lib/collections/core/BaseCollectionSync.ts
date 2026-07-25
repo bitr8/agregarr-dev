@@ -29,6 +29,7 @@ import {
   getCollectionMediaType,
   handleRateLimit,
   hasAgregarrLabel,
+  isMultiCollectionPattern,
   logCollectionProcessingResults,
   sanitizeCollectionName,
   updateConfigWithRatingKey,
@@ -844,6 +845,17 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     }
   }
 
+  /** Call this as soon as Plex returns a key: everything after creation can throw, and a retry with no stored key cannot find the unlabeled collection it just made. */
+  protected persistCollectionRatingKey(
+    config: CollectionConfig | undefined,
+    collectionRatingKey: string
+  ): void {
+    if (!config || isMultiCollectionPattern(config)) {
+      return;
+    }
+    this.updateConfigWithRatingKey(config, collectionRatingKey);
+  }
+
   /**
    * Validate and sanitize collection items before processing
    */
@@ -1092,12 +1104,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     );
 
     // Update config with rating key if collection was created/updated
-    // Skip for multi-collection patterns (one config generates multiple collections)
-    const isMultiCollectionPattern =
-      (config.type === 'overseerr' && config.subtype === 'users') ||
-      (config.type === 'tmdb' && config.subtype === 'auto_franchise');
-    if (updateResult.collectionRatingKey && !isMultiCollectionPattern) {
-      this.updateConfigWithRatingKey(config, updateResult.collectionRatingKey);
+    if (updateResult.collectionRatingKey) {
+      this.persistCollectionRatingKey(config, updateResult.collectionRatingKey);
     }
 
     // Store missing items for Quick Sync (now that we have collectionRatingKey)
@@ -1426,6 +1434,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         }
 
         collectionRatingKey = newSmartCollectionRatingKey;
+        this.persistCollectionRatingKey(options.config, collectionRatingKey);
         created = 1;
       }
     } else {
@@ -1598,6 +1607,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         }
 
         collectionRatingKey = newCollectionRatingKey;
+        this.persistCollectionRatingKey(options.config, collectionRatingKey);
 
         // Add all items to the new collection
         await plexClient.addItemsToCollection(collectionRatingKey, plexItems);
@@ -1757,10 +1767,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       // This is more reliable than label matching for all single collections
       // Skip for multi-collection patterns (one config generates multiple collections)
       let ratingKeyWasStale = false;
-      const isMultiCollectionPattern =
-        (config?.type === 'overseerr' && config?.subtype === 'users') ||
-        (config?.type === 'tmdb' && config?.subtype === 'auto_franchise');
-      if (config?.collectionRatingKey && !isMultiCollectionPattern) {
+      if (config?.collectionRatingKey && !isMultiCollectionPattern(config)) {
         try {
           const existingByRatingKey = await plexClient.getCollectionMetadata(
             config.collectionRatingKey

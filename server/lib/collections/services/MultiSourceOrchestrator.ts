@@ -2514,10 +2514,9 @@ export class MultiSourceOrchestrator {
       }
     }
 
-    // 2. Fallback to exact name matching (less reliable). Labeled smart
-    // collections still match here: step 1 misses them when their label does
-    // not parse to a config ID. Only an unlabeled smart collection is refused,
-    // because that one belongs to the user.
+    // 2. Fallback to exact name matching (less reliable). Any agregarr label
+    // still matches here, because step 1 misses labels that do not parse to a
+    // config ID. An unlabeled collection is the user's own and is refused.
     const nameMatch = allCollections.find(
       (collection) =>
         collection.title === collectionName &&
@@ -2814,8 +2813,8 @@ export class MultiSourceOrchestrator {
     allCollections: PlexCollection[],
     processedCollectionKeys?: Set<string>
   ): Promise<boolean> {
-    // Find existing collection. An unlabeled smart collection sharing the name
-    // is the user's own, and this path deletes what it finds.
+    // Find existing collection. This path deletes what it finds, so an
+    // unlabeled collection sharing the name is refused: it is the user's own.
     const existingCollection = allCollections.find(
       (c) =>
         c.title === config.name &&

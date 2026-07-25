@@ -2452,3 +2452,17 @@ export function hasAgregarrLabel(
     return text.toLowerCase().startsWith('agregarr');
   });
 }
+
+/**
+ * One config, many collections. A single stored `collectionRatingKey` would
+ * name whichever one happened to sync last, so these configs never store one.
+ */
+export function isMultiCollectionPattern(config?: {
+  type?: string;
+  subtype?: string;
+}): boolean {
+  return (
+    (config?.type === 'overseerr' && config?.subtype === 'users') ||
+    (config?.type === 'tmdb' && config?.subtype === 'auto_franchise')
+  );
+}
