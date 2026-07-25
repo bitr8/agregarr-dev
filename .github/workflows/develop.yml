@@ -185,7 +185,13 @@ jobs:
         id: tags
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "tags=bitr8/agregarr:latest,bitr8/agregarr:${VERSION}" >> "$GITHUB_OUTPUT"
+          # A pre-release (v2.8.1-rc1) gets its own tag and must not move
+          # :latest, so the whole release path can be rehearsed on a throwaway.
+          if [[ "$VERSION" == *-* ]]; then
+            echo "tags=bitr8/agregarr:${VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=bitr8/agregarr:latest,bitr8/agregarr:${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Create manifest and push
         working-directory: /tmp/digests
         run: |
