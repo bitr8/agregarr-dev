@@ -39,6 +39,7 @@ import LibrarySelectionSection from '@app/components/Collections/FormSections/Li
 import MultiSourceConfigSection from '@app/components/Collections/FormSections/MultiSourceConfigSection';
 import NetworksConfigSection from '@app/components/Collections/FormSections/NetworksConfigSection';
 import OriginalsConfigSection from '@app/components/Collections/FormSections/OriginalsConfigSection';
+import PlexLabelSection from '@app/components/Collections/FormSections/PlexLabelSection';
 import PosterUploadSection from '@app/components/Collections/FormSections/PosterUploadSection';
 import TemplateSection from '@app/components/Collections/FormSections/TemplateSection';
 import ThemeUploadSection from '@app/components/Collections/FormSections/ThemeUploadSection';
@@ -119,6 +120,7 @@ const messages = defineMessages({
   validationPersonMinimumItemsMin: 'Minimum items must be at least 2',
   validationSeparatorTitleRequired: 'Separator title is required',
   validationSeparatorTitleMin: 'Separator title must be at least 2 characters',
+  validationPlexLabelRequired: 'Please select a Plex label',
   validationLibraryMin: 'Please select at least one library',
   validationLibraryRequired: 'Please select at least one library',
   validationRadarrInstanceRequired: 'Radarr instance is required',
@@ -584,6 +586,17 @@ const CollectionFormConfigForm = ({
               intl.formatMessage(messages.validationSeparatorTitleRequired)
             )
             .min(2, intl.formatMessage(messages.validationSeparatorTitleMin)),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+    plexLabel: Yup.string()
+      .transform((value) => value?.trim())
+      .when(['type', 'subtype'], {
+        is: (type?: string, subtype?: string) =>
+          type === 'plex' && subtype === 'label',
+        then: (schema) =>
+          schema.required(
+            intl.formatMessage(messages.validationPlexLabelRequired)
+          ),
         otherwise: (schema) => schema.notRequired(),
       }),
 
@@ -1748,6 +1761,7 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).radarrTagId ?? undefined,
           sonarrTagId:
             (config as CollectionFormConfig).sonarrTagId ?? undefined,
+          plexLabel: (config as CollectionFormConfig).plexLabel ?? undefined,
           // Coming Soon monitored server/tag filtering
           comingSoonRadarrServerId:
             (config as CollectionFormConfig).comingSoonRadarrServerId ??
@@ -3026,6 +3040,18 @@ const CollectionFormConfigForm = ({
                         isEssentialsRender &&
                         (values.libraryIds?.length > 0 || values.libraryId) && (
                           <LibraryEssentialsPreview />
+                        )}
+
+                      {/* Plex Label picker - rendered after library selection so a
+                          library is chosen before its labels are fetched */}
+                      {isCollection &&
+                        values.type === 'plex' &&
+                        values.subtype === 'label' && (
+                          <PlexLabelSection
+                            values={typedValues as CollectionFormConfig}
+                            setFieldValue={setFieldValue}
+                            isVisible={true}
+                          />
                         )}
 
                       {/* Regular Form - show full form for normal collections */}
@@ -5237,6 +5263,7 @@ const CollectionFormConfigForm = ({
                         sonarrTagId: values.sonarrTagId,
                         radarrInstanceId: values.radarrInstanceId,
                         sonarrInstanceId: values.sonarrInstanceId,
+                        plexLabel: values.plexLabel,
                         // Coming Soon specific fields
                         comingSoonRadarrServerId:
                           values.comingSoonRadarrServerId,
