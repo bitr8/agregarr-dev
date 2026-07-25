@@ -1804,6 +1804,10 @@ export class MultiSourceOrchestrator {
         }
 
         collectionRatingKey = newSmartCollectionRatingKey;
+        this.updateMultiSourceConfigWithRatingKey(
+          options.config,
+          collectionRatingKey
+        );
         created = 1;
       }
     } else {
@@ -1890,6 +1894,10 @@ export class MultiSourceOrchestrator {
             }
 
             collectionRatingKey = newCollectionRatingKey;
+            this.updateMultiSourceConfigWithRatingKey(
+              options.config,
+              collectionRatingKey
+            );
             await plexClient.updateCollectionContents(
               collectionRatingKey,
               plexItems
@@ -2031,6 +2039,10 @@ export class MultiSourceOrchestrator {
         }
 
         collectionRatingKey = newCollectionRatingKey;
+        this.updateMultiSourceConfigWithRatingKey(
+          options.config,
+          collectionRatingKey
+        );
         await plexClient.addItemsToCollection(collectionRatingKey, plexItems);
         created = 1;
       }
@@ -3432,7 +3444,10 @@ export class MultiSourceOrchestrator {
   }
 
   /**
-   * Update multi-source config with rating key
+   * Update multi-source config with rating key. Call it as soon as Plex
+   * returns one: items, sort and the ownership label all come after creation
+   * and can throw, and findExistingMultiSourceCollection now refuses an
+   * unlabeled collection, so a retry with no stored key builds a duplicate.
    */
   private updateMultiSourceConfigWithRatingKey(
     config: MultiSourceCollectionConfig,
