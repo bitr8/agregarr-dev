@@ -2432,3 +2432,27 @@ export function incrementCollectionSyncCounter(configId: string): number {
     return 0;
   }
 }
+
+/**
+ * An `agregarr*` label is the only proof we made it. Without one, a smart
+ * collection is the user's own: adopting destroys its filter, or the collection.
+ */
+export function shouldAdoptByTitle({
+  title,
+  isSmart,
+  hasAgregarrLabel,
+  titleCandidates,
+  collectionName,
+}: {
+  title: string;
+  isSmart: boolean;
+  hasAgregarrLabel: boolean;
+  titleCandidates: string[];
+  collectionName?: string;
+}): boolean {
+  return (
+    titleCandidates.includes(title) &&
+    (hasAgregarrLabel ||
+      (!isSmart && !!collectionName && title === collectionName))
+  );
+}

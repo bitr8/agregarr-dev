@@ -30,6 +30,7 @@ import {
   handleRateLimit,
   logCollectionProcessingResults,
   sanitizeCollectionName,
+  shouldAdoptByTitle,
   updateConfigWithRatingKey,
   validateAndSanitizeItems,
   validateCollectionItems,
@@ -1988,20 +1989,17 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
               label.toLowerCase().startsWith('agregarr')
             );
 
-            const titleMatches = titleCandidates.includes(collection.title);
-
-            // Adopt if: (a) title matches AND has an agregarr label (orphaned
-            // from config ID change), or (b) title matches the per-user
-            // collection name AND collection is unlabeled (orphaned from a
-            // failed creation where the label was never applied).
-            const isOrphanedUserCollection =
-              !hasAgregarrLabel &&
-              collectionName &&
-              collection.title === collectionName;
+            const isSmartCollection =
+              (collection as PlexCollectionWithSmart).smart === '1';
 
             if (
-              titleMatches &&
-              (hasAgregarrLabel || isOrphanedUserCollection)
+              shouldAdoptByTitle({
+                title: collection.title,
+                isSmart: isSmartCollection,
+                hasAgregarrLabel,
+                titleCandidates,
+                collectionName,
+              })
             ) {
               // Validate the ratingKey is reachable before adopting
               const adoptCheck = await plexClient.getCollectionMetadataSafe(
@@ -2014,9 +2012,6 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                 );
                 continue;
               }
-
-              const isSmartCollection =
-                (collection as PlexCollectionWithSmart).smart === '1';
 
               logger.info(
                 `Found orphaned collection by title: "${collection.title}" - adopting with label`,

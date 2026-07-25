@@ -26,7 +26,10 @@ vi.mock('@server/lib/settings', () => ({
   getSettings: () => settings,
 }));
 
-import { clearConfigRatingKey } from './CollectionUtilities';
+import {
+  clearConfigRatingKey,
+  shouldAdoptByTitle,
+} from './CollectionUtilities';
 
 const config = (overrides: Partial<CollectionConfig>): CollectionConfig =>
   ({ id: 'cfg-1', libraryId: '4', ...overrides } as CollectionConfig);
@@ -119,5 +122,75 @@ describe('clearConfigRatingKey', () => {
     clearConfigRatingKey('cfg-1', '4');
 
     expect(stored().collectionRatingKey).toBeUndefined();
+  });
+});
+
+describe('shouldAdoptByTitle', () => {
+  const base = {
+    title: 'Horror Movies',
+    titleCandidates: ['Horror Movies'],
+    collectionName: 'Horror Movies',
+  };
+
+  it('adopts an unlabeled regular collection (failed-creation orphan)', () => {
+    expect(
+      shouldAdoptByTitle({ ...base, isSmart: false, hasAgregarrLabel: false })
+    ).toBe(true);
+  });
+
+  it('refuses an unlabeled smart collection (the user built it)', () => {
+    expect(
+      shouldAdoptByTitle({ ...base, isSmart: true, hasAgregarrLabel: false })
+    ).toBe(false);
+  });
+
+  it('adopts a labeled smart collection (showUnwatchedOnly re-find)', () => {
+    expect(
+      shouldAdoptByTitle({ ...base, isSmart: true, hasAgregarrLabel: true })
+    ).toBe(true);
+  });
+
+  it('adopts a labeled regular collection (config ID change orphan)', () => {
+    expect(
+      shouldAdoptByTitle({ ...base, isSmart: false, hasAgregarrLabel: true })
+    ).toBe(true);
+  });
+
+  it('refuses any collection whose title does not match', () => {
+    expect(
+      shouldAdoptByTitle({
+        ...base,
+        title: 'Something Else',
+        isSmart: false,
+        hasAgregarrLabel: true,
+      })
+    ).toBe(false);
+  });
+
+  it('refuses an unlabeled collection matching config.name but not collectionName', () => {
+    expect(
+      shouldAdoptByTitle({
+        title: 'Config Name',
+        titleCandidates: ['Config Name', 'Rendered Name'],
+        collectionName: 'Rendered Name',
+        isSmart: false,
+        hasAgregarrLabel: false,
+      })
+    ).toBe(false);
+  });
+
+  // Plex data: if title were also missing, strict-equal on two undefineds
+  // would adopt, so the collectionName guard has to carry this one.
+  it('refuses an unlabeled collection when both title and collectionName are absent', () => {
+    const missing = undefined as unknown as string;
+    expect(
+      shouldAdoptByTitle({
+        title: missing,
+        titleCandidates: [missing],
+        collectionName: undefined,
+        isSmart: false,
+        hasAgregarrLabel: false,
+      })
+    ).toBe(false);
   });
 });
