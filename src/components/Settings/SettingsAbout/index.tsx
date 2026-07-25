@@ -101,7 +101,7 @@ const SettingsAbout = () => {
             className="flex flex-row items-center truncate"
           >
             <code className="truncate">
-              {data.version.replace('develop-', '')}
+              {data.version.replace(/^develop-(.{7}).*/, '$1')}
             </code>
             {status?.commitTag !== 'local' &&
               (status?.updateAvailable ? (

@@ -81,7 +81,7 @@ const VersionStatus = ({
               intl.formatMessage(messages.outofdate)
             ) : (
               <code className="bg-transparent p-0">
-                {data.version.replace('develop-', '')}
+                {data.version.replace(/^develop-(.{7}).*/, '$1')}
               </code>
             )}
           </span>
