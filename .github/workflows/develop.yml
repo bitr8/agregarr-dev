@@ -69,6 +69,15 @@ jobs:
             SLUG="${GITHUB_REF#refs/heads/feature/}"
             echo "tags=bitr8/agregarr:${SLUG}" >> "$GITHUB_OUTPUT"
           fi
+      # The other half of the invariant: releases take their version from the
+      # tag, so develop must stay 0.1.0 or its builds start impersonating one.
+      - name: Fail if the develop version was bumped
+        run: |
+          v=$(jq -r .version package.json)
+          if [ "$v" != "0.1.0" ]; then
+            echo "::error::package.json is $v; develop must stay 0.1.0 so builds report develop-<sha>"
+            exit 1
+          fi
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -120,6 +129,20 @@ jobs:
           build-args: |
             COMMIT_TAG=${{ github.sha }}
           outputs: type=image,name=bitr8/agregarr,push-by-digest=true,name-canonical=true,push=true
+      # v2.8.0 shipped reporting 2.7.0. Assert on the image, not on the
+      # injection step having exited 0. Fails before merge_release moves
+      # :latest, so a mismatched build never becomes user-visible.
+      - name: Verify the image reports the tag's version
+        run: |
+          want="${GITHUB_REF#refs/tags/v}"
+          got=$(docker run --rm --entrypoint node \
+            "bitr8/agregarr@${{ steps.build.outputs.digest }}" \
+            -e 'console.log(require("/app/package.json").version)')
+          echo "tag=$want image=$got"
+          if [ "$want" != "$got" ]; then
+            echo "::error::image reports $got but the tag says $want"
+            exit 1
+          fi
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
