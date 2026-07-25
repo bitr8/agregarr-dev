@@ -2434,25 +2434,21 @@ export function incrementCollectionSyncCounter(configId: string): number {
 }
 
 /**
- * An `agregarr*` label is the only proof we made it. Without one, a smart
- * collection is the user's own: adopting destroys its filter, or the collection.
+ * Ownership proof. An `agregarr*` label is the ONLY evidence a collection is
+ * ours: a matching title is user-selectable, and "not a smart collection"
+ * says nothing about who created it.
+ *
+ * Prefix rather than `parseConfigIdFromLabel`, which rejects hyphenated
+ * labels still in use, e.g. `agregarr-multisource-123`.
  */
-export function shouldAdoptByTitle({
-  title,
-  isSmart,
-  hasAgregarrLabel,
-  titleCandidates,
-  collectionName,
-}: {
-  title: string;
-  isSmart: boolean;
-  hasAgregarrLabel: boolean;
-  titleCandidates: string[];
-  collectionName?: string;
-}): boolean {
-  return (
-    titleCandidates.includes(title) &&
-    (hasAgregarrLabel ||
-      (!isSmart && !!collectionName && title === collectionName))
-  );
+export function hasAgregarrLabel(
+  labels: (string | { tag?: string })[] | undefined
+): boolean {
+  if (!Array.isArray(labels)) {
+    return false;
+  }
+  return labels.some((label) => {
+    const text = typeof label === 'string' ? label : label?.tag ?? '';
+    return text.toLowerCase().startsWith('agregarr');
+  });
 }

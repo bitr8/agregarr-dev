@@ -28,9 +28,9 @@ import {
   extractErrorMessage,
   getCollectionMediaType,
   handleRateLimit,
+  hasAgregarrLabel,
   logCollectionProcessingResults,
   sanitizeCollectionName,
-  shouldAdoptByTitle,
   updateConfigWithRatingKey,
   validateAndSanitizeItems,
   validateCollectionItems,
@@ -1985,22 +1985,14 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             const collection = result.value.collection;
             const labels = result.value.labels;
 
-            const hasAgregarrLabel = labels.some((label: string) =>
-              label.toLowerCase().startsWith('agregarr')
-            );
-
+            // A matching title is not ownership: the label is. Adopting an
+            // unlabeled collection here overwrote users' filters and deleted
+            // their collections.
+            const isOurs = hasAgregarrLabel(labels);
             const isSmartCollection =
               (collection as PlexCollectionWithSmart).smart === '1';
 
-            if (
-              shouldAdoptByTitle({
-                title: collection.title,
-                isSmart: isSmartCollection,
-                hasAgregarrLabel,
-                titleCandidates,
-                collectionName,
-              })
-            ) {
+            if (isOurs && titleCandidates.includes(collection.title)) {
               // Validate the ratingKey is reachable before adopting
               const adoptCheck = await plexClient.getCollectionMetadataSafe(
                 collection.ratingKey
@@ -2022,7 +2014,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                   collectionType: isSmartCollection ? 'smart' : 'regular',
                   oldLabels: labels,
                   newLabel: customLabel,
-                  hadAgregarrLabel: hasAgregarrLabel,
+                  hadAgregarrLabel: isOurs,
                 }
               );
 

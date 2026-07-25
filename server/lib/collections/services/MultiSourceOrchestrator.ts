@@ -17,6 +17,7 @@ import {
   createSyncError,
   getCollectionSyncCounter,
   getMediaTypeFromLibrary,
+  hasAgregarrLabel,
   incrementCollectionSyncCounter,
   parseConfigIdFromLabel,
   processMissingItemsWithMode,
@@ -2509,11 +2510,15 @@ export class MultiSourceOrchestrator {
       }
     }
 
-    // 2. Fallback to exact name matching (less reliable)
+    // 2. Fallback to exact name matching (less reliable). Labeled smart
+    // collections still match here: step 1 misses them when their label does
+    // not parse to a config ID. Only an unlabeled smart collection is refused,
+    // because that one belongs to the user.
     const nameMatch = allCollections.find(
       (collection) =>
         collection.title === collectionName &&
-        collection.libraryKey === libraryKey
+        collection.libraryKey === libraryKey &&
+        hasAgregarrLabel(collection.labels)
     );
 
     if (nameMatch) {
@@ -2805,9 +2810,13 @@ export class MultiSourceOrchestrator {
     allCollections: PlexCollection[],
     processedCollectionKeys?: Set<string>
   ): Promise<boolean> {
-    // Find existing collection
+    // Find existing collection. An unlabeled smart collection sharing the name
+    // is the user's own, and this path deletes what it finds.
     const existingCollection = allCollections.find(
-      (c) => c.title === config.name && c.libraryKey === config.libraryId
+      (c) =>
+        c.title === config.name &&
+        c.libraryKey === config.libraryId &&
+        hasAgregarrLabel(c.labels)
     );
 
     if (existingCollection) {

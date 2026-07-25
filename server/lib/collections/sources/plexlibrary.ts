@@ -13,6 +13,7 @@ import {
   extractTmdbIdFromGuids,
   extractTvdbIdFromGuids,
   getCollectionMediaType,
+  hasAgregarrLabel,
   type LibraryItemsCache,
 } from '@server/lib/collections/core/CollectionUtilities';
 import type {
@@ -480,9 +481,14 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
           this.normalizeLabel(label) === normalizedLabel
       );
 
+      // Label still matches on its own, so a renamed separator is still found.
+      // Only the title branch is narrowed: an unlabeled smart collection
+      // sharing the title is the user's own.
       return (
         hasLabel ||
-        (collection.title && collection.title.toLowerCase() === normalizedTitle)
+        (collection.title !== undefined &&
+          collection.title.toLowerCase() === normalizedTitle &&
+          hasAgregarrLabel(collection.labels))
       );
     });
   }
@@ -498,17 +504,24 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     const separatorTitle = this.getSeparatorTitle(config);
 
     try {
-      const existingCollection =
-        this.findSeparatorCollection(
-          allCollections,
-          separatorLabel,
+      let existingCollection = this.findSeparatorCollection(
+        allCollections,
+        separatorLabel,
+        separatorTitle,
+        config.libraryId
+      );
+
+      if (!existingCollection) {
+        // getCollectionByName matches on title alone, so it would re-admit the
+        // user's own smart collection that findSeparatorCollection just refused.
+        const byName = await plexClient.getCollectionByName(
           separatorTitle,
           config.libraryId
-        ) ||
-        (await plexClient.getCollectionByName(
-          separatorTitle,
-          config.libraryId
-        ));
+        );
+        if (byName && hasAgregarrLabel(byName.labels)) {
+          existingCollection = byName;
+        }
+      }
 
       let ratingKey: string | null | undefined = existingCollection?.ratingKey;
 
@@ -925,9 +938,15 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
             personInfo?.tmdbPersonId ?? labelSuffix
           );
 
+          // Prefix check, not the exact person label: that label changes with
+          // whether TMDB resolution succeeded, so matching on it would refuse
+          // our own collection and duplicate it. An unlabeled smart collection
+          // sharing the title is the user's own.
           const existingCollection = allCollections.find(
             (c) =>
-              c.title === collectionName && c.libraryKey === config.libraryId
+              c.title === collectionName &&
+              c.libraryKey === config.libraryId &&
+              hasAgregarrLabel(c.labels)
           );
 
           let collectionRatingKey: string | null = null;

@@ -762,6 +762,11 @@ class PlexAPI {
               libraryName: library.title,
               labels,
               titleSort: detailedCollection?.titleSort,
+              // Ownership guards read this; prefer detail over the summary
+              // payload so a missing flag cannot read as "not smart".
+              smart:
+                (detailedCollection as { smart?: string } | undefined)?.smart ??
+                (collection as { smart?: string }).smart,
             };
 
             allCollections.push(enhancedCollection);

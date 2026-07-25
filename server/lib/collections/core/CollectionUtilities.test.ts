@@ -26,10 +26,7 @@ vi.mock('@server/lib/settings', () => ({
   getSettings: () => settings,
 }));
 
-import {
-  clearConfigRatingKey,
-  shouldAdoptByTitle,
-} from './CollectionUtilities';
+import { clearConfigRatingKey, hasAgregarrLabel } from './CollectionUtilities';
 
 const config = (overrides: Partial<CollectionConfig>): CollectionConfig =>
   ({ id: 'cfg-1', libraryId: '4', ...overrides } as CollectionConfig);
@@ -125,72 +122,28 @@ describe('clearConfigRatingKey', () => {
   });
 });
 
-describe('shouldAdoptByTitle', () => {
-  const base = {
-    title: 'Horror Movies',
-    titleCandidates: ['Horror Movies'],
-    collectionName: 'Horror Movies',
-  };
-
-  it('adopts an unlabeled regular collection (failed-creation orphan)', () => {
-    expect(
-      shouldAdoptByTitle({ ...base, isSmart: false, hasAgregarrLabel: false })
-    ).toBe(true);
+describe('hasAgregarrLabel', () => {
+  it('matches the hyphenated labels parseConfigIdFromLabel rejects', () => {
+    // Regression: routing multi-source deletes through parseConfigIdFromLabel
+    // silently stopped removing these collections.
+    expect(hasAgregarrLabel(['agregarr-multisource-10213'])).toBe(true);
+    expect(hasAgregarrLabel(['Agregarr-filtered_hub-10214'])).toBe(true);
   });
 
-  it('refuses an unlabeled smart collection (the user built it)', () => {
-    expect(
-      shouldAdoptByTitle({ ...base, isSmart: true, hasAgregarrLabel: false })
-    ).toBe(false);
+  it('matches camel-case labels', () => {
+    expect(hasAgregarrLabel(['AgregarrTmdb10213'])).toBe(true);
   });
 
-  it('adopts a labeled smart collection (showUnwatchedOnly re-find)', () => {
-    expect(
-      shouldAdoptByTitle({ ...base, isSmart: true, hasAgregarrLabel: true })
-    ).toBe(true);
+  it('reads the tag shape Plex returns for raw collections', () => {
+    expect(hasAgregarrLabel([{ tag: 'agregarr-multisource-1' }])).toBe(true);
+    expect(hasAgregarrLabel([{ tag: 'horror' }])).toBe(false);
   });
 
-  it('adopts a labeled regular collection (config ID change orphan)', () => {
-    expect(
-      shouldAdoptByTitle({ ...base, isSmart: false, hasAgregarrLabel: true })
-    ).toBe(true);
-  });
-
-  it('refuses any collection whose title does not match', () => {
-    expect(
-      shouldAdoptByTitle({
-        ...base,
-        title: 'Something Else',
-        isSmart: false,
-        hasAgregarrLabel: true,
-      })
-    ).toBe(false);
-  });
-
-  it('refuses an unlabeled collection matching config.name but not collectionName', () => {
-    expect(
-      shouldAdoptByTitle({
-        title: 'Config Name',
-        titleCandidates: ['Config Name', 'Rendered Name'],
-        collectionName: 'Rendered Name',
-        isSmart: false,
-        hasAgregarrLabel: false,
-      })
-    ).toBe(false);
-  });
-
-  // Plex data: if title were also missing, strict-equal on two undefineds
-  // would adopt, so the collectionName guard has to carry this one.
-  it('refuses an unlabeled collection when both title and collectionName are absent', () => {
-    const missing = undefined as unknown as string;
-    expect(
-      shouldAdoptByTitle({
-        title: missing,
-        titleCandidates: [missing],
-        collectionName: undefined,
-        isSmart: false,
-        hasAgregarrLabel: false,
-      })
-    ).toBe(false);
+  // The whole point: a user collection is refused however plausible it looks.
+  // "Same title" and "not a smart collection" are not ownership evidence.
+  it('refuses a user collection regardless of title or smart flag', () => {
+    expect(hasAgregarrLabel(['favourites'])).toBe(false);
+    expect(hasAgregarrLabel([])).toBe(false);
+    expect(hasAgregarrLabel(undefined)).toBe(false);
   });
 });
