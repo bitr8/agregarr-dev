@@ -7,7 +7,7 @@ import {
   collectSecretValues,
   registerLogSecrets,
 } from '@server/utils/logRedaction';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import fs from 'fs';
 import { merge } from 'lodash';
 import path from 'path';
@@ -626,6 +626,8 @@ export interface WatchlistSyncSettings {
 
 export interface MainSettings {
   apiKey: string;
+  // Gates the unauthenticated /plex-webhook route; not the admin apiKey, which grants full API access
+  plexWebhookToken: string;
   applicationTitle: string;
   applicationUrl: string;
   csrfProtection: boolean;
@@ -737,6 +739,7 @@ class Settings {
       clientId: randomUUID(),
       main: {
         apiKey: '',
+        plexWebhookToken: '',
         applicationTitle: 'Agregarr',
         applicationUrl: '',
         csrfProtection: false,
@@ -960,6 +963,12 @@ class Settings {
   get main(): MainSettings {
     if (!this.data.main.apiKey) {
       this.data.main.apiKey = this.generateApiKey();
+      this.save();
+    }
+    if (!this.data.main.plexWebhookToken) {
+      // base64url, not generateApiKey(): this rides in a query string, and plain
+      // base64 would eventually emit '+', which decodes to a space and 401s forever.
+      this.data.main.plexWebhookToken = randomBytes(32).toString('base64url');
       this.save();
     }
     return this.data.main;

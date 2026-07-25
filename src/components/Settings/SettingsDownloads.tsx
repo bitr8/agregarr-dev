@@ -97,6 +97,11 @@ const messages = defineMessages({
   toastYoutubeSettingsFailure:
     'Something went wrong while saving YouTube settings.',
   plexWebhookTitle: 'Plex Webhook',
+  plexWebhookUrlChangedTitle: 'The webhook URL has changed',
+  plexWebhookUrlChanged:
+    'The webhook now requires a token, so the URL is different. If you registered this webhook in Plex before updating, copy the new URL below and paste it into Plex under Settings, Webhooks. The old URL will be rejected.',
+  plexWebhookTokenWarning:
+    'This URL contains a secret that authenticates the webhook. Treat it like a password and do not share it.',
   plexWebhookDescription:
     'Automatically reset watched status when a placeholder trailer is played, preventing it from syncing to Trakt or other scrobbling services. Requires Plex Pass. Register the webhook in Plex under Settings → Webhooks.',
 });
@@ -1073,29 +1078,43 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
             {intl.formatMessage(messages.plexWebhookDescription)}
           </p>
         </div>
-        <div className="space-y-2 text-sm text-stone-400">
-          <p>
-            Webhook path:{' '}
-            <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-              /plex-webhook
-            </code>
-          </p>
-          <p className="font-medium text-stone-300">Examples:</p>
-          <ul className="ml-4 space-y-1">
-            <li>
-              Local:{' '}
+        <Alert
+          title={intl.formatMessage(messages.plexWebhookUrlChangedTitle)}
+          type="warning"
+        >
+          {intl.formatMessage(messages.plexWebhookUrlChanged)}
+        </Alert>
+        {!dataMain ? (
+          <LoadingSpinner />
+        ) : (
+          <div className="space-y-2 text-sm text-stone-400">
+            <p>
+              Webhook path:{' '}
               <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-                http://192.168.1.100:7171/plex-webhook
+                /plex-webhook?token=
+                {dataMain.plexWebhookToken}
               </code>
-            </li>
-            <li>
-              Remote:{' '}
-              <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-                https://agregarr.yourdomain.com/plex-webhook
-              </code>
-            </li>
-          </ul>
-        </div>
+            </p>
+            <p>{intl.formatMessage(messages.plexWebhookTokenWarning)}</p>
+            <p className="font-medium text-stone-300">Examples:</p>
+            <ul className="ml-4 space-y-1">
+              <li>
+                Local:{' '}
+                <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                  http://192.168.1.100:7171/plex-webhook?token=
+                  {dataMain.plexWebhookToken}
+                </code>
+              </li>
+              <li>
+                Remote:{' '}
+                <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                  https://agregarr.yourdomain.com/plex-webhook?token=
+                  {dataMain.plexWebhookToken}
+                </code>
+              </li>
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Plex Watchlist Sync Settings */}

@@ -220,6 +220,11 @@ app
     if (settings.main.trustProxy) {
       server.enable('trust proxy');
     }
+    // Plex webhook — unauthenticated and multipart, so it mounts ahead of the body
+    // parsers, CSRF and the OpenAPI validator. Its token check must reject a caller
+    // before express.json buffers anything on their behalf.
+    server.use('/plex-webhook', plexWebhookRoute);
+
     server.use(cookieParser());
     server.use(express.json({ limit: '10mb' }));
     server.use(express.urlencoded({ extended: true }));
@@ -238,9 +243,6 @@ app
         next();
       }
     });
-    // Plex webhook — must be before CSRF and OpenAPI validator (unauthenticated, multipart)
-    server.use('/plex-webhook', plexWebhookRoute);
-
     if (settings.main.csrfProtection) {
       server.use(
         csurf({

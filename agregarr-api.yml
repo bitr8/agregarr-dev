@@ -145,6 +145,10 @@ components:
         apiKey:
           type: string
           readOnly: true
+        plexWebhookToken:
+          type: string
+          description: Secret in the Plex webhook URL. Auto-generated; not the admin apiKey.
+          readOnly: true
         appLanguage:
           type: string
           example: en
