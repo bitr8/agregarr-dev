@@ -6,3 +6,7 @@ config/
 # assets
 src/assets/
 public/
+
+# prettier 2.8.4 joins `> [!TIP]` onto the line below it, which stops GitHub
+# rendering the alert. Fixed in prettier 3; drop this when we upgrade.
+*.md
