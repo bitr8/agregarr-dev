@@ -5,17 +5,18 @@
 Active fork of [Agregarr](https://github.com/agregarr/agregarr) packaging performance fixes, placeholder lifecycle improvements, and open upstream PRs into a single Docker image. Available as `bitr8/agregarr` on Docker Hub.
 
 > [!TIP]
-> **Latest release: [v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0)** — Maintainerr deletion countdowns on season posters, season numbers on collection grids, and quality badges that stop flickering off between syncs. Full [release notes](https://github.com/bitr8/agregarr-dev/releases).
+>
+> **Latest release: [v2.8.1](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.1).** Agregarr won't touch a collection unless it carries one of its own labels, so a collection of yours with a matching name gets left alone. Separator collections, a presets dropdown and per-user collection targeting landed in [v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0) just before it. Full [release notes](https://github.com/bitr8/agregarr-dev/releases).
 
 ## Docker Image
 
 Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agregarr).
 
-| Tag | What it tracks |
-|-----|----------------|
-| `:latest` | Stable releases. Recommended for most users. |
-| `:2.7.0` (etc.) | Pinned to a specific release. |
-| `:develop` | Bleeding edge. Builds on every push to develop, may break. |
+| Tag             | What it tracks                                             |
+| --------------- | ---------------------------------------------------------- |
+| `:latest`       | Stable releases. Recommended for most users.               |
+| `:2.8.1` (etc.) | Pinned to a specific release.                              |
+| `:develop`      | Bleeding edge. Builds on every push to develop, may break. |
 
 **Multi-arch** — release tags support amd64 and arm64 (Apple Silicon, Raspberry Pi 4+). The `:develop` tag builds amd64 only.
 
@@ -66,6 +67,18 @@ Two problem areas drove most of these changes: sync performance at scale (40+ co
 Both collection and overlay syncs get unified side-by-side dashboard cards with live progress, stats, ETA, and start/stop controls. Cards are sticky -- they show last completed results when idle, and display "Waiting for..." when queued behind another job.
 
 ![Collection Sync Dashboard](public/images/collection-sync-dashboard.png)
+
+### Collections
+
+**Ownership by Label** -- An `agregarr` label is the only thing that marks a collection as Agregarr's. When a config loses track of its collection in Plex it falls back to matching on title, and before 2.8.1 that fallback would adopt a collection of your own if the names matched: relabelled, contents replaced, smart filter overwritten. A config set to remove its collection when inactive could delete it. All five title-matching paths check the label now, so your own collection names don't have to stay distinct from your config names.
+
+**Separator Collections** -- An empty collection that exists to carry a title card, so a long collection row can be broken into labelled groups instead of running together. Kometa has had these for years and they're a good idea. Separators skip the template engine, so the title renders exactly as you type it, and the form is cut down to visibility and time restrictions. Point one at your own poster template or take the built-in Separator template. _(fork [#41](https://github.com/bitr8/agregarr-dev/issues/41))_
+
+**Collection Presets** -- Add Collection has a presets dropdown, twelve entries covering TMDB, IMDb, Trakt, Coming Soon and Netflix Top 10. Picking one fills in type, subtype, template, item limit and visibility, so a new collection is a name and a save rather than a form-filling exercise. Trakt presets stay hidden until Trakt credentials are saved. Coming Soon presets switch placeholder creation on for you. _(fork [#31](https://github.com/bitr8/agregarr-dev/issues/31), [#34](https://github.com/bitr8/agregarr-dev/issues/34))_
+
+**Per-User Targeting** -- Any collection config can name a Target User. Agregarr labels the collection, excludes it from every other user's library filters, and shows a "Target User" badge in the listing. One limit worth knowing: Plex promotes a collection to the Home screen server-wide and there's no per-user version of that switch, so a targeted collection that's also home-promoted still shows on everyone's Home. Leave it recommended-only if you want it properly hidden. _(Cherry-picked from Elliott Carlson's upstream PR [#555](https://github.com/agregarr/agregarr/pull/555))_
+
+Smart collections also get a Last Episode Added sort option. _(fork [#43](https://github.com/bitr8/agregarr-dev/issues/43))_
 
 ### Performance
 
@@ -121,6 +134,8 @@ Upstream placeholder cleanup has gaps that leave orphaned entries in Plex and do
 
 **Sonarr Folder Naming** -- Agregarr creates placeholders at `/tv/Show (2024)/` but Sonarr uses `/tv/Show (2024) [imdbid-tt1234567]/`. When real content arrives, Plex sees them as different shows, leaving orphaned entries. This fork extracts the folder name from Sonarr's series path. Falls back to standard naming if the show isn't in Sonarr.
 
+**Movie `.plexmatch` Files** -- Movie placeholders relied on the `{tmdb-ID}` filename tag alone, which Plex's metadata agent only processes after the scan finishes. TV placeholders have written a `.plexmatch` file since 2.6.0, which Plex reads during the scan instead. Movies do the same now, so GUIDs get assigned sooner and fewer creations time out waiting. Cleanup removes `.plexmatch` alongside `.comingsoon`, so deleting a placeholder doesn't leave an orphan folder. _(fork [#45](https://github.com/bitr8/agregarr-dev/issues/45))_
+
 **Download Status Awareness** -- Upstream doesn't check whether content has already been downloaded in Radarr/Sonarr. This fork queries \*arr download status in batch, skips placeholder creation for items already downloaded, and uses download status as a cleanup signal. Prevents unnecessary placeholders for content that's about to arrive.
 
 **Post-Sync Hub Verification** -- After collection sync completes, queries each filtered hub and applies missing `trailer-placeholder` labels to any items that slipped through. A safety net that catches label leaks regardless of which pipeline stage failed to apply them.
@@ -145,18 +160,24 @@ Enable per library: **Overlays > library config > "Use episode files for quality
 
 ![Episode scanning toggle](public/images/episode-scanning-toggle.png)
 
-| Aspect | Before (Plex metadata) | After (episode scanning) |
-| --- | --- | --- |
-| Resolution badge | Whatever Plex reports for the show | Majority of actual episode files |
-| HDR/DV badge | Often wrong or missing | True if 50%+ of episodes have it |
-| Audio codec | Show-level guess | Most common across episodes |
-| Data source | `episodeMediaSource: 'show'` | `episodeMediaSource: 'aggregated'` |
+| Aspect           | Before (Plex metadata)             | After (episode scanning)           |
+| ---------------- | ---------------------------------- | ---------------------------------- |
+| Resolution badge | Whatever Plex reports for the show | Majority of actual episode files   |
+| HDR/DV badge     | Often wrong or missing             | True if 50%+ of episodes have it   |
+| Audio codec      | Show-level guess                   | Most common across episodes        |
+| Data source      | `episodeMediaSource: 'show'`       | `episodeMediaSource: 'aggregated'` |
 
 **How it works:** Two-tier scan -- fetches the episode list (~19s for 21K episodes), then only batch-fetches stream detail (HDR, DV, bitDepth) if your templates use those fields (~133s). Results are cached in SQLite for 7 days with hash-based invalidation, so subsequent syncs complete in seconds.
 
 Season 0 specials are excluded from aggregation (they're usually low-quality extras). Existing overlay templates benefit immediately -- aggregated values replace the primary context fields (`resolution`, `hdr`, `dolbyVision`, etc.). Raw show-level values are preserved as `showResolution`, `showHdr`, etc.
 
 New template variables: `episodeCount`, `episode4kPercent`, `episodeHdrPercent`, `episodeDvPercent`, and all `show*` raw fields. Available in both variable text and application conditions.
+
+### Next-Episode Countdowns
+
+Sonarr is the authority for the next-episode date. TMDB's `next_episode_to_air` is served from a gateway cache and can lag reality by hours, so a countdown would drop off a poster once the episode aired and turn up again later when the cache caught up. Sonarr has the next episode lined up the second the current one airs, so there's no window left to fall through. TMDB still supplies identity and covers shows Sonarr doesn't track.
+
+Two supporting changes make it stick. A failed fetch is told apart from a genuine "no upcoming episode", so a transient blip leaves the overlay alone instead of clearing it. And a countdown whose date has passed is cleared at read time, whatever a cache upstream believes. _(fork [#35](https://github.com/bitr8/agregarr-dev/issues/35))_
 
 ### Maintainerr Season Deletion Countdown
 
@@ -188,7 +209,7 @@ Season tiles in generated collection posters now carry an `S{n}` badge. Six tile
 
 ### Additional Overlay Variables
 
-**TV Season Counts** -- Two new variables for TV show overlays: `totalSeasons` (from TMDB) and `seasonsAvailable` (seasons in your Plex library). Useful for overlays like "Season 2 of 5" or conditional overlays on incomplete shows. Available as both template variables and condition fields. *(Contributed by [Bergasha](https://github.com/Bergasha))*
+**TV Season Counts** -- Two new variables for TV show overlays: `totalSeasons` (from TMDB) and `seasonsAvailable` (seasons in your Plex library). Useful for overlays like "Season 2 of 5" or conditional overlays on incomplete shows. Available as both template variables and condition fields. _(Contributed by [Bergasha](https://github.com/Bergasha))_
 
 ## Upstream PRs
 
