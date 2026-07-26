@@ -15,6 +15,7 @@ import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import {
+  determineReleaseDate,
   isAirDateUpcoming,
   toServerCalendarDate,
 } from '@server/utils/dateHelpers';
@@ -1146,6 +1147,14 @@ export interface ReleaseDateInfo {
   seasonNumber?: number;
   episodeNumber?: number;
   tvdbId?: number;
+  // True when releaseDate is the theatrical+90 estimate rather than a published
+  // digital/physical date, so a template can render it differently.
+  isEstimated?: boolean;
+  // TMDB components kept so Radarr-first can merge per type instead of
+  // all-or-nothing (movies only).
+  digitalRelease?: string;
+  physicalRelease?: string;
+  inCinemas?: string;
 }
 
 type SonarrNextEpisode = {
@@ -1201,7 +1210,8 @@ export async function fetchReleaseDateInfo(
   mediaType: 'movie' | 'show',
   sonarrCache?: Map<string, SonarrSeries[]>,
   preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>,
-  fetchStatus?: { failed: boolean }
+  fetchStatus?: { failed: boolean },
+  radarrCache?: Map<string, RadarrMovie[]>
 ): Promise<ReleaseDateInfo | undefined> {
   // Check preloaded data first (batch prefetch optimization)
   if (preloadedTmdbReleaseDates) {
@@ -1227,6 +1237,15 @@ export async function fetchReleaseDateInfo(
       // Mechanism-2 skip-guard and surfacing as a generic per-item error instead
       // of a preserved overlay. Treat any throw as a transient failure.
       try {
+        if (mediaType === 'movie') {
+          // Same inversion as Sonarr-first below, on the *arr that owns movies.
+          return await applyRadarrFirstReleaseDate(
+            preloaded,
+            tmdbId,
+            radarrCache
+          );
+        }
+
         const { info, sonarrFailed } = await applySonarrFirstNextEpisode(
           preloaded,
           preloaded.tvdbId,
@@ -1247,7 +1266,7 @@ export async function fetchReleaseDateInfo(
         // throw is unexpected and would be a fork#35-class regression - surface
         // it above debug spam even though the overlay is safely preserved.
         logger.warn(
-          'Unexpected error applying Sonarr-first to preloaded release date',
+          'Unexpected error applying *arr-first to preloaded release date',
           {
             label: 'OverlayContextBuilder',
             tmdbId,
@@ -1269,7 +1288,7 @@ export async function fetchReleaseDateInfo(
       // For movies, use proper release date calculation (digital > physical > theatrical+90)
       // This matches PlaceholderContextService implementation
       if (movieDetails.release_dates?.results) {
-        const { extractReleaseDates, determineReleaseDate } = await import(
+        const { extractReleaseDates } = await import(
           '@server/utils/dateHelpers'
         );
         const preferredRegion =
@@ -1286,17 +1305,30 @@ export async function fetchReleaseDateInfo(
         );
 
         if (determined) {
-          return {
-            releaseDate: determined.releaseDate,
-          };
+          return applyRadarrFirstReleaseDate(
+            {
+              releaseDate: determined.releaseDate,
+              isEstimated: determined.isEstimated,
+              digitalRelease: extracted.digitalRelease,
+              physicalRelease: extracted.physicalRelease,
+              inCinemas: extracted.inCinemas,
+            },
+            tmdbId,
+            radarrCache
+          );
         }
       }
 
-      // Fallback to simple release_date if release_dates not available
+      // Fallback to simple release_date if release_dates not available. Safe to
+      // Radarr-merge because the resolver refuses to trade a published date for
+      // an estimate; the prefetch caches this same bare shape, so both paths
+      // must agree.
       if (movieDetails.release_date) {
-        return {
-          releaseDate: movieDetails.release_date,
-        };
+        return applyRadarrFirstReleaseDate(
+          { releaseDate: movieDetails.release_date },
+          tmdbId,
+          radarrCache
+        );
       }
     } else {
       // For TV shows
@@ -1615,6 +1647,99 @@ async function applySonarrFirstNextEpisode(
   }
 
   return resolveSonarrFirstNextEpisode(base, sonarr);
+}
+
+/**
+ * Radarr-first for movie release dates, mirroring Sonarr-first for TV (fork#35)
+ * and matching the precedence the coming-soon collection sort already uses.
+ *
+ * Applied OUTSIDE the `tmdb-releases` cache: folding a faster-moving source into
+ * a TMDB-keyed entry would hide Radarr changes behind TMDB's TTL. A Radarr
+ * outage leaves the TMDB date in place rather than skipping the item.
+ */
+async function applyRadarrFirstReleaseDate(
+  base: ReleaseDateInfo,
+  tmdbId: number,
+  radarrCache?: Map<string, RadarrMovie[]>
+): Promise<ReleaseDateInfo> {
+  const settings = getSettings();
+  if (!settings.radarr || settings.radarr.length === 0) {
+    return base;
+  }
+
+  let movie: RadarrMovie | undefined;
+  for (const radarrSettings of settings.radarr) {
+    if (!radarrSettings.hostname) {
+      continue;
+    }
+    try {
+      const movies = await getRadarrMovies(radarrSettings, radarrCache);
+      movie = movies.find((m) => m.tmdbId === tmdbId);
+      if (movie) {
+        break;
+      }
+    } catch (error) {
+      logger.debug('Failed to check Radarr instance for release date', {
+        label: 'OverlayContextBuilder',
+        tmdbId,
+        hostname: radarrSettings.hostname,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (!movie) {
+    return base;
+  }
+
+  const merged = resolveRadarrFirstReleaseDate(base, movie);
+
+  if (merged.releaseDate !== base.releaseDate) {
+    logger.debug('Radarr-first release date applied', {
+      label: 'OverlayContextBuilder',
+      tmdbId,
+      tmdbDate: base.releaseDate,
+      radarrDate: merged.releaseDate,
+      wasEstimated: base.isEstimated,
+      isEstimated: merged.isEstimated,
+    });
+  }
+
+  return merged;
+}
+
+/**
+ * Pure half of Radarr-first: merge Radarr's components over TMDB's, re-derive,
+ * and never downgrade. Returning `base` on an empty merge stops a date-less
+ * Radarr record blanking a TMDB date; refusing an estimate over a published
+ * date stops a Radarr-only `inCinemas` rewriting a real date as theatrical+90.
+ *
+ * Not covered: TMDB knowing no date at all returns early upstream, so
+ * Radarr-only titles still get no overlay date.
+ */
+export function resolveRadarrFirstReleaseDate(
+  base: ReleaseDateInfo,
+  movie: Pick<RadarrMovie, 'digitalRelease' | 'physicalRelease' | 'inCinemas'>
+): ReleaseDateInfo {
+  const determined = determineReleaseDate(
+    movie.digitalRelease || base.digitalRelease,
+    movie.physicalRelease || base.physicalRelease,
+    movie.inCinemas || base.inCinemas
+  );
+
+  if (!determined) {
+    return base;
+  }
+
+  if (determined.isEstimated && base.releaseDate && !base.isEstimated) {
+    return base;
+  }
+
+  return {
+    ...base,
+    releaseDate: determined.releaseDate,
+    isEstimated: determined.isEstimated,
+  };
 }
 
 /**

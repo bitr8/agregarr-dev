@@ -177,6 +177,7 @@ interface PreviewPosterMetadata {
   status: string;
   daysUntilRelease?: number;
   releaseDate?: string;
+  isEstimatedReleaseDate?: boolean;
   runtime?: number;
   daysUntilAction?: number;
 }

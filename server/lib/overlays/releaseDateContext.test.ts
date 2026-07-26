@@ -151,4 +151,17 @@ describe('deriveReleaseDateContext timezone boundary (TZ=Australia/Sydney)', () 
     expect(ctx.daysUntilNextSeason).toBeUndefined();
     expect(ctx.daysAgoNextSeason).toBe(0);
   });
+
+  it('passes the estimated-date flag through to the render context', () => {
+    const ctx = deriveReleaseDateContext({
+      releaseDate: '2026-09-24',
+      isEstimated: true,
+    });
+    expect(ctx.isEstimatedReleaseDate).toBe(true);
+  });
+
+  it('omits the estimated flag when there is no release date to qualify', () => {
+    const ctx = deriveReleaseDateContext({ isEstimated: true });
+    expect(ctx.isEstimatedReleaseDate).toBeUndefined();
+  });
 });
