@@ -22,7 +22,6 @@ import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import fs from 'fs/promises';
 import {
   enrichWithTMDBReleaseDates,
   fetchMonitoredMovies,
@@ -847,98 +846,6 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         placeholders: placeholderItems.length,
       },
     };
-  }
-
-  /**
-   * Retry downloading a trailer if the current file is the fallback placeholder
-   * Returns true if the file was replaced, false otherwise
-   */
-  private async retryTrailerDownload(
-    dbItem: ComingSoonItem,
-    fallbackPlaceholderSize: number,
-    sourceItem: ComingSoonSourceData,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    config: CollectionConfig
-  ): Promise<boolean> {
-    try {
-      // Check if the current file size matches the fallback placeholder
-      const stats = await fs.stat(dbItem.placeholderPath);
-
-      if (stats.size !== fallbackPlaceholderSize) {
-        // File size doesn't match fallback - this is a real trailer
-        return false;
-      }
-
-      logger.info(
-        'Detected fallback placeholder, attempting to download real trailer',
-        {
-          label: 'Coming Soon Collections',
-          title: sourceItem.title,
-          tmdbId: sourceItem.tmdbId,
-        }
-      );
-
-      // Attempt to download a real trailer
-      const { downloadTrailer } = await import(
-        '@server/lib/placeholders/trailerDownload'
-      );
-      const trailerPath = await downloadTrailer(
-        sourceItem.title,
-        sourceItem.year,
-        sourceItem.mediaType,
-        sourceItem.tmdbId
-      );
-
-      // Check if the downloaded trailer is different from the fallback
-      const newStats = await fs.stat(trailerPath);
-      if (newStats.size === fallbackPlaceholderSize) {
-        // Still the fallback, no real trailer available yet
-        logger.debug('No real trailer available yet, keeping fallback', {
-          label: 'Coming Soon Collections',
-          title: sourceItem.title,
-        });
-        // Clean up temp file
-        try {
-          await fs.unlink(trailerPath);
-        } catch {
-          // Ignore cleanup errors
-        }
-        return false;
-      }
-
-      // We have a real trailer! Replace the placeholder file
-      logger.info(
-        'Successfully downloaded real trailer, replacing placeholder',
-        {
-          label: 'Coming Soon Collections',
-          title: sourceItem.title,
-          oldSize: stats.size,
-          newSize: newStats.size,
-        }
-      );
-
-      await fs.copyFile(trailerPath, dbItem.placeholderPath);
-
-      // Clean up temp file
-      try {
-        await fs.unlink(trailerPath);
-      } catch (error) {
-        logger.warn('Failed to clean up temp trailer file', {
-          label: 'Coming Soon Collections',
-          path: trailerPath,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      return true; // File was replaced
-    } catch (error) {
-      logger.debug('Failed to retry trailer download', {
-        label: 'Coming Soon Collections',
-        title: sourceItem.title,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return false;
-    }
   }
 
   /**
