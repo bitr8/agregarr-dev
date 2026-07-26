@@ -1159,12 +1159,47 @@ class PlexAPI {
     }
   }
 
+  // Reads the collection back and counts how many of `attemptedKeys` actually
+  // landed. Only call this after a write that claims success - a failed write
+  // is already a known failure and doesn't need a second API call to prove it.
+  private async verifyItemsLanded(
+    collectionRatingKey: string,
+    attemptedKeys: Set<string>
+  ): Promise<number> {
+    if (attemptedKeys.size === 0) {
+      return 0;
+    }
+
+    const currentItems = await this.getCollectionItems(collectionRatingKey);
+    const currentSet = new Set(currentItems);
+    let verified = 0;
+    for (const key of attemptedKeys) {
+      if (currentSet.has(key)) {
+        verified++;
+      }
+    }
+
+    if (verified < attemptedKeys.size) {
+      logger.warn(
+        `addItemsToCollection: read-back verification found fewer items than the write claimed`,
+        {
+          label: 'Plex API',
+          collectionRatingKey,
+          attempted: attemptedKeys.size,
+          verified,
+        }
+      );
+    }
+
+    return verified;
+  }
+
   public async addItemsToCollection(
     collectionRatingKey: string,
     items: PlexCollectionItem[]
-  ): Promise<void> {
+  ): Promise<{ successful: number; failed: number }> {
     if (items.length === 0) {
-      return;
+      return { successful: 0, failed: 0 };
     }
 
     // PROTECTION: Never add items to smart collections - they are auto-populated by Plex
@@ -1225,6 +1260,13 @@ class PlexAPI {
       }
 
       await this.safePutQuery(addUrl);
+
+      const requestedKeys = new Set(items.map((item) => item.ratingKey));
+      const verified = await this.verifyItemsLanded(
+        collectionRatingKey,
+        requestedKeys
+      );
+      return { successful: verified, failed: items.length - verified };
     } catch (error) {
       // If bulk addition fails, fall back to individual addition
       logger.warn(
@@ -1234,6 +1276,9 @@ class PlexAPI {
           collectionRatingKey,
         }
       );
+
+      let failed = 0;
+      const addedKeys = new Set<string>();
 
       for (const item of items) {
         try {
@@ -1248,7 +1293,9 @@ class PlexAPI {
           }
 
           await this.safePutQuery(addUrl);
+          addedKeys.add(item.ratingKey);
         } catch (itemError) {
+          failed++;
           const errorMessage =
             itemError instanceof Error ? itemError.message : 'Unknown error';
           logger.warn(
@@ -1262,6 +1309,16 @@ class PlexAPI {
           );
         }
       }
+
+      if (addedKeys.size === 0) {
+        return { successful: 0, failed };
+      }
+
+      const verified = await this.verifyItemsLanded(
+        collectionRatingKey,
+        addedKeys
+      );
+      return { successful: verified, failed: items.length - verified };
     }
   }
 
