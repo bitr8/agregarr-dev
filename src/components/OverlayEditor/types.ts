@@ -258,6 +258,7 @@ export interface OverlayRenderContext {
   // MOVIES: Earliest of Digital/Physical > Theatrical (+90 days estimate)
   // TV SHOWS: Series premiere date (NOT next episode!)
   releaseDate?: string;
+  isEstimatedReleaseDate?: boolean; // releaseDate is the theatrical+90 estimate, not a published date
   daysUntilRelease?: number; // Days until releaseDate
   daysAgo?: number; // Days since releaseDate
 
@@ -484,6 +485,11 @@ export const AVAILABLE_VARIABLES = {
   ],
   'coming-soon': [
     { field: 'releaseDate', label: 'Release Date', example: 'JAN 15' },
+    {
+      field: 'isEstimatedReleaseDate',
+      label: 'Release Date Is Estimated',
+      example: 'false',
+    },
     { field: 'daysUntilRelease', label: 'Days Until Release', example: '14' },
     {
       field: 'daysAgo',
@@ -725,6 +731,11 @@ export const CONDITION_FIELD_CATEGORIES = {
     },
     { field: 'daysUntilRelease', label: 'Days Until Release', example: '14' },
     {
+      field: 'isEstimatedReleaseDate',
+      label: 'Release Date Is Estimated',
+      example: 'false',
+    },
+    {
       field: 'daysAgo',
       label: 'Days Since Release (incl. release day)',
       example: '3',
@@ -918,6 +929,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysSinceAdded: 14,
     daysSinceLastPlayed: 3,
     releaseDate: '2025-02-15', // Primary release date (digital)
+    isEstimatedReleaseDate: false,
     daysUntilRelease: 14,
     runtime: 136,
     runtimeHHMM: '2h 16m',

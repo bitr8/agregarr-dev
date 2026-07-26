@@ -41,7 +41,10 @@ import {
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
 import { deriveReleaseDateContext } from './releaseDateContext';
-import { shouldSkipOnReleaseDateFetchFailure } from './releaseDateFetchPolicy';
+import {
+  RELEASE_DATE_CONTEXT_FIELDS,
+  shouldSkipOnReleaseDateFetchFailure,
+} from './releaseDateFetchPolicy';
 import { classifySeasonCleanupAction } from './seasonCleanupPolicy';
 import { restoreSeasonBasePoster } from './seasonPosterRestore';
 
@@ -874,7 +877,10 @@ class OverlayLibraryService {
                     extracted.inCinemas
                   );
                   if (determined) {
-                    releaseDateInfo = { releaseDate: determined.releaseDate };
+                    releaseDateInfo = {
+                      releaseDate: determined.releaseDate,
+                      isEstimated: determined.isEstimated,
+                    };
                     logger.debug('Prefetch: determined release date', {
                       label: 'OverlayLibrary',
                       tmdbId,
@@ -1560,17 +1566,9 @@ class OverlayLibraryService {
       }
 
       // Check if any templates need release date info
-      const needsReleaseDates =
-        requiredContextFields.has('releaseDate') ||
-        requiredContextFields.has('daysUntilRelease') ||
-        requiredContextFields.has('daysAgo') ||
-        requiredContextFields.has('nextEpisodeAirDate') ||
-        requiredContextFields.has('daysUntilNextEpisode') ||
-        requiredContextFields.has('nextSeasonAirDate') ||
-        requiredContextFields.has('daysUntilNextSeason') ||
-        requiredContextFields.has('daysAgoNextSeason') ||
-        requiredContextFields.has('seasonNumber') ||
-        requiredContextFields.has('episodeNumber');
+      const needsReleaseDates = RELEASE_DATE_CONTEXT_FIELDS.some((field) =>
+        requiredContextFields.has(field)
+      );
 
       if (needsReleaseDates) {
         await this.prefetchTmdbReleaseDates(allItems);
@@ -1919,17 +1917,9 @@ class OverlayLibraryService {
           requiredContextFields.has('isImdbTop250') ||
           requiredContextFields.has('imdbTop250Rank');
 
-        const needsReleaseDates =
-          requiredContextFields.has('releaseDate') ||
-          requiredContextFields.has('daysUntilRelease') ||
-          requiredContextFields.has('daysAgo') ||
-          requiredContextFields.has('nextEpisodeAirDate') ||
-          requiredContextFields.has('daysUntilNextEpisode') ||
-          requiredContextFields.has('nextSeasonAirDate') ||
-          requiredContextFields.has('daysUntilNextSeason') ||
-          requiredContextFields.has('daysAgoNextSeason') ||
-          requiredContextFields.has('seasonNumber') ||
-          requiredContextFields.has('episodeNumber');
+        const needsReleaseDates = RELEASE_DATE_CONTEXT_FIELDS.some((field) =>
+          requiredContextFields.has(field)
+        );
 
         if (needsImdbRatings && plexItems.length > 0) {
           await this.prefetchImdbRatings(plexItems);

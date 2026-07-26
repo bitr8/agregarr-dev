@@ -1141,6 +1141,8 @@ export async function buildRenderContext(
  */
 export interface ReleaseDateInfo {
   releaseDate?: string;
+  // releaseDate is the theatrical+90 guess, not a published digital/physical date.
+  isEstimated?: boolean;
   nextEpisodeAirDate?: string;
   nextSeasonAirDate?: string;
   seasonNumber?: number;
@@ -1288,6 +1290,7 @@ export async function fetchReleaseDateInfo(
         if (determined) {
           return {
             releaseDate: determined.releaseDate,
+            isEstimated: determined.isEstimated,
           };
         }
       }

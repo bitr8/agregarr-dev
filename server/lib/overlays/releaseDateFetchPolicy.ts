@@ -6,6 +6,7 @@
  */
 export const RELEASE_DATE_CONTEXT_FIELDS = [
   'releaseDate',
+  'isEstimatedReleaseDate',
   'daysUntilRelease',
   'daysAgo',
   'nextEpisodeAirDate',
