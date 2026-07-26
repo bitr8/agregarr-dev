@@ -217,6 +217,8 @@ export interface CollectionFormConfig {
   readonly lastSyncedAt?: string; // ISO string timestamp of last successful sync to Plex
   readonly lastModifiedAt?: string; // ISO string timestamp when config was last modified
   readonly needsSync?: boolean; // true if modified since last sync
+  readonly lastSyncError?: string; // Error message from last failed sync (cleared on success)
+  readonly lastSyncErrorAt?: string; // ISO timestamp of the sync error
   readonly lastSyncWarning?: string; // Warning from last sync (synced but with issues)
   readonly lastSyncWarningAt?: string; // ISO timestamp of warning
   readonly maxItems?: number; // Optional for hubs/pre-existing
