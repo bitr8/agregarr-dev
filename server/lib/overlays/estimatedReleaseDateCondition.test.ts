@@ -25,6 +25,15 @@ const flagIs = (value: boolean): ApplicationCondition => ({
   ],
 });
 
+const flagIsNot = (value: boolean): ApplicationCondition => ({
+  sections: [
+    {
+      sectionOperator: 'and',
+      rules: [{ field: 'isEstimatedReleaseDate', operator: 'neq', value }],
+    },
+  ],
+});
+
 const isPublished = flagIs(false);
 const isEstimate = flagIs(true);
 
@@ -54,6 +63,33 @@ describe('isEstimatedReleaseDate as a condition field', () => {
   // so a producer that omits the flag drops the item from the condition.
   it('does not match the published condition when the flag is absent', () => {
     expect(evaluateCondition(isPublished, ctx({}))).toBe(false);
+  });
+});
+
+// Pairing a template on this field: the confirmed half must use `neq true`,
+// not `eq false`. The flag is a third state, not a boolean - shows never get
+// it - and `eq false` drops every one of them out of BOTH halves of the pair.
+describe('splitting a template into estimated and confirmed halves', () => {
+  const notEstimate = flagIsNot(true);
+
+  it('neq true catches a published date', () => {
+    expect(
+      evaluateCondition(notEstimate, ctx({ isEstimatedReleaseDate: false }))
+    ).toBe(true);
+  });
+
+  it('neq true also catches a show, where the flag is absent', () => {
+    expect(evaluateCondition(notEstimate, ctx({}))).toBe(true);
+  });
+
+  it('eq false does NOT catch a show, which is why the pair must use neq', () => {
+    expect(evaluateCondition(isPublished, ctx({}))).toBe(false);
+  });
+
+  it('the two halves stay mutually exclusive for a real estimate', () => {
+    const estimated = ctx({ isEstimatedReleaseDate: true });
+    expect(evaluateCondition(isEstimate, estimated)).toBe(true);
+    expect(evaluateCondition(notEstimate, estimated)).toBe(false);
   });
 });
 
