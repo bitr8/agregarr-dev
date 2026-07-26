@@ -269,7 +269,8 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
             await plexClient.updateCollectionTitle(
               plexCol.ratingKey,
               resolvedTitle,
-              excludedConfig.libraryId
+              excludedConfig.libraryId,
+              plexCol.title
             );
           }
           excludeCollectionTitles.push(resolvedTitle);

@@ -331,6 +331,7 @@ class CollectionsSync {
       this.setStage('Connecting to Plex server...');
       collectionSyncProgress.setDetail('Connecting to Plex server...');
       const plexClient = await this.getPlexClient();
+      plexClient.clearHubManagementCache();
 
       // Test connection
       const isConnected = await plexClient.getStatus();
@@ -516,29 +517,6 @@ class CollectionsSync {
       }
 
       const duration = Date.now() - startTime;
-
-      // Run discovery to refresh missing warnings
-      this.setStage('Refreshing collection status...');
-      collectionSyncProgress.setDetail('Refreshing collection status...');
-      try {
-        const { discoveryService } = await import(
-          '@server/lib/collections/services/DiscoveryService'
-        );
-        await discoveryService.discoverAllHubs(
-          plexClient,
-          true, // Update settings with any new discoveries to keep everything in sync
-          true // Skip sync check since we're already in sync
-        );
-        logger.info('Collection status refreshed successfully', {
-          label: 'Collections Sync',
-        });
-      } catch (error) {
-        logger.warn('Failed to refresh collection status after sync', {
-          label: 'Collections Sync',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Don't fail the sync if discovery fails
-      }
 
       // Randomize home order for collections with randomizeHomeOrder enabled
       try {

@@ -182,7 +182,8 @@ export function convertUIOrderingToPlexIdentifiers(
 export async function applyUnifiedOrderingToPlex(
   plexClient: PlexAPI,
   orderingItems: OrderingItem[]
-): Promise<void> {
+): Promise<boolean> {
+  let didRepromote = false;
   try {
     // Convert UI ordering to Plex identifiers
     const plexItems = convertUIOrderingToPlexIdentifiers(orderingItems);
@@ -269,13 +270,14 @@ export async function applyUnifiedOrderingToPlex(
 
       // Apply ordering using Plex hub reordering API with precision convergence recovery
       try {
-        await plexClient.reorderHubs(
+        const repromoted = await plexClient.reorderHubs(
           libraryId,
           orderedIdentifiers,
           undefined,
           libraryType,
           nextSyncCounter
         );
+        didRepromote = didRepromote || repromoted;
       } catch (error: unknown) {
         // Check if this is a precision convergence error
         const convergenceError = error as Error & {
@@ -316,6 +318,8 @@ export async function applyUnifiedOrderingToPlex(
             orderedIdentifiers
           );
 
+          didRepromote = true;
+
           logger.info(
             `Successfully recovered from precision convergence in library ${libraryId}`,
             {
@@ -333,6 +337,7 @@ export async function applyUnifiedOrderingToPlex(
     }
 
     // Successfully applied unified ordering
+    return didRepromote;
   } catch (error) {
     logger.error(
       `Failed to apply unified ordering: ${extractErrorMessage(error)}`,

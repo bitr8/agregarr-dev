@@ -74,6 +74,8 @@ interface CollectionUpdateOptions {
   processedCollectionKeys?: Set<string>;
   libraryKey: string;
   config: MultiSourceCollectionConfig;
+  existingTitle?: string;
+  existingTitleSort?: string;
 }
 
 interface MetadataUpdateOptions {
@@ -84,6 +86,8 @@ interface MetadataUpdateOptions {
   customPoster?: string | Record<string, string>;
   config: MultiSourceCollectionConfig;
   libraryKey: string;
+  existingTitle?: string;
+  existingTitleSort?: string;
 }
 
 /**
@@ -1468,12 +1472,14 @@ export class MultiSourceOrchestrator {
   private async setCustomSortSafely(
     plexClient: PlexAPI,
     collectionRatingKey: string,
-    collectionName: string
+    collectionName: string,
+    currentSort?: string
   ): Promise<void> {
     try {
       await plexClient.updateCollectionContentSort(
         collectionRatingKey,
-        'custom'
+        'custom',
+        currentSort
       );
     } catch (error) {
       logger.warn(
@@ -1754,7 +1760,8 @@ export class MultiSourceOrchestrator {
             await plexClient.updateCollectionTitle(
               collectionRatingKey,
               collectionName,
-              options.libraryKey
+              options.libraryKey,
+              existingCollection.title
             );
             logger.debug(
               `Updated title for smart multi-source collection: ${existingCollection.title} -> ${collectionName}`,
@@ -1919,7 +1926,8 @@ export class MultiSourceOrchestrator {
             await this.setCustomSortSafely(
               plexClient,
               collectionRatingKey,
-              collectionName
+              collectionName,
+              existingCollection.collectionSort
             );
             const updateResult = await plexClient.updateCollectionContents(
               collectionRatingKey,
@@ -1946,7 +1954,8 @@ export class MultiSourceOrchestrator {
               await plexClient.updateCollectionTitle(
                 collectionRatingKey,
                 collectionName,
-                options.libraryKey
+                options.libraryKey,
+                existingCollection.title
               );
               logger.debug(
                 `Updated title for multi-source collection: ${existingCollection.title} -> ${collectionName}`,
@@ -2052,7 +2061,8 @@ export class MultiSourceOrchestrator {
       await this.setCustomSortSafely(
         plexClient,
         collectionRatingKey,
-        collectionName
+        collectionName,
+        created ? undefined : existingCollection?.collectionSort
       );
 
       if (plexItems.length > 1) {
@@ -2078,7 +2088,12 @@ export class MultiSourceOrchestrator {
       throw new Error(`Failed to create or find collection ${collectionName}`);
     }
 
-    // Apply metadata to the collection
+    // Apply metadata to the collection — only pass existing values when the
+    // collection was not recreated (created=1 means a fresh ratingKey)
+    if (!created) {
+      options.existingTitle = existingCollection?.title;
+      options.existingTitleSort = existingCollection?.titleSort;
+    }
     await this.updateCollectionMetadataStandardized(
       plexClient,
       collectionRatingKey,
@@ -2169,7 +2184,8 @@ export class MultiSourceOrchestrator {
       await plexClient.updateCollectionTitle(
         collectionRatingKey,
         options.config.name,
-        options.libraryKey
+        options.libraryKey,
+        options.existingTitle
       );
     }
 
@@ -2197,7 +2213,8 @@ export class MultiSourceOrchestrator {
         plexClient,
         collectionRatingKey,
         options.config.name,
-        options.config
+        options.config,
+        options.existingTitleSort
       );
     }
 
@@ -2926,7 +2943,8 @@ export class MultiSourceOrchestrator {
     plexClient: PlexAPI,
     collectionRatingKey: string,
     collectionName: string,
-    config: MultiSourceCollectionConfig
+    config: MultiSourceCollectionConfig,
+    currentTitleSort?: string
   ): Promise<void> {
     // Only update sortTitle if we have sortOrderLibrary defined
     if (config.sortOrderLibrary === undefined) {
@@ -2981,7 +2999,8 @@ export class MultiSourceOrchestrator {
       // Update the sortTitle in Plex
       await plexClient.updateCollectionSortTitle(
         collectionRatingKey,
-        sortTitle
+        sortTitle,
+        currentTitleSort
       );
 
       logger.debug(

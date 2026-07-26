@@ -183,6 +183,7 @@ interface PlexCollection {
   libraryKey?: string;
   libraryName?: string;
   titleSort?: string;
+  collectionSort?: string;
   Label?: { tag: string; id?: number }[];
   [key: string]: unknown;
 }
@@ -193,6 +194,7 @@ interface PlexCollectionMetadata extends PlexCollection {
   thumb?: string;
   art?: string;
   titleSort?: string;
+  collectionSort?: string;
   smart?: string; // Smart collections have smart="1" attribute (Plex returns string)
 }
 
@@ -239,6 +241,10 @@ class PlexAPI {
 
   public recordWrite(category: string): void {
     this.writeCounts.set(category, (this.writeCounts.get(category) ?? 0) + 1);
+  }
+
+  public shouldSkipUnchangedWrites(): boolean {
+    return getSettings().main.skipUnchangedPlexWrites !== false;
   }
 
   public recordPhaseTime(phase: string, ms: number): void {
@@ -842,6 +848,7 @@ class PlexAPI {
               libraryName: library.title,
               labels,
               titleSort: detailedCollection?.titleSort,
+              collectionSort: detailedCollection?.collectionSort,
             };
 
             allCollections.push(enhancedCollection);
@@ -1604,7 +1611,8 @@ class PlexAPI {
   public async updateCollectionTitle(
     collectionRatingKey: string,
     title: string,
-    libraryKey?: string
+    libraryKey?: string,
+    currentTitle?: string
   ): Promise<void> {
     const normalizedTitle = title.trim();
     if (!normalizedTitle) {
@@ -1612,6 +1620,13 @@ class PlexAPI {
         `Skipping empty title update for collection ${collectionRatingKey}`,
         { label: 'Plex API', collectionRatingKey }
       );
+      return;
+    }
+    if (
+      currentTitle !== undefined &&
+      normalizedTitle === currentTitle &&
+      this.shouldSkipUnchangedWrites()
+    ) {
       return;
     }
     try {
@@ -1921,8 +1936,16 @@ class PlexAPI {
 
   public async updateCollectionSortTitle(
     collectionRatingKey: string,
-    sortTitle: string
+    sortTitle: string,
+    currentTitleSort?: string
   ): Promise<void> {
+    if (
+      currentTitleSort !== undefined &&
+      sortTitle === currentTitleSort &&
+      this.shouldSkipUnchangedWrites()
+    ) {
+      return;
+    }
     try {
       const params = {
         type: 18,
@@ -1952,7 +1975,8 @@ class PlexAPI {
 
   public async updateCollectionContentSort(
     collectionRatingKey: string,
-    sortType: 'release' | 'alpha' | 'custom' = 'custom'
+    sortType: 'release' | 'alpha' | 'custom' = 'custom',
+    currentSort?: string
   ): Promise<void> {
     try {
       // Map sort types to Plex integer values (from Python PlexAPI reverse engineering)
@@ -1962,9 +1986,18 @@ class PlexAPI {
         custom: 2, // Custom collection order (preserves add order)
       };
 
+      const desiredSort = sortValues[sortType];
+      if (
+        currentSort !== undefined &&
+        String(desiredSort) === String(currentSort) &&
+        this.shouldSkipUnchangedWrites()
+      ) {
+        return;
+      }
+
       // Use the correct endpoint discovered from Python PlexAPI debug output:
       // PUT /library/collections/{ratingKey}/prefs?collectionSort=2
-      const editUrl = `/library/collections/${collectionRatingKey}/prefs?collectionSort=${sortValues[sortType]}`;
+      const editUrl = `/library/collections/${collectionRatingKey}/prefs?collectionSort=${desiredSort}`;
 
       await this.safePutQuery(editUrl);
       this.recordWrite('contentSort');
@@ -2153,14 +2186,17 @@ class PlexAPI {
       // Only promote if not already in hub management — re-promoting resets
       // visibility to all-on, undoing any inactive visibility that was set.
       let alreadyManaged = false;
+      let currentHub:
+        | PlexHubManagementResponse['MediaContainer']['Hub'][number]
+        | undefined;
       try {
         const hubMgmt = await this.hubManager.getHubManagement(
           librarySectionID
         );
-        alreadyManaged =
-          hubMgmt.MediaContainer?.Hub?.some(
-            (h: { identifier: string }) => h.identifier === hubIdentifier
-          ) ?? false;
+        currentHub = hubMgmt.MediaContainer?.Hub?.find(
+          (h: { identifier: string }) => h.identifier === hubIdentifier
+        );
+        alreadyManaged = currentHub !== undefined;
       } catch {
         // Fall through to promote (same as pre-fix behaviour)
       }
@@ -2168,6 +2204,15 @@ class PlexAPI {
       if (!alreadyManaged) {
         const hubInitUrl = `/hubs/sections/${librarySectionID}/manage?metadataItemId=${collectionRatingKey}`;
         await this.safePostQuery(hubInitUrl);
+        this.hubManager.clearHubManagementCache();
+      } else if (
+        currentHub &&
+        currentHub.promotedToRecommended === recommended &&
+        currentHub.promotedToOwnHome === home &&
+        currentHub.promotedToSharedHome === shared &&
+        this.shouldSkipUnchangedWrites()
+      ) {
+        return;
       }
 
       // Update visibility settings
@@ -2823,6 +2868,10 @@ class PlexAPI {
     return this.hubManager.getLibraryHubs(sectionId);
   }
 
+  public clearHubManagementCache(): void {
+    this.hubManager.clearHubManagementCache();
+  }
+
   /**
    * Get hub management interface for a library section
    * This endpoint provides the drag-and-drop hub ordering interface
@@ -2884,7 +2933,7 @@ class PlexAPI {
     positionedItemsCount?: number,
     libraryType?: 'movie' | 'show',
     syncCounter?: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     return this.hubManager.reorderHubs(
       sectionId,
       desiredOrder,

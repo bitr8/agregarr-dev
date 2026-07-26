@@ -218,14 +218,16 @@ export class HubSyncService {
       // Step 5: Apply unified ordering to each library with cleanup
       const libraryCount = orderingItemsByLibrary.size;
       onProgress?.(`Applying ordering to ${libraryCount} libraries...`);
-      await this.applyOrderingToLibraries(
+      const didRepromote = await this.applyOrderingToLibraries(
         plexClient,
         orderingItemsByLibrary,
         onProgress
       );
 
       // Convergence recovery re-promotes collections, resetting Plex visibility — restore it
-      await this.syncHubVisibility(plexClient, onProgress);
+      if (didRepromote) {
+        await this.syncHubVisibility(plexClient, onProgress);
+      }
     } catch (error) {
       logger.error(
         `Unified ordering sync failed: ${extractErrorMessage(error)}`,
@@ -1536,11 +1538,12 @@ export class HubSyncService {
     plexClient: PlexAPI,
     orderingItemsByLibrary: Map<string, OrderingItem[]>,
     onProgress?: (stage: string) => void
-  ): Promise<void> {
+  ): Promise<boolean> {
     let processedLibraries = 0;
     const totalLibraries = Array.from(orderingItemsByLibrary.values()).filter(
       (items) => items.length > 0
     ).length;
+    let didRepromote = false;
 
     for (const [libraryId, orderingItems] of orderingItemsByLibrary) {
       if (orderingItems.length === 0) {
@@ -1614,7 +1617,11 @@ export class HubSyncService {
         }
 
         // Applying unified ordering for library
-        await applyUnifiedOrderingToPlex(plexClient, completeOrderingItems);
+        const repromoted = await applyUnifiedOrderingToPlex(
+          plexClient,
+          completeOrderingItems
+        );
+        didRepromote = didRepromote || repromoted;
       } catch (error) {
         logger.error(
           `Failed to apply ordering for library ${libraryId}: ${extractErrorMessage(
@@ -1626,8 +1633,12 @@ export class HubSyncService {
             error: extractErrorMessage(error),
           }
         );
+        // Unknown failure state - restore visibility to be safe
+        didRepromote = true;
       }
     }
+
+    return didRepromote;
   }
 
   /**

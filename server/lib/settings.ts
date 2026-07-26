@@ -637,6 +637,7 @@ export interface MainSettings {
   locale: string;
   tmdbLanguage?: string; // Language for TMDB API calls (poster metadata, etc.) - defaults to 'en'
   enableTmdbPosterCache?: boolean; // Enable 7-day file cache for TMDB posters to reduce API calls - defaults to true
+  skipUnchangedPlexWrites?: boolean;
   ratingsCacheMaxDays?: number; // Maximum cache TTL for rating data (IMDb/RT) - older content caches longer, defaults to 30
   nextConfigId?: number; // Next sequential ID for collection configs (starts at 10000)
   // Global sync status tracking
@@ -749,6 +750,7 @@ class Settings {
         locale: 'en',
         tmdbLanguage: 'en',
         enableTmdbPosterCache: true,
+        skipUnchangedPlexWrites: true,
       },
       plex: {
         name: '',

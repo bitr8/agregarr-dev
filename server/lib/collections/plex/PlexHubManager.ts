@@ -8,9 +8,24 @@ import logger from '@server/logger';
  */
 class PlexHubManager {
   private plexApi: PlexAPI;
+  private hubManagementCache = new Map<string, PlexHubManagementResponse>();
 
   constructor(plexApi: PlexAPI) {
     this.plexApi = plexApi;
+  }
+
+  public clearHubManagementCache(): void {
+    this.hubManagementCache.clear();
+  }
+
+  public async getCachedHubManagement(
+    sectionId: string
+  ): Promise<PlexHubManagementResponse> {
+    const cached = this.hubManagementCache.get(sectionId);
+    if (cached) return cached;
+    const result = await this.getHubManagement(sectionId);
+    this.hubManagementCache.set(sectionId, result);
+    return result;
   }
 
   /**
@@ -160,6 +175,32 @@ class PlexHubManager {
     }
   ): Promise<void> {
     try {
+      let currentHub:
+        | PlexHubManagementResponse['MediaContainer']['Hub'][number]
+        | undefined;
+      try {
+        const mgmt = await this.getCachedHubManagement(sectionId);
+        currentHub = mgmt?.MediaContainer?.Hub?.find(
+          (h) => h.identifier === hubId
+        );
+      } catch {
+        // Fall through to write if cache fetch fails
+      }
+      if (currentHub) {
+        const alreadyMatches =
+          (visibility.promotedToRecommended === undefined ||
+            visibility.promotedToRecommended ===
+              currentHub.promotedToRecommended) &&
+          (visibility.promotedToOwnHome === undefined ||
+            visibility.promotedToOwnHome === currentHub.promotedToOwnHome) &&
+          (visibility.promotedToSharedHome === undefined ||
+            visibility.promotedToSharedHome ===
+              currentHub.promotedToSharedHome);
+        if (alreadyMatches && this.plexApi.shouldSkipUnchangedWrites()) {
+          return;
+        }
+      }
+
       const params = new URLSearchParams();
 
       if (visibility.promotedToRecommended !== undefined) {
@@ -185,7 +226,18 @@ class PlexHubManager {
       await this.plexApi['safePutQuery'](url);
       this.plexApi.recordWrite('hubVisibility');
 
-      // Hub visibility updated successfully - reduced logging
+      // Keep the cache in sync so later checks in this sync see the new state
+      if (currentHub) {
+        if (visibility.promotedToRecommended !== undefined) {
+          currentHub.promotedToRecommended = visibility.promotedToRecommended;
+        }
+        if (visibility.promotedToOwnHome !== undefined) {
+          currentHub.promotedToOwnHome = visibility.promotedToOwnHome;
+        }
+        if (visibility.promotedToSharedHome !== undefined) {
+          currentHub.promotedToSharedHome = visibility.promotedToSharedHome;
+        }
+      }
     } catch (error) {
       logger.error(
         `Error updating hub visibility for ${hubId} in library section ${sectionId}`,
@@ -255,13 +307,13 @@ class PlexHubManager {
     positionedItemsCount?: number,
     libraryType?: 'movie' | 'show',
     syncCounter?: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Declare outside try block for error logging
     let completeDesiredOrder = desiredOrder;
 
     try {
       if (desiredOrder.length <= 1) {
-        return;
+        return false;
       }
 
       // Get current hub order from Plex
@@ -282,7 +334,7 @@ class PlexHubManager {
       if (
         JSON.stringify(currentOrder) === JSON.stringify(completeDesiredOrder)
       ) {
-        return;
+        return false;
       }
 
       logger.debug(
@@ -577,6 +629,8 @@ class PlexHubManager {
           );
         }
       }
+
+      return repromoCount > 0;
     } catch (error) {
       logger.error(`Error reordering hubs in library section ${sectionId}`, {
         label: 'Plex API',
@@ -608,6 +662,7 @@ class PlexHubManager {
 
       await this.plexApi['safeDeleteQuery'](url);
       this.plexApi.recordWrite('hubRecovery');
+      this.hubManagementCache.delete(sectionId);
 
       logger.info(
         `Successfully reset hub management for library section ${sectionId}`,
@@ -641,6 +696,7 @@ class PlexHubManager {
 
       await this.plexApi['safeDeleteQuery'](url);
       this.plexApi.recordWrite('hubRecovery');
+      this.hubManagementCache.delete(sectionId);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -654,6 +710,7 @@ class PlexHubManager {
             hubId,
           }
         );
+        this.hubManagementCache.delete(sectionId);
         return;
       }
       logger.error(
@@ -702,6 +759,7 @@ class PlexHubManager {
       const hubInitUrl = `/hubs/sections/${libraryId}/manage?metadataItemId=${collectionRatingKey}`;
       await this.plexApi['safePostQuery'](hubInitUrl);
       this.plexApi.recordWrite('hubPromote');
+      this.hubManagementCache.delete(libraryId);
 
       logger.debug(
         `Successfully promoted collection to hub management: ${collectionRatingKey}`,

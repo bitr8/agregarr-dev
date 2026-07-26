@@ -560,6 +560,8 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
         customPoster: undefined,
         libraryKey: config.libraryId,
         config,
+        existingTitle: existingCollection?.title,
+        existingTitleSort: existingCollection?.titleSort,
       });
 
       // Set separator to inherit library default (collectionMode = -1)

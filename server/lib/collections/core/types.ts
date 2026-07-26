@@ -77,6 +77,8 @@ export interface PlexCollection {
   art?: string;
   /** Number of children in collection */
   childCount?: number;
+  titleSort?: string;
+  collectionSort?: string;
   /** Collection labels */
   labels?: (string | PlexLabel)[];
   /** Collection items */
