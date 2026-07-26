@@ -815,10 +815,17 @@ const AllCollectionsView: React.FC = () => {
                   {/* Visibility icons */}
                   {getVisibilityIcons(visibilityConfig, timeRestriction)}
 
-                  {/* Sync Status - Three-state system */}
+                  {/* Sync Status */}
                   <SyncStatus
                     needsSync={collection.needsSync}
                     isActive={collection.isActive}
+                    lastSyncedAt={collection.originalConfig.lastSyncedAt}
+                    lastSyncError={originalCollectionConfig?.lastSyncError}
+                    lastSyncErrorAt={originalCollectionConfig?.lastSyncErrorAt}
+                    lastSyncWarning={originalCollectionConfig?.lastSyncWarning}
+                    lastSyncWarningAt={
+                      originalCollectionConfig?.lastSyncWarningAt
+                    }
                   />
 
                   {/* Link icon - fixed space for consistent spacing */}

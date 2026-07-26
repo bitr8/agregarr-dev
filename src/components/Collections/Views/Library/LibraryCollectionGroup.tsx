@@ -404,13 +404,34 @@ const SortableItem = ({
         {/* Visibility icons */}
         {getVisibilityIcons(config.visibilityConfig, config.timeRestriction)}
 
-        {/* Sync Status - Three-state system */}
+        {/* Sync Status */}
         <SyncStatus
           needsSync={config.needsSync}
           isActive={config.isActive}
           onIndividualSync={isCollection ? onIndividualSync : undefined}
           collectionId={config.id}
           isSyncing={isSyncing}
+          lastSyncedAt={config.lastSyncedAt}
+          lastSyncError={
+            isCollection
+              ? (config as CollectionFormConfig).lastSyncError
+              : undefined
+          }
+          lastSyncErrorAt={
+            isCollection
+              ? (config as CollectionFormConfig).lastSyncErrorAt
+              : undefined
+          }
+          lastSyncWarning={
+            isCollection
+              ? (config as CollectionFormConfig).lastSyncWarning
+              : undefined
+          }
+          lastSyncWarningAt={
+            isCollection
+              ? (config as CollectionFormConfig).lastSyncWarningAt
+              : undefined
+          }
         />
 
         {/* Link icon - fixed space for consistent spacing */}

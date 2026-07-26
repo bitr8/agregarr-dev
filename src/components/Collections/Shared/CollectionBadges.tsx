@@ -4,9 +4,11 @@ import ThreeHomesIcon from '@app/assets/icons/threeHomes.svg';
 import Badge from '@app/components/Common/Badge';
 import type { CollectionFormConfig } from '@app/types/collections';
 import { formatSyncScheduleBadge } from '@app/utils/collections/collectionUtils';
+import { formatTimeAgo } from '@app/utils/timeFormatters';
 import {
   ArrowPathIcon,
   CheckIcon,
+  ExclamationCircleIcon,
   ExclamationTriangleIcon,
   LinkIcon as LinkIconHeroicon,
   LinkSlashIcon,
@@ -691,14 +693,22 @@ export const MissingIndicator: React.FC<MissingIndicatorProps> = ({
   );
 };
 
-// Sync Status - Three-state system
+// Sync Status - reflects error/warning/syncing/needsSync/synced/inactive state
 interface SyncStatusProps {
   needsSync?: boolean;
   isActive?: boolean;
   onIndividualSync?: (collectionId: string) => Promise<void>;
   collectionId?: string;
   isSyncing?: boolean;
+  lastSyncedAt?: string;
+  lastSyncError?: string;
+  lastSyncErrorAt?: string;
+  lastSyncWarning?: string;
+  lastSyncWarningAt?: string;
 }
+
+const relativeTime = (iso?: string): string =>
+  iso ? formatTimeAgo(new Date(iso).getTime()) : 'unknown time';
 
 export const SyncStatus: React.FC<SyncStatusProps> = ({
   needsSync,
@@ -706,46 +716,83 @@ export const SyncStatus: React.FC<SyncStatusProps> = ({
   onIndividualSync,
   collectionId,
   isSyncing,
+  lastSyncedAt,
+  lastSyncError,
+  lastSyncErrorAt,
+  lastSyncWarning,
+  lastSyncWarningAt,
 }) => {
+  const hasError = Boolean(lastSyncError);
+  const hasWarning = !hasError && Boolean(lastSyncWarning);
+  const canRetry =
+    Boolean(onIndividualSync && collectionId) && (hasError || needsSync);
+
+  let icon: React.ReactNode;
+  if (hasError) {
+    icon = (
+      <ExclamationTriangleIcon
+        className="h-4 w-4 text-red-500"
+        title={`Sync failed ${relativeTime(lastSyncErrorAt)}: ${lastSyncError}`}
+      />
+    );
+  } else if (hasWarning) {
+    icon = (
+      <ExclamationCircleIcon
+        className="h-4 w-4 text-orange-400"
+        title={`Synced with warning ${relativeTime(
+          lastSyncWarningAt
+        )}: ${lastSyncWarning}`}
+      />
+    );
+  } else if (isSyncing) {
+    icon = (
+      <ArrowPathIcon
+        className="h-4 w-4 animate-spin text-yellow-400"
+        title="Syncing..."
+      />
+    );
+  } else if (needsSync) {
+    icon = (
+      <ArrowPathIcon
+        className="h-4 w-4 text-red-400 group-hover:text-red-300"
+        title="Needs Sync - Collection has been modified and needs to be synced to Plex"
+      />
+    );
+  } else if (!lastSyncedAt) {
+    icon = (
+      <ArrowPathIcon className="h-4 w-4 text-gray-500" title="Never synced" />
+    );
+  } else if (isActive) {
+    icon = (
+      <CheckIcon
+        className="h-4 w-4 text-gray-400"
+        title={`Synced and Active - Last synced: ${relativeTime(lastSyncedAt)}`}
+      />
+    );
+  } else {
+    icon = (
+      <XMarkIcon
+        className="h-4 w-4 text-gray-400"
+        title="Inactive - Collection is disabled by time restrictions"
+      />
+    );
+  }
+
   return (
     <div className="flex w-12 justify-center">
-      {needsSync ? (
-        onIndividualSync && collectionId ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onIndividualSync(collectionId);
-            }}
-            disabled={isSyncing}
-            className="group -m-1 rounded p-1 transition-colors hover:bg-gray-700/50"
-            title={
-              isSyncing ? 'Syncing...' : 'Click to sync this collection now'
-            }
-          >
-            <ArrowPathIcon
-              className={`h-4 w-4 transition-colors ${
-                isSyncing
-                  ? 'animate-spin text-yellow-400'
-                  : 'text-red-400 group-hover:text-red-300'
-              }`}
-            />
-          </button>
-        ) : (
-          <ArrowPathIcon
-            className="h-4 w-4 text-red-400"
-            title="Needs Sync - Collection has been modified and needs to be synced to Plex"
-          />
-        )
-      ) : isActive ? (
-        <CheckIcon
-          className="h-4 w-4 text-gray-400"
-          title="Synced and Active - Collection is up to date and currently active"
-        />
+      {canRetry ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onIndividualSync?.(collectionId as string);
+          }}
+          disabled={isSyncing}
+          className="group -m-1 rounded p-1 transition-colors hover:bg-gray-700/50"
+        >
+          {icon}
+        </button>
       ) : (
-        <XMarkIcon
-          className="h-4 w-4 text-gray-400"
-          title="Inactive - Collection is disabled by time restrictions"
-        />
+        icon
       )}
     </div>
   );
