@@ -663,6 +663,7 @@ export interface MainSettings {
   letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: false)
   // FlixPatrol fetching method
   flixpatrolUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for FlixPatrol page fetching (default: false)
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
 }
 
 interface PublicSettings {
@@ -751,6 +752,9 @@ class Settings {
         tmdbLanguage: 'en',
         enableTmdbPosterCache: true,
         skipUnchangedPlexWrites: true,
+        logLevel:
+          (process.env.LOG_LEVEL?.toLowerCase() as MainSettings['logLevel']) ||
+          'info',
       },
       plex: {
         name: '',

@@ -55,6 +55,8 @@ const messages = defineMessages({
   enableTmdbPosterCache: 'Enable TMDB Poster Cache',
   enableTmdbPosterCacheTip:
     'Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)',
+  logLevel: 'Log Level',
+  logLevelTip: 'Controls how much detail appears in logs',
   resetAgregarr: 'Reset',
   resetAgregarrDescription:
     'Remove all Agregarr collections from Plex and clear all user labels.',
@@ -167,6 +169,7 @@ const SettingsMain = () => {
             enableTmdbPosterCache: data?.enableTmdbPosterCache ?? true,
             watchProviderRegion: data?.watchProviderRegion ?? 'US',
             trustProxy: data?.trustProxy,
+            logLevel: data?.logLevel ?? 'info',
           }}
           enableReinitialize
           validationSchema={MainSettingsSchema}
@@ -181,6 +184,7 @@ const SettingsMain = () => {
                 enableTmdbPosterCache: values.enableTmdbPosterCache,
                 watchProviderRegion: values.watchProviderRegion,
                 trustProxy: values.trustProxy,
+                logLevel: values.logLevel,
               });
               mutate('/api/v1/settings/public');
               mutate('/api/v1/status');
@@ -387,6 +391,24 @@ const SettingsMain = () => {
                         );
                       }}
                     />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="logLevel" className="text-label">
+                    {intl.formatMessage(messages.logLevel)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.logLevelTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field as="select" id="logLevel" name="logLevel">
+                        <option value="error">Error</option>
+                        <option value="warn">Warning</option>
+                        <option value="info">Info</option>
+                        <option value="debug">Debug</option>
+                      </Field>
+                    </div>
                   </div>
                 </div>
                 <div className="form-row">

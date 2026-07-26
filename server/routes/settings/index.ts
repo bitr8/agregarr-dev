@@ -106,6 +106,10 @@ settingsRoutes.post('/main', (req, res, next) => {
   settings.main = merge(settings.main, mainBody);
   settings.save();
 
+  if (settings.main.logLevel) {
+    logger.level = settings.main.logLevel;
+  }
+
   return res.status(200).json({
     ...filteredMainSettings(req.user, settings.main),
     watchProviderRegion: settings.overlays?.watchProviderRegion ?? 'US',

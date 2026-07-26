@@ -64,7 +64,7 @@ const redactFinalMessage = winston.format((info) => {
 });
 
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL?.toLowerCase() || 'debug',
+  level: process.env.LOG_LEVEL?.toLowerCase() || 'info',
   format: winston.format.combine(
     winston.format.splat(),
     winston.format.timestamp(),

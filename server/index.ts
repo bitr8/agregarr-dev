@@ -48,6 +48,11 @@ app
     // Load Settings
     const settings = getSettings().load();
 
+    // Apply saved log level
+    if (settings.main.logLevel) {
+      logger.level = settings.main.logLevel;
+    }
+
     // Initialize RestartFlag with current settings
     restartFlag.initializeSettings(settings.main);
 
