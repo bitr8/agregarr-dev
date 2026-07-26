@@ -55,6 +55,7 @@ class PlexPosterManager {
         url
       )}`;
       await this.plexApi['safePostQuery'](key);
+      this.plexApi.recordWrite('poster');
 
       logger.info(`Successfully uploaded poster from URL for ${ratingKey}`, {
         label: 'Plex API',
@@ -102,6 +103,7 @@ class PlexPosterManager {
         },
         timeout: 30000,
       });
+      this.plexApi.recordWrite('poster');
 
       logger.info(`Successfully uploaded poster from file for ${ratingKey}`, {
         label: 'Plex API',

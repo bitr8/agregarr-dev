@@ -93,6 +93,7 @@ class PlexHubManager {
         : `/hubs/sections/${sectionId}/manage/${hubId}/move`;
 
       await this.plexApi['safePutQuery'](url);
+      this.plexApi.recordWrite('hubOrder');
     } catch (error) {
       logger.error(
         `Error moving hub ${hubId} in library section ${sectionId}`,
@@ -182,6 +183,7 @@ class PlexHubManager {
 
       const url = `/hubs/sections/${sectionId}/manage/${hubId}?${params.toString()}`;
       await this.plexApi['safePutQuery'](url);
+      this.plexApi.recordWrite('hubVisibility');
 
       // Hub visibility updated successfully - reduced logging
     } catch (error) {
@@ -605,6 +607,7 @@ class PlexHubManager {
       );
 
       await this.plexApi['safeDeleteQuery'](url);
+      this.plexApi.recordWrite('hubRecovery');
 
       logger.info(
         `Successfully reset hub management for library section ${sectionId}`,
@@ -637,6 +640,7 @@ class PlexHubManager {
       const url = `/hubs/sections/${sectionId}/manage/${hubId}`;
 
       await this.plexApi['safeDeleteQuery'](url);
+      this.plexApi.recordWrite('hubRecovery');
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -697,6 +701,7 @@ class PlexHubManager {
     try {
       const hubInitUrl = `/hubs/sections/${libraryId}/manage?metadataItemId=${collectionRatingKey}`;
       await this.plexApi['safePostQuery'](hubInitUrl);
+      this.plexApi.recordWrite('hubPromote');
 
       logger.debug(
         `Successfully promoted collection to hub management: ${collectionRatingKey}`,

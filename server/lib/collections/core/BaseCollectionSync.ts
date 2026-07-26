@@ -300,6 +300,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           }
 
           // Process individual configuration (using effective config with potentially overridden visibility)
+          const configPhaseStart = Date.now();
           const result = await this.processConfiguration(
             effectiveConfig,
             plexClient,
@@ -307,6 +308,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             processedCollectionKeys,
             libraryCache, // OPTIMIZATION: Pass library cache to eliminate repeated API calls
             options
+          );
+          plexClient.recordCollectionProcessingTime(
+            Date.now() - configPhaseStart
           );
 
           created += result.created;
@@ -1151,6 +1155,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     items: CollectionItem[],
     options: CollectionUpdateOptions
   ): Promise<CollectionUpdateResult> {
+    const contentPhaseStart = Date.now();
     const { collectionName, mediaType, customLabel } = options;
 
     // Validate items first
@@ -1658,11 +1663,18 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       throw new Error(`Failed to create or find collection ${collectionName}`);
     }
 
+    plexClient.recordPhaseTime('contentUpdate', Date.now() - contentPhaseStart);
+
     // Apply metadata to the collection
+    const metadataPhaseStart = Date.now();
     const metadataResult = await this.updateCollectionMetadata(
       plexClient,
       collectionRatingKey,
       options
+    );
+    plexClient.recordPhaseTime(
+      'metadataUpdate',
+      Date.now() - metadataPhaseStart
     );
 
     if (metadataResult.ratingKeyIsStale) {

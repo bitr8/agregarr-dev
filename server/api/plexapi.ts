@@ -212,6 +212,85 @@ class PlexAPI {
   private posterManager: PlexPosterManager;
   private autoEmptyTrashPrefPromise?: Promise<boolean>;
 
+  // Write telemetry - scoped to this instance (one PlexAPI per sync run), not
+  // a global singleton, so overlapping syncs never share counts.
+  private writeCounts = new Map<string, number>();
+  private phaseTimingsMs = new Map<string, number>();
+  private collectionProcessingMs = 0;
+
+  private static readonly WRITE_CATEGORIES = [
+    'title',
+    'sortTitle',
+    'contentSort',
+    'hubVisibility',
+    'label',
+    'poster',
+    'arrange',
+    'mode',
+  ] as const;
+
+  private static readonly PHASE_ORDER = [
+    'sourceFetch',
+    'contentUpdate',
+    'metadataUpdate',
+    'hubSync',
+    'ordering',
+  ] as const;
+
+  public recordWrite(category: string): void {
+    this.writeCounts.set(category, (this.writeCounts.get(category) ?? 0) + 1);
+  }
+
+  public recordPhaseTime(phase: string, ms: number): void {
+    this.phaseTimingsMs.set(phase, (this.phaseTimingsMs.get(phase) ?? 0) + ms);
+  }
+
+  // Total time spent inside processConfiguration() across every collection
+  // this sync. Not logged directly - it's the base that sourceFetch is
+  // derived from in getPhaseSummary().
+  public recordCollectionProcessingTime(ms: number): void {
+    this.collectionProcessingMs += ms;
+  }
+
+  public getWriteSummary(): { total: number; text: string } {
+    const seen = new Set<string>();
+    const parts: string[] = [];
+    let total = 0;
+    for (const category of PlexAPI.WRITE_CATEGORIES) {
+      const count = this.writeCounts.get(category) ?? 0;
+      parts.push(`${category}: ${count}`);
+      total += count;
+      seen.add(category);
+    }
+    for (const [category, count] of this.writeCounts) {
+      if (!seen.has(category)) {
+        parts.push(`${category}: ${count}`);
+        total += count;
+      }
+    }
+    return { total, text: parts.join(', ') };
+  }
+
+  // ponytail: sourceFetch is a residual (collectionProcessing minus the two
+  // sub-phases timed directly), not an isolated measurement - fetchSourceData
+  // is abstract and implemented per source (16 subclasses), so there's no
+  // single call site to wrap directly. Upgrade path: thread a timer through
+  // fetchSourceData if per-source fetch time is ever needed.
+  public getPhaseSummary(): string {
+    const contentMs = this.phaseTimingsMs.get('contentUpdate') ?? 0;
+    const metadataMs = this.phaseTimingsMs.get('metadataUpdate') ?? 0;
+    const sourceFetchMs = Math.max(
+      0,
+      this.collectionProcessingMs - contentMs - metadataMs
+    );
+    this.phaseTimingsMs.set('sourceFetch', sourceFetchMs);
+
+    return PlexAPI.PHASE_ORDER.map(
+      (phase) =>
+        `${phase}: ${Math.round(this.phaseTimingsMs.get(phase) ?? 0)}ms`
+    ).join(', ');
+  }
+
   private getExtendedClient(): ExtendedPlexAPI {
     return this.plexClient as ExtendedPlexAPI;
   }
@@ -1384,6 +1463,7 @@ class PlexAPI {
         const editUrl = `/library/metadata/${collectionRatingKey}?${queryString}`;
 
         await this.safePutQuery(editUrl);
+        this.recordWrite('label');
 
         // Verify the label was actually added (with a small delay for Plex API)
         await new Promise((resolve) => setTimeout(resolve, 500)); // Allow Plex time to index the label
@@ -1481,6 +1561,7 @@ class PlexAPI {
           normalizedTitle
         )}&title.locked=1`;
         await this.safePutQuery(editUrl);
+        this.recordWrite('title');
       } else {
         // Fallback to old method if libraryKey not provided (for backwards compatibility)
         // This may not work reliably for collections
@@ -1495,6 +1576,7 @@ class PlexAPI {
         const editUrl = `/library/metadata/${collectionRatingKey}?${queryString}`;
 
         await this.safePutQuery(editUrl);
+        this.recordWrite('title');
 
         logger.warn(
           `updateCollectionTitle called without libraryKey - using legacy endpoint which may not work for collections`,
@@ -1530,6 +1612,7 @@ class PlexAPI {
       const prefsUrl = `/library/metadata/${collectionRatingKey}/prefs?collectionMode=${mode}`;
 
       await this.safePutQuery(prefsUrl);
+      this.recordWrite('mode');
 
       logger.debug(
         `Updated collection mode to ${mode} for collection ${collectionRatingKey}`,
@@ -1793,6 +1876,7 @@ class PlexAPI {
       const editUrl = `/library/metadata/${collectionRatingKey}?${queryString}`;
 
       await this.safePutQuery(editUrl);
+      this.recordWrite('sortTitle');
     } catch (error) {
       logger.error(
         `Error updating sort title for collection ${collectionRatingKey}`,
@@ -1821,6 +1905,7 @@ class PlexAPI {
       const editUrl = `/library/collections/${collectionRatingKey}/prefs?collectionSort=${sortValues[sortType]}`;
 
       await this.safePutQuery(editUrl);
+      this.recordWrite('contentSort');
     } catch (error) {
       logger.error(
         `Error updating content sort for collection ${collectionRatingKey}`,
@@ -1859,6 +1944,7 @@ class PlexAPI {
       const moveUrl = `/library/collections/${collectionRatingKey}/items/${itemRatingKey}/move?after=${afterItemRatingKey}`;
 
       await this.safePutQuery(moveUrl);
+      this.recordWrite('arrange');
       return true;
     } catch (error) {
       // Silently fail - this is not critical for functionality
@@ -1925,6 +2011,7 @@ class PlexAPI {
           try {
             const moveUrl = `/library/collections/${collectionRatingKey}/items/${itemToMove}/move`;
             await this.safePutQuery(moveUrl);
+            this.recordWrite('arrange');
             success = true;
           } catch (error) {
             success = false;

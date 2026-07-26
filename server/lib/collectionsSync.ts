@@ -370,13 +370,16 @@ class CollectionsSync {
         './collections/plex/HubSyncService'
       );
       const hubSyncService = new HubSyncService();
+      const hubSyncPhaseStart = Date.now();
       await hubSyncService.syncHubVisibility(plexClient, (stage: string) => {
         this.setStage(stage);
       });
+      plexClient.recordPhaseTime('hubSync', Date.now() - hubSyncPhaseStart);
 
       // Sync pre-existing collection sortTitles based on promotion status
       this.setStage('Updating collection sort titles...');
       collectionSyncProgress.setDetail('Updating collection sort titles...');
+      const orderingPhaseStart = Date.now();
       await hubSyncService.syncPreExistingCollectionSortTitles(plexClient);
 
       // Sync unified ordering (collections + hubs)
@@ -387,6 +390,7 @@ class CollectionsSync {
       await hubSyncService.syncUnifiedOrdering(plexClient, (stage: string) => {
         this.setStage(stage);
       });
+      plexClient.recordPhaseTime('ordering', Date.now() - orderingPhaseStart);
 
       // Clean up orphaned collections after sync completes
       this.setStage('Cleaning up orphaned collections...');
@@ -551,6 +555,15 @@ class CollectionsSync {
         });
         // Don't fail the sync if randomization fails
       }
+
+      const writeSummary = plexClient.getWriteSummary();
+      logger.info(
+        `Plex writes this sync: ${writeSummary.total} (${writeSummary.text})`,
+        { label: 'Collections Sync' }
+      );
+      logger.info(`Sync phase timings: ${plexClient.getPhaseSummary()}`, {
+        label: 'Collections Sync',
+      });
 
       logger.info('Collections sync completed successfully', {
         label: 'Collections Sync',
