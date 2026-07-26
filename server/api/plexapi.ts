@@ -388,19 +388,20 @@ class PlexAPI {
   /**
    * Check if a collection is a smart collection
    * @param collectionRatingKey The rating key of the collection to check
-   * @returns true if the collection is smart, false otherwise
+   * @returns 'smart' | 'not_smart', or 'unknown' when the check itself failed -
+   *   callers must not treat 'unknown' the same as 'not_smart'
    */
   private async isSmartCollection(
     collectionRatingKey: string
-  ): Promise<boolean> {
+  ): Promise<'smart' | 'not_smart' | 'unknown'> {
     try {
       const metadata = await this.getCollectionMetadata(collectionRatingKey);
       if (!metadata) {
-        return false;
+        return 'unknown';
       }
 
       // Smart collections have smart="1" attribute in Plex API
-      return metadata.smart === '1';
+      return metadata.smart === '1' ? 'smart' : 'not_smart';
     } catch (error) {
       logger.warn(
         `Failed to check if collection ${collectionRatingKey} is smart`,
@@ -409,7 +410,7 @@ class PlexAPI {
           error: error instanceof Error ? error.message : String(error),
         }
       );
-      return false;
+      return 'unknown';
     }
   }
 
@@ -1202,15 +1203,17 @@ class PlexAPI {
       return { successful: 0, failed: 0 };
     }
 
-    // PROTECTION: Never add items to smart collections - they are auto-populated by Plex
-    const isSmart = await this.isSmartCollection(collectionRatingKey);
-    if (isSmart) {
+    // PROTECTION: Never add items to smart collections - they are auto-populated by Plex.
+    // Treat an unknown status (transport failure) the same as smart: refuse.
+    const smartStatus = await this.isSmartCollection(collectionRatingKey);
+    if (smartStatus !== 'not_smart') {
       logger.error(
         `PROTECTION: Attempted to add items to smart collection ${collectionRatingKey}. This could corrupt the Plex database!`,
         {
           label: 'Plex API',
           collectionRatingKey,
           itemCount: items.length,
+          smartStatus,
           protection: 'SMART_COLLECTION_BLOCK',
         }
       );
@@ -1379,14 +1382,16 @@ class PlexAPI {
   public async removeItemsFromCollection(
     collectionRatingKey: string
   ): Promise<void> {
-    // PROTECTION: Never remove items from smart collections - they are auto-populated by Plex
-    const isSmart = await this.isSmartCollection(collectionRatingKey);
-    if (isSmart) {
+    // PROTECTION: Never remove items from smart collections - they are auto-populated by Plex.
+    // Treat an unknown status (transport failure) the same as smart: refuse.
+    const smartStatus = await this.isSmartCollection(collectionRatingKey);
+    if (smartStatus !== 'not_smart') {
       logger.error(
         `PROTECTION: Attempted to remove items from smart collection ${collectionRatingKey}. This could corrupt the Plex database!`,
         {
           label: 'Plex API',
           collectionRatingKey,
+          smartStatus,
           protection: 'SMART_COLLECTION_BLOCK',
         }
       );
@@ -1980,15 +1985,17 @@ class PlexAPI {
     itemRatingKey: string,
     afterItemRatingKey: string
   ): Promise<boolean> {
-    // PROTECTION: Never move items in smart collections - they have their own ordering
-    const isSmart = await this.isSmartCollection(collectionRatingKey);
-    if (isSmart) {
+    // PROTECTION: Never move items in smart collections - they have their own ordering.
+    // Treat an unknown status (transport failure) the same as smart: refuse.
+    const smartStatus = await this.isSmartCollection(collectionRatingKey);
+    if (smartStatus !== 'not_smart') {
       logger.debug(
         `PROTECTION: Attempted to move item in smart collection ${collectionRatingKey}. Skipping move for smart collection.`,
         {
           label: 'Plex API',
           collectionRatingKey,
           itemRatingKey,
+          smartStatus,
           protection: 'SMART_COLLECTION_SKIP',
         }
       );
@@ -2017,15 +2024,17 @@ class PlexAPI {
       return; // No need to arrange single item or empty collections
     }
 
-    // PROTECTION: Never arrange items in smart collections - they have their own ordering
-    const isSmart = await this.isSmartCollection(collectionRatingKey);
-    if (isSmart) {
+    // PROTECTION: Never arrange items in smart collections - they have their own ordering.
+    // Treat an unknown status (transport failure) the same as smart: refuse.
+    const smartStatus = await this.isSmartCollection(collectionRatingKey);
+    if (smartStatus !== 'not_smart') {
       logger.warn(
         `PROTECTION: Attempted to arrange items in smart collection ${collectionRatingKey}. Skipping arrangement for smart collection.`,
         {
           label: 'Plex API',
           collectionRatingKey,
           itemCount: orderedItems.length,
+          smartStatus,
           protection: 'SMART_COLLECTION_SKIP',
         }
       );
@@ -2195,15 +2204,17 @@ class PlexAPI {
     let successful = 0;
     let failed = 0;
 
-    // PROTECTION: Never remove items from smart collections - they are auto-populated by Plex
-    const isSmart = await this.isSmartCollection(collectionRatingKey);
-    if (isSmart) {
+    // PROTECTION: Never remove items from smart collections - they are auto-populated by Plex.
+    // Treat an unknown status (transport failure) the same as smart: refuse.
+    const smartStatus = await this.isSmartCollection(collectionRatingKey);
+    if (smartStatus !== 'not_smart') {
       logger.error(
         `PROTECTION: Attempted to remove specific items from smart collection ${collectionRatingKey}. This could corrupt the Plex database!`,
         {
           label: 'Plex API',
           collectionRatingKey,
           itemCount: itemsToRemove.length,
+          smartStatus,
           protection: 'SMART_COLLECTION_BLOCK',
         }
       );
@@ -2255,15 +2266,17 @@ class PlexAPI {
     let removed = 0;
     let reordered = false;
 
-    // PROTECTION: Never update smart collections - they are auto-populated by Plex
-    const isSmart = await this.isSmartCollection(collectionRatingKey);
-    if (isSmart) {
+    // PROTECTION: Never update smart collections - they are auto-populated by Plex.
+    // Treat an unknown status (transport failure) the same as smart: refuse.
+    const smartStatus = await this.isSmartCollection(collectionRatingKey);
+    if (smartStatus !== 'not_smart') {
       logger.error(
         `PROTECTION: Attempted to update contents of smart collection ${collectionRatingKey}. This could corrupt the Plex database!`,
         {
           label: 'Plex API',
           collectionRatingKey,
           itemCount: desiredItems.length,
+          smartStatus,
           protection: 'SMART_COLLECTION_BLOCK',
         }
       );
@@ -2352,15 +2365,17 @@ class PlexAPI {
     let successful = 0;
     let failed = 0;
 
-    // PROTECTION: Never add items to smart collections - they are auto-populated by Plex
-    const isSmart = await this.isSmartCollection(collectionRatingKey);
-    if (isSmart) {
+    // PROTECTION: Never add items to smart collections - they are auto-populated by Plex.
+    // Treat an unknown status (transport failure) the same as smart: refuse.
+    const smartStatus = await this.isSmartCollection(collectionRatingKey);
+    if (smartStatus !== 'not_smart') {
       logger.error(
         `PROTECTION: Attempted to add specific items to smart collection ${collectionRatingKey}. This could corrupt the Plex database!`,
         {
           label: 'Plex API',
           collectionRatingKey,
           itemCount: itemsToAdd.length,
+          smartStatus,
           protection: 'SMART_COLLECTION_BLOCK',
         }
       );
