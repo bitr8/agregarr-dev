@@ -496,8 +496,12 @@ export function determineReleaseDate(
 
   // Priority 2: Theatrical + 90 days estimate
   if (theatricalRelease) {
-    const baseDate = new Date(theatricalRelease);
-    baseDate.setDate(baseDate.getDate() + 90);
+    // Noon UTC anchor and UTC arithmetic. Counting days in local time and then
+    // serialising with toISOString() loses a day when the span crosses into
+    // DST, so a Sydney server dated a 16/07 theatrical to 13/10, not 14/10.
+    const dateOnly = theatricalRelease.split('T')[0];
+    const baseDate = new Date(dateOnly + 'T12:00:00.000Z');
+    baseDate.setUTCDate(baseDate.getUTCDate() + 90);
     return {
       releaseDate: baseDate.toISOString().split('T')[0],
       isEstimated: true,

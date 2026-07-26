@@ -271,6 +271,24 @@ describe('dateHelpers with TZ=Australia/Sydney', () => {
       expect(result?.releaseDate).toBe('2026-04-01');
       expect(result?.isEstimated).toBe(true);
     });
+
+    // The case above spans 01/01-01/04, entirely inside AEDT, so it cannot see
+    // a DST shift. The Odyssey (AU theatrical 16/07) crosses the 04/10 start
+    // and was rendering 13/10 in production instead of 14/10.
+    it('keeps the +90 estimate on the right day across the DST start', () => {
+      const result = determineReleaseDate(
+        undefined,
+        undefined,
+        '2026-07-16T00:00:00.000Z'
+      );
+      expect(result?.releaseDate).toBe('2026-10-14');
+      expect(result?.isEstimated).toBe(true);
+    });
+
+    it('does the same for a date-only theatrical value', () => {
+      const result = determineReleaseDate(undefined, undefined, '2026-07-16');
+      expect(result?.releaseDate).toBe('2026-10-14');
+    });
   });
 });
 
