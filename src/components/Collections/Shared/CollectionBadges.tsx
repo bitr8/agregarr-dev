@@ -728,7 +728,14 @@ export const SyncStatus: React.FC<SyncStatusProps> = ({
     Boolean(onIndividualSync && collectionId) && (hasError || needsSync);
 
   let icon: React.ReactNode;
-  if (hasError) {
+  if (isSyncing) {
+    icon = (
+      <ArrowPathIcon
+        className="h-4 w-4 animate-spin text-yellow-400"
+        title="Syncing..."
+      />
+    );
+  } else if (hasError) {
     icon = (
       <ExclamationTriangleIcon
         className="h-4 w-4 text-red-500"
@@ -742,13 +749,6 @@ export const SyncStatus: React.FC<SyncStatusProps> = ({
         title={`Synced with warning ${relativeTime(
           lastSyncWarningAt
         )}: ${lastSyncWarning}`}
-      />
-    );
-  } else if (isSyncing) {
-    icon = (
-      <ArrowPathIcon
-        className="h-4 w-4 animate-spin text-yellow-400"
-        title="Syncing..."
       />
     );
   } else if (needsSync) {

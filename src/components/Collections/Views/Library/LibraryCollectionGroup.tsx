@@ -583,7 +583,7 @@ const LibraryCollectionGroup = ({
 }: LibraryCollectionGroupProps) => {
   const intl = useIntl();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
+  const [syncingIds, setSyncingIds] = useState<Map<string, number>>(new Map());
   const { addToast } = useToasts();
 
   // SWR revalidation hook for refreshing collection data after sync
@@ -591,15 +591,20 @@ const LibraryCollectionGroup = ({
 
   // Monitor collections to detect when individual syncs complete (or fail)
   useEffect(() => {
-    syncingIds.forEach((syncingId) => {
+    syncingIds.forEach((startedAt, syncingId) => {
       const collection = collections.find((c) => c.id === syncingId);
       if (!collection) return;
 
-      if (collection.lastSyncError) {
+      const errorIsNew =
+        collection.lastSyncError &&
+        collection.lastSyncErrorAt &&
+        new Date(collection.lastSyncErrorAt).getTime() > startedAt;
+
+      if (errorIsNew) {
         setSyncingIds((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(syncingId);
-          return newSet;
+          const newMap = new Map(prev);
+          newMap.delete(syncingId);
+          return newMap;
         });
         addToast(`Sync failed: ${collection.lastSyncError}`, {
           appearance: 'error',
@@ -607,9 +612,9 @@ const LibraryCollectionGroup = ({
         });
       } else if (!collection.needsSync) {
         setSyncingIds((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(syncingId);
-          return newSet;
+          const newMap = new Map(prev);
+          newMap.delete(syncingId);
+          return newMap;
         });
       }
     });
@@ -617,8 +622,7 @@ const LibraryCollectionGroup = ({
 
   // Handle individual collection sync
   const handleIndividualSync = async (collectionId: string) => {
-    // Add to syncing set
-    setSyncingIds((prev) => new Set(prev).add(collectionId));
+    setSyncingIds((prev) => new Map(prev).set(collectionId, Date.now()));
 
     try {
       await axios.post(`/api/v1/collections/${collectionId}/sync`);
@@ -640,9 +644,9 @@ const LibraryCollectionGroup = ({
         setSyncingIds((prev) => {
           stillSyncing = prev.has(collectionId);
           if (!stillSyncing) return prev;
-          const newSet = new Set(prev);
-          newSet.delete(collectionId);
-          return newSet;
+          const newMap = new Map(prev);
+          newMap.delete(collectionId);
+          return newMap;
         });
         if (stillSyncing) {
           addToast('Sync may have failed - check collection status', {
