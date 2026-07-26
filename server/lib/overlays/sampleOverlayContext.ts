@@ -71,7 +71,6 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
 
   // Status fields
   releaseDate: '2024-12-25',
-  isEstimatedReleaseDate: false,
   daysUntilRelease: 14,
   daysAgo: 3,
   nextEpisodeAirDate: '2025-01-15',

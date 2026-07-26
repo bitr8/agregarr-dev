@@ -417,7 +417,6 @@ export interface OverlayRenderContext {
   // MOVIES: Earliest of Digital/Physical > Theatrical (+90 days estimate)
   // TV SHOWS: Series premiere date (NOT next episode!)
   releaseDate?: string;
-  isEstimatedReleaseDate?: boolean; // releaseDate is the theatrical+90 estimate, not a published date
   daysUntilRelease?: number; // Days until releaseDate
   daysAgo?: number; // Days since releaseDate
 

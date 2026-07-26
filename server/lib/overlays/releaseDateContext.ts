@@ -86,9 +86,6 @@ export function deriveReleaseDateContext(
 
   return {
     releaseDate: info.releaseDate,
-    // Only meaningful alongside a date; an estimate flag with no date to
-    // qualify would let a template render "estimated" over nothing.
-    isEstimatedReleaseDate: info.releaseDate ? info.isEstimated : undefined,
     daysUntilRelease,
     daysAgo,
     nextEpisodeAirDate,

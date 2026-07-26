@@ -1,6 +1,5 @@
 import type { MaintainerrCollection } from '@server/api/maintainerr';
 import PlexAPI from '@server/api/plexapi';
-import type { RadarrMovie } from '@server/api/servarr/radarr';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
@@ -229,21 +228,12 @@ overlayTestRouter.post('/', async (req, res) => {
 
     const baseContext = contextResult.context;
 
-    // Shared for this request only: both the release-date merge and the
-    // monitoring check pull Radarr's full movie list, and this route has no
-    // job-level cache to borrow.
-    const radarrCache = new Map<string, RadarrMovie[]>();
-
     // Fetch release date information if TMDB ID available
     let releaseDateContext: Partial<OverlayRenderContext> = {};
     if (tmdbId) {
       const releaseDateInfo = await fetchReleaseDateInfo(
         tmdbId,
-        actualMediaType,
-        undefined,
-        undefined,
-        undefined,
-        radarrCache
+        actualMediaType
       );
 
       if (releaseDateInfo) {
@@ -260,7 +250,7 @@ overlayTestRouter.post('/', async (req, res) => {
       monitoringContext = await checkMonitoringStatus(
         tmdbId,
         actualMediaType,
-        radarrCache,
+        undefined,
         undefined
       );
     }

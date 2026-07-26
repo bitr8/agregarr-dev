@@ -109,7 +109,6 @@ const BOOLEAN_FIELDS = [
   'rtCertifiedFresh',
   'rtVerifiedHot',
   'hasSubtitles',
-  'isEstimatedReleaseDate',
 ];
 
 // ============================================================================

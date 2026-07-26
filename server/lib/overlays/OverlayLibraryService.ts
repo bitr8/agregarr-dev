@@ -41,10 +41,7 @@ import {
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
 import { deriveReleaseDateContext } from './releaseDateContext';
-import {
-  RELEASE_DATE_CONTEXT_FIELDS,
-  shouldSkipOnReleaseDateFetchFailure,
-} from './releaseDateFetchPolicy';
+import { shouldSkipOnReleaseDateFetchFailure } from './releaseDateFetchPolicy';
 import { classifySeasonCleanupAction } from './seasonCleanupPolicy';
 import { restoreSeasonBasePoster } from './seasonPosterRestore';
 
@@ -877,16 +874,7 @@ class OverlayLibraryService {
                     extracted.inCinemas
                   );
                   if (determined) {
-                    // Components are carried so the per-item Radarr-first merge
-                    // can work off a cache hit; isEstimated so a template can
-                    // tell theatrical+90 from a published date.
-                    releaseDateInfo = {
-                      releaseDate: determined.releaseDate,
-                      isEstimated: determined.isEstimated,
-                      digitalRelease: extracted.digitalRelease,
-                      physicalRelease: extracted.physicalRelease,
-                      inCinemas: extracted.inCinemas,
-                    };
+                    releaseDateInfo = { releaseDate: determined.releaseDate };
                     logger.debug('Prefetch: determined release date', {
                       label: 'OverlayLibrary',
                       tmdbId,
@@ -1572,9 +1560,17 @@ class OverlayLibraryService {
       }
 
       // Check if any templates need release date info
-      const needsReleaseDates = RELEASE_DATE_CONTEXT_FIELDS.some((field) =>
-        requiredContextFields.has(field)
-      );
+      const needsReleaseDates =
+        requiredContextFields.has('releaseDate') ||
+        requiredContextFields.has('daysUntilRelease') ||
+        requiredContextFields.has('daysAgo') ||
+        requiredContextFields.has('nextEpisodeAirDate') ||
+        requiredContextFields.has('daysUntilNextEpisode') ||
+        requiredContextFields.has('nextSeasonAirDate') ||
+        requiredContextFields.has('daysUntilNextSeason') ||
+        requiredContextFields.has('daysAgoNextSeason') ||
+        requiredContextFields.has('seasonNumber') ||
+        requiredContextFields.has('episodeNumber');
 
       if (needsReleaseDates) {
         await this.prefetchTmdbReleaseDates(allItems);
@@ -1923,9 +1919,17 @@ class OverlayLibraryService {
           requiredContextFields.has('isImdbTop250') ||
           requiredContextFields.has('imdbTop250Rank');
 
-        const needsReleaseDates = RELEASE_DATE_CONTEXT_FIELDS.some((field) =>
-          requiredContextFields.has(field)
-        );
+        const needsReleaseDates =
+          requiredContextFields.has('releaseDate') ||
+          requiredContextFields.has('daysUntilRelease') ||
+          requiredContextFields.has('daysAgo') ||
+          requiredContextFields.has('nextEpisodeAirDate') ||
+          requiredContextFields.has('daysUntilNextEpisode') ||
+          requiredContextFields.has('nextSeasonAirDate') ||
+          requiredContextFields.has('daysUntilNextSeason') ||
+          requiredContextFields.has('daysAgoNextSeason') ||
+          requiredContextFields.has('seasonNumber') ||
+          requiredContextFields.has('episodeNumber');
 
         if (needsImdbRatings && plexItems.length > 0) {
           await this.prefetchImdbRatings(plexItems);
@@ -2161,8 +2165,7 @@ class OverlayLibraryService {
           actualMediaType,
           this.sonarrSeriesCache,
           this.preloadedTmdbReleaseDates,
-          releaseDateFetch,
-          this.radarrMoviesCache
+          releaseDateFetch
         );
 
         // fork#35 (Mechanism 2): a transient TMDB/Sonarr failure returns
