@@ -1297,8 +1297,12 @@ export async function fetchReleaseDateInfo(
 
       // Fallback to simple release_date if release_dates not available
       if (movieDetails.release_date) {
+        // Published date, not the +90 guess, so the flag is false rather than
+        // absent: an `isEstimatedReleaseDate == false` condition cannot match an
+        // undefined field (evaluateRule).
         return {
           releaseDate: movieDetails.release_date,
+          isEstimated: false,
         };
       }
     } else {

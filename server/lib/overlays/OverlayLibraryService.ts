@@ -895,7 +895,10 @@ class OverlayLibraryService {
 
                 // Fallback to simple release_date
                 if (!releaseDateInfo && movieDetails.release_date) {
-                  releaseDateInfo = { releaseDate: movieDetails.release_date };
+                  releaseDateInfo = {
+                    releaseDate: movieDetails.release_date,
+                    isEstimated: false,
+                  };
                 }
               } else {
                 // TV show
