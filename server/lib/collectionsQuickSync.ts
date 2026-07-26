@@ -926,23 +926,48 @@ class CollectionsQuickSync {
       title: m.plexItem.title,
     }));
 
-    await plexClient.addItemsToCollection(collectionRatingKey, newItems);
-
-    logger.info('Added items to collection', {
-      label: 'Collections Quick Sync',
-      collectionName: config?.name || 'Unknown Collection',
+    const { successful, failed } = await plexClient.addItemsToCollection(
       collectionRatingKey,
-      configId: firstMatch?.configId,
-      itemsAdded: newItems.length,
-      titles: sortedMatches.map((m) => m.missingItem.title),
-    });
+      newItems
+    );
 
-    // Delete matched missing items from database (they're no longer missing)
+    if (successful > 0) {
+      logger.info('Added items to collection', {
+        label: 'Collections Quick Sync',
+        collectionName: config?.name || 'Unknown Collection',
+        collectionRatingKey,
+        configId: firstMatch?.configId,
+        itemsAdded: successful,
+        itemsFailed: failed,
+        titles: sortedMatches.map((m) => m.missingItem.title),
+      });
+    }
+    if (failed > 0) {
+      logger.warn(
+        'Not all items were verified as added to collection - unverified items stay in the retry queue',
+        {
+          label: 'Collections Quick Sync',
+          collectionName: config?.name || 'Unknown Collection',
+          collectionRatingKey,
+          itemsFailed: failed,
+        }
+      );
+    }
+
+    if (successful === 0) {
+      return 0;
+    }
+
+    // ponytail: addItemsToCollection reports counts only, not which ratingKeys
+    // landed - assume the first `successful` items (by add order) are the
+    // verified ones. Upgrade path: have addItemsToCollection return the
+    // verified ratingKey set for an exact match.
+    const verifiedMatches = sortedMatches.slice(0, successful);
     const repository = getRepository(CollectionMissingItems);
-    const missingItemIds = matches.map((m) => m.missingItem.id);
+    const missingItemIds = verifiedMatches.map((m) => m.missingItem.id);
     await repository.delete(missingItemIds);
 
-    return newItems.length;
+    return successful;
   }
 
   /**
