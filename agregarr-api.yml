@@ -9343,6 +9343,15 @@ paths:
       tags:
         - settings-plex
         - users
+      parameters:
+        - in: query
+          name: all
+          schema:
+            type: string
+            enum:
+              - 'true'
+          required: false
+          description: When set to "true", returns all Plex users including the server owner. Otherwise returns only unimported users.
       responses:
         '200':
           description: Plex users
