@@ -426,16 +426,15 @@ export const PRESET_TEMPLATES: {
     },
   },
 
-  // Trailer badge - corner slot avoids overlapping the full-width status banners above
   {
     name: 'Trailer',
-    description: 'Corner ribbon identifying placeholder trailers',
+    description: 'Full-width banner identifying placeholder trailers',
     type: 'status',
     tags: ['Status'],
     applicationCondition: {
       sections: [
         {
-          rules: [{ field: 'downloaded', operator: 'eq', value: false }],
+          rules: [{ field: 'isPlaceholder', operator: 'eq', value: true }],
         },
       ],
     },
@@ -444,30 +443,30 @@ export const PRESET_TEMPLATES: {
       height: 1500,
       elements: [
         {
-          id: 'trailer-badge-bg',
+          id: 'trailer-banner-bg',
           layerOrder: 0,
           type: 'tile',
-          x: 787,
-          y: 155,
-          width: 200,
-          height: 155,
+          x: 0,
+          y: 100,
+          width: 1000,
+          height: 100,
           properties: {
-            fillColor: '#7C3AED',
-            fillOpacity: 75,
+            fillColor: '#571aff',
+            fillOpacity: 70,
             borderRadius: 0,
           },
         },
         {
-          id: 'trailer-badge-text',
+          id: 'trailer-text',
           layerOrder: 1,
           type: 'text',
-          x: 787,
-          y: 197,
-          width: 200,
-          height: 71,
+          x: 0,
+          y: 120,
+          width: 1000,
+          height: 80,
           properties: {
             text: 'TRAILER',
-            fontSize: 40,
+            fontSize: 60,
             fontFamily: 'Inter',
             fontWeight: 'bold',
             fontStyle: 'normal',
