@@ -885,7 +885,8 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
       const trailerPath = await downloadTrailer(
         sourceItem.title,
         sourceItem.year,
-        sourceItem.mediaType
+        sourceItem.mediaType,
+        sourceItem.tmdbId
       );
 
       // Check if the downloaded trailer is different from the fallback

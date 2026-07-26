@@ -35,15 +35,11 @@ export interface PlaceholderResult {
 }
 
 /**
- * Options for downloading YouTube trailers
+ * Options for downloading trailers
  */
 export interface TrailerDownloadOptions {
-  /** Movie/show title */
   title: string;
-  /** Release year */
   year?: number;
-  /** Output path for downloaded file */
   outputPath: string;
-  /** Maximum duration in seconds (optional, default: 210 = 3.5 minutes) */
   maxDuration?: number;
 }

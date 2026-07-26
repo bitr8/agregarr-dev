@@ -93,6 +93,15 @@ const messages = defineMessages({
   skipYoutubeTrailerDownloads: 'Skip YouTube Trailer Downloads',
   skipYoutubeTrailerDownloadsDescription:
     'Use only the hardcoded placeholder video instead of downloading YouTube trailers. This dramatically speeds up placeholder creation, but placeholders will use a generic video instead of actual trailers.',
+  preferTmdbTrailers: 'Prefer TMDB Trailers',
+  preferTmdbTrailersDescription:
+    'Resolve trailers from TMDB video metadata before falling back to YouTube search. More accurate — uses the authoritative trailer linked to the title rather than a search guess.',
+  trailerExcludeWords: 'Exclude Words',
+  trailerExcludeWordsDescription:
+    'Comma-separated words. Any match in a video title rejects the candidate. Applied to both TMDB and YouTube results.',
+  trailerIncludeWords: 'Include Words',
+  trailerIncludeWordsDescription:
+    'Comma-separated words. All must be present in the video title. Applied to YouTube fallback only. Leave empty for no filter.',
   toastYoutubeSettingsSuccess: 'YouTube settings saved successfully!',
   toastYoutubeSettingsFailure:
     'Something went wrong while saving YouTube settings.',
@@ -939,17 +948,23 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
           </div>
         )}
 
-        {/* YouTube Trailer Download Toggle */}
+        {/* Trailer Download Settings */}
         <Formik
           initialValues={{
             skipYoutubeTrailerDownloads:
               dataMain?.skipYoutubeTrailerDownloads || false,
+            preferTmdbTrailers: dataMain?.preferTmdbTrailers !== false,
+            trailerExcludeWords: dataMain?.trailerExcludeWords ?? '',
+            trailerIncludeWords: dataMain?.trailerIncludeWords ?? '',
           }}
           enableReinitialize
           onSubmit={async (values) => {
             try {
               await axios.post('/api/v1/settings/main', {
                 skipYoutubeTrailerDownloads: values.skipYoutubeTrailerDownloads,
+                preferTmdbTrailers: values.preferTmdbTrailers,
+                trailerExcludeWords: values.trailerExcludeWords,
+                trailerIncludeWords: values.trailerIncludeWords,
               });
 
               addToast(
@@ -1000,6 +1015,72 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
                         e.target.checked
                       );
                     }}
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <label htmlFor="preferTmdbTrailers" className="checkbox-label">
+                  <span className="mr-2">
+                    {intl.formatMessage(messages.preferTmdbTrailers)}
+                  </span>
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.preferTmdbTrailersDescription)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="checkbox"
+                    id="preferTmdbTrailers"
+                    name="preferTmdbTrailers"
+                    checked={values.preferTmdbTrailers}
+                    disabled={values.skipYoutubeTrailerDownloads}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFieldValue('preferTmdbTrailers', e.target.checked);
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <label htmlFor="trailerExcludeWords" className="text-label">
+                  <span className="mr-2">
+                    {intl.formatMessage(messages.trailerExcludeWords)}
+                  </span>
+                  <span className="label-tip">
+                    {intl.formatMessage(
+                      messages.trailerExcludeWordsDescription
+                    )}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="text"
+                    id="trailerExcludeWords"
+                    name="trailerExcludeWords"
+                    placeholder="review, reaction, behind the scenes, breakdown, explained, fan made, concept"
+                    disabled={values.skipYoutubeTrailerDownloads}
+                    className="block w-full rounded-md border border-stone-600 bg-stone-700 px-3 py-2 text-white shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <label htmlFor="trailerIncludeWords" className="text-label">
+                  <span className="mr-2">
+                    {intl.formatMessage(messages.trailerIncludeWords)}
+                  </span>
+                  <span className="label-tip">
+                    {intl.formatMessage(
+                      messages.trailerIncludeWordsDescription
+                    )}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="text"
+                    id="trailerIncludeWords"
+                    name="trailerIncludeWords"
+                    placeholder=""
+                    disabled={values.skipYoutubeTrailerDownloads}
+                    className="block w-full rounded-md border border-stone-600 bg-stone-700 px-3 py-2 text-white shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                   />
                 </div>
               </div>

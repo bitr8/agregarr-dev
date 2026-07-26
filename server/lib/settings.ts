@@ -657,8 +657,11 @@ export interface MainSettings {
   // Placeholder root folders (per-library)
   placeholderMovieRootFolders?: Record<string, string>; // libraryKey -> movie placeholder path mapping
   placeholderTVRootFolders?: Record<string, string>; // libraryKey -> TV placeholder path mapping
-  // YouTube trailer download settings
+  // Trailer download settings
   skipYoutubeTrailerDownloads?: boolean; // If true, skip YouTube trailer downloads and use hardcoded placeholder video only (speeds up sync)
+  preferTmdbTrailers?: boolean; // If true (default), resolve trailers from TMDB /videos before falling back to YouTube search
+  trailerExcludeWords?: string; // Comma-separated words — any match in title rejects the candidate
+  trailerIncludeWords?: string; // Comma-separated words — all must match in title (empty = no filter)
   // Letterboxd fetching method
   letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: false)
   // FlixPatrol fetching method

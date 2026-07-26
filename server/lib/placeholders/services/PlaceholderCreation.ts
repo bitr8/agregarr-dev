@@ -523,7 +523,8 @@ async function createPlaceholderFile(
   const trailerPath = await downloadTrailer(
     sourceItem.title,
     sourceItem.year,
-    sourceItem.mediaType
+    sourceItem.mediaType,
+    sourceItem.tmdbId
   );
 
   logger.debug(

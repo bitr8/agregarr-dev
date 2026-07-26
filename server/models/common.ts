@@ -130,14 +130,16 @@ export const mapExternalIds = (eids: TmdbExternalIds): ExternalIds => ({
 });
 
 export const mapVideos = (videoResult: TmdbVideoResult): Video[] =>
-  videoResult?.results.map(({ key, name, size, type, site }: TmdbVideo) => ({
-    site,
-    key,
-    name,
-    size,
-    type,
-    url: siteUrlCreator(site, key),
-  }));
+  videoResult?.results
+    .filter(({ site }: TmdbVideo) => site === 'YouTube')
+    .map(({ key, name, size, type, site }: TmdbVideo) => ({
+      site: site as 'YouTube',
+      key,
+      name,
+      size,
+      type,
+      url: siteUrlCreator(site as 'YouTube', key),
+    }));
 
 export const mapWatchProviders = (watchProvidersResult: {
   [iso_3166_1: string]: TmdbWatchProviders;
