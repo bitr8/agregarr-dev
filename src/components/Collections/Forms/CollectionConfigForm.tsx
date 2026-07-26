@@ -252,6 +252,10 @@ const messages = defineMessages({
     "When enabled, this {itemType}'s position will be randomly shuffled with other collections that have this option enabled during each sync. Custom scheduling for shuffling can be set on the Jobs page.",
   targetUser: 'Target User',
   targetUserNone: 'None (visible to all users)',
+  targetUserHint:
+    "This user will see the collection in their library. Other users have it hidden from library browsing via label filters. Home screen promotion (Users' Home) is server-wide and cannot be scoped per user.",
+  targetUserHomeConflict:
+    "Users' Home is enabled with a targeted user. Home screen promotion is server-wide — all users will see this collection on their Home, not just the targeted user. To restrict visibility fully, disable Users' Home.",
   pleaseFixErrors: 'Please fix the following errors:',
   failedFetchTraktTitle: 'Failed to fetch Trakt list title',
   failedFetchTmdbTitle: 'Failed to fetch TMDB title',
@@ -3440,10 +3444,17 @@ const CollectionFormConfigForm = ({
                                   </Field>
                                 </div>
                                 <p className="mt-1 text-sm text-gray-400">
-                                  Only this user will see the collection. The
-                                  server owner always has visibility over all
-                                  collections.
+                                  {intl.formatMessage(messages.targetUserHint)}
                                 </p>
+                                {values.targetUserId &&
+                                  values.visibilityConfig?.usersHome && (
+                                    <div className="mt-2 rounded border border-orange-500/20 bg-orange-500/10 p-2 text-xs text-orange-300">
+                                      ⚠️{' '}
+                                      {intl.formatMessage(
+                                        messages.targetUserHomeConflict
+                                      )}
+                                    </div>
+                                  )}
                               </div>
                             </div>
 
@@ -4798,10 +4809,17 @@ const CollectionFormConfigForm = ({
                                 </Field>
                               </div>
                               <p className="mt-1 text-sm text-gray-400">
-                                Only this user will see the collection. The
-                                server owner always has visibility over all
-                                collections.
+                                {intl.formatMessage(messages.targetUserHint)}
                               </p>
+                              {values.targetUserId &&
+                                values.visibilityConfig?.usersHome && (
+                                  <div className="mt-2 rounded border border-orange-500/20 bg-orange-500/10 p-2 text-xs text-orange-300">
+                                    ⚠️{' '}
+                                    {intl.formatMessage(
+                                      messages.targetUserHomeConflict
+                                    )}
+                                  </div>
+                                )}
                             </div>
                           </div>
 
