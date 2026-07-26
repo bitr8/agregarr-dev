@@ -103,7 +103,7 @@ const messages = defineMessages({
   plexWebhookTokenWarning:
     'This URL contains a secret that authenticates the webhook. Treat it like a password and do not share it.',
   plexWebhookDescription:
-    'Automatically reset watched status when a placeholder trailer is played, preventing it from syncing to Trakt or other scrobbling services. Requires Plex Pass. Register the webhook in Plex under Settings → Webhooks.',
+    'Automatically resets the Plex watched status when a placeholder trailer is played. Effective for tools that sync watched state from Plex. Cannot prevent real-time scrobbles already sent to external services — exclude placeholder items in your scrobbler settings for full coverage. Requires Plex Pass. Register the webhook in Plex under Settings → Webhooks.',
 });
 
 interface ServerInstanceProps {
