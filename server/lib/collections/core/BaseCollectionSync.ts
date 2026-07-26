@@ -1829,6 +1829,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                 title: existingByRatingKey.title,
                 labels: existingByRatingKey.labels || [],
                 type: existingByRatingKey.type || 'collection',
+                titleSort: existingByRatingKey.titleSort,
+                collectionSort: existingByRatingKey.collectionSort,
               };
             }
           }
@@ -1899,6 +1901,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
           return {
             collection,
+            detailedCollection,
             labels,
             found,
             error: null,
@@ -1983,6 +1986,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             title: matchedCollection.collection.title,
             labels: matchedCollection.labels,
             type: matchedCollection.collection.type || 'collection',
+            titleSort: matchedCollection.detailedCollection?.titleSort,
+            collectionSort:
+              matchedCollection.detailedCollection?.collectionSort,
           };
         }
       }
