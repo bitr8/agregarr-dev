@@ -14,6 +14,7 @@ import type { ApplicationCondition } from '@server/entity/OverlayTemplate';
 
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 import { evaluateCondition } from './OverlayTemplateRenderer';
+import { createSampleOverlayContext } from './sampleOverlayContext';
 
 const flagIs = (value: boolean): ApplicationCondition => ({
   sections: [
@@ -53,5 +54,22 @@ describe('isEstimatedReleaseDate as a condition field', () => {
   // so a producer that omits the flag drops the item from the condition.
   it('does not match the published condition when the flag is absent', () => {
     expect(evaluateCondition(isPublished, ctx({}))).toBe(false);
+  });
+});
+
+// The preview has to agree with production or a condition matches while the
+// user is building it and never matches once it runs. Only movies get a
+// theatrical+90 estimate.
+describe('sample context parity with production', () => {
+  it('offers the flag for movies, since movies can be estimated', () => {
+    expect(createSampleOverlayContext('movie').isEstimatedReleaseDate).toBe(
+      false
+    );
+  });
+
+  it('leaves it undefined for shows, as deriveReleaseDateContext does', () => {
+    expect(
+      createSampleOverlayContext('show').isEstimatedReleaseDate
+    ).toBeUndefined();
   });
 });
