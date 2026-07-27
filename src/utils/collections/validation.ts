@@ -317,6 +317,16 @@ const timeRestrictionValidations = {
   }),
 };
 
+// Library Essentials selection validation
+const essentialsValidations = {
+  selectionMode: Yup.string().oneOf(
+    ['exclude', 'include'],
+    'Invalid selection mode'
+  ),
+  excludeValues: Yup.array().of(Yup.string()),
+  includeValues: Yup.array().of(Yup.string()),
+};
+
 // Combined validation schema
 export const CollectionConfigSchema = Yup.object().shape({
   ...baseCollectionSchema,
@@ -325,6 +335,7 @@ export const CollectionConfigSchema = Yup.object().shape({
   ...placeholderValidations,
   ...autoRequestValidations,
   ...timeRestrictionValidations,
+  ...essentialsValidations,
 });
 
 /**

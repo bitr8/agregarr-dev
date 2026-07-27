@@ -307,6 +307,15 @@ export const saveIndividualConfigs = async (
           comingSoonSonarrRootFolder:
             collectionConfig.comingSoonSonarrRootFolder,
         }),
+        ...(collectionConfig.selectionMode !== undefined && {
+          selectionMode: collectionConfig.selectionMode,
+        }),
+        ...(collectionConfig.excludeValues !== undefined && {
+          excludeValues: collectionConfig.excludeValues,
+        }),
+        ...(collectionConfig.includeValues !== undefined && {
+          includeValues: collectionConfig.includeValues,
+        }),
         ...(collectionConfig.isMultiSource !== undefined && {
           isMultiSource: collectionConfig.isMultiSource,
         }),

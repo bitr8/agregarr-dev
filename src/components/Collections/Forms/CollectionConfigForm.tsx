@@ -1846,11 +1846,15 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).enableCustomSummary ?? false,
           enableCustomTheme:
             (config as CollectionFormConfig).enableCustomTheme ?? false,
-          // Default autoPoster to false for pre-existing collections (they have their own posters),
-          // true for Agregarr-created collections
           autoPoster:
             (config as CollectionFormConfig).autoPoster ??
-            (isPreExisting ? false : true),
+            !(
+              isPreExisting ||
+              ((config as CollectionFormConfig).type === 'plex' &&
+                ['genre', 'decade', 'resolution', 'contentRating'].includes(
+                  (config as CollectionFormConfig).subtype || ''
+                ))
+            ),
           autoPosterTemplate:
             (config as CollectionFormConfig).autoPosterTemplate ?? null,
           useTmdbFranchisePoster:
@@ -1922,6 +1926,10 @@ const CollectionFormConfigForm = ({
             startDate: '01-01',
             startTime: '09:00',
           },
+          selectionMode:
+            (config as CollectionFormConfig).selectionMode ?? 'exclude',
+          excludeValues: (config as CollectionFormConfig).excludeValues ?? [],
+          includeValues: (config as CollectionFormConfig).includeValues ?? [],
         }}
         validationSchema={CollectionFormConfigSchema}
         enableReinitialize={false}
@@ -2344,6 +2352,9 @@ const CollectionFormConfigForm = ({
               values.type === 'comingsoon' && values.subtype === 'monitored'
                 ? values.comingSoonSonarrRootFolder
                 : undefined,
+            selectionMode: values.selectionMode,
+            excludeValues: values.excludeValues,
+            includeValues: values.includeValues,
             autoPoster: values.autoPoster,
             autoPosterTemplate: values.autoPosterTemplate,
             useTmdbFranchisePoster: values.useTmdbFranchisePoster,

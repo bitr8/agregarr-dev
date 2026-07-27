@@ -839,17 +839,9 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
         }
       }
 
-      const configRecord = config as unknown as Record<string, unknown>;
-      const selectionMode: string =
-        typeof configRecord.selectionMode === 'string'
-          ? configRecord.selectionMode
-          : 'exclude';
-      const excludeValues: string[] = Array.isArray(configRecord.excludeValues)
-        ? configRecord.excludeValues
-        : [];
-      const includeValues: string[] = Array.isArray(configRecord.includeValues)
-        ? configRecord.includeValues
-        : [];
+      const selectionMode = config.selectionMode ?? 'exclude';
+      const excludeValues = config.excludeValues ?? [];
+      const includeValues = config.includeValues ?? [];
 
       const filteredValues =
         selectionMode === 'include'

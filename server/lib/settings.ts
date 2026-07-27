@@ -347,6 +347,9 @@ export interface CollectionConfig {
     | 'cycle_lists';
   // Individual sync scheduling
   readonly customSyncSchedule?: CustomSyncSchedule;
+  readonly selectionMode?: 'exclude' | 'include';
+  readonly excludeValues?: string[];
+  readonly includeValues?: string[];
 }
 
 /**
