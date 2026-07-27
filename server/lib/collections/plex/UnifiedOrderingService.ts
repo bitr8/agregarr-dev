@@ -254,18 +254,11 @@ export async function applyUnifiedOrderingToPlex(
         ? 'show'
         : 'movie';
 
-      // DEBUG: Log the ordering array being sent to Plex
-      logger.info('ORDERING DEBUG: Array being sent to PlexAPI reorderHubs', {
+      logger.debug('Ordering array being sent to PlexAPI reorderHubs', {
         label: 'Unified Ordering Service',
         libraryId,
         libraryType,
         orderedIdentifiers,
-        sortedItemsDebug: sortedItems.map((item, index) => ({
-          index,
-          sortOrder: item.sortOrder,
-          identifier: item.identifier,
-          libraryId: item.libraryId,
-        })),
       });
 
       // Apply ordering using Plex hub reordering API with precision convergence recovery
