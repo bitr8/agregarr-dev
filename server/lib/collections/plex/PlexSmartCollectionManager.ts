@@ -623,6 +623,169 @@ class PlexSmartCollectionManager {
   }
 
   /**
+   * Create a smart collection filtered by attribute (genre, decade, resolution, contentRating)
+   */
+  public async createAttributeCollection(
+    title: string,
+    libraryKey: string,
+    mediaType: 'movie' | 'tv',
+    attribute: string,
+    value: string,
+    labelFilter: string
+  ): Promise<string | null> {
+    try {
+      logger.debug(
+        `Creating attribute smart collection "${title}" for library ${libraryKey}`,
+        {
+          label: 'Plex API',
+          title,
+          libraryKey,
+          mediaType,
+          attribute,
+          value,
+        }
+      );
+
+      const type = mediaType === 'movie' ? 1 : 2;
+
+      // value used as-is: content rating keys arrive pre-encoded from Plex
+      const filterUri = `/library/sections/${libraryKey}/all?type=${type}&${attribute}=${value}&label!=${encodeURIComponent(
+        labelFilter
+      )}`;
+
+      const uri = `server://${
+        getSettings().plex.machineId
+      }/com.plexapp.plugins.library${filterUri}`;
+      const createUrl = `/library/collections?type=${type}&title=${encodeURIComponent(
+        title
+      )}&smart=1&uri=${encodeURIComponent(uri)}&sectionId=${libraryKey}`;
+
+      const createResponse = await this.plexApi['safePostQuery'](createUrl);
+      if (
+        !createResponse ||
+        typeof createResponse !== 'object' ||
+        !('MediaContainer' in createResponse)
+      ) {
+        logger.error(
+          'Invalid response when creating attribute smart collection',
+          {
+            label: 'Plex API',
+            response: createResponse,
+          }
+        );
+        return null;
+      }
+
+      const mediaContainer = createResponse.MediaContainer as {
+        Metadata?: { ratingKey: string }[];
+      };
+      if (!mediaContainer.Metadata || mediaContainer.Metadata.length === 0) {
+        logger.error(
+          'No metadata returned when creating attribute smart collection',
+          {
+            label: 'Plex API',
+            response: createResponse,
+          }
+        );
+        return null;
+      }
+
+      const smartCollectionRatingKey = mediaContainer.Metadata[0].ratingKey;
+
+      // Set the collection to be filtered by user
+      await this.setCollectionUserFilter(smartCollectionRatingKey);
+
+      logger.info(
+        `Successfully created attribute smart collection "${title}" with rating key ${smartCollectionRatingKey}`,
+        {
+          label: 'Plex API',
+          title,
+          smartCollectionRatingKey,
+          mediaType,
+          attribute,
+          value,
+        }
+      );
+
+      return smartCollectionRatingKey;
+    } catch (error) {
+      logger.error(`Error creating attribute smart collection "${title}"`, {
+        label: 'Plex API',
+        title,
+        libraryKey,
+        mediaType,
+        attribute,
+        value,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Update an existing attribute-based smart collection's URI
+   */
+  public async updateAttributeSmartCollectionUri(
+    ratingKey: string,
+    libraryKey: string,
+    mediaType: 'movie' | 'tv',
+    attribute: string,
+    value: string,
+    labelFilter: string
+  ): Promise<void> {
+    try {
+      logger.debug(
+        `Updating attribute smart collection URI for collection ${ratingKey}`,
+        {
+          label: 'Plex API',
+          ratingKey,
+          libraryKey,
+          mediaType,
+          attribute,
+          value,
+        }
+      );
+
+      const type = mediaType === 'movie' ? 1 : 2;
+
+      // value used as-is: content rating keys arrive pre-encoded from Plex
+      const filterUri = `/library/sections/${libraryKey}/all?type=${type}&${attribute}=${value}&label!=${encodeURIComponent(
+        labelFilter
+      )}`;
+
+      const uri = `server://${
+        getSettings().plex.machineId
+      }/com.plexapp.plugins.library${filterUri}`;
+
+      const updateUrl = `/library/collections/${ratingKey}/items?uri=${encodeURIComponent(
+        uri
+      )}`;
+      await this.plexApi['safePutQuery'](updateUrl);
+
+      logger.debug(
+        `Successfully updated attribute smart collection URI for collection ${ratingKey}`,
+        {
+          label: 'Plex API',
+          ratingKey,
+          attribute,
+          value,
+        }
+      );
+    } catch (error) {
+      logger.error(
+        `Error updating attribute smart collection URI for collection ${ratingKey}`,
+        {
+          label: 'Plex API',
+          ratingKey,
+          error:
+            error instanceof Error ? error.message : 'Unknown error occurred',
+        }
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Update an existing filtered hub smart collection's URI
    * This updates the filter parameters including maxItems limit
    * @param smartCollectionRatingKey - The rating key of the smart collection to update

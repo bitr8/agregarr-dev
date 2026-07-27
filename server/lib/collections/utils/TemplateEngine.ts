@@ -33,6 +33,7 @@ export interface TemplateContext {
   // Person-specific placeholders (actor/director collections)
   actor?: string; // Actor name for actor collections
   director?: string; // Director name for director collections
+  value?: string; // Attribute value name for library essentials collections
 }
 
 /**
@@ -168,6 +169,10 @@ export class TemplateEngine {
 
     if (context.director !== undefined) {
       processed = processed.replace(/{director}/g, context.director);
+    }
+
+    if (context.value !== undefined) {
+      processed = processed.replace(/{value}/g, context.value);
     }
 
     // Debug logging to see the final result

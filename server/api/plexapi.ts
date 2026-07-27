@@ -3101,6 +3101,48 @@ class PlexAPI {
     );
   }
 
+  /**
+   * Create a smart collection filtered by attribute (genre, decade, resolution, contentRating)
+   */
+  public async createAttributeCollection(
+    title: string,
+    libraryKey: string,
+    mediaType: 'movie' | 'tv',
+    attribute: string,
+    value: string,
+    labelFilter: string
+  ): Promise<string | null> {
+    return this.smartCollectionManager.createAttributeCollection(
+      title,
+      libraryKey,
+      mediaType,
+      attribute,
+      value,
+      labelFilter
+    );
+  }
+
+  /**
+   * Update an existing attribute-based smart collection's URI
+   */
+  public async updateAttributeSmartCollectionUri(
+    ratingKey: string,
+    libraryKey: string,
+    mediaType: 'movie' | 'tv',
+    attribute: string,
+    value: string,
+    labelFilter: string
+  ): Promise<void> {
+    return this.smartCollectionManager.updateAttributeSmartCollectionUri(
+      ratingKey,
+      libraryKey,
+      mediaType,
+      attribute,
+      value,
+      labelFilter
+    );
+  }
+
   // POSTER MANAGEMENT METHODS - Delegated to PlexPosterManager
 
   /**
