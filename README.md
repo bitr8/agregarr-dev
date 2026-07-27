@@ -78,6 +78,10 @@ Both collection and overlay syncs get unified side-by-side dashboard cards with 
 
 **Per-User Targeting** -- Any collection config can name a Target User. Agregarr labels the collection, excludes it from every other user's library filters, and shows a "Target User" badge in the listing. One limit worth knowing: Plex promotes a collection to the Home screen server-wide and there's no per-user version of that switch, so a targeted collection that's also home-promoted still shows on everyone's Home. Leave it recommended-only if you want it properly hidden. _(Cherry-picked from Elliott Carlson's upstream PR [#555](https://github.com/agregarr/agregarr/pull/555))_
 
+**Library Essentials** -- One config creates a smart collection for every genre, decade, resolution or content rating in a library. Pick a subtype, pick a library, and the form discovers what values Plex already knows about -- a checkbox list lets you exclude the ones you don't want, or flip to include mode and hand-pick. Each collection is a Plex smart filter, so items sort themselves in as your library grows. Content ratings group by prefix (AU ratings, TV ratings, numeric ages, general) with per-group toggles.
+
+Exclude mode means new values that appear in your library get a collection on the next sync. Include mode means only the values you picked. Separators and custom title templates work the same as directors/actors. Auto-poster defaults to off, hub visibility is locked off -- these are for browsing your library, not cluttering the home screen.
+
 Smart collections also get a Last Episode Added sort option. _(fork [#43](https://github.com/bitr8/agregarr-dev/issues/43))_
 
 ### Performance
