@@ -859,7 +859,12 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
             mediaType,
             subtype,
           };
-          const template = config.template || '{value}';
+          const template =
+            config.template === 'custom'
+              ? (mediaType === 'tv'
+                  ? config.customTVTemplate
+                  : config.customMovieTemplate) || '{value}'
+              : config.template || '{value}';
           const collectionName = this.templateEngine.processTemplate(
             template,
             context

@@ -1015,9 +1015,20 @@ export const getTemplatePresets = (
     }
   }
 
-  // Plex Library (auto director collections)
+  // Plex Library (auto director/actor/essentials collections)
   if (values.type === 'plex') {
     switch (values.subtype) {
+      case 'genre':
+      case 'decade':
+      case 'resolution':
+      case 'contentRating':
+        return [
+          {
+            label: 'Attribute Value',
+            value: '{value}',
+          },
+          { label: 'Custom', value: 'custom' },
+        ];
       case 'directors':
         return [
           {

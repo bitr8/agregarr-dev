@@ -394,9 +394,15 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
         const isSeparator =
           (req.body.subtype || existingConfig.subtype) === 'separator' &&
           (req.body.type || existingConfig.type) === 'plex';
-        let processedName = isSeparator
-          ? templateToProcess
-          : templateEngine.processTemplate(templateToProcess, context);
+        const isEssentials =
+          (req.body.type || existingConfig.type) === 'plex' &&
+          ['genre', 'decade', 'resolution', 'contentRating'].includes(
+            req.body.subtype || existingConfig.subtype || ''
+          );
+        let processedName =
+          isSeparator || isEssentials
+            ? req.body.name || templateToProcess
+            : templateEngine.processTemplate(templateToProcess, context);
 
         // Handle Overseerr user collections
         if (
@@ -562,14 +568,20 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       const isSeparator =
         (req.body.subtype || configToUpdate.subtype) === 'separator' &&
         (req.body.type || configToUpdate.type) === 'plex';
-      let processedName = isSeparator
-        ? templateToProcess
-        : templateEngine.processTemplate(templateToProcess, context);
+      const isEssentials =
+        (req.body.type || configToUpdate.type) === 'plex' &&
+        ['genre', 'decade', 'resolution', 'contentRating'].includes(
+          req.body.subtype || configToUpdate.subtype || ''
+        );
+      let processedName =
+        isSeparator || isEssentials
+          ? req.body.name || templateToProcess
+          : templateEngine.processTemplate(templateToProcess, context);
 
-      // Check for duplicate collection names within this library
-      // Skip duplicate check for DYNAMIC_RANDOM_TITLE as each collection gets a unique title from the random list
+      // Skip duplicate check for multi-collection patterns and dynamic titles
       const templateValue = req.body.template || configToUpdate.template;
       if (
+        !isEssentials &&
         templateValue !== 'DYNAMIC_RANDOM_TITLE' &&
         templateValue !== 'DYNAMIC_CYCLE_TITLE'
       ) {
@@ -1525,13 +1537,19 @@ collectionsRoutes.post('/create', isAuthenticated(), async (req, res) => {
 
       const isSeparator =
         req.body.subtype === 'separator' && req.body.type === 'plex';
-      let processedName = isSeparator
-        ? templateToProcess
-        : templateEngine.processTemplate(templateToProcess, context);
+      const isEssentialsCreate =
+        req.body.type === 'plex' &&
+        ['genre', 'decade', 'resolution', 'contentRating'].includes(
+          req.body.subtype || ''
+        );
+      let processedName =
+        isSeparator || isEssentialsCreate
+          ? req.body.name || templateToProcess
+          : templateEngine.processTemplate(templateToProcess, context);
 
-      // Check for duplicate collection names within this library
-      // Skip duplicate check for DYNAMIC_RANDOM_TITLE as each collection gets a unique title from the random list
+      // Skip duplicate check for multi-collection patterns and dynamic titles
       if (
+        !isEssentialsCreate &&
         req.body.template !== 'DYNAMIC_RANDOM_TITLE' &&
         req.body.template !== 'DYNAMIC_CYCLE_TITLE'
       ) {

@@ -1,4 +1,5 @@
 import type { CollectionFormConfig } from '@app/types/collections';
+import { isLibraryEssentialsPattern } from '@app/utils/collections/collectionUtils';
 import type React from 'react';
 import { useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
@@ -28,59 +29,41 @@ const CollectionExclusionSection: React.FC<CollectionExclusionSectionProps> = ({
 }) => {
   const intl = useIntl();
 
-  // Special collection types that should not be available for exclusion
-  // These types create multiple collections or have special behavior
-  const isSpecialCollectionType = (config: CollectionFormConfig): boolean => {
-    // Overseerr individual user collections (creates one per user)
-    if (config.type === 'overseerr' && config.subtype === 'users') {
+  // Multi-collection patterns should not appear as exclusion targets
+  const isMultiCollectionPattern = (config: CollectionFormConfig): boolean => {
+    if (config.type === 'overseerr' && config.subtype === 'users') return true;
+    if (config.type === 'tmdb' && config.subtype === 'auto_franchise')
       return true;
-    }
-    // TMDB auto franchise collections (creates one per franchise)
-    if (config.type === 'tmdb' && config.subtype === 'auto_franchise') {
+    if (
+      config.type === 'plex' &&
+      (config.subtype === 'directors' || config.subtype === 'actors')
+    )
       return true;
-    }
+    if (isLibraryEssentialsPattern(config.type, config.subtype)) return true;
     return false;
   };
 
   // Get all library IDs this collection is configured for
-  // For linked collections, this could be multiple libraries
   const currentLibraryIds =
     values.libraryIds || (values.libraryId ? [values.libraryId] : []);
 
-  // Filter out the current collection, special types, and get collections from the same libraries
   const availableCollections = allCollectionConfigs.filter(
     (config) =>
-      config.id !== values.id && // Don't allow excluding from itself
-      currentLibraryIds.includes(config.libraryId) && // Show collections from any of the selected libraries
-      !isSpecialCollectionType(config) // Exclude special collection types
+      config.id !== values.id &&
+      currentLibraryIds.includes(config.libraryId) &&
+      !isMultiCollectionPattern(config)
   );
 
   const selectedExclusions = values.excludeFromCollections || [];
 
-  // Track enabled state independently from selections
-  // Enabled if there are selections OR if user has toggled it on
   const [isManuallyEnabled, setIsManuallyEnabled] = useState(
     selectedExclusions.length > 0
   );
   const isEnabled = isManuallyEnabled || selectedExclusions.length > 0;
 
-  // Don't show section if this is a special collection type
-  if (isSpecialCollectionType(values)) {
-    return null;
-  }
-
-  // Hide for Plex person collections (actors/directors) to avoid exclusions
-  if (
-    values.type === 'plex' &&
-    (values.subtype === 'actors' || values.subtype === 'directors')
-  ) {
-    return null;
-  }
-
-  // Don't show section if there are no available collections to exclude from
-  if (availableCollections.length === 0) {
-    return null;
-  }
+  // Early returns after all hooks
+  if (isMultiCollectionPattern(values)) return null;
+  if (availableCollections.length === 0) return null;
 
   // Prepare options for react-select
   const options = availableCollections.map((collection) => ({

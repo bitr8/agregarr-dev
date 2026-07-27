@@ -1,5 +1,9 @@
 import type { CollectionFormConfig } from '@app/types/collections';
 import { validateApiKeysForCollectionType } from '@app/utils/apiKeyValidation';
+import {
+  getLibraryEssentialsLabel,
+  isLibraryEssentialsPattern,
+} from '@app/utils/collections/collectionUtils';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import type {
   MainSettings,
@@ -56,6 +60,81 @@ interface SubtypeOption {
   label: string;
   description?: string;
 }
+
+interface SeparatorToggleProps {
+  values: CollectionFormConfig;
+  setFieldValue: (field: string, value: string | boolean | undefined) => void;
+  defaultTitle: string;
+  typeLabel: string;
+}
+
+const SeparatorToggle = ({
+  values,
+  setFieldValue,
+  defaultTitle,
+  typeLabel,
+}: SeparatorToggleProps) => {
+  const intl = useIntl();
+  return (
+    <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <label
+            htmlFor="useSeparator"
+            className="text-sm font-medium text-gray-300"
+          >
+            {intl.formatMessage(messages.useSeparator)}
+          </label>
+          <p className="text-xs text-gray-400">
+            {intl.formatMessage(messages.useSeparatorHelp, {
+              type: typeLabel,
+            })}
+          </p>
+        </div>
+        <Field
+          type="checkbox"
+          id="useSeparator"
+          name="useSeparator"
+          className="h-5 w-5 rounded border-stone-500 bg-stone-700 text-orange-500 focus:ring-2 focus:ring-orange-500"
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            const checked = e.target.checked;
+            setFieldValue('useSeparator', checked);
+            if (
+              checked &&
+              (!values.separatorTitle ||
+                values.separatorTitle.trim().length === 0)
+            ) {
+              setFieldValue('separatorTitle', defaultTitle);
+            }
+          }}
+        />
+      </div>
+      {values.useSeparator && (
+        <div className="mt-3">
+          <label
+            htmlFor="separatorTitle"
+            className="mb-2 block text-sm text-gray-300"
+          >
+            {intl.formatMessage(messages.separatorTitle)}{' '}
+            <span className="text-red-500">*</span>
+          </label>
+          <Field
+            type="text"
+            id="separatorTitle"
+            name="separatorTitle"
+            placeholder={defaultTitle}
+            className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            {intl.formatMessage(messages.separatorTitleHelp, {
+              defaultTitle,
+            })}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface CollectionTypeSectionProps {
   values: CollectionFormConfig;
@@ -264,6 +343,27 @@ const CollectionTypeSection = ({
         ];
       case 'plex':
         return [
+          {
+            value: 'genre',
+            label: 'Genre Collections',
+            description: 'One smart collection per genre in your library',
+          },
+          {
+            value: 'decade',
+            label: 'Decade Collections',
+            description: 'One smart collection per decade (2020s, 2010s...)',
+          },
+          {
+            value: 'resolution',
+            label: 'Resolution Collections',
+            description:
+              'One smart collection per quality level (4K, 1080p...)',
+          },
+          {
+            value: 'contentRating',
+            label: 'Content Rating Collections',
+            description: 'One smart collection per content rating',
+          },
           {
             value: 'directors',
             label: 'Auto Director Collections',
@@ -534,6 +634,34 @@ const CollectionTypeSection = ({
                 setFieldValue('separatorTitle', undefined);
               }
 
+              // Set defaults for Library Essentials subtypes
+              if (isLibraryEssentialsPattern(values.type, newSubtype)) {
+                setFieldValue('autoPoster', false);
+                setFieldValue('visibilityConfig', {
+                  usersHome: false,
+                  serverOwnerHome: false,
+                  libraryRecommended: false,
+                });
+                setFieldValue('selectionMode', 'exclude');
+                setFieldValue('excludeValues', []);
+                setFieldValue('includeValues', []);
+                setFieldValue('personMinimumItems', undefined);
+                setFieldValue('useSeparator', undefined);
+              } else if (
+                isLibraryEssentialsPattern(values.type, values.subtype)
+              ) {
+                // Restore defaults when leaving essentials
+                setFieldValue('autoPoster', true);
+                setFieldValue('visibilityConfig', {
+                  usersHome: true,
+                  serverOwnerHome: true,
+                  libraryRecommended: false,
+                });
+                setFieldValue('selectionMode', undefined);
+                setFieldValue('excludeValues', undefined);
+                setFieldValue('includeValues', undefined);
+              }
+
               // Auto-set media type for movie-only collection types
               if (values.type === 'trakt' && newSubtype === 'boxoffice') {
                 setFieldValue('mediaType', 'movie');
@@ -622,8 +750,8 @@ const CollectionTypeSection = ({
       {/* Person minimum items & separator option for auto person collections */}
       {values.type === 'plex' &&
         (values.subtype === 'directors' || values.subtype === 'actors') && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
+          <div className="space-y-4">
+            <div>
               <label
                 htmlFor="personMinimumItems"
                 className="mb-2 block text-sm text-gray-300"
@@ -643,78 +771,30 @@ const CollectionTypeSection = ({
                 {intl.formatMessage(messages.minimumItemsHelp)}
               </p>
             </div>
-            <div className="rounded-md border border-gray-500/20 bg-transparent p-4 md:col-span-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <label
-                    htmlFor="useSeparator"
-                    className="text-sm font-medium text-gray-300"
-                  >
-                    {intl.formatMessage(messages.useSeparator)}
-                  </label>
-                  <p className="text-xs text-gray-400">
-                    {intl.formatMessage(messages.useSeparatorHelp, {
-                      type: values.subtype === 'actors' ? 'actor' : 'director',
-                    })}
-                  </p>
-                </div>
-                <Field
-                  type="checkbox"
-                  id="useSeparator"
-                  name="useSeparator"
-                  className="h-5 w-5 rounded border-stone-500 bg-stone-700 text-orange-500 focus:ring-2 focus:ring-orange-500"
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    const checked = e.target.checked;
-                    setFieldValue('useSeparator', checked);
-                    if (
-                      checked &&
-                      (!values.separatorTitle ||
-                        values.separatorTitle.trim().length === 0)
-                    ) {
-                      setFieldValue(
-                        'separatorTitle',
-                        values.subtype === 'actors'
-                          ? 'Actor Collections'
-                          : 'Director Collections'
-                      );
-                    }
-                  }}
-                />
-              </div>
-            </div>
-            {values.useSeparator && (
-              <div className="md:col-span-2">
-                <label
-                  htmlFor="separatorTitle"
-                  className="mb-2 block text-sm text-gray-300"
-                >
-                  {intl.formatMessage(messages.separatorTitle)}{' '}
-                  <span className="text-red-500">*</span>
-                </label>
-                <Field
-                  type="text"
-                  id="separatorTitle"
-                  name="separatorTitle"
-                  placeholder={
-                    values.subtype === 'actors'
-                      ? 'Actor Collections'
-                      : 'Director Collections'
-                  }
-                  className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-                <p className="mt-1 text-xs text-gray-400">
-                  {intl.formatMessage(messages.separatorTitleHelp, {
-                    defaultTitle: intl.formatMessage(
-                      values.subtype === 'actors'
-                        ? messages.actorCollections
-                        : messages.directorCollections
-                    ),
-                  })}
-                </p>
-              </div>
-            )}
+            <SeparatorToggle
+              values={values}
+              setFieldValue={setFieldValue}
+              defaultTitle={
+                values.subtype === 'actors'
+                  ? 'Actor Collections'
+                  : 'Director Collections'
+              }
+              typeLabel={values.subtype === 'actors' ? 'actor' : 'director'}
+            />
           </div>
         )}
+
+      {/* Separator option for library essentials */}
+      {isLibraryEssentialsPattern(values.type, values.subtype) && (
+        <SeparatorToggle
+          values={values}
+          setFieldValue={setFieldValue}
+          defaultTitle={`${getLibraryEssentialsLabel(
+            values.subtype
+          )} Collections`}
+          typeLabel={values.subtype || 'attribute'}
+        />
+      )}
 
       {/* Standalone separator title */}
       {values.type === 'plex' && values.subtype === 'separator' && (

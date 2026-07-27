@@ -431,3 +431,29 @@ export function formatSyncScheduleBadge(
   // Fallback
   return 'Sync: Custom';
 }
+
+const LIBRARY_ESSENTIALS_SUBTYPES = [
+  'genre',
+  'decade',
+  'resolution',
+  'contentRating',
+] as const;
+
+export type LibraryEssentialsSubtype =
+  (typeof LIBRARY_ESSENTIALS_SUBTYPES)[number];
+
+export function isLibraryEssentialsPattern(
+  type?: string,
+  subtype?: string
+): boolean {
+  return (
+    type === 'plex' &&
+    LIBRARY_ESSENTIALS_SUBTYPES.includes(subtype as LibraryEssentialsSubtype)
+  );
+}
+
+export function getLibraryEssentialsLabel(subtype?: string): string {
+  if (subtype === 'contentRating') return 'Content Rating';
+  if (!subtype) return '';
+  return subtype.charAt(0).toUpperCase() + subtype.slice(1);
+}
