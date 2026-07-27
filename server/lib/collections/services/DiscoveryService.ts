@@ -396,6 +396,7 @@ export class DiscoveryService {
                 libraryId: c.libraryId,
                 newSortOrder: c.sortOrderHome,
                 isPromoted: c.isPromotedToHub,
+                visibilitySaved: c.visibilityConfig,
               })),
             }
           );
@@ -1095,6 +1096,21 @@ export class DiscoveryService {
                   ) {
                     existingPreExisting.sortOrderHome = hubConfig.sortOrderHome;
                   }
+                  logger.debug(
+                    `Hub enhancement PATH 1 (newly discovered): "${existingPreExisting.name}" — setting visibility from Plex hub state`,
+                    {
+                      label: 'Discovery Service - Visibility Debug',
+                      ratingKey: parsedHub.ratingKey,
+                      beforeVisibility: {
+                        ...existingPreExisting.visibilityConfig,
+                      },
+                      hubValues: {
+                        promotedToSharedHome: hub.promotedToSharedHome,
+                        promotedToOwnHome: hub.promotedToOwnHome,
+                        promotedToRecommended: hub.promotedToRecommended,
+                      },
+                    }
+                  );
                   // This config was discovered this run (not yet saved).
                   // Set initial visibility from Plex hub management state,
                   // since the config was created with all-false defaults.
@@ -1152,6 +1168,23 @@ export class DiscoveryService {
                     // (same check as first path).
                     let activeVisibility =
                       existingConfigFromSettings.visibilityConfig;
+                    logger.debug(
+                      `Hub enhancement PATH 2 (existing in settings): "${existingConfigFromSettings.name}" — preserving user visibility`,
+                      {
+                        label: 'Discovery Service - Visibility Debug',
+                        ratingKey: parsedHub.ratingKey,
+                        savedVisibility: activeVisibility
+                          ? { ...activeVisibility }
+                          : null,
+                        hasTimeRestriction:
+                          !!existingConfigFromSettings.timeRestriction,
+                        hubValues: {
+                          promotedToSharedHome: hub.promotedToSharedHome,
+                          promotedToOwnHome: hub.promotedToOwnHome,
+                          promotedToRecommended: hub.promotedToRecommended,
+                        },
+                      }
+                    );
                     if (existingConfigFromSettings.timeRestriction) {
                       const alreadyFull =
                         activeVisibility.usersHome &&
