@@ -16118,6 +16118,69 @@ paths:
         '500':
           description: Failed to fetch Plex labels
 
+  /plex/library/{libraryId}/attributes/{attributeType}:
+    get:
+      summary: Discover library attribute values
+      description: Returns the distinct values for a given attribute type in a Plex library, plus any existing collections that would conflict with the rendered template.
+      tags:
+        - plex
+      parameters:
+        - name: libraryId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: attributeType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [genre, decade, resolution, contentRating]
+        - name: template
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: configId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attribute values and conflicts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  values:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          type: string
+                        title:
+                          type: string
+                        fastKey:
+                          type: string
+                  conflicts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        title:
+                          type: string
+                        ratingKey:
+                          type: string
+        '400':
+          description: Invalid attribute type or library
+        '401':
+          description: Authentication required
+        '500':
+          description: Failed to fetch library attributes
+
   /overlay-test:
     post:
       summary: Test overlay application on a single item
