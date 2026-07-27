@@ -1096,7 +1096,7 @@ export class DiscoveryService {
                   ) {
                     existingPreExisting.sortOrderHome = hubConfig.sortOrderHome;
                   }
-                  logger.debug(
+                  logger.info(
                     `Hub enhancement PATH 1 (newly discovered): "${existingPreExisting.name}" — setting visibility from Plex hub state`,
                     {
                       label: 'Discovery Service - Visibility Debug',
@@ -1168,7 +1168,7 @@ export class DiscoveryService {
                     // (same check as first path).
                     let activeVisibility =
                       existingConfigFromSettings.visibilityConfig;
-                    logger.debug(
+                    logger.info(
                       `Hub enhancement PATH 2 (existing in settings): "${existingConfigFromSettings.name}" — preserving user visibility`,
                       {
                         label: 'Discovery Service - Visibility Debug',
