@@ -604,9 +604,150 @@ export class CollectionCleanupService {
       };
     }
 
+    // Special case for auto actor/director collections - one config generates multiple
+    // Plex collections. Match by label prefix instead of ratingKey.
+    const personLabel = managedLabels.find(
+      (labelText) =>
+        labelText.toLowerCase().startsWith('agregarrautoactor-') ||
+        labelText.toLowerCase().startsWith('agregarrautodirector-')
+    );
+    if (personLabel) {
+      const isActor = personLabel
+        .toLowerCase()
+        .startsWith('agregarrautoactor-');
+      const prefix = isActor ? 'AgregarrAutoActor-' : 'AgregarrAutoDirector-';
+      const remainder = personLabel.slice(prefix.length);
+      const configId = remainder.split('-')[0];
+
+      if (!configId) {
+        return { shouldDelete: true, reason: 'invalid person label format' };
+      }
+
+      const hasParentConfig = currentConfigs.some(
+        (config) =>
+          config.type === 'plex' &&
+          config.id === configId &&
+          config.subtype === (isActor ? 'actors' : 'directors') &&
+          (Array.isArray(config.libraryId)
+            ? config.libraryId[0]
+            : config.libraryId) === collection.libraryKey
+      );
+
+      if (!hasParentConfig) {
+        return {
+          shouldDelete: true,
+          reason: 'person collection config removed',
+        };
+      }
+
+      return {
+        shouldDelete: false,
+        reason: 'person collection config still active',
+      };
+    }
+
+    // Special case for library essentials collections - one config generates multiple
+    // Plex collections. Match by label prefix instead of ratingKey.
+    const essentialsLabel = managedLabels.find((labelText) =>
+      labelText.toLowerCase().startsWith('agregarressentials-')
+    );
+    if (essentialsLabel) {
+      const remainder = essentialsLabel.slice('AgregarrEssentials-'.length);
+      const configId = remainder.split('-')[0];
+      const subtype = configId
+        ? remainder.slice(configId.length + 1).split('-')[0]
+        : undefined;
+
+      if (!configId || !subtype) {
+        return {
+          shouldDelete: true,
+          reason: 'invalid essentials label format',
+        };
+      }
+
+      const hasParentConfig = currentConfigs.some(
+        (config) =>
+          config.type === 'plex' &&
+          config.id === configId &&
+          config.subtype === subtype &&
+          (Array.isArray(config.libraryId)
+            ? config.libraryId[0]
+            : config.libraryId) === collection.libraryKey
+      );
+
+      if (!hasParentConfig) {
+        return {
+          shouldDelete: true,
+          reason: 'essentials collection config changed or removed',
+        };
+      }
+
+      return {
+        shouldDelete: false,
+        reason: 'essentials collection config still active',
+      };
+    }
+
     // If no ratingKey match and not a special multi-collection type, the config must have been removed
     return { shouldDelete: true, reason: 'configuration removed' };
   }
+}
+
+/**
+ * Delete Plex collections in a library whose labels match any of the given
+ * prefixes. Used to clean up multi-collection configs (actors, directors,
+ * essentials) that spawn several Plex collections per config.
+ */
+export async function deleteManagedPlexCollections(
+  plexClient: PlexAPI,
+  labelPrefixes: string[],
+  libraryId: string
+): Promise<number> {
+  const prefixes = labelPrefixes.map((prefix) => prefix.toLowerCase());
+  const allCollections = await plexClient.getAllCollections();
+
+  const matching = allCollections.filter((collection: PlexCollection) => {
+    if (collection.libraryKey !== libraryId) {
+      return false;
+    }
+
+    const labels = Array.isArray(collection.labels) ? collection.labels : [];
+    return labels.some((label: string | PlexLabel) => {
+      const labelText = (
+        typeof label === 'string' ? label : label.tag
+      ).toLowerCase();
+      return prefixes.some((prefix) => labelText.startsWith(prefix));
+    });
+  });
+
+  if (matching.length === 0 && labelPrefixes.length > 0) {
+    logger.warn(`No collections found to clean up (Plex may be unreachable)`, {
+      label: 'Collection Cleanup Service',
+      labelPrefixes,
+      libraryId,
+    });
+  }
+
+  let deleted = 0;
+  for (const collection of matching) {
+    try {
+      await plexClient.deleteCollection(collection.ratingKey);
+      deleted++;
+      logger.info(`Deleted managed collection: ${collection.title}`, {
+        label: 'Collection Cleanup Service',
+        collectionTitle: collection.title,
+        ratingKey: collection.ratingKey,
+      });
+    } catch (error) {
+      logger.warn(`Failed to delete managed collection: ${collection.title}`, {
+        label: 'Collection Cleanup Service',
+        ratingKey: collection.ratingKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return deleted;
 }
 
 export default CollectionCleanupService;

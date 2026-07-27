@@ -270,4 +270,142 @@ searchRouter.get('/labels', async (_req, res) => {
   }
 });
 
+const ATTRIBUTE_TYPES = [
+  'genre',
+  'decade',
+  'resolution',
+  'contentRating',
+] as const;
+type AttributeType = (typeof ATTRIBUTE_TYPES)[number];
+
+/**
+ * Discover attribute values (genre/decade/resolution/contentRating) for a library,
+ * with rendered-name conflict detection against existing collections
+ * GET /api/v1/plex/library/:libraryId/attributes/:attributeType?template=...&configId=...
+ */
+searchRouter.get(
+  '/library/:libraryId/attributes/:attributeType',
+  async (req, res) => {
+    const { libraryId, attributeType } = req.params;
+    const template = req.query.template as string | undefined;
+    const configId = req.query.configId as string | undefined;
+
+    logger.debug('Library attribute discovery requested', {
+      label: 'PlexLibraryAttributes',
+      libraryId,
+      attributeType,
+      hasTemplate: !!template,
+      configId,
+    });
+
+    if (!(ATTRIBUTE_TYPES as readonly string[]).includes(attributeType)) {
+      return res.status(400).json({
+        error: `Invalid attribute type. Must be one of: ${ATTRIBUTE_TYPES.join(
+          ', '
+        )}`,
+      });
+    }
+
+    try {
+      // Get admin user for Plex API access
+      const { getAdminUser } = await import(
+        '@server/lib/collections/core/CollectionUtilities'
+      );
+      const admin = await getAdminUser();
+
+      if (!admin) {
+        return res.status(500).json({ error: 'No admin user found' });
+      }
+
+      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+
+      const libraries = await plexApi.getLibraries();
+      const library = libraries.find((lib) => lib.key === libraryId);
+
+      if (!library || (library.type !== 'movie' && library.type !== 'show')) {
+        return res
+          .status(400)
+          .json({ error: `Library ${libraryId} not found` });
+      }
+
+      let values: { key: string; title: string; fastKey: string }[];
+      try {
+        values = await plexApi.getLibraryAttributes(
+          libraryId,
+          attributeType as AttributeType,
+          library.type === 'show' ? 2 : 1
+        );
+      } catch (error) {
+        logger.error('Failed to fetch library attributes', {
+          label: 'PlexLibraryAttributes',
+          libraryId,
+          attributeType,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return res.status(500).json({
+          error: 'Failed to fetch library attributes',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      const allCollections = await plexApi.getAllCollections();
+      const libraryCollections = allCollections.filter(
+        (collection) => collection.libraryKey === libraryId
+      );
+
+      const essentialsPrefix = configId
+        ? `agregarressentials-${configId}-`.toLowerCase()
+        : undefined;
+
+      const relevantCollections = essentialsPrefix
+        ? libraryCollections.filter((collection) => {
+            const labels = Array.isArray(collection.labels)
+              ? collection.labels
+              : [];
+            const labelTexts = labels.map((l: string | { tag: string }) =>
+              typeof l === 'string' ? l : l.tag
+            );
+            return !labelTexts.some((labelText) =>
+              labelText.toLowerCase().startsWith(essentialsPrefix)
+            );
+          })
+        : libraryCollections;
+
+      const conflicts: { title: string; ratingKey: string }[] = [];
+
+      for (const value of values) {
+        const renderedTitle = template
+          ? template.replace('{value}', value.title)
+          : value.title;
+
+        const conflict = relevantCollections.find(
+          (collection) =>
+            collection.title.toLowerCase() === renderedTitle.toLowerCase()
+        );
+
+        if (conflict) {
+          conflicts.push({
+            title: conflict.title,
+            ratingKey: conflict.ratingKey,
+          });
+        }
+      }
+
+      return res.status(200).json({ values, conflicts });
+    } catch (error) {
+      logger.error('Failed to discover library attributes', {
+        label: 'PlexLibraryAttributes',
+        libraryId,
+        attributeType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return res.status(500).json({
+        error: 'Failed to discover library attributes',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+);
+
 export default searchRouter;

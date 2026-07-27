@@ -3532,6 +3532,60 @@ class PlexAPI {
     }
   }
 
+  /**
+   * Get all values for a library attribute (genre, decade, resolution, contentRating)
+   * @param libraryId - Library section key
+   * @param attribute - Attribute type to query
+   * @param mediaType - Plex type filter (1=movie, 2=show); derived from the library if omitted
+   */
+  public async getLibraryAttributes(
+    libraryId: string,
+    attribute: 'genre' | 'decade' | 'resolution' | 'contentRating',
+    mediaType?: number
+  ): Promise<{ key: string; title: string; fastKey: string }[]> {
+    let type = mediaType;
+
+    if (type === undefined) {
+      const libraries = await this.getLibraries();
+      const library = libraries.find((lib) => lib.key === libraryId);
+
+      if (!library) {
+        throw new Error(`Library ${libraryId} not found`);
+      }
+
+      type = library.type === 'show' ? 2 : 1;
+    }
+
+    const response = await this.plexClient.query<{
+      MediaContainer: {
+        Directory?: {
+          key: string;
+          title: string;
+          fastKey: string;
+          type: string;
+        }[];
+      };
+    }>(`/library/sections/${libraryId}/${attribute}?type=${type}`);
+
+    const values = (response.MediaContainer?.Directory || []).map((d) => ({
+      key: d.key,
+      title: d.title,
+      fastKey: d.fastKey,
+    }));
+
+    logger.debug(
+      `Found ${values.length} ${attribute} values in library ${libraryId}`,
+      {
+        label: 'Plex API',
+        libraryId,
+        attribute,
+        valueCount: values.length,
+      }
+    );
+
+    return values;
+  }
+
   public async getLibraryLabels(libraryId: string): Promise<string[]> {
     try {
       // Fetch library metadata to determine media type

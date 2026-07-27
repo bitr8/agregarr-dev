@@ -1119,6 +1119,65 @@ collectionsRoutes.delete('/:id', isAuthenticated(), async (req, res) => {
             }
           }
         }
+
+        // Delete Plex collections for multi-collection configs
+        for (const config of configsToDelete) {
+          if (config.type !== 'plex') {
+            continue;
+          }
+
+          const prefixes: string[] = [];
+          if (config.subtype === 'actors') {
+            prefixes.push(`AgregarrAutoActor-${config.id}-`);
+          } else if (config.subtype === 'directors') {
+            prefixes.push(`AgregarrAutoDirector-${config.id}-`);
+          } else if (
+            config.subtype === 'genre' ||
+            config.subtype === 'decade' ||
+            config.subtype === 'resolution' ||
+            config.subtype === 'contentRating'
+          ) {
+            prefixes.push(`AgregarrEssentials-${config.id}-`);
+          }
+
+          if (prefixes.length === 0) {
+            continue;
+          }
+
+          try {
+            const { deleteManagedPlexCollections } = await import(
+              '@server/lib/collections/services/CollectionCleanupService'
+            );
+            const libId = Array.isArray(config.libraryId)
+              ? config.libraryId[0]
+              : config.libraryId;
+            const deleted = await deleteManagedPlexCollections(
+              plexClient,
+              prefixes,
+              libId
+            );
+            if (deleted > 0) {
+              logger.info(
+                `Deleted ${deleted} managed Plex collections for config ${config.id}`,
+                {
+                  label: 'Collections API',
+                  configId: config.id,
+                  configName: config.name,
+                  deleted,
+                }
+              );
+            }
+          } catch (error) {
+            logger.warn(
+              `Failed to cleanup managed Plex collections for config ${config.id}`,
+              {
+                label: 'Collections API',
+                configId: config.id,
+                error: error instanceof Error ? error.message : String(error),
+              }
+            );
+          }
+        }
       } else {
         logger.warn(
           'No local admin Plex token found for label cleanup during deletion'
