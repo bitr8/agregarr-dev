@@ -85,10 +85,9 @@ const LibraryEssentialsPreview: React.FC = () => {
     !!libraryId && isLibraryEssentialsPattern(values.type, subtype);
 
   // Fetch values once per library+subtype; compute conflicts client-side
+  const configIdParam = configId ? `?configId=${configId}` : '';
   const swrKey = shouldFetch
-    ? `/api/v1/plex/library/${libraryId}/attributes/${subtype}?configId=${
-        configId || ''
-      }`
+    ? `/api/v1/plex/library/${libraryId}/attributes/${subtype}${configIdParam}`
     : null;
 
   const { data, error, isLoading, mutate } = useSWR<DiscoveryResponse>(swrKey, {
