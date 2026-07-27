@@ -2901,13 +2901,6 @@ const CollectionFormConfigForm = ({
                           </div>
                         )}
 
-                      {/* Library Essentials preview + selection */}
-                      {isCollection &&
-                        isEssentialsRender &&
-                        (values.libraryIds?.length > 0 || values.libraryId) && (
-                          <LibraryEssentialsPreview />
-                        )}
-
                       {/* Custom URL Section - show after type/subtype selection, before library selection */}
                       {isCollection && (
                         <CustomUrlSection
@@ -3027,6 +3020,13 @@ const CollectionFormConfigForm = ({
                           isDetectingMediaType={false}
                         />
                       )}
+
+                      {/* Library Essentials preview + selection — after library selection */}
+                      {isCollection &&
+                        isEssentialsRender &&
+                        (values.libraryIds?.length > 0 || values.libraryId) && (
+                          <LibraryEssentialsPreview />
+                        )}
 
                       {/* Regular Form - show full form for normal collections */}
                       {isCollection &&
