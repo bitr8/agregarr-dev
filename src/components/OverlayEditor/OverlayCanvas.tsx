@@ -280,7 +280,7 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
         className="flex h-full w-full items-center justify-center"
       >
         <div
-          className="relative overflow-hidden border-2 border-stone-600 shadow-lg"
+          className="relative box-content overflow-hidden border-2 border-stone-600 shadow-lg"
           style={{
             width: `${displayWidth}px`,
             height: `${displayHeight}px`,

@@ -306,7 +306,7 @@ export const PosterCanvas = forwardRef<PosterCanvasRef, PosterCanvasProps>(
     return (
       <div className="flex h-full w-full items-center justify-center p-4">
         <div
-          className="relative overflow-hidden border-2 border-stone-600 shadow-lg"
+          className="relative box-content overflow-hidden border-2 border-stone-600 shadow-lg"
           style={{
             width: `${displayWidth}px`,
             height: `${displayHeight}px`,
