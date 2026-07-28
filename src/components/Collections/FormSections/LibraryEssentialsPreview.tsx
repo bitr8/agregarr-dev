@@ -77,7 +77,7 @@ const LibraryEssentialsPreview: React.FC = () => {
           : ((values as Record<string, unknown>)
               .customMovieTemplate as string)) || '{value}'
       : rawTemplate || '{value}';
-  const selectionMode = values.selectionMode || 'exclude';
+  const selectionMode = values.selectionMode || 'include';
   const excludeValues = values.excludeValues || [];
   const includeValues = values.includeValues || [];
 
@@ -106,7 +106,7 @@ const LibraryEssentialsPreview: React.FC = () => {
   useEffect(() => {
     if (resetKey !== prevResetKey) {
       setPrevResetKey(resetKey);
-      setFieldValue('selectionMode', 'exclude');
+      setFieldValue('selectionMode', 'include');
       setFieldValue('excludeValues', []);
       setFieldValue('includeValues', []);
     }

@@ -839,7 +839,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
         }
       }
 
-      const selectionMode = config.selectionMode ?? 'exclude';
+      const selectionMode = config.selectionMode ?? 'include';
       const excludeValues = config.excludeValues ?? [];
       const includeValues = config.includeValues ?? [];
 
