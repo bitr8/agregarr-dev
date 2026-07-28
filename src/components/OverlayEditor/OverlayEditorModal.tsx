@@ -38,6 +38,9 @@ const messages = defineMessages({
   description: 'Description (Optional)',
   enterName: 'Enter a name',
   enterDescription: 'Enter a description',
+  canvasDimensions: 'Canvas Size',
+  canvasWidth: 'Width',
+  canvasHeight: 'Height',
   refreshPoster: 'Next Poster',
   // Application condition
   applicationCondition: 'Application Condition',
@@ -92,6 +95,48 @@ interface AvailableOverlayTemplate {
   name: string;
   templateData: OverlayTemplateData;
 }
+
+const CanvasDimensionInput: React.FC<{
+  id: string;
+  label: string;
+  value: number;
+  onCommit: (value: number) => void;
+}> = ({ id, label, value, onCommit }) => {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const clamped = Math.max(100, Math.min(2000, parseInt(draft) || 100));
+    setDraft(String(clamped));
+    if (clamped !== value) {
+      onCommit(clamped);
+    }
+  };
+
+  return (
+    <div className="flex-1">
+      <label htmlFor={id} className="mb-1 block text-xs text-stone-400">
+        {label}
+      </label>
+      <input
+        type="number"
+        id={id}
+        min={100}
+        max={2000}
+        className="w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white focus:border-orange-500 focus:outline-none"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+        }}
+      />
+    </div>
+  );
+};
 
 export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
   isOpen,
@@ -398,6 +443,37 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                           value={description || ''}
                           onChange={(e) => setDescription(e.target.value)}
                         />
+                      </div>
+
+                      {/* Canvas Dimensions */}
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-stone-300">
+                          {intl.formatMessage(messages.canvasDimensions)}
+                        </label>
+                        <div className="flex gap-2">
+                          <CanvasDimensionInput
+                            id="canvasWidth"
+                            label={intl.formatMessage(messages.canvasWidth)}
+                            value={overlayData.width}
+                            onCommit={(w) =>
+                              addToHistory({
+                                ...overlayData,
+                                width: w,
+                              })
+                            }
+                          />
+                          <CanvasDimensionInput
+                            id="canvasHeight"
+                            label={intl.formatMessage(messages.canvasHeight)}
+                            value={overlayData.height}
+                            onCommit={(h) =>
+                              addToHistory({
+                                ...overlayData,
+                                height: h,
+                              })
+                            }
+                          />
+                        </div>
                       </div>
 
                       {/* Tags */}
