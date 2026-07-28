@@ -11,6 +11,7 @@ const messages = defineMessages({
   noLabelsFound: 'No labels found in this library',
   plexLabelHelp:
     'Only items in the selected library that carry this label are included. Membership refreshes on each sync.',
+  loadError: 'Failed to load labels',
 });
 
 interface PlexLabelSectionProps {
@@ -55,7 +56,11 @@ const PlexLabelSection = ({
         name="plexLabel"
         className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
         value={values.plexLabel || ''}
-        disabled={!selectedLibraryId || (!plexLabelsData && !plexLabelsError)}
+        disabled={
+          !selectedLibraryId ||
+          !!plexLabelsError ||
+          (!plexLabelsData && !plexLabelsError)
+        }
         onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
           setFieldValue('plexLabel', e.target.value || undefined)
         }
@@ -73,7 +78,13 @@ const PlexLabelSection = ({
           </option>
         ))}
       </select>
+      {selectedLibraryId && plexLabelsError && (
+        <p className="mt-1 text-xs text-red-400">
+          {intl.formatMessage(messages.loadError)}
+        </p>
+      )}
       {selectedLibraryId &&
+        !plexLabelsError &&
         plexLabelsData &&
         plexLabelsData.labels.length === 0 && (
           <p className="mt-1 text-xs text-amber-400">

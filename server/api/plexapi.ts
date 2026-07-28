@@ -3581,10 +3581,7 @@ class PlexAPI {
         const batch = response.MediaContainer.Metadata || [];
         items.push(...batch);
 
-        const total =
-          response.MediaContainer.totalSize ??
-          response.MediaContainer.size ??
-          batch.length;
+        const total = response.MediaContainer.totalSize ?? 0;
         if (batch.length < pageSize || items.length >= total) {
           break;
         }
@@ -3718,7 +3715,9 @@ class PlexAPI {
       const directories = response.MediaContainer?.Directory || [];
       const labels = directories
         .map((d) => d.title)
-        .filter((title): title is string => !!title);
+        .filter(
+          (title): title is string => !!title && title !== 'trailer-placeholder'
+        );
 
       logger.debug(`Found ${labels.length} labels in library ${libraryId}`, {
         label: 'Plex API',

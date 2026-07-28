@@ -1123,7 +1123,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
           libraryKey: config.libraryId,
           originalPosition: index + 1, // Preserve source order for multi-source interleaving
         },
-      } as CollectionItem;
+      };
     });
   }
 
