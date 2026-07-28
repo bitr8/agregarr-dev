@@ -235,6 +235,8 @@ export interface CollectionConfig {
   readonly sonarrInstanceId?: number; // Selected Sonarr instance ID for tag-based collections
   // Generic ordering options (applicable to all collection types)
   readonly sortOrder?: CollectionSortOrder; // Sort order for collection items (default: 'default')
+  // Plex Library label subtype: build a collection from items carrying this Plex label
+  readonly plexLabel?: string;
   // Unified person minimum items (applies to both actors and directors)
   readonly personMinimumItems?: number;
   // Plex Library separator settings for auto person collections

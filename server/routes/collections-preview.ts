@@ -941,6 +941,7 @@ async function processPreviewAsync(
     sonarrTagId?: number;
     radarrInstanceId?: number;
     sonarrInstanceId?: number;
+    plexLabel?: string;
     // Coming Soon specific fields
     comingSoonRadarrServerId?: number;
     comingSoonSonarrServerId?: number;
@@ -988,6 +989,7 @@ async function processPreviewAsync(
       radarrInstanceId,
       sonarrTagId,
       sonarrInstanceId,
+      plexLabel,
       comingSoonRadarrServerId,
       comingSoonSonarrServerId,
       comingSoonRadarrRootFolder,
@@ -1092,6 +1094,10 @@ async function processPreviewAsync(
     if (type === 'sonarrtag') {
       previewConfigRecord.sonarrTagId = sonarrTagId;
       previewConfigRecord.sonarrInstanceId = sonarrInstanceId;
+    }
+
+    if (type === 'plex') {
+      previewConfigRecord.plexLabel = plexLabel;
     }
 
     if (type === 'tautulli') {

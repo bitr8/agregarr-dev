@@ -6,12 +6,13 @@ import { PosterTemplate } from '@server/entity/PosterTemplate';
  * Creates smart collections based on Plex library metadata (e.g., directors, actors).
  */
 
-import type PlexAPI from '@server/api/plexapi';
+import PlexAPI from '@server/api/plexapi';
 import TheMovieDb from '@server/api/themoviedb';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   extractTmdbIdFromGuids,
   extractTvdbIdFromGuids,
+  getAdminUser,
   getCollectionMediaType,
   hasAgregarrLabel,
   type LibraryItemsCache,
@@ -26,6 +27,7 @@ import type {
   MissingItem,
   PlexCollection,
   PlexLabel,
+  PlexLabelSourceData,
   SyncResult,
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
@@ -731,6 +733,18 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     _mediaType: 'movie' | 'tv'
   ): Promise<Record<string, unknown>> {
     void _mediaType;
+
+    // Label collections are a single collection named by the config, not per-person.
+    if (config.subtype === 'label') {
+      return {
+        source: 'plex',
+        subtype: 'label',
+        plexLabel: config.plexLabel,
+        name: config.name,
+        collectionName: config.name,
+      };
+    }
+
     const personPlaceholder =
       config.subtype === 'actors' ? '{actor}' : '{director}';
 
@@ -1046,20 +1060,76 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
   }
 
   public override async fetchSourceData(
-    _config: CollectionConfig,
+    config: CollectionConfig,
     _options?: CollectionSyncOptions,
     _libraryCache?: LibraryItemsCache
   ): Promise<CollectionSourceData[]> {
-    void _config;
     void _options;
     void _libraryCache;
-    // Director collections use Plex library data gathered during processing; no external source fetch required.
-    return [];
+    // Only the 'label' subtype uses the standard fetch/map pipeline (e.g. for the
+    // collection Preview). Director/actor/separator collections build their items
+    // during processConfiguration and need no external source fetch.
+    if (config.subtype !== 'label') {
+      return [];
+    }
+    const plexLabel = config.plexLabel?.trim();
+    if (!plexLabel || !config.libraryId) {
+      return [];
+    }
+    const admin = await getAdminUser();
+    if (!admin?.plexToken) {
+      return [];
+    }
+    const plexClient = new PlexAPI({ plexToken: admin.plexToken });
+    const mediaType = getCollectionMediaType(config);
+    const plexItems = await plexClient.getItemsByLabel(
+      config.libraryId,
+      plexLabel,
+      mediaType
+    );
+    // Return the minimal source-data shape. PlexLabelSourceData is a member of
+    // the CollectionSourceData union, so this needs no cast.
+    return plexItems.map(
+      (item): PlexLabelSourceData => ({
+        ratingKey: item.ratingKey,
+        title: item.title,
+        year: item.year,
+        Guid: item.Guid,
+      })
+    );
+  }
+
+  /**
+   * Map Plex library items (label source data) to CollectionItems. Shared by the
+   * sync path (processLabelConfiguration) and the Preview path
+   * (mapSourceDataToItems) so the two can't drift.
+   */
+  private mapPlexItemsToCollectionItems(
+    items: PlexLabelSourceData[],
+    config: CollectionConfig
+  ): CollectionItem[] {
+    const mediaType = getCollectionMediaType(config);
+    return items.map((item, index) => {
+      const tmdbId = extractTmdbIdFromGuids(item.Guid);
+      const tvdbId = extractTvdbIdFromGuids(item.Guid);
+      return {
+        ratingKey: item.ratingKey,
+        title: item.title,
+        type: mediaType === 'movie' ? 'movie' : 'tv',
+        year: item.year,
+        tmdbId: tmdbId ?? undefined,
+        tvdbId: tvdbId ?? undefined,
+        metadata: {
+          libraryKey: config.libraryId,
+          originalPosition: index + 1, // Preserve source order for multi-source interleaving
+        },
+      } as CollectionItem;
+    });
   }
 
   public override async mapSourceDataToItems(
-    _sourceData: CollectionSourceData[],
-    _config: CollectionConfig,
+    sourceData: CollectionSourceData[],
+    config: CollectionConfig,
     _plexClient?: PlexAPI,
     _libraryCache?: LibraryItemsCache
   ): Promise<{
@@ -1067,15 +1137,27 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     missingItems?: MissingItem[];
     stats?: FilteringStats;
   }> {
-    void _sourceData;
-    void _config;
     void _plexClient;
     void _libraryCache;
-    // Items are derived directly from Plex during processConfiguration.
+    // Non-label plex collections derive their items during processConfiguration.
+    if (config.subtype !== 'label') {
+      return {
+        items: [],
+        missingItems: [],
+        stats: { original: 0, filtered: 0, removed: 0 },
+      };
+    }
+    // Label items are already Plex library items, so they're all in-library.
+    // Narrow the union with a type guard (ratingKey is unique to label source
+    // data) so no cast is needed.
+    const labelItems = sourceData.filter(
+      (item): item is PlexLabelSourceData => 'ratingKey' in item
+    );
+    const items = this.mapPlexItemsToCollectionItems(labelItems, config);
     return {
-      items: [],
+      items,
       missingItems: [],
-      stats: { original: 0, filtered: 0, removed: 0 },
+      stats: { original: items.length, filtered: items.length, removed: 0 },
     };
   }
 
@@ -1100,6 +1182,102 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       updated: 0,
       itemCount: 0,
     };
+  }
+
+  /**
+   * Process a label collection - builds a single collection from all library
+   * items that carry the configured Plex label, then runs them through the
+   * standard filtering/ordering/creation pipeline (same as any other source).
+   */
+  private async processLabelConfiguration(
+    config: CollectionConfig,
+    plexClient: PlexAPI,
+    allCollections: PlexCollection[],
+    processedCollectionKeys?: Set<string>,
+    libraryCache?: LibraryItemsCache
+  ): Promise<SyncResult> {
+    const plexLabel = config.plexLabel?.trim();
+    if (!plexLabel) {
+      throw this.createSyncError(
+        CollectionSyncErrorType.CONFIGURATION_ERROR,
+        `No Plex label specified for collection: ${config.name}`
+      );
+    }
+    if (!config.libraryId) {
+      throw this.createSyncError(
+        CollectionSyncErrorType.CONFIGURATION_ERROR,
+        `No library specified for label collection: ${config.name}`
+      );
+    }
+
+    const mediaType = getCollectionMediaType(config);
+
+    logger.info('Processing label collection', {
+      label: 'Plex Library Collections',
+      configName: config.name,
+      libraryId: config.libraryId,
+      plexLabel,
+    });
+
+    try {
+      const plexItems = await plexClient.getItemsByLabel(
+        config.libraryId,
+        plexLabel,
+        mediaType
+      );
+
+      const items = this.mapPlexItemsToCollectionItems(plexItems, config);
+
+      const { items: filteredItems } = await this.applyFilteringToMappedItems(
+        {
+          items,
+          missingItems: [],
+          stats: {
+            original: items.length,
+            filtered: items.length,
+            removed: 0,
+          },
+        },
+        config
+      );
+
+      if (filteredItems.length === 0) {
+        logger.warn(`No items found with label "${plexLabel}"`, {
+          label: 'Plex Library Collections',
+          configName: config.name,
+          libraryId: config.libraryId,
+          plexLabel,
+        });
+        return { created: 0, updated: 0 };
+      }
+
+      return await this.processWithMediaTypeStrategy(
+        filteredItems,
+        config,
+        plexClient,
+        allCollections,
+        processedCollectionKeys,
+        undefined,
+        libraryCache,
+        []
+      );
+    } catch (error) {
+      logger.error('Failed to process label collection', {
+        label: 'Plex Library Collections',
+        configName: config.name,
+        libraryId: config.libraryId,
+        plexLabel,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw this.createSyncError(
+        CollectionSyncErrorType.API_ERROR,
+        `Failed to build label collection "${
+          config.name
+        }" from label "${plexLabel}": ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
@@ -1150,10 +1328,20 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       );
     }
 
+    if (subtype === 'label') {
+      return this.processLabelConfiguration(
+        config,
+        plexClient,
+        allCollections,
+        processedCollectionKeys,
+        _libraryCache
+      );
+    }
+
     if (!subtype || (subtype !== 'directors' && subtype !== 'actors')) {
       throw this.createSyncError(
         CollectionSyncErrorType.CONFIGURATION_ERROR,
-        `Invalid plex subtype: ${subtype}. Supported: directors, actors, separator, genre, decade, resolution, contentRating.`
+        `Invalid plex subtype: ${subtype}. Supported: directors, actors, separator, label, genre, decade, resolution, contentRating.`
       );
     }
 

@@ -8002,6 +8002,7 @@ paths:
                             sonarrtag,
                             comingsoon,
                             filtered_hub,
+                            plex,
                           ]
                         example: 'imdb'
                       subtype:
@@ -16095,10 +16096,18 @@ paths:
 
   /plex/labels:
     get:
-      summary: Get all Plex labels
-      description: Fetches all unique labels (tags) from all movie and TV show libraries in Plex. Used for the Plex Label condition field in overlay templates.
+      summary: Get Plex labels
+      description: Fetches unique labels (tags) from Plex. With no query parameter, aggregates labels across all movie and TV show libraries (used for the Plex Label condition field in overlay templates). With `libraryId`, returns only the labels present in that single library (used by the Plex Library "Label" collection type).
       tags:
         - overlays
+      parameters:
+        - name: libraryId
+          in: query
+          required: false
+          description: Restrict results to a single library, by section key. Omit to aggregate across all movie/TV libraries.
+          schema:
+            type: string
+          example: '10'
       responses:
         '200':
           description: Unique labels across all libraries

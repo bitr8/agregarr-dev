@@ -377,6 +377,12 @@ const CollectionTypeSection = ({
               'Automatically create smart collections for the top 5 actors in this library.',
           },
           {
+            value: 'label',
+            label: 'Label',
+            description:
+              'Build a collection from every item in this library that has a specific Plex label.',
+          },
+          {
             value: 'separator',
             label: 'Separator',
             description:

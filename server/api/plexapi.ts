@@ -3547,6 +3547,71 @@ class PlexAPI {
   }
 
   /**
+   * Get all library items that carry a specific label (movies or TV).
+   * Pages through the full result set so the entire labelled subset is returned.
+   */
+  public async getItemsByLabel(
+    libraryId: string,
+    label: string,
+    mediaType: 'movie' | 'tv'
+  ): Promise<PlexLibraryItem[]> {
+    const type = mediaType === 'movie' ? 1 : 2;
+    const labelFilter = encodeURIComponent(label);
+    // Exclude Agregarr's own placeholder items so they never leak into a label collection.
+    const placeholderFilter = encodeURIComponent('trailer-placeholder');
+    const pageSize = 200;
+    const items: PlexLibraryItem[] = [];
+
+    try {
+      for (let offset = 0; ; offset += pageSize) {
+        const response = await this.plexClient.query<{
+          MediaContainer: {
+            totalSize?: number;
+            size?: number;
+            Metadata?: PlexLibraryItem[];
+          };
+        }>({
+          uri: `/library/sections/${libraryId}/all?type=${type}&label=${labelFilter}&label!=${placeholderFilter}&includeGuids=1`,
+          extraHeaders: {
+            'X-Plex-Container-Start': `${offset}`,
+            'X-Plex-Container-Size': `${pageSize}`,
+          },
+        });
+
+        const batch = response.MediaContainer.Metadata || [];
+        items.push(...batch);
+
+        const total =
+          response.MediaContainer.totalSize ??
+          response.MediaContainer.size ??
+          batch.length;
+        if (batch.length < pageSize || items.length >= total) {
+          break;
+        }
+      }
+
+      logger.debug(
+        `Found ${items.length} items with label "${label}" in library ${libraryId}`,
+        { label: 'Plex API', plexLabel: label, libraryId, mediaType }
+      );
+
+      return items;
+    } catch (error) {
+      logger.error(
+        `Failed to fetch items for label "${label}" in library ${libraryId}`,
+        {
+          label: 'Plex API',
+          plexLabel: label,
+          libraryId,
+          mediaType,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Get all labels for a library
    * @param libraryId - Library section key
    * @returns Array of unique label names

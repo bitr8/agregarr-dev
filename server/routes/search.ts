@@ -209,11 +209,12 @@ searchRouter.get('/search', async (req, res) => {
 });
 
 /**
- * Get all unique labels across all movie/show libraries
- * GET /api/v1/plex/labels
+ * Get unique Plex labels.
+ * GET /api/v1/plex/labels            -> labels across all movie/show libraries
+ * GET /api/v1/plex/labels?libraryId= -> labels in a single library only
  * Returns: { labels: string[] }
  */
-searchRouter.get('/labels', async (_req, res) => {
+searchRouter.get('/labels', async (req, res) => {
   try {
     // Get admin user for Plex API access
     const { getAdminUser } = await import(
@@ -230,9 +231,13 @@ searchRouter.get('/labels', async (_req, res) => {
     // Get all libraries
     const allLibraries = await plexApi.getLibraries();
 
-    // Filter to only movie and show libraries
+    // Filter to only movie and show libraries, optionally to a single library
+    const libraryId =
+      typeof req.query.libraryId === 'string' ? req.query.libraryId : undefined;
     const libraries = allLibraries.filter(
-      (lib) => lib.type === 'movie' || lib.type === 'show'
+      (lib) =>
+        (lib.type === 'movie' || lib.type === 'show') &&
+        (!libraryId || lib.key === libraryId)
     );
 
     // Fetch labels for each library and collect unique ones

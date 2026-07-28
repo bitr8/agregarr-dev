@@ -428,6 +428,8 @@ export interface CollectionFormConfig {
   readonly comingSoonSonarrRootFolder?: string; // Sonarr root folder path to filter by
   // Generic ordering options (applicable to all collection types)
   readonly sortOrder?: CollectionSortOrder; // Sort order for collection items (default: 'default')
+  // Plex Library label subtype: build a collection from items carrying this Plex label
+  readonly plexLabel?: string;
   // Unified person minimum items for plex/actors|directors
   readonly personMinimumItems?: number;
   // Plex Library separator settings for multi-collections (actors/directors)
@@ -641,6 +643,8 @@ export interface CollectionConfigCreateRequest {
   readonly comingSoonRadarrRootFolder?: string;
   readonly comingSoonSonarrRootFolder?: string;
   readonly sortOrder?: CollectionSortOrder;
+  // Plex Library label subtype: build a collection from items carrying this Plex label
+  readonly plexLabel?: string;
   // Unified person minimum items for plex actors/directors
   readonly personMinimumItems?: number;
   // Plex Library separator settings for auto person multi-collections

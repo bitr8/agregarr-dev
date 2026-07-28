@@ -102,6 +102,7 @@ interface PreviewCollectionModalProps {
     sonarrTagId?: number;
     radarrInstanceId?: number;
     sonarrInstanceId?: number;
+    plexLabel?: string;
     // Coming Soon specific fields
     comingSoonRadarrServerId?: number;
     comingSoonSonarrServerId?: number;
@@ -229,6 +230,7 @@ const PreviewCollectionModal = ({
     sonarrTagId: previewConfig.sonarrTagId,
     radarrInstanceId: previewConfig.radarrInstanceId,
     sonarrInstanceId: previewConfig.sonarrInstanceId,
+    plexLabel: previewConfig.plexLabel,
     comingSoonRadarrServerId: previewConfig.comingSoonRadarrServerId,
     comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
     comingSoonRadarrRootFolder: previewConfig.comingSoonRadarrRootFolder,
@@ -315,6 +317,7 @@ const PreviewCollectionModal = ({
           sonarrTagId: previewConfig.sonarrTagId,
           radarrInstanceId: previewConfig.radarrInstanceId,
           sonarrInstanceId: previewConfig.sonarrInstanceId,
+          plexLabel: previewConfig.plexLabel,
           // Coming Soon specific fields
           comingSoonRadarrServerId: previewConfig.comingSoonRadarrServerId,
           comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
