@@ -1096,10 +1096,10 @@ export class DiscoveryService {
                   ) {
                     existingPreExisting.sortOrderHome = hubConfig.sortOrderHome;
                   }
-                  logger.info(
+                  logger.debug(
                     `Hub enhancement PATH 1 (newly discovered): "${existingPreExisting.name}" — setting visibility from Plex hub state`,
                     {
-                      label: 'Discovery Service - Visibility Debug',
+                      label: 'Discovery Service',
                       ratingKey: parsedHub.ratingKey,
                       beforeVisibility: {
                         ...existingPreExisting.visibilityConfig,
@@ -1164,14 +1164,12 @@ export class DiscoveryService {
 
                   if (existingConfigFromSettings) {
                     // User's saved visibilityConfig is the source of truth.
-                    // Self-heal corrupted active visibility for time-restricted configs
-                    // (same check as first path).
-                    let activeVisibility =
+                    const activeVisibility =
                       existingConfigFromSettings.visibilityConfig;
-                    logger.info(
+                    logger.debug(
                       `Hub enhancement PATH 2 (existing in settings): "${existingConfigFromSettings.name}" — preserving user visibility`,
                       {
-                        label: 'Discovery Service - Visibility Debug',
+                        label: 'Discovery Service',
                         ratingKey: parsedHub.ratingKey,
                         savedVisibility: activeVisibility
                           ? { ...activeVisibility }
@@ -1185,38 +1183,6 @@ export class DiscoveryService {
                         },
                       }
                     );
-                    if (existingConfigFromSettings.timeRestriction) {
-                      const alreadyFull =
-                        activeVisibility.usersHome &&
-                        activeVisibility.serverOwnerHome &&
-                        activeVisibility.libraryRecommended;
-                      if (!alreadyFull) {
-                        const inactive =
-                          existingConfigFromSettings.timeRestriction!
-                            .inactiveVisibilityConfig ?? {
-                            usersHome: false,
-                            serverOwnerHome: false,
-                            libraryRecommended: true,
-                          };
-                        if (
-                          activeVisibility.usersHome === inactive.usersHome &&
-                          activeVisibility.serverOwnerHome ===
-                            inactive.serverOwnerHome &&
-                          activeVisibility.libraryRecommended ===
-                            inactive.libraryRecommended
-                        ) {
-                          activeVisibility = {
-                            usersHome: true,
-                            serverOwnerHome: true,
-                            libraryRecommended: true,
-                          };
-                          logger.info(
-                            `Self-healed corrupted active visibility for "${existingConfigFromSettings.name}" — matched inactive config, reset to all-visible`,
-                            { label: 'Discovery Service' }
-                          );
-                        }
-                      }
-                    }
 
                     const enhancedConfig: PreExistingCollectionConfig = {
                       ...existingConfigFromSettings,
