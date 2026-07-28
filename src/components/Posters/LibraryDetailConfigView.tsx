@@ -640,7 +640,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                   </button>
                 )}
               </div>
-              <div className="relative aspect-[2/3] h-[540px] overflow-hidden rounded-lg bg-stone-900">
+              <div className="relative h-[540px] w-[360px] overflow-hidden rounded-lg bg-stone-900">
                 {previewLoading && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50">
                     <LoadingSpinner />
