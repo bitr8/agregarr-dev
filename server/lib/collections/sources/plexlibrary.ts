@@ -865,6 +865,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       let created = 0;
       let updated = 0;
       let deleted = 0;
+      const collectedRatingKeys: string[] = [];
 
       for (const value of filteredValues) {
         try {
@@ -948,9 +949,10 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
           }
 
           const visibilityConfig: CollectionVisibilityConfig = {
-            usersHome: false,
-            serverOwnerHome: false,
-            libraryRecommended: false,
+            usersHome: config.visibilityConfig?.usersHome ?? false,
+            serverOwnerHome: config.visibilityConfig?.serverOwnerHome ?? false,
+            libraryRecommended:
+              config.visibilityConfig?.libraryRecommended ?? false,
             isActive: config.isActive ?? true,
           };
 
@@ -965,6 +967,16 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
             config,
           });
 
+          if (config.autoPoster) {
+            await this.generateAutoPoster(
+              collectionName,
+              config,
+              collectionRatingKey,
+              plexClient
+            );
+          }
+
+          collectedRatingKeys.push(collectionRatingKey);
           processedCollectionKeys?.add(collectionRatingKey);
         } catch (error) {
           logger.error(
@@ -1036,6 +1048,10 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
           updatedCollections
         );
       }
+
+      this.updateCollectionConfigField(config.id, {
+        collectionRatingKeys: collectedRatingKeys,
+      });
 
       return {
         created,

@@ -2279,23 +2279,14 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       }
     }
 
-    // Update visibility settings - but only promote to hub if collection has ANY visibility
+    // Update visibility settings (promote, demote, or skip if never managed)
     if (visibilityConfig) {
-      const hasAnyVisibility =
-        visibilityConfig.usersHome ||
-        visibilityConfig.serverOwnerHome ||
-        visibilityConfig.libraryRecommended;
-
-      if (hasAnyVisibility) {
-        // Only call updateCollectionVisibility (which promotes to hub) if collection should be visible somewhere
-        await plexClient.updateCollectionVisibility(
-          collectionRatingKey,
-          visibilityConfig.libraryRecommended, // recommended (promotedToRecommended)
-          visibilityConfig.serverOwnerHome, // home (promotedToOwnHome)
-          visibilityConfig.usersHome // shared (promotedToSharedHome)
-        );
-      }
-      // Collections with false/false/false visibility remain as basic collections (not promoted to hubs)
+      await plexClient.updateCollectionVisibility(
+        collectionRatingKey,
+        visibilityConfig.libraryRecommended, // recommended (promotedToRecommended)
+        visibilityConfig.serverOwnerHome, // home (promotedToOwnHome)
+        visibilityConfig.usersHome // shared (promotedToSharedHome)
+      );
     }
 
     // Update poster if provided

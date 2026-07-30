@@ -2186,6 +2186,7 @@ class PlexAPI {
       // Only promote if not already in hub management — re-promoting resets
       // visibility to all-on, undoing any inactive visibility that was set.
       let alreadyManaged = false;
+      let lookupSucceeded = false;
       let currentHub:
         | PlexHubManagementResponse['MediaContainer']['Hub'][number]
         | undefined;
@@ -2197,8 +2198,19 @@ class PlexAPI {
           (h: { identifier: string }) => h.identifier === hubIdentifier
         );
         alreadyManaged = currentHub !== undefined;
+        lookupSucceeded = true;
       } catch {
         // Fall through to promote (same as pre-fix behaviour)
+      }
+
+      if (
+        lookupSucceeded &&
+        !alreadyManaged &&
+        !recommended &&
+        !home &&
+        !shared
+      ) {
+        return;
       }
 
       if (!alreadyManaged) {
