@@ -84,6 +84,8 @@ Exclude mode means new values that appear in your library get a collection on th
 
 Smart collections also get a Last Episode Added sort option. _(fork [#43](https://github.com/bitr8/agregarr-dev/issues/43))_
 
+**Label Collections** -- Pick a Plex label, get a collection of every item carrying it. Same pattern as Radarr/Sonarr Tag collections: items go through the standard filter, ordering, overlay, and generated poster pipeline. The label dropdown is populated from whichever library you select, and Preview works. _(Contributed by [Damienlee69](https://github.com/Damienlee69), fork [#48](https://github.com/bitr8/agregarr-dev/pull/48))_
+
 ### Performance
 
 Upstream Agregarr makes individual API calls per item, per rating source, per cache miss. With 40+ collections and 10k+ items, syncs take hours and hammer external APIs. These changes reduce that to minutes.
@@ -95,7 +97,7 @@ Upstream Agregarr makes individual API calls per item, per rating source, per ca
 | **Configurable Rating Cache**   | No way to tune cache duration                         | `ratingsCacheMaxDays` in settings.json (default: 30)       |
 | **Collection Sync Cache**       | `getAllCollections()` called on every loop iteration  | Cached with mutation-based invalidation. Saves ~25-30s     |
 | **Batch Overlay Metadata**      | Plex metadata fetched one item at a time              | Batches of 200 per API call. Falls back on failure         |
-| **FlixPatrol CloudflareSolver** | Hardcoded browser-spoofing headers stopped working    | Uses Playwright-based solver, same as Letterboxd           |
+| **FlixPatrol CloudflareSolver** | Hardcoded browser-spoofing headers stopped working    | Playwright solver with FlareSolverr fallback, backoff      |
 | **WAF Solver Timeout Fix**      | IMDb pages never reach `networkidle`, WAF solve hangs | Uses `/chart/top/` for token acquisition, `load` wait      |
 | **AniList Retry Cap**           | `parseInt` NaN bug causes infinite tight retry loops  | Capped at 5 attempts                                       |
 | **Release Date TTL Cap**        | Stale cache shows wrong overlay for new releases      | Items within 3 days of release: max 2h TTL                 |
@@ -118,11 +120,26 @@ Upstream Agregarr makes individual API calls per item, per rating source, per ca
 | 142 pages         | ~25 min    | ~40 sec    |
 | Cloudflare blocks | 0          | 0          |
 
-Enable via **Settings > Sources > Fetching Settings** in the UI. Defaults to off (Playwright) for safety. Flip back if Cloudflare starts blocking.
+Enable via **Settings > Sources > Fetching Settings** in the UI. Defaults to on. Switch off if Cloudflare starts blocking.
 
 **Plain HTTP for FlixPatrol** (`flixpatrolUsePlainHttp`) -- Same approach as Letterboxd. FlixPatrol top 10 pages return full HTML without Cloudflare challenges. Applies to all 3 fetch paths (platform top 10, country list, platform discovery).
 
 Enable via **Settings > Sources > Fetching Settings** in the UI. Defaults to off (Playwright) for safety.
+
+**FlareSolverr Support** (`flareSolverrUrl`) -- When a Cloudflare challenge can't be resolved by the built-in Playwright solver, FlareSolverr takes over. Set the URL in **Settings > Sources > Fetching Settings** or `flareSolverrUrl` under `main` in settings.json. The built-in solver tries first; on failure it falls back to FlareSolverr if configured, with exponential backoff on consecutive failures. Leave blank to skip the fallback.
+
+Useful for FlixPatrol collections, since FlixPatrol sits behind Cloudflare and plain HTTP won't work. Add FlareSolverr to your compose:
+
+```yaml
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+    restart: unless-stopped
+```
+
+Then set the URL to `http://flaresolverr:8191`.
 
 ### Placeholder Lifecycle Fixes
 
