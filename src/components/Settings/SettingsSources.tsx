@@ -145,6 +145,9 @@ const messages = defineMessages({
   flixpatrolUsePlainHttp: 'Use Plain HTTP for FlixPatrol',
   flixpatrolUsePlainHttpTip:
     'Use direct HTTP requests instead of browser automation (Playwright) for FlixPatrol page fetching. Much faster and works unless Cloudflare challenges return.',
+  flareSolverrUrl: 'FlareSolverr URL',
+  flareSolverrUrlTip:
+    'URL of your FlareSolverr instance (e.g. http://flaresolverr:8191). When set, Cloudflare-challenged fetches use FlareSolverr instead of the built-in browser.',
   toastFetchingSettingsSuccess: 'Fetching settings saved successfully!',
   toastFetchingSettingsFailure:
     'Something went wrong while saving fetching settings.',
@@ -369,6 +372,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
         initialValues={{
           letterboxdUsePlainHttp: dataMain?.letterboxdUsePlainHttp ?? true,
           flixpatrolUsePlainHttp: dataMain?.flixpatrolUsePlainHttp ?? false,
+          flareSolverrUrl: dataMain?.flareSolverrUrl ?? '',
         }}
         enableReinitialize
         onSubmit={async (values) => {
@@ -376,6 +380,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
             await axios.post('/api/v1/settings/main', {
               letterboxdUsePlainHttp: values.letterboxdUsePlainHttp,
               flixpatrolUsePlainHttp: values.flixpatrolUsePlainHttp,
+              flareSolverrUrl: values.flareSolverrUrl || undefined,
             });
             revalidateMain();
             addToast(
@@ -442,6 +447,24 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
                     );
                   }}
                 />
+              </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="flareSolverrUrl" className="text-label">
+                <span>{intl.formatMessage(messages.flareSolverrUrl)}</span>
+                <span className="label-tip">
+                  {intl.formatMessage(messages.flareSolverrUrlTip)}
+                </span>
+              </label>
+              <div className="form-input-area">
+                <div className="form-input-field">
+                  <Field
+                    type="text"
+                    id="flareSolverrUrl"
+                    name="flareSolverrUrl"
+                    placeholder="http://flaresolverr:8191"
+                  />
+                </div>
               </div>
             </div>
             <div className="actions">
