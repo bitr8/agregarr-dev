@@ -447,12 +447,7 @@ fetchTitleRoutes.get('/', isAuthenticated(), async (req, res) => {
       }
 
       case 'letterboxd': {
-        // For Letterboxd, we need Playwright to bypass Cloudflare protection
         sendProgress(res, 'connecting', 'Connecting to Letterboxd...');
-
-        const { CloudflareSolver } = await import(
-          '@server/lib/collections/utils/CloudflareSolver'
-        );
 
         try {
           const watchlistMatch = sanitizedUrl.match(
@@ -475,14 +470,22 @@ fetchTitleRoutes.get('/', isAuthenticated(), async (req, res) => {
             return res.end();
           }
 
-          sendProgress(
-            res,
-            'challenge',
-            'Bypassing Cloudflare protection... (may take a few seconds)'
-          );
+          sendProgress(res, 'challenge', 'Fetching Letterboxd page...');
 
-          // Use Playwright to bypass Cloudflare and get page content
-          const html = await CloudflareSolver.fetchPage(sanitizedUrl);
+          const usePlainHttp =
+            getSettings().main.letterboxdUsePlainHttp ?? true;
+          let html: string;
+          if (usePlainHttp) {
+            const { LetterboxdHttpClient } = await import(
+              '@server/lib/collections/utils/LetterboxdHttpClient'
+            );
+            html = await LetterboxdHttpClient.fetchPage(sanitizedUrl);
+          } else {
+            const { CloudflareSolver } = await import(
+              '@server/lib/collections/utils/CloudflareSolver'
+            );
+            html = await CloudflareSolver.fetchPage(sanitizedUrl);
+          }
 
           sendProgress(res, 'parsing', 'Extracting list title...');
 

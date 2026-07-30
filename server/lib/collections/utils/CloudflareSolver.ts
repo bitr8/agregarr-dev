@@ -1,18 +1,41 @@
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import axios from 'axios';
 import { chromium, type BrowserContext } from 'playwright';
 
 /**
  * Cloudflare Challenge Solver
  *
- * Uses Playwright headless browser to bypass Cloudflare protection.
- * Since Cloudflare uses TLS fingerprinting, we can't just get cookies -
- * we need to use the browser to fetch the actual content.
+ * When flareSolverrUrl is configured, delegates to the FlareSolverr sidecar
+ * (same pattern as Prowlarr/Jackett). Otherwise falls back to built-in
+ * Playwright headless browser.
  */
+function isChallengeTitle(title: string): boolean {
+  return (
+    title.includes('Just a moment') ||
+    title.includes('Checking your browser') ||
+    title === ''
+  );
+}
+
+function isChallengeHtml(html: string): boolean {
+  return (
+    html.includes('<title>Just a moment') ||
+    html.includes('<title>Checking your browser') ||
+    html.includes('<title></title>')
+  );
+}
+
 export class CloudflareSolver {
   private static fetchInProgress: Map<string, Promise<string>> = new Map();
   private static htmlCache: Map<string, { html: string; fetchedAt: number }> =
     new Map();
   private static readonly HTML_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private static readonly BACKOFF_BASE_MS = 60 * 1000; // 1 minute
+  private static solveFailures: Map<
+    string,
+    { count: number; backoffUntil: number }
+  > = new Map();
 
   /**
    * Fetch page content using Playwright, bypassing Cloudflare.
@@ -20,35 +43,58 @@ export class CloudflareSolver {
    * multiple times in quick succession (validate → extractTitle → page 1 fetch).
    */
   static async fetchPage(url: string): Promise<string> {
-    // Return cached content if still fresh
+    // Return cached content if still fresh (before backoff — cached data is valid)
     const cached = this.htmlCache.get(url);
     if (cached && Date.now() - cached.fetchedAt < this.HTML_CACHE_TTL) {
-      logger.debug('Returning cached page content', {
-        label: 'Cloudflare Solver',
-        url,
-        ageMs: Date.now() - cached.fetchedAt,
-      });
       return cached.html;
     }
 
-    // Check if fetch is already in progress for this URL
+    // Join in-flight fetch (before backoff — someone already started this)
     const inProgress = this.fetchInProgress.get(url);
     if (inProgress) {
-      logger.debug('Page fetch already in progress, waiting...', {
-        label: 'Cloudflare Solver',
-        url,
-      });
       return await inProgress;
     }
 
-    // Start fetching
-    const fetchPromise = this.fetchWithBrowser(url);
+    // Check backoff before starting new network work
+    const domain = new URL(url).hostname;
+    const failure = this.solveFailures.get(domain);
+    if (failure && failure.backoffUntil > Date.now()) {
+      const waitSecs = Math.round((failure.backoffUntil - Date.now()) / 1000);
+      throw new Error(
+        `Cloudflare solver backing off for ${domain} (${failure.count} consecutive failures, ${waitSecs}s remaining)`
+      );
+    }
+
+    // Start fetching — prefer FlareSolverr when configured
+    const solverrUrl = getSettings().main.flareSolverrUrl;
+    const fetchPromise = solverrUrl
+      ? this.fetchWithFlareSolverr(url, solverrUrl)
+      : this.fetchWithBrowser(url);
     this.fetchInProgress.set(url, fetchPromise);
 
     try {
       const content = await fetchPromise;
-      this.htmlCache.set(url, { html: content, fetchedAt: Date.now() });
+      if (!isChallengeHtml(content)) {
+        this.htmlCache.set(url, { html: content, fetchedAt: Date.now() });
+      }
+      this.solveFailures.delete(domain);
       return content;
+    } catch (error) {
+      const prev = this.solveFailures.get(domain);
+      const count = (prev?.count ?? 0) + 1;
+      const backoffMs =
+        this.BACKOFF_BASE_MS * Math.pow(2, Math.min(count - 1, 4));
+      this.solveFailures.set(domain, {
+        count,
+        backoffUntil: Date.now() + backoffMs,
+      });
+      logger.warn(
+        `Cloudflare solve failed for ${domain}, backoff ${Math.round(
+          backoffMs / 1000
+        )}s (${count} consecutive)`,
+        { label: 'Cloudflare Solver' }
+      );
+      throw error;
     } finally {
       this.fetchInProgress.delete(url);
     }
@@ -140,12 +186,8 @@ export class CloudflareSolver {
 
       while (Date.now() - startTime < maxWaitTime) {
         const pageTitle = await page.title();
-        const isChallengePage =
-          pageTitle.includes('Just a moment') ||
-          pageTitle.includes('Checking your browser') ||
-          pageTitle === '';
 
-        if (!isChallengePage) {
+        if (!isChallengeTitle(pageTitle)) {
           logger.debug('Page loaded successfully', {
             label: 'Cloudflare Solver',
             pageTitle,
@@ -161,6 +203,14 @@ export class CloudflareSolver {
         });
 
         await page.waitForTimeout(pollInterval);
+      }
+
+      const finalTitle = await page.title();
+      if (isChallengeTitle(finalTitle)) {
+        await browser.close();
+        throw new Error(
+          `Cloudflare challenge did not resolve within ${maxWaitTime}ms for ${domain}`
+        );
       }
 
       // Get the page content
@@ -195,6 +245,60 @@ export class CloudflareSolver {
   }
 
   /**
+   * Fetch page via FlareSolverr sidecar (same API as Prowlarr/Jackett).
+   */
+  private static async fetchWithFlareSolverr(
+    url: string,
+    solverrUrl: string
+  ): Promise<string> {
+    const domain = new URL(url).hostname;
+
+    logger.info('Fetching page via FlareSolverr', {
+      label: 'Cloudflare Solver',
+      domain,
+      url,
+    });
+
+    const endpoint = solverrUrl.replace(/\/+$/, '') + '/v1';
+    const response = await axios.post(
+      endpoint,
+      { cmd: 'request.get', url, maxTimeout: 60000 },
+      { timeout: 70000 }
+    );
+
+    if (response.data?.status !== 'ok' || !response.data?.solution?.response) {
+      throw new Error(
+        `FlareSolverr returned status: ${
+          response.data?.status ?? 'unknown'
+        } for ${domain}`
+      );
+    }
+
+    const solutionStatus = (response.data.solution.status as number) ?? 0;
+    if (solutionStatus >= 400) {
+      throw new Error(
+        `FlareSolverr upstream returned HTTP ${solutionStatus} for ${domain}`
+      );
+    }
+
+    const html = response.data.solution.response as string;
+
+    if (isChallengeHtml(html)) {
+      throw new Error(
+        `FlareSolverr could not solve Cloudflare challenge for ${domain}`
+      );
+    }
+
+    logger.info('Successfully fetched page via FlareSolverr', {
+      label: 'Cloudflare Solver',
+      domain,
+      contentLength: html.length,
+    });
+
+    return html;
+  }
+
+  /**
    * Fetch multiple pages using a single shared browser context.
    * More efficient than fetchPage() for batches since browser startup only happens once.
    */
@@ -203,6 +307,31 @@ export class CloudflareSolver {
     concurrency = 5
   ): Promise<Map<string, string>> {
     if (urls.length === 0) return new Map();
+
+    // When FlareSolverr is configured, route through fetchPage for backoff/cache
+    const solverrUrl = getSettings().main.flareSolverrUrl;
+    if (solverrUrl) {
+      const results = new Map<string, string>();
+      for (const url of urls) {
+        // Short-circuit if domain is in backoff (avoid log spam)
+        const domain = new URL(url).hostname;
+        const failure = this.solveFailures.get(domain);
+        if (failure && failure.backoffUntil > Date.now()) continue;
+
+        try {
+          const html = await this.fetchPage(url);
+          results.set(url, html);
+        } catch (error) {
+          logger.debug(
+            `FlareSolverr batch: failed for ${url}: ${
+              error instanceof Error ? error.message : 'Unknown'
+            }`,
+            { label: 'Cloudflare Solver' }
+          );
+        }
+      }
+      return results;
+    }
 
     const results = new Map<string, string>();
     const domain = new URL(urls[0]).hostname;
@@ -268,6 +397,14 @@ export class CloudflareSolver {
                 waitUntil: 'domcontentloaded',
                 timeout: 30000,
               });
+              const title = await page.title();
+              if (isChallengeTitle(title)) {
+                logger.warn(
+                  `Cloudflare challenge not resolved for batch URL: ${url}`,
+                  { label: 'Cloudflare Solver' }
+                );
+                return { url, content: null };
+              }
               const content = await page.content();
               return { url, content };
             } catch (error) {

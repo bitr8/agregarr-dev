@@ -367,7 +367,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
       </div>
       <Formik
         initialValues={{
-          letterboxdUsePlainHttp: dataMain?.letterboxdUsePlainHttp ?? false,
+          letterboxdUsePlainHttp: dataMain?.letterboxdUsePlainHttp ?? true,
           flixpatrolUsePlainHttp: dataMain?.flixpatrolUsePlainHttp ?? false,
         }}
         enableReinitialize

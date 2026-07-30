@@ -54,6 +54,177 @@ export enum FlixPatrolPlatform {
   HULU = 'hulu',
 }
 
+// Sourced from Wayback Machine CDX index of 2026 captures (4216 URLs, Jan-Jul 2026).
+// FlixPatrol slug quirks preserved: 'salvador' not 'el-salvador', 'swaziland' not 'eswatini'.
+const FLIXPATROL_COUNTRIES = [
+  'afghanistan',
+  'albania',
+  'algeria',
+  'andorra',
+  'angola',
+  'antigua-and-barbuda',
+  'argentina',
+  'armenia',
+  'australia',
+  'austria',
+  'azerbaijan',
+  'bahamas',
+  'bahrain',
+  'bangladesh',
+  'barbados',
+  'belarus',
+  'belgium',
+  'belize',
+  'benin',
+  'bolivia',
+  'bosnia-and-herzegovina',
+  'botswana',
+  'brazil',
+  'bulgaria',
+  'burkina-faso',
+  'cambodia',
+  'cameroon',
+  'canada',
+  'cape-verde',
+  'chad',
+  'chile',
+  'colombia',
+  'costa-rica',
+  'croatia',
+  'cyprus',
+  'czech-republic',
+  'democratic-republic-of-the-congo',
+  'denmark',
+  'dominica',
+  'dominican-republic',
+  'ecuador',
+  'egypt',
+  'estonia',
+  'fiji',
+  'finland',
+  'france',
+  'gabon',
+  'gambia',
+  'georgia',
+  'germany',
+  'ghana',
+  'greece',
+  'grenada',
+  'guadeloupe',
+  'guatemala',
+  'guinea-bissau',
+  'guyana',
+  'haiti',
+  'honduras',
+  'hong-kong',
+  'hungary',
+  'iceland',
+  'india',
+  'indonesia',
+  'iraq',
+  'ireland',
+  'israel',
+  'italy',
+  'ivory-coast',
+  'jamaica',
+  'japan',
+  'jordan',
+  'kazakhstan',
+  'kenya',
+  'kuwait',
+  'kyrgyzstan',
+  'laos',
+  'latvia',
+  'lebanon',
+  'libya',
+  'liechtenstein',
+  'lithuania',
+  'luxembourg',
+  'madagascar',
+  'malawi',
+  'malaysia',
+  'maldives',
+  'mali',
+  'malta',
+  'martinique',
+  'mauritania',
+  'mauritius',
+  'mexico',
+  'moldova',
+  'monaco',
+  'mongolia',
+  'montenegro',
+  'morocco',
+  'mozambique',
+  'myanmar',
+  'namibia',
+  'netherlands',
+  'new-caledonia',
+  'new-zealand',
+  'nicaragua',
+  'niger',
+  'nigeria',
+  'north-macedonia',
+  'norway',
+  'oman',
+  'pakistan',
+  'panama',
+  'papua-new-guinea',
+  'paraguay',
+  'peru',
+  'philippines',
+  'poland',
+  'portugal',
+  'qatar',
+  'republic-of-the-congo',
+  'reunion',
+  'romania',
+  'russia',
+  'rwanda',
+  'saint-kitts-and-nevis',
+  'saint-lucia',
+  'salvador',
+  'san-marino',
+  'saudi-arabia',
+  'senegal',
+  'serbia',
+  'singapore',
+  'slovakia',
+  'slovenia',
+  'somalia',
+  'south-africa',
+  'south-korea',
+  'south-sudan',
+  'spain',
+  'sri-lanka',
+  'sudan',
+  'suriname',
+  'swaziland',
+  'sweden',
+  'switzerland',
+  'taiwan',
+  'tajikistan',
+  'tanzania',
+  'thailand',
+  'togo',
+  'trinidad-and-tobago',
+  'tunisia',
+  'turkey',
+  'turkmenistan',
+  'uganda',
+  'ukraine',
+  'united-arab-emirates',
+  'united-kingdom',
+  'united-states',
+  'uruguay',
+  'uzbekistan',
+  'venezuela',
+  'vietnam',
+  'yemen',
+  'zambia',
+  'zimbabwe',
+] as const;
+
 /**
  * FlixPatrol API client for fetching streaming top 10 lists
  *
@@ -505,51 +676,12 @@ class FlixPatrolAPI extends ExternalAPI {
   }
 
   /**
-   * Get available countries by scraping FlixPatrol main page
-   * Cached for 24 hours
+   * Get available countries for FlixPatrol streaming charts.
+   * Static list — country coverage changes on geopolitical timescales, not website releases.
+   * Sourced from Wayback Machine CDX index of 2026 captures (4216 URLs, Jan-Jul 2026).
    */
   public async getAvailableCountries(): Promise<string[]> {
-    const cacheKey = 'flixpatrol:countries:v5'; // v5 to bust cache with direct axios
-
-    // Check cache first
-    const cached = this.cache?.get<string[]>(cacheKey);
-    if (cached) {
-      logger.debug('Returning cached countries list', {
-        label: 'FlixPatrol API',
-        count: cached.length,
-      });
-      return cached;
-    }
-
-    try {
-      logger.debug('Scraping countries list from FlixPatrol', {
-        label: 'FlixPatrol API',
-      });
-
-      const html = await this.fetchFlixPatrolPage(
-        'https://flixpatrol.com/top10/streaming/'
-      );
-      const countries = this.parseCountriesFromHtml(html);
-
-      // Cache for 24 hours
-      this.cache?.set(cacheKey, countries, 86400);
-
-      logger.info(`Scraped ${countries.length} countries from FlixPatrol`, {
-        label: 'FlixPatrol API',
-        count: countries.length,
-        sample: countries.slice(0, 5),
-      });
-
-      return countries;
-    } catch (error) {
-      logger.error('Failed to scrape countries from FlixPatrol:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-
-      // No fallback - propagate the error
-      throw error;
-    }
+    return ['global', ...FLIXPATROL_COUNTRIES];
   }
 
   /**
@@ -564,7 +696,7 @@ class FlixPatrolAPI extends ExternalAPI {
       return this.getGlobalPlatformOptions();
     }
 
-    const cacheKey = `flixpatrol:platforms:${country}`;
+    const cacheKey = `flixpatrol:platforms:v2:${country}`;
 
     // Check cache first
     const cached = this.cache?.get<FlixPatrolPlatformOption[]>(cacheKey);
@@ -1442,103 +1574,6 @@ class FlixPatrolAPI extends ExternalAPI {
       { value: 'discovery_plus_top_10', label: 'Discovery+ Top 10' },
       { value: 'hulu_top_10', label: 'Hulu Top 10' },
     ];
-  }
-
-  /**
-   * Parse countries from FlixPatrol streaming page HTML
-   */
-  private parseCountriesFromHtml(html: string): string[] {
-    try {
-      logger.debug(`Parsing HTML of length: ${html.length}`, {
-        label: 'FlixPatrol API',
-      });
-
-      const dom = new JSDOM(html);
-      const document = dom.window.document;
-
-      const countries = new Set<string>();
-
-      // Look for streaming links with country codes
-      // Format: /top10/streaming/{country}/2025-09-05/
-      const streamingLinks = document.querySelectorAll(
-        'a[href*="/streaming/"]'
-      );
-
-      logger.debug(
-        `Found ${streamingLinks.length} links with /streaming/ in href`,
-        {
-          label: 'FlixPatrol API',
-        }
-      );
-
-      let matchCount = 0;
-      streamingLinks.forEach((link, index) => {
-        const href = link.getAttribute('href') || '';
-        const text = link.textContent?.trim() || '';
-
-        // Extract country from URLs like /top10/streaming/united-states/2025-09-05/
-        const countryMatch = href.match(/\/streaming\/([a-z-]+)(?:\/|$)/);
-        if (countryMatch && countryMatch[1]) {
-          const country = countryMatch[1].toLowerCase();
-
-          // Filter out non-country paths
-          if (country !== 'streaming' && country.length >= 2) {
-            countries.add(country);
-            matchCount++;
-
-            if (matchCount <= 5) {
-              logger.debug(
-                `Match ${matchCount}: "${text}" -> "${country}" from "${href}"`,
-                {
-                  label: 'FlixPatrol API',
-                }
-              );
-            }
-          }
-        } else if (index < 5) {
-          logger.debug(`No match for link: "${text}" -> "${href}"`, {
-            label: 'FlixPatrol API',
-          });
-        }
-      });
-
-      // Always include 'global' as the global option at the top
-      const result = ['global', ...Array.from(countries).sort()];
-
-      logger.debug(`Total unique countries found: ${result.length}`, {
-        label: 'FlixPatrol API',
-        totalLinks: streamingLinks.length,
-        matches: matchCount,
-      });
-
-      if (result.length <= 1) {
-        logger.error(
-          'Very few countries found, this indicates a scraping issue',
-          {
-            label: 'FlixPatrol API',
-            countries: result,
-            htmlSnippet: html.substring(0, 500),
-          }
-        );
-      }
-
-      logger.debug(
-        `Parsed ${result.length} countries from FlixPatrol streaming page`,
-        {
-          label: 'FlixPatrol API',
-          sample: result.slice(0, 10),
-        }
-      );
-
-      return result;
-    } catch (error) {
-      logger.error('Failed to parse countries from HTML:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-
-      // No fallback - if we can't get real data, we fail
-      throw error;
-    }
   }
 
   /**

@@ -411,7 +411,7 @@ https://letterboxd.com/dave/list/imdb-top-250/
         case 'letterboxd': {
           const { getSettings } = await import('@server/lib/settings');
           const usePlainHttpTitle =
-            getSettings().main.letterboxdUsePlainHttp ?? false;
+            getSettings().main.letterboxdUsePlainHttp ?? true;
           let html: string;
           if (usePlainHttpTitle) {
             const { LetterboxdHttpClient } = await import(
@@ -1359,7 +1359,7 @@ https://letterboxd.com/dave/list/imdb-top-250/
       });
 
       const { getSettings } = await import('@server/lib/settings');
-      const usePlainHttp = getSettings().main.letterboxdUsePlainHttp ?? false;
+      const usePlainHttp = getSettings().main.letterboxdUsePlainHttp ?? true;
 
       const discoveredUrls = new Set<string>();
       const listUrlRegex = /href="(\/[^/]+\/list\/[^/]+\/)"[^>]*>/g;
@@ -1954,7 +1954,7 @@ https://letterboxd.com/dave/list/imdb-top-250/
       if (libraryCache) {
         const { getSettings } = await import('@server/lib/settings');
         const usePlainHttpValidation =
-          getSettings().main.letterboxdUsePlainHttp ?? false;
+          getSettings().main.letterboxdUsePlainHttp ?? true;
         let html: string;
         if (usePlainHttpValidation) {
           const { LetterboxdHttpClient } = await import(

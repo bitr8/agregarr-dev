@@ -668,9 +668,11 @@ export interface MainSettings {
   trailerExcludeWords?: string; // Comma-separated words — any match in title rejects the candidate
   trailerIncludeWords?: string; // Comma-separated words — all must match in title (empty = no filter)
   // Letterboxd fetching method
-  letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: false)
+  letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: true)
   // FlixPatrol fetching method
   flixpatrolUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for FlixPatrol page fetching (default: false)
+  // FlareSolverr proxy URL (e.g. http://localhost:8191). When set, used for all Cloudflare-challenged fetches instead of built-in Playwright.
+  flareSolverrUrl?: string;
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
 }
 

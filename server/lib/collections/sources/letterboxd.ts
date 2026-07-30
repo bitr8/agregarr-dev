@@ -136,7 +136,7 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
       }
 
       // Choose fetcher based on setting
-      const usePlainHttp = getSettings().main.letterboxdUsePlainHttp ?? false;
+      const usePlainHttp = getSettings().main.letterboxdUsePlainHttp ?? true;
 
       logger.debug(`Fetching Letterboxd list: ${listUrl}`, {
         label: 'Letterboxd Collections',
@@ -1324,11 +1324,30 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
 
     if (urls.length === 0) return results;
 
-    const { CloudflareSolver } = await import(
-      '@server/lib/collections/utils/CloudflareSolver'
-    );
+    const usePlainHttp = getSettings().main.letterboxdUsePlainHttp ?? true;
 
-    const htmlMap = await CloudflareSolver.fetchPagesBatch(urls, 5);
+    let htmlMap: Map<string, string>;
+    if (usePlainHttp) {
+      const { LetterboxdHttpClient } = await import(
+        '@server/lib/collections/utils/LetterboxdHttpClient'
+      );
+      htmlMap = new Map();
+      for (const url of urls) {
+        try {
+          const html = await LetterboxdHttpClient.fetchPage(url);
+          htmlMap.set(url, html);
+        } catch {
+          logger.debug(`Failed to fetch film page: ${url}`, {
+            label: 'Letterboxd Collections',
+          });
+        }
+      }
+    } else {
+      const { CloudflareSolver } = await import(
+        '@server/lib/collections/utils/CloudflareSolver'
+      );
+      htmlMap = await CloudflareSolver.fetchPagesBatch(urls, 5);
+    }
 
     for (const [url, html] of htmlMap) {
       const tmdbResult = this.parseTmdbIdFromHtml(html);
