@@ -968,11 +968,35 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
           });
 
           if (config.autoPoster) {
+            let posterItems: CollectionItem[] | undefined;
+            try {
+              const children = await plexClient.getCollectionItemsWithMetadata(
+                collectionRatingKey
+              );
+              posterItems = children.slice(0, 12).map((item, index) => ({
+                ratingKey: item.ratingKey,
+                title: item.title,
+                type:
+                  item.type === 'movie' ? ('movie' as const) : ('tv' as const),
+                tmdbId: extractTmdbIdFromGuids(item.Guid) ?? undefined,
+                tvdbId: extractTvdbIdFromGuids(item.Guid) ?? undefined,
+                metadata: {
+                  libraryKey: config.libraryId,
+                  originalPosition: index + 1,
+                },
+              }));
+            } catch {
+              logger.warn(
+                `Failed to fetch items for essentials poster: ${collectionName}`,
+                { label: 'Plex Library Collections' }
+              );
+            }
             await this.generateAutoPoster(
               collectionName,
               config,
               collectionRatingKey,
-              plexClient
+              plexClient,
+              posterItems
             );
           }
 
