@@ -40,6 +40,17 @@ export class RandomListManager {
   private static readonly DISCOVERY_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
   private static readonly NEGATIVE_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours for failed discovery
 
+  // URLs already claimed by another config in the current sync run
+  private static syncRunSelectedUrls = new Set<string>();
+
+  public static beginSyncRun(): void {
+    this.syncRunSelectedUrls.clear();
+  }
+
+  public static endSyncRun(): void {
+    this.syncRunSelectedUrls.clear();
+  }
+
   // Built-in fallback lists — stable editorial lists, used when discovery fails
   private static readonly FALLBACK_LISTS: Record<string, string[]> = {
     imdb: [
@@ -504,16 +515,20 @@ https://letterboxd.com/dave/list/imdb-top-250/
       return null;
     }
 
-    // If no media type validation needed, use old behavior
+    // If no media type validation needed, pick from unclaimed URLs
     if (!targetMediaType) {
-      const randomIndex = Math.floor(Math.random() * urls.length);
-      const selectedUrl = urls[randomIndex];
+      const available = urls.filter((u) => !this.syncRunSelectedUrls.has(u));
+      const pool = available.length > 0 ? available : urls;
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      const selectedUrl = pool[randomIndex];
+      this.syncRunSelectedUrls.add(selectedUrl);
 
       logger.info(`Selected random URL for ${sourceType}: ${selectedUrl}`, {
         label: 'RandomListManager',
         sourceType,
         selectedUrl,
         totalUrls: urls.length,
+        availableAfterExclusion: available.length,
       });
 
       return selectedUrl;
@@ -541,14 +556,20 @@ https://letterboxd.com/dave/list/imdb-top-250/
         libraryCache
       );
       if (libraryUrls.length > 0) {
-        const randomIndex = Math.floor(Math.random() * libraryUrls.length);
-        const selectedUrl = libraryUrls[randomIndex];
+        const available = libraryUrls.filter(
+          (u) => !this.syncRunSelectedUrls.has(u)
+        );
+        const pool = available.length > 0 ? available : libraryUrls;
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        const selectedUrl = pool[randomIndex];
+        this.syncRunSelectedUrls.add(selectedUrl);
         logger.info(
           `Selected TMDB collection from user library: ${selectedUrl}`,
           {
             label: 'RandomListManager',
             selectedUrl,
             candidateCount: libraryUrls.length,
+            availableAfterExclusion: available.length,
           }
         );
         return selectedUrl;
@@ -569,7 +590,12 @@ https://letterboxd.com/dave/list/imdb-top-250/
         selectedUrl = urls[randomIndex];
       } while (triedUrls.has(selectedUrl) && triedUrls.size < urls.length);
 
+      if (triedUrls.has(selectedUrl)) break;
       triedUrls.add(selectedUrl);
+
+      if (this.syncRunSelectedUrls.has(selectedUrl)) {
+        continue;
+      }
 
       logger.debug(
         `Validating random URL (attempt ${attempt + 1}): ${selectedUrl}`,
@@ -592,6 +618,7 @@ https://letterboxd.com/dave/list/imdb-top-250/
         );
 
         if (isValid) {
+          this.syncRunSelectedUrls.add(selectedUrl);
           logger.info(
             `Selected validated random URL for ${sourceType}: ${selectedUrl}`,
             {
@@ -612,6 +639,23 @@ https://letterboxd.com/dave/list/imdb-top-250/
         });
         // Continue to next URL
       }
+    }
+
+    // All unclaimed URLs exhausted — reuse one already claimed by this run
+    const reusable = urls.filter((u) => this.syncRunSelectedUrls.has(u));
+    if (reusable.length > 0) {
+      const fallback = reusable[Math.floor(Math.random() * reusable.length)];
+      logger.info(
+        `All unique URLs exhausted for ${sourceType}, reusing: ${fallback}`,
+        {
+          label: 'RandomListManager',
+          sourceType,
+          targetMediaType,
+          fallback,
+          triedUrls: triedUrls.size,
+        }
+      );
+      return fallback;
     }
 
     logger.warn(

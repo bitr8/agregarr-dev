@@ -13,6 +13,7 @@ import type {
   CollectionSource,
   SyncResult,
 } from '@server/lib/collections/core/types';
+import { RandomListManager } from '@server/lib/collections/utils/RandomListManager';
 import type { GhostDeletion } from '@server/lib/placeholders/services/PlaceholderCleanup';
 import type {
   DiscoveredMoviePlaceholder,
@@ -658,329 +659,339 @@ export class CollectionSyncService {
     let refreshedForFilteredHubs = false;
     const processedLinkIds = new Set<number>();
 
-    for (const config of orderedConfigs) {
-      if (this.cancelled) break;
+    RandomListManager.beginSyncRun();
+    try {
+      for (const config of orderedConfigs) {
+        if (this.cancelled) break;
 
-      // Linked configs across libraries represent one logical collection
-      const isNewUniqueCollection = !(
-        config.isLinked &&
-        config.linkId != null &&
-        processedLinkIds.has(config.linkId)
-      );
-      if (config.isLinked && config.linkId != null) {
-        processedLinkIds.add(config.linkId);
-      }
-
-      try {
-        let created = 0;
-        let updated = 0;
-
-        // Report collection processing start
-        onProgress?.(
-          processedCount,
-          `Processing "${config.name}"...`,
-          uniqueCollectionCount
+        // Linked configs across libraries represent one logical collection
+        const isNewUniqueCollection = !(
+          config.isLinked &&
+          config.linkId != null &&
+          processedLinkIds.has(config.linkId)
         );
-        collectionSyncProgress.startCollection(
-          config.id,
-          config.name,
-          config.type
-        );
+        if (config.isLinked && config.linkId != null) {
+          processedLinkIds.add(config.linkId);
+        }
 
-        // Wait for API access for this collection type to prevent concurrent access
-        const { IndividualCollectionScheduler } = await import(
-          './IndividualCollectionScheduler'
-        );
-        await IndividualCollectionScheduler.waitForApiAccess(
-          config.type,
-          config.id,
-          config.name,
-          config.libraryId
-        );
+        try {
+          let created = 0;
+          let updated = 0;
 
-        // Check if this collection has custom scheduling enabled
-        const hasCustomSchedule = config.customSyncSchedule?.enabled;
-
-        if (hasCustomSchedule) {
-          // Skip content sync for custom scheduled collections - cleanup handles them via label matching
+          // Report collection processing start
           onProgress?.(
             processedCount,
-            `Skipping content sync for "${config.name}" (custom scheduled)...`,
+            `Processing "${config.name}"...`,
             uniqueCollectionCount
           );
-          collectionSyncProgress.completeCollection(
-            'skipped',
-            0,
-            0,
-            undefined,
-            isNewUniqueCollection
+          collectionSyncProgress.startCollection(
+            config.id,
+            config.name,
+            config.type
           );
 
-          logger.debug(
-            `Skipped content sync for custom scheduled collection: ${config.name}`,
+          // Wait for API access for this collection type to prevent concurrent access
+          const { IndividualCollectionScheduler } = await import(
+            './IndividualCollectionScheduler'
+          );
+          await IndividualCollectionScheduler.waitForApiAccess(
+            config.type,
+            config.id,
+            config.name,
+            config.libraryId
+          );
+
+          // Check if this collection has custom scheduling enabled
+          const hasCustomSchedule = config.customSyncSchedule?.enabled;
+
+          if (hasCustomSchedule) {
+            // Skip content sync for custom scheduled collections - cleanup handles them via label matching
+            onProgress?.(
+              processedCount,
+              `Skipping content sync for "${config.name}" (custom scheduled)...`,
+              uniqueCollectionCount
+            );
+            collectionSyncProgress.completeCollection(
+              'skipped',
+              0,
+              0,
+              undefined,
+              isNewUniqueCollection
+            );
+
+            logger.debug(
+              `Skipped content sync for custom scheduled collection: ${config.name}`,
+              {
+                label: 'Collection Sync Service',
+                configId: config.id,
+              }
+            );
+          } else {
+            // Force-refresh cache once before filtered hub phase so exclusion title
+            // resolution reads post-sync titles. Title updates don't set mutated=true.
+            if (
+              config.type === 'filtered_hub' &&
+              !refreshedForFilteredHubs &&
+              cachedAllCollections !== null
+            ) {
+              cachedAllCollections = null;
+              refreshedForFilteredHubs = true;
+              logger.debug(
+                'Invalidating getAllCollections cache before filtered hub phase',
+                { label: 'Collection Sync Service' }
+              );
+            }
+
+            // Use cached collections list, re-fetching only when stale
+            if (!cachedAllCollections) {
+              logger.debug('Fetching getAllCollections from Plex API', {
+                label: 'Collection Sync Service',
+                reason: processedCount === 0 ? 'initial' : 'cache-invalidated',
+              });
+              cachedAllCollections = await plexClient.getAllCollections();
+            }
+            const allCollections = cachedAllCollections;
+
+            let result: SyncResult;
+            if (config.type === 'multi-source') {
+              // Use new multi-source orchestrator for distinct multi-source collections
+              const { MultiSourceOrchestrator } = await import(
+                './MultiSourceOrchestrator'
+              );
+              const orchestrator = new MultiSourceOrchestrator();
+
+              // Convert CollectionConfig to MultiSourceCollectionConfig format
+              const multiSourceConfig: MultiSourceCollectionConfig = {
+                id: config.id,
+                name: config.name,
+                type: 'multi-source',
+                // Dropping this here is how a whole recovery path goes dead: the
+                // individual scheduler spreads the config and keeps it, so the
+                // two sync routes behave differently.
+                collectionRatingKey: config.collectionRatingKey,
+                visibilityConfig: config.visibilityConfig,
+                mediaType: getCollectionMediaType(config),
+                libraryId: config.libraryId,
+                libraryName: config.libraryName,
+                maxItems: config.maxItems ?? 50, // Provide default for multi-source
+                template: config.template || '', // Provide default for multi-source
+                sources:
+                  config.sources?.map((source) => ({
+                    id: source.id,
+                    type: source.type as MultiSourceType,
+                    subtype: source.subtype || '',
+                    customUrl: source.customUrl,
+                    timePeriod: source.timePeriod as
+                      | 'daily'
+                      | 'weekly'
+                      | 'monthly'
+                      | 'all'
+                      | undefined,
+                    customDays: source.customDays,
+                    minimumPlays: source.minimumPlays,
+                    priority: source.priority,
+                    networksCountry: source.networksCountry,
+                    radarrTagServerId: source.radarrTagServerId,
+                    radarrTagId: source.radarrTagId,
+                    radarrTagLabel: source.radarrTagLabel,
+                    sonarrTagServerId: source.sonarrTagServerId,
+                    sonarrTagId: source.sonarrTagId,
+                    sonarrTagLabel: source.sonarrTagLabel,
+                  })) || [],
+                combineMode:
+                  (config.combineMode as MultiSourceCombineMode) ||
+                  'list_order',
+                isActive: config.isActive,
+                sortOrderHome: config.sortOrderHome,
+                sortOrderLibrary: config.sortOrderLibrary,
+                isLibraryPromoted: config.isLibraryPromoted,
+                timeRestriction: config.timeRestriction,
+                customPoster: config.customPoster,
+                autoPoster: config.autoPoster,
+                autoPosterTemplate: config.autoPosterTemplate,
+                // Wallpaper, summary, and theme settings
+                customWallpaper: config.customWallpaper,
+                customSummary: config.customSummary,
+                customTheme: config.customTheme,
+                enableCustomWallpaper: config.enableCustomWallpaper,
+                enableCustomSummary: config.enableCustomSummary,
+                enableCustomTheme: config.enableCustomTheme,
+                // Missing items / auto-download settings
+                downloadMode: config.downloadMode,
+                searchMissingMovies: config.searchMissingMovies,
+                searchMissingTV: config.searchMissingTV,
+                autoApproveMovies: config.autoApproveMovies,
+                autoApproveTV: config.autoApproveTV,
+                maxSeasonsToRequest: config.maxSeasonsToRequest,
+                seasonsPerShowLimit: config.seasonsPerShowLimit,
+                seasonGrabOrder: config.seasonGrabOrder,
+                maxPositionToProcess: config.maxPositionToProcess,
+                minimumYear: config.minimumYear,
+                minimumImdbRating: config.minimumImdbRating,
+                minimumRottenTomatoesRating: config.minimumRottenTomatoesRating,
+                minimumRottenTomatoesAudienceRating:
+                  config.minimumRottenTomatoesAudienceRating,
+                filterSettings: config.filterSettings,
+                directDownloadRadarrServerId:
+                  config.directDownloadRadarrServerId,
+                directDownloadRadarrProfileId:
+                  config.directDownloadRadarrProfileId,
+                directDownloadRadarrRootFolder:
+                  config.directDownloadRadarrRootFolder,
+                directDownloadSonarrServerId:
+                  config.directDownloadSonarrServerId,
+                directDownloadSonarrProfileId:
+                  config.directDownloadSonarrProfileId,
+                directDownloadSonarrRootFolder:
+                  config.directDownloadSonarrRootFolder,
+                // Smart collection settings (unwatched filter feature)
+                showUnwatchedOnly: config.showUnwatchedOnly,
+                smartCollectionSort: config.smartCollectionSort,
+                // Placeholder creation settings
+                createPlaceholdersForMissing:
+                  config.createPlaceholdersForMissing,
+                placeholderDaysAhead: config.placeholderDaysAhead,
+                placeholderReleasedDays: config.placeholderReleasedDays,
+                includeAllReleasedItems: config.includeAllReleasedItems,
+                placeholderMinimumYear: config.placeholderMinimumYear,
+                placeholderMinimumImdbRating:
+                  config.placeholderMinimumImdbRating,
+                placeholderMinimumRottenTomatoesRating:
+                  config.placeholderMinimumRottenTomatoesRating,
+                placeholderMinimumRottenTomatoesAudienceRating:
+                  config.placeholderMinimumRottenTomatoesAudienceRating,
+                placeholderFilterSettings: config.placeholderFilterSettings,
+                applyOverlaysDuringSync: config.applyOverlaysDuringSync,
+              };
+
+              result = await orchestrator.processMultiSourceCollection(
+                multiSourceConfig,
+                plexClient,
+                allCollections,
+                processedCollectionKeys,
+                libraryCache,
+                undefined // options
+              );
+            } else {
+              // Use normal single-source sync
+              const syncService = await this.createSyncService(config.type);
+              result = await syncService.processCollections(
+                [config],
+                plexClient,
+                allCollections,
+                processedCollectionKeys,
+                libraryCache
+              );
+            }
+
+            created += result.created || 0;
+            updated += result.updated || 0;
+
+            // Invalidate cache if sync mutated Plex (created or deleted collections)
+            if (result.mutated) {
+              cachedAllCollections = null;
+              logger.debug(
+                `getAllCollections cache invalidated after ${config.name}`,
+                { label: 'Collection Sync Service' }
+              );
+            }
+
+            // Check if the sync returned an error or warning
+            if (result.error) {
+              logger.warn(
+                `Collection sync returned error for ${config.name}: ${result.error}`,
+                {
+                  label: 'Collection Sync Service',
+                  configId: config.id,
+                }
+              );
+              // Persist error for UI display — keeps needsSync=true
+              settings.setCollectionSyncError(config.id, result.error);
+              collectionSyncProgress.completeCollection(
+                'error',
+                created,
+                updated,
+                result.error,
+                isNewUniqueCollection
+              );
+            } else if (result.warning) {
+              logger.info(
+                `Collection sync completed with warning for ${config.name}: ${result.warning}`,
+                {
+                  label: 'Collection Sync Service',
+                  configId: config.id,
+                }
+              );
+              // Synced successfully but with issues — mark synced, persist warning
+              settings.setCollectionSyncWarning(config.id, result.warning);
+              collectionSyncProgress.completeCollection(
+                'success',
+                created,
+                updated,
+                undefined,
+                isNewUniqueCollection
+              );
+            } else {
+              // Mark collection as successfully synced (clears any previous error/warning)
+              settings.markCollectionSynced(config.id, 'collection');
+              collectionSyncProgress.completeCollection(
+                'success',
+                created,
+                updated,
+                undefined,
+                isNewUniqueCollection
+              );
+            }
+          }
+
+          totalCreated += created;
+          totalUpdated += updated;
+
+          if (created > 0 || updated > 0) {
+            logger.info(
+              `Collection processed: ${config.name} (created: ${created}, updated: ${updated})`,
+              {
+                label: 'Collection Sync Service',
+              }
+            );
+          }
+
+          // Update progress count (only for new unique collections)
+          if (isNewUniqueCollection) processedCount++;
+          onProgress?.(processedCount, undefined, uniqueCollectionCount);
+        } catch (error) {
+          const errorMessage = extractErrorMessage(error);
+          logger.error(
+            `Failed to process collection ${config.name}: ${errorMessage}`,
             {
               label: 'Collection Sync Service',
               configId: config.id,
+              error: errorMessage,
             }
           );
-        } else {
-          // Force-refresh cache once before filtered hub phase so exclusion title
-          // resolution reads post-sync titles. Title updates don't set mutated=true.
-          if (
-            config.type === 'filtered_hub' &&
-            !refreshedForFilteredHubs &&
-            cachedAllCollections !== null
-          ) {
-            cachedAllCollections = null;
-            refreshedForFilteredHubs = true;
-            logger.debug(
-              'Invalidating getAllCollections cache before filtered hub phase',
-              { label: 'Collection Sync Service' }
-            );
-          }
 
-          // Use cached collections list, re-fetching only when stale
-          if (!cachedAllCollections) {
-            logger.debug('Fetching getAllCollections from Plex API', {
-              label: 'Collection Sync Service',
-              reason: processedCount === 0 ? 'initial' : 'cache-invalidated',
-            });
-            cachedAllCollections = await plexClient.getAllCollections();
-          }
-          const allCollections = cachedAllCollections;
-
-          let result: SyncResult;
-          if (config.type === 'multi-source') {
-            // Use new multi-source orchestrator for distinct multi-source collections
-            const { MultiSourceOrchestrator } = await import(
-              './MultiSourceOrchestrator'
-            );
-            const orchestrator = new MultiSourceOrchestrator();
-
-            // Convert CollectionConfig to MultiSourceCollectionConfig format
-            const multiSourceConfig: MultiSourceCollectionConfig = {
-              id: config.id,
-              name: config.name,
-              type: 'multi-source',
-              // Dropping this here is how a whole recovery path goes dead: the
-              // individual scheduler spreads the config and keeps it, so the
-              // two sync routes behave differently.
-              collectionRatingKey: config.collectionRatingKey,
-              visibilityConfig: config.visibilityConfig,
-              mediaType: getCollectionMediaType(config),
-              libraryId: config.libraryId,
-              libraryName: config.libraryName,
-              maxItems: config.maxItems ?? 50, // Provide default for multi-source
-              template: config.template || '', // Provide default for multi-source
-              sources:
-                config.sources?.map((source) => ({
-                  id: source.id,
-                  type: source.type as MultiSourceType,
-                  subtype: source.subtype || '',
-                  customUrl: source.customUrl,
-                  timePeriod: source.timePeriod as
-                    | 'daily'
-                    | 'weekly'
-                    | 'monthly'
-                    | 'all'
-                    | undefined,
-                  customDays: source.customDays,
-                  minimumPlays: source.minimumPlays,
-                  priority: source.priority,
-                  networksCountry: source.networksCountry,
-                  radarrTagServerId: source.radarrTagServerId,
-                  radarrTagId: source.radarrTagId,
-                  radarrTagLabel: source.radarrTagLabel,
-                  sonarrTagServerId: source.sonarrTagServerId,
-                  sonarrTagId: source.sonarrTagId,
-                  sonarrTagLabel: source.sonarrTagLabel,
-                })) || [],
-              combineMode:
-                (config.combineMode as MultiSourceCombineMode) || 'list_order',
-              isActive: config.isActive,
-              sortOrderHome: config.sortOrderHome,
-              sortOrderLibrary: config.sortOrderLibrary,
-              isLibraryPromoted: config.isLibraryPromoted,
-              timeRestriction: config.timeRestriction,
-              customPoster: config.customPoster,
-              autoPoster: config.autoPoster,
-              autoPosterTemplate: config.autoPosterTemplate,
-              // Wallpaper, summary, and theme settings
-              customWallpaper: config.customWallpaper,
-              customSummary: config.customSummary,
-              customTheme: config.customTheme,
-              enableCustomWallpaper: config.enableCustomWallpaper,
-              enableCustomSummary: config.enableCustomSummary,
-              enableCustomTheme: config.enableCustomTheme,
-              // Missing items / auto-download settings
-              downloadMode: config.downloadMode,
-              searchMissingMovies: config.searchMissingMovies,
-              searchMissingTV: config.searchMissingTV,
-              autoApproveMovies: config.autoApproveMovies,
-              autoApproveTV: config.autoApproveTV,
-              maxSeasonsToRequest: config.maxSeasonsToRequest,
-              seasonsPerShowLimit: config.seasonsPerShowLimit,
-              seasonGrabOrder: config.seasonGrabOrder,
-              maxPositionToProcess: config.maxPositionToProcess,
-              minimumYear: config.minimumYear,
-              minimumImdbRating: config.minimumImdbRating,
-              minimumRottenTomatoesRating: config.minimumRottenTomatoesRating,
-              minimumRottenTomatoesAudienceRating:
-                config.minimumRottenTomatoesAudienceRating,
-              filterSettings: config.filterSettings,
-              directDownloadRadarrServerId: config.directDownloadRadarrServerId,
-              directDownloadRadarrProfileId:
-                config.directDownloadRadarrProfileId,
-              directDownloadRadarrRootFolder:
-                config.directDownloadRadarrRootFolder,
-              directDownloadSonarrServerId: config.directDownloadSonarrServerId,
-              directDownloadSonarrProfileId:
-                config.directDownloadSonarrProfileId,
-              directDownloadSonarrRootFolder:
-                config.directDownloadSonarrRootFolder,
-              // Smart collection settings (unwatched filter feature)
-              showUnwatchedOnly: config.showUnwatchedOnly,
-              smartCollectionSort: config.smartCollectionSort,
-              // Placeholder creation settings
-              createPlaceholdersForMissing: config.createPlaceholdersForMissing,
-              placeholderDaysAhead: config.placeholderDaysAhead,
-              placeholderReleasedDays: config.placeholderReleasedDays,
-              includeAllReleasedItems: config.includeAllReleasedItems,
-              placeholderMinimumYear: config.placeholderMinimumYear,
-              placeholderMinimumImdbRating: config.placeholderMinimumImdbRating,
-              placeholderMinimumRottenTomatoesRating:
-                config.placeholderMinimumRottenTomatoesRating,
-              placeholderMinimumRottenTomatoesAudienceRating:
-                config.placeholderMinimumRottenTomatoesAudienceRating,
-              placeholderFilterSettings: config.placeholderFilterSettings,
-              applyOverlaysDuringSync: config.applyOverlaysDuringSync,
-            };
-
-            result = await orchestrator.processMultiSourceCollection(
-              multiSourceConfig,
-              plexClient,
-              allCollections,
-              processedCollectionKeys,
-              libraryCache,
-              undefined // options
-            );
-          } else {
-            // Use normal single-source sync
-            const syncService = await this.createSyncService(config.type);
-            result = await syncService.processCollections(
-              [config],
-              plexClient,
-              allCollections,
-              processedCollectionKeys,
-              libraryCache
-            );
-          }
-
-          created += result.created || 0;
-          updated += result.updated || 0;
-
-          // Invalidate cache if sync mutated Plex (created or deleted collections)
-          if (result.mutated) {
-            cachedAllCollections = null;
-            logger.debug(
-              `getAllCollections cache invalidated after ${config.name}`,
-              { label: 'Collection Sync Service' }
-            );
-          }
-
-          // Check if the sync returned an error or warning
-          if (result.error) {
-            logger.warn(
-              `Collection sync returned error for ${config.name}: ${result.error}`,
-              {
-                label: 'Collection Sync Service',
-                configId: config.id,
-              }
-            );
-            // Persist error for UI display — keeps needsSync=true
-            settings.setCollectionSyncError(config.id, result.error);
-            collectionSyncProgress.completeCollection(
-              'error',
-              created,
-              updated,
-              result.error,
-              isNewUniqueCollection
-            );
-          } else if (result.warning) {
-            logger.info(
-              `Collection sync completed with warning for ${config.name}: ${result.warning}`,
-              {
-                label: 'Collection Sync Service',
-                configId: config.id,
-              }
-            );
-            // Synced successfully but with issues — mark synced, persist warning
-            settings.setCollectionSyncWarning(config.id, result.warning);
-            collectionSyncProgress.completeCollection(
-              'success',
-              created,
-              updated,
-              undefined,
-              isNewUniqueCollection
-            );
-          } else {
-            // Mark collection as successfully synced (clears any previous error/warning)
-            settings.markCollectionSynced(config.id, 'collection');
-            collectionSyncProgress.completeCollection(
-              'success',
-              created,
-              updated,
-              undefined,
-              isNewUniqueCollection
-            );
-          }
-        }
-
-        totalCreated += created;
-        totalUpdated += updated;
-
-        if (created > 0 || updated > 0) {
-          logger.info(
-            `Collection processed: ${config.name} (created: ${created}, updated: ${updated})`,
-            {
-              label: 'Collection Sync Service',
-            }
+          // Persist error for UI display
+          settings.setCollectionSyncError(config.id, errorMessage);
+          collectionSyncProgress.completeCollection(
+            'error',
+            0,
+            0,
+            errorMessage,
+            isNewUniqueCollection
           );
+
+          if (isNewUniqueCollection) processedCount++;
+          onProgress?.(processedCount, undefined, uniqueCollectionCount);
+        } finally {
+          // Always release the API, regardless of success or failure
+          const { IndividualCollectionScheduler } = await import(
+            './IndividualCollectionScheduler'
+          );
+          IndividualCollectionScheduler.releaseApiAccess(config.type);
         }
-
-        // Update progress count (only for new unique collections)
-        if (isNewUniqueCollection) processedCount++;
-        onProgress?.(processedCount, undefined, uniqueCollectionCount);
-      } catch (error) {
-        const errorMessage = extractErrorMessage(error);
-        logger.error(
-          `Failed to process collection ${config.name}: ${errorMessage}`,
-          {
-            label: 'Collection Sync Service',
-            configId: config.id,
-            error: errorMessage,
-          }
-        );
-
-        // Persist error for UI display
-        settings.setCollectionSyncError(config.id, errorMessage);
-        collectionSyncProgress.completeCollection(
-          'error',
-          0,
-          0,
-          errorMessage,
-          isNewUniqueCollection
-        );
-
-        if (isNewUniqueCollection) processedCount++;
-        onProgress?.(processedCount, undefined, uniqueCollectionCount);
-      } finally {
-        // Always release the API, regardless of success or failure
-        const { IndividualCollectionScheduler } = await import(
-          './IndividualCollectionScheduler'
-        );
-        IndividualCollectionScheduler.releaseApiAccess(config.type);
       }
+    } finally {
+      RandomListManager.endSyncRun();
     }
 
     // Post-sync: verify filtered hub labels to catch any placeholders that leaked through
