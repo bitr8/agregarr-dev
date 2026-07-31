@@ -1381,7 +1381,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                     <input
                       type="range"
                       min="8"
-                      max="72"
+                      max="200"
                       value={
                         localSliderValues[`fontSize-${selectedElement.id}`] ??
                         (selectedElement.properties as TextElementProps)
