@@ -1075,16 +1075,31 @@ settingsRoutes.get(
       'data',
     ];
 
+    // Iterative walk (not recursive+spread) so neither a deeply nested nor a
+    // very large `data` payload can exceed the call stack.
+    const MAX_DEPTH = 10;
     const deepValueStrings = (obj: Record<string, unknown>): string[] => {
-      const values = [];
+      const values: string[] = [];
+      const stack: { val: unknown; depth: number }[] = [{ val: obj, depth: 0 }];
 
-      for (const val of Object.values(obj)) {
+      while (stack.length) {
+        const { val, depth } = stack.pop() as {
+          val: unknown;
+          depth: number;
+        };
+
         if (typeof val === 'string') {
           values.push(val);
         } else if (typeof val === 'number') {
           values.push(val.toString());
-        } else if (val !== null && typeof val === 'object') {
-          values.push(...deepValueStrings(val as Record<string, unknown>));
+        } else if (
+          val !== null &&
+          typeof val === 'object' &&
+          depth < MAX_DEPTH
+        ) {
+          for (const child of Object.values(val)) {
+            stack.push({ val: child, depth: depth + 1 });
+          }
         }
       }
 
