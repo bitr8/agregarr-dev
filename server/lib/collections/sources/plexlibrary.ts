@@ -967,7 +967,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
             config,
           });
 
-          if (config.autoPoster) {
+          if (config.autoPoster ?? true) {
             let posterItems: CollectionItem[] | undefined;
             try {
               const children = await plexClient.getCollectionItemsWithMetadata(
