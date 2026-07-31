@@ -1110,16 +1110,22 @@ export async function buildRenderContext(
     try {
       const selected = computeDaysUntilAction(
         maintainerrCollections,
-        item.ratingKey
+        item.ratingKey,
+        { mediaType, tmdbId }
       );
 
       if (selected) {
         context.daysUntilAction = selected.days;
 
+        if (selected.childItemsMatched > 0) {
+          context.seasonsLeavingCount = selected.childItemsMatched;
+        }
+
         logger.debug('Calculated Maintainerr daysUntilAction', {
           label: 'OverlayContextBuilder',
           ratingKey: item.ratingKey,
           title: item.title,
+          childItemsMatched: selected.childItemsMatched,
           selectedCollection: selected.collection.title,
           daysUntilAction: selected.days,
         });

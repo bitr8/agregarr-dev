@@ -10,6 +10,8 @@ export interface MaintainerrCountdown {
   days: number;
   /** The collection with the LOWEST daysUntilAction for this item. */
   collection: MaintainerrCollection;
+  /** Season/episode members matched via the tmdbId fallback (0 for direct ratingKey hits). */
+  childItemsMatched: number;
 }
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -118,33 +120,43 @@ export function collectSeasonCandidateKeys(
  */
 export function computeDaysUntilAction(
   collections: MaintainerrCollection[],
-  ratingKey: string
+  ratingKey: string,
+  opts?: { mediaType?: string; tmdbId?: number }
 ): MaintainerrCountdown | null {
-  const matches: MaintainerrCountdown[] = [];
+  const matches: { collection: MaintainerrCollection; days: number }[] = [];
+  let childItemsMatched = 0;
 
   for (const collection of collections) {
     if (!hasDeletionSchedule(collection)) {
       continue;
     }
 
-    const mediaItem = collection.media.find((m) => {
+    let mediaItems = collection.media.filter((m) => {
       const id = m.mediaServerId || m.plexId?.toString();
       return id === ratingKey;
     });
-    if (!mediaItem) {
-      continue;
+
+    // Fallback for season/episode-scoped Maintainerr collections: their members
+    // carry season ratingKeys that never equal the show's ratingKey. Maintainerr
+    // reports the parent series' tmdbId on those rows, so match by that instead.
+    if (mediaItems.length === 0 && opts?.mediaType === 'show' && opts?.tmdbId) {
+      const tid = opts.tmdbId;
+      mediaItems = collection.media.filter((m) => Number(m.tmdbId) === tid);
+      childItemsMatched += mediaItems.length;
     }
 
-    const addedTime = new Date(mediaItem.addDate).getTime();
-    if (Number.isNaN(addedTime)) {
-      continue;
-    }
+    for (const mediaItem of mediaItems) {
+      const addedTime = new Date(mediaItem.addDate).getTime();
+      if (Number.isNaN(addedTime)) {
+        continue;
+      }
 
-    const daysSinceAdded = Math.floor((Date.now() - addedTime) / MS_PER_DAY);
-    matches.push({
-      collection,
-      days: collection.deleteAfterDays - daysSinceAdded,
-    });
+      const daysSinceAdded = Math.floor((Date.now() - addedTime) / MS_PER_DAY);
+      matches.push({
+        collection,
+        days: collection.deleteAfterDays - daysSinceAdded,
+      });
+    }
   }
 
   if (matches.length === 0) {
@@ -152,5 +164,8 @@ export function computeDaysUntilAction(
   }
 
   // Item may be in multiple collections; the one acting soonest wins.
-  return matches.reduce((min, curr) => (curr.days < min.days ? curr : min));
+  const best = matches.reduce((min, curr) =>
+    curr.days < min.days ? curr : min
+  );
+  return { ...best, childItemsMatched };
 }

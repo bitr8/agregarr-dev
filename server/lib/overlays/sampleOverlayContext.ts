@@ -162,6 +162,7 @@ export function createSampleOverlayContext(
     Object.assign(context, EPISODE_AGGREGATION_FIELDS);
     context.totalSeasons = 5;
     context.seasonsAvailable = 3;
+    context.seasonsLeavingCount = 2;
     // Only movies get a theatrical+90 estimate, so deriveReleaseDateContext
     // leaves this undefined for shows. Previewing it as false would let a
     // condition match here and never match live.
