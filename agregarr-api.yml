@@ -6795,6 +6795,122 @@ paths:
                     example: 'A collection with the name "Top 10 Movies" already exists in library "Movies". Please choose a different name or template.'
         '500':
           description: Failed to create collection
+
+  /collections/export:
+    post:
+      summary: Export collection configs as JSON
+      description: Exports selected collection configurations as a downloadable JSON file. Instance-bound fields (IDs, server references, sync state) are stripped.
+      tags:
+        - collections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ids
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                  example: ['10213', '10042']
+      responses:
+        '200':
+          description: Collections exported successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    example: '1.0'
+                  exportedAt:
+                    type: string
+                    format: date-time
+                  collections:
+                    type: array
+                    items:
+                      type: object
+        '400':
+          description: Missing or empty ids array
+        '404':
+          description: No matching collection configs found
+        '500':
+          description: Failed to export collections
+
+  /collections/import:
+    post:
+      summary: Import collection configs from JSON
+      description: Imports collection configurations from a previously exported JSON file. Fresh IDs are generated and instance-bound fields are set to defaults.
+      tags:
+        - collections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - collections
+                - libraryId
+              properties:
+                version:
+                  type: string
+                  example: '1.0'
+                collections:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - type
+                    properties:
+                      name:
+                        type: string
+                      type:
+                        type: string
+                libraryId:
+                  type: string
+                  example: '3'
+                nameOverrides:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        '200':
+          description: Collections imported successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Successfully imported 2 collection(s)'
+                  count:
+                    type: integer
+                    example: 2
+                  configs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        type:
+                          type: string
+                        libraryId:
+                          type: string
+        '400':
+          description: Invalid payload, unsupported version, or missing required fields
+        '500':
+          description: Failed to import collections
+
   /collections/{id}/settings:
     put:
       summary: Update individual collection settings

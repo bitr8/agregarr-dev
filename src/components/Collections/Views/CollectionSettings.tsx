@@ -1,9 +1,12 @@
 import BulkEditModal from '@app/components/Collections/BulkEditModal';
+import CollectionPickerModal from '@app/components/Collections/CollectionPickerModal';
 import CollectionConfigForm from '@app/components/Collections/Forms/CollectionConfigForm';
 import GlobalSyncStatus from '@app/components/Collections/GlobalSyncStatus';
+import ImportCollections from '@app/components/Collections/ImportCollections';
 import LibraryCollectionGroup from '@app/components/Collections/Views/Library/LibraryCollectionGroup';
 import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
+import { useCollectionExport } from '@app/hooks/collections/useCollectionExport';
 import { useCollectionReordering } from '@app/hooks/collections/useCollectionReordering';
 import useFirstTimeSetup from '@app/hooks/useFirstTimeSetup';
 import type {
@@ -21,7 +24,9 @@ import {
 } from '@app/utils/collections/linkingHandlers';
 import { Menu, Transition } from '@headlessui/react';
 import {
+  ArrowDownTrayIcon,
   ArrowPathIcon,
+  ArrowUpTrayIcon,
   ChevronDownIcon,
   ExclamationTriangleIcon,
   MagnifyingGlassIcon,
@@ -1822,6 +1827,13 @@ const CollectionSettings = ({
     }
   };
 
+  const {
+    showExportPicker,
+    setShowExportPicker,
+    exportPickerItems,
+    handleExport,
+  } = useCollectionExport(localCollectionConfigs);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1901,6 +1913,28 @@ const CollectionSettings = ({
               </span>
             </Button>
           )}
+
+          {/* Export/Import buttons */}
+          <Button
+            buttonType="default"
+            onClick={() => setShowExportPicker(true)}
+            disabled={localCollectionConfigs.length === 0}
+            className="flex items-center space-x-2"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            <span>Export</span>
+          </Button>
+          <ImportCollections
+            trigger={
+              <Button
+                buttonType="default"
+                className="flex items-center space-x-2"
+              >
+                <ArrowUpTrayIcon className="h-4 w-4" />
+                <span>Import</span>
+              </Button>
+            }
+          />
         </div>
         {(localCollectionConfigs.length > 0 || localHubConfigs.length > 0) && (
           <div className="flex items-center space-x-4">
@@ -2377,6 +2411,17 @@ const CollectionSettings = ({
           libraries={libraries}
           allCollectionConfigs={localCollectionConfigs}
           allHubConfigs={localHubConfigs}
+        />
+      )}
+
+      {/* Export Picker Modal */}
+      {showExportPicker && (
+        <CollectionPickerModal
+          title="Export Collections"
+          actionLabel="Export"
+          items={exportPickerItems}
+          onConfirm={handleExport}
+          onClose={() => setShowExportPicker(false)}
         />
       )}
 

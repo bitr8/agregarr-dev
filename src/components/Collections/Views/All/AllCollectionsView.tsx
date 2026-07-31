@@ -1,5 +1,7 @@
 import BulkEditModal from '@app/components/Collections/BulkEditModal';
+import CollectionPickerModal from '@app/components/Collections/CollectionPickerModal';
 import CollectionConfigForm from '@app/components/Collections/Forms/CollectionConfigForm';
+import ImportCollections from '@app/components/Collections/ImportCollections';
 import {
   CustomSyncScheduleBadge,
   getVisibilityIcons,
@@ -21,12 +23,15 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import { useCollectionEdit } from '@app/hooks/collections/useCollectionEdit';
+import { useCollectionExport } from '@app/hooks/collections/useCollectionExport';
 import type { CollectionFormConfig, Library } from '@app/types/collections';
 import {
   linkCollectionConfig,
   unlinkCollectionConfig,
 } from '@app/utils/collections/linkingHandlers';
 import {
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
   FunnelIcon,
   PencilIcon,
   PencilSquareIcon,
@@ -292,6 +297,13 @@ const AllCollectionsView: React.FC = () => {
     }
   }, [allCollections, filterType, filterLibrary, sortType]);
 
+  const {
+    showExportPicker,
+    setShowExportPicker,
+    exportPickerItems,
+    handleExport,
+  } = useCollectionExport(collectionData?.collectionConfigs || []);
+
   if (hasError) {
     return (
       <div className="text-center">
@@ -543,6 +555,23 @@ const AllCollectionsView: React.FC = () => {
               <PencilSquareIcon className="mr-1 h-4 w-4" />
               {intl.formatMessage(messages.bulkEdit)}
             </Button>
+            <Button
+              buttonType="default"
+              buttonSize="sm"
+              onClick={() => setShowExportPicker(true)}
+              disabled={!collectionData?.collectionConfigs?.length}
+            >
+              <ArrowDownTrayIcon className="mr-1 h-4 w-4" />
+              Export
+            </Button>
+            <ImportCollections
+              trigger={
+                <Button buttonType="default" buttonSize="sm">
+                  <ArrowUpTrayIcon className="mr-1 h-4 w-4" />
+                  Import
+                </Button>
+              }
+            />
             <p className="text-sm text-gray-400">
               {intl.formatMessage(messages.totalCollections, {
                 count: filteredAndSortedCollections.length,
@@ -977,6 +1006,17 @@ const AllCollectionsView: React.FC = () => {
           }
           allCollectionConfigs={collectionData?.collectionConfigs || []}
           allHubConfigs={hubConfigs || []}
+        />
+      )}
+
+      {/* Export Picker Modal */}
+      {showExportPicker && (
+        <CollectionPickerModal
+          title="Export Collections"
+          actionLabel="Export"
+          items={exportPickerItems}
+          onConfirm={handleExport}
+          onClose={() => setShowExportPicker(false)}
         />
       )}
 

@@ -2571,6 +2571,10 @@ collectionsRoutes.use('/fetch-title', fetchTitleRoutes);
 import mediaTypeRoutes from './media-type';
 collectionsRoutes.use('/detect-media-type', mediaTypeRoutes);
 
+// Mount export/import routes
+import collectionExportImportRoutes from './collectionExportImport';
+collectionsRoutes.use('/', collectionExportImportRoutes);
+
 // Mount poster routes (at root level since they have varied paths)
 import collectionPostersRoutes from './collection-posters';
 collectionsRoutes.use('/', collectionPostersRoutes);
