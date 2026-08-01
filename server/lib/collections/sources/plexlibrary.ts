@@ -1420,8 +1420,17 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       const qualifyingPeople = people.filter(
         (person) => person.count >= minimumItems
       );
-      const qualifyingPersonNames = new Set(
-        qualifyingPeople.map((person) => person.name.toLowerCase())
+      const qualifyingCollectionNames = new Set(
+        await Promise.all(
+          qualifyingPeople.map(async (person) => {
+            const name = await this.createPersonCollectionName(
+              person.name,
+              config,
+              mediaType
+            );
+            return name.toLowerCase();
+          })
+        )
       );
 
       logger.info(
@@ -1599,7 +1608,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       for (const collection of managedCollections) {
         const normalizedTitle = collection.title.toLowerCase();
 
-        if (qualifyingPersonNames.has(normalizedTitle)) {
+        if (qualifyingCollectionNames.has(normalizedTitle)) {
           continue;
         }
 
