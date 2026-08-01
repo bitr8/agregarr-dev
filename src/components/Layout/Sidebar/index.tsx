@@ -1,3 +1,4 @@
+import HealthBadge from '@app/components/Layout/HealthBadge';
 import VersionStatus from '@app/components/Layout/VersionStatus';
 import useClickOutside from '@app/hooks/useClickOutside';
 import type { Permission } from '@app/hooks/useUser';
@@ -223,6 +224,7 @@ const Sidebar = ({
                         onClick={() => setClosed()}
                         isFirstTimeSetup={isFirstTimeSetup}
                       />
+                      {!isFirstTimeSetup && <HealthBadge />}
                     </div>
                   </div>
                 </div>
@@ -285,6 +287,7 @@ const Sidebar = ({
               </nav>
               <div className="px-2">
                 <VersionStatus isFirstTimeSetup={isFirstTimeSetup} />
+                {!isFirstTimeSetup && <HealthBadge />}
               </div>
             </div>
           </div>

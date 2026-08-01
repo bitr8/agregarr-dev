@@ -3,6 +3,7 @@ import {
   generateCollectionTag,
   type TagSource,
 } from '@server/lib/collections/services/ArrTagUtils';
+import { runHealthChecks } from '@server/lib/healthcheck';
 import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -36,6 +37,7 @@ radarrRoutes.post('/', (req, res) => {
 
   settings.radarr = [...settings.radarr, newRadarr];
   settings.save();
+  runHealthChecks();
 
   return res.status(201).json(newRadarr);
 });
@@ -107,6 +109,7 @@ radarrRoutes.put<{ id: string }, RadarrSettings, RadarrSettings>(
       id: Number(req.params.id),
     } as RadarrSettings;
     settings.save();
+    runHealthChecks();
 
     return res.status(200).json(settings.radarr[radarrIndex]);
   }

@@ -15,9 +15,10 @@ import type {
   LogsResultsResponse,
   SettingsAboutResponse,
 } from '@server/interfaces/api/settingsInterfaces';
-import { scheduledJobs } from '@server/job/schedule';
+import { getJobRuns, scheduledJobs } from '@server/job/schedule';
 import type { AvailableCacheIds } from '@server/lib/cache';
 import cacheManager from '@server/lib/cache';
+import { runHealthChecks } from '@server/lib/healthcheck';
 // ImageProxy removed - not needed for collections-only app
 // Plex scanner import removed - not needed for collections-only app
 import type {
@@ -184,11 +185,8 @@ settingsRoutes.post('/plex', async (req, res, next) => {
         result.MediaContainer.machineIdentifier.substring(0, 8) + '...',
     });
 
-    // Collections sync now only triggered by:
-    // 1. Scheduled job (every 12 hours) when collections are enabled
-    // 2. Manual "Save & Run" button in UI
+    runHealthChecks();
 
-    // Return the updated Plex settings
     const response = {
       ...settings.plex,
     };
@@ -1189,6 +1187,7 @@ settingsRoutes.get('/jobs', (_req, res) => {
         }
       }
 
+      const runs = getJobRuns(job.id);
       return {
         id: job.id,
         name: job.name,
@@ -1198,6 +1197,7 @@ settingsRoutes.get('/jobs', (_req, res) => {
         nextExecutionTime: nextExecution,
         followingExecutionTime: followingExecution,
         running: job.running ? job.running() : false,
+        lastRun: runs[0] ?? null,
       };
     })
   );

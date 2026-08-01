@@ -5,6 +5,7 @@ import type {
   TmdbMovieResult,
   TmdbTvResult,
 } from '@server/api/themoviedb/interfaces';
+import { getCheckIds, getHealthStatus } from '@server/lib/healthcheck';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
@@ -111,6 +112,44 @@ router.get('/status/appdata', (_req, res) => {
     appDataPath: appDataPath(),
   });
 });
+
+router.get('/status/health', isAuthenticated(), (_req, res) => {
+  return res.status(200).json(getHealthStatus());
+});
+
+router.post<{ id: string }>(
+  '/status/health/:id/silence',
+  isAuthenticated(),
+  (req, res, next) => {
+    const { id } = req.params;
+    if (!getCheckIds().includes(id)) {
+      return next({ status: 404, message: 'Unknown health check.' });
+    }
+    const settings = getSettings();
+    const silenced = settings.main.silencedHealthChecks ?? [];
+    if (!silenced.includes(id)) {
+      settings.main.silencedHealthChecks = [...silenced, id];
+      settings.save();
+    }
+    return res.status(204).send();
+  }
+);
+
+router.delete<{ id: string }>(
+  '/status/health/:id/silence',
+  isAuthenticated(),
+  (req, res, next) => {
+    const { id } = req.params;
+    if (!getCheckIds().includes(id)) {
+      return next({ status: 404, message: 'Unknown health check.' });
+    }
+    const settings = getSettings();
+    const silenced = settings.main.silencedHealthChecks ?? [];
+    settings.main.silencedHealthChecks = silenced.filter((s) => s !== id);
+    settings.save();
+    return res.status(204).send();
+  }
+);
 
 router.get('/request/count', (_req, res) => {
   // Request system removed for Agregarr - return zero counts

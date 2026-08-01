@@ -8,6 +8,14 @@ import PageTitle from '@app/components/Common/PageTitle';
 import globalMessages from '@app/i18n/globalMessages';
 import Error from '@app/pages/_error';
 import {
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ExclamationTriangleIcon,
+  MinusCircleIcon,
+  SpeakerXMarkIcon,
+} from '@heroicons/react/24/outline';
+import {
   ArrowDownTrayIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/solid';
@@ -15,8 +23,10 @@ import type {
   SettingsAboutResponse,
   StatusResponse,
 } from '@server/interfaces/api/settingsInterfaces';
+import axios from 'axios';
 import { useState } from 'react';
-import { defineMessages, useIntl } from 'react-intl';
+import { defineMessages, FormattedRelativeTime, useIntl } from 'react-intl';
+import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages = defineMessages({
@@ -38,14 +48,50 @@ const messages = defineMessages({
   exportDebugInfo: 'Export Debugging Info',
 });
 
+interface HealthCheckResult {
+  id: string;
+  name: string;
+  status: 'ok' | 'warning' | 'error' | 'skipped';
+  message?: string;
+  durationMs: number;
+  checkedAt: string;
+  silenced: boolean;
+  docsUrl?: string;
+}
+
+interface HealthStatusResponse {
+  status: 'ok' | 'warning' | 'error' | 'unknown' | 'disabled';
+  checkedAt: string | null;
+  checks: HealthCheckResult[];
+}
+
+const statusIcon = (status: string) => {
+  switch (status) {
+    case 'ok':
+      return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
+    case 'warning':
+      return <ExclamationTriangleIcon className="h-5 w-5 text-amber-500" />;
+    case 'error':
+      return <ExclamationCircleIcon className="h-5 w-5 text-red-500" />;
+    default:
+      return <MinusCircleIcon className="h-5 w-5 text-gray-500" />;
+  }
+};
+
 const SettingsAbout = () => {
   const intl = useIntl();
+  const { addToast } = useToasts();
   const [showExportModal, setShowExportModal] = useState(false);
   const { data, error } = useSWR<SettingsAboutResponse>(
     '/api/v1/settings/about'
   );
 
   const { data: status } = useSWR<StatusResponse>('/api/v1/status');
+
+  const { data: health, mutate: revalidateHealth } =
+    useSWR<HealthStatusResponse>('/api/v1/status/health', {
+      refreshInterval: 60 * 1000,
+    });
 
   if (!data && !error) {
     return <LoadingSpinner />;
@@ -179,6 +225,126 @@ const SettingsAbout = () => {
           </List.Item>
         </List>
       </div>
+      {health && health.status !== 'disabled' && (
+        <div className="section">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="heading">Health Checks</h3>
+            <div className="flex items-center space-x-3">
+              {health.checkedAt && (
+                <span className="text-xs text-gray-400">
+                  Last checked{' '}
+                  {(() => {
+                    const seconds = Math.floor(
+                      (new Date(health.checkedAt).getTime() - Date.now()) / 1000
+                    );
+                    const minutes = Math.floor(seconds / 60);
+                    if (Math.abs(minutes) < 60) {
+                      return (
+                        <FormattedRelativeTime
+                          value={minutes}
+                          unit="minute"
+                          numeric="auto"
+                          updateIntervalInSeconds={30}
+                        />
+                      );
+                    }
+                    return (
+                      <FormattedRelativeTime
+                        value={Math.floor(seconds / 3600)}
+                        unit="hour"
+                        numeric="auto"
+                        updateIntervalInSeconds={300}
+                      />
+                    );
+                  })()}
+                </span>
+              )}
+              <Button
+                buttonType="primary"
+                onClick={async () => {
+                  await axios.post('/api/v1/settings/jobs/health-checks/run');
+                  addToast('Health checks started.', {
+                    appearance: 'success',
+                    autoDismiss: true,
+                  });
+                  setTimeout(() => revalidateHealth(), 3000);
+                }}
+              >
+                <ArrowPathIcon className="mr-1 h-4 w-4" />
+                Run Now
+              </Button>
+            </div>
+          </div>
+          {health.status === 'unknown' ? (
+            <p className="text-sm text-gray-400">
+              Health checks have not run yet. They will run automatically every
+              6 hours, or click Run Now.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {health.checks.map((check) => (
+                <div
+                  key={check.id}
+                  className={`flex items-start rounded-lg border border-gray-700 p-3 ${
+                    check.silenced ? 'opacity-50' : ''
+                  }`}
+                >
+                  <div className="mr-3 mt-0.5 flex-shrink-0">
+                    {check.silenced ? (
+                      <SpeakerXMarkIcon className="h-5 w-5 text-gray-500" />
+                    ) : (
+                      statusIcon(check.status)
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-white">
+                        {check.name}
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        {check.docsUrl &&
+                          (check.status === 'warning' ||
+                            check.status === 'error') && (
+                            <a
+                              href={check.docsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-orange-400 hover:underline"
+                            >
+                              Docs
+                            </a>
+                          )}
+                        <button
+                          className="text-xs text-gray-500 hover:text-gray-300"
+                          onClick={async () => {
+                            if (check.silenced) {
+                              await axios.delete(
+                                `/api/v1/status/health/${check.id}/silence`
+                              );
+                            } else {
+                              await axios.post(
+                                `/api/v1/status/health/${check.id}/silence`
+                              );
+                            }
+                            revalidateHealth();
+                          }}
+                        >
+                          {check.silenced ? 'Unsilence' : 'Silence'}
+                        </button>
+                      </div>
+                    </div>
+                    {check.message && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        {check.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <ExportDebugModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}

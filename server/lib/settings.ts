@@ -675,6 +675,8 @@ export interface MainSettings {
   // FlareSolverr proxy URL (e.g. http://localhost:8191). When set, used for all Cloudflare-challenged fetches instead of built-in Playwright.
   flareSolverrUrl?: string;
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  healthChecksEnabled?: boolean;
+  silencedHealthChecks?: string[];
 }
 
 interface PublicSettings {
@@ -712,7 +714,8 @@ export type JobId =
   | 'plex-randomize-home-order'
   | 'overlay-application'
   | 'overlay-quick-sync'
-  | 'watchlist-sync';
+  | 'watchlist-sync'
+  | 'health-checks';
 
 export interface GlobalExclusions {
   movies: number[]; // TMDB IDs for excluded movies
@@ -812,6 +815,9 @@ class Settings {
         },
         'watchlist-sync': {
           schedule: '0 0 */6 * * *', // Every 6 hours
+        },
+        'health-checks': {
+          schedule: '0 0 */6 * * *',
         },
       },
       watchlistSync: {

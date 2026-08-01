@@ -55,6 +55,9 @@ const messages = defineMessages({
   enableTmdbPosterCache: 'Enable TMDB Poster Cache',
   enableTmdbPosterCacheTip:
     'Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)',
+  enableHealthChecks: 'Enable Health Checks',
+  enableHealthChecksTip:
+    'Run periodic health checks to detect connection issues and configuration problems',
   logLevel: 'Log Level',
   logLevelTip: 'Controls how much detail appears in logs',
   resetAgregarr: 'Reset',
@@ -167,6 +170,7 @@ const SettingsMain = () => {
             locale: data?.locale ?? 'en',
             tmdbLanguage: data?.tmdbLanguage ?? 'en',
             enableTmdbPosterCache: data?.enableTmdbPosterCache ?? true,
+            healthChecksEnabled: data?.healthChecksEnabled ?? true,
             watchProviderRegion: data?.watchProviderRegion ?? 'US',
             trustProxy: data?.trustProxy,
             logLevel: data?.logLevel ?? 'info',
@@ -182,6 +186,7 @@ const SettingsMain = () => {
                 locale: values.locale,
                 tmdbLanguage: values.tmdbLanguage,
                 enableTmdbPosterCache: values.enableTmdbPosterCache,
+                healthChecksEnabled: values.healthChecksEnabled,
                 watchProviderRegion: values.watchProviderRegion,
                 trustProxy: values.trustProxy,
                 logLevel: values.logLevel,
@@ -388,6 +393,32 @@ const SettingsMain = () => {
                         setFieldValue(
                           'enableTmdbPosterCache',
                           !values.enableTmdbPosterCache
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label
+                    htmlFor="healthChecksEnabled"
+                    className="checkbox-label"
+                  >
+                    <span className="mr-2">
+                      {intl.formatMessage(messages.enableHealthChecks)}
+                    </span>
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.enableHealthChecksTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <Field
+                      type="checkbox"
+                      id="healthChecksEnabled"
+                      name="healthChecksEnabled"
+                      onChange={() => {
+                        setFieldValue(
+                          'healthChecksEnabled',
+                          !values.healthChecksEnabled
                         );
                       }}
                     />

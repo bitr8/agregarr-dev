@@ -45,6 +45,12 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages({
   cachevsize: 'Value Size',
   flushcache: 'Flush Cache',
   unknownJob: 'Unknown Job',
+  lastrun: 'Last Run',
+  lastRunSuccess: 'Success',
+  lastRunError: 'Error',
+  lastRunSkipped: 'Skipped',
+  lastRunRunning: 'Running',
+  lastRunNever: 'Never',
   'plex-refresh-token': 'Plex Refresh Token',
   'plex-collections-sync': 'Plex Collections Sync',
   'plex-collections-quick-sync': 'Collections Quick Sync',
@@ -52,6 +58,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages({
   'overlay-application': 'Poster Overlay Application',
   'overlay-quick-sync': 'Overlay Quick Sync',
   'watchlist-sync': 'Plex Watchlist Sync',
+  'health-checks': 'Health Checks',
   editJobSchedule: 'Modify Job',
   jobScheduleEditSaved: 'Job edited successfully!',
   jobScheduleEditFailed: 'Something went wrong while saving the job.',
@@ -84,6 +91,14 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages({
     'Following execution in {count} {count, plural, one {day} other {days}}',
 });
 
+interface JobRunRecord {
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  outcome: 'success' | 'error' | 'skipped' | 'running';
+  error?: string;
+}
+
 interface Job {
   id: JobId;
   name: string;
@@ -93,6 +108,7 @@ interface Job {
   nextExecutionTime: string;
   followingExecutionTime: string | null;
   running: boolean;
+  lastRun: JobRunRecord | null;
 }
 
 type JobModalState = {
@@ -602,6 +618,7 @@ const SettingsJobs = () => {
               <Table.TH>{intl.formatMessage(messages.jobname)}</Table.TH>
               <Table.TH>{intl.formatMessage(messages.jobtype)}</Table.TH>
               <Table.TH>{intl.formatMessage(messages.nextexecution)}</Table.TH>
+              <Table.TH>{intl.formatMessage(messages.lastrun)}</Table.TH>
               <Table.TH></Table.TH>
             </tr>
           </thead>
@@ -712,6 +729,77 @@ const SettingsJobs = () => {
                         );
                       }
                     })()}
+                </Table.TD>
+                <Table.TD>
+                  {job.lastRun ? (
+                    <div className="flex items-center space-x-2">
+                      <span
+                        title={
+                          job.lastRun.outcome === 'error'
+                            ? job.lastRun.error
+                            : job.lastRun.outcome === 'success' &&
+                              job.lastRun.durationMs != null
+                            ? `${(job.lastRun.durationMs / 1000).toFixed(1)}s`
+                            : undefined
+                        }
+                      >
+                        <Badge
+                          badgeType={
+                            job.lastRun.outcome === 'success'
+                              ? 'success'
+                              : job.lastRun.outcome === 'error'
+                              ? 'danger'
+                              : job.lastRun.outcome === 'skipped'
+                              ? 'warning'
+                              : 'default'
+                          }
+                        >
+                          {intl.formatMessage(
+                            job.lastRun.outcome === 'success'
+                              ? messages.lastRunSuccess
+                              : job.lastRun.outcome === 'error'
+                              ? messages.lastRunError
+                              : job.lastRun.outcome === 'skipped'
+                              ? messages.lastRunSkipped
+                              : messages.lastRunRunning
+                          )}
+                        </Badge>
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {(() => {
+                          const ts =
+                            job.lastRun.finishedAt ?? job.lastRun.startedAt;
+                          const seconds = Math.round(
+                            (new Date(ts).getTime() - Date.now()) / 1000
+                          );
+                          const minutes = Math.round(seconds / 60);
+                          if (Math.abs(minutes) < 60) {
+                            return (
+                              <FormattedRelativeTime
+                                value={minutes}
+                                unit="minute"
+                                numeric="auto"
+                                updateIntervalInSeconds={30}
+                              />
+                            );
+                          }
+                          const hours = Math.round(seconds / 3600);
+                          return (
+                            <FormattedRelativeTime
+                              value={hours}
+                              unit="hour"
+                              numeric="auto"
+                              updateIntervalInSeconds={300}
+                            />
+                          );
+                        })()}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-500">
+                      {intl.formatMessage(messages.lastRunNever)}
+                    </span>
+                  )}
                 </Table.TD>
                 <Table.TD alignText="right">
                   {job.interval !== 'fixed' && (

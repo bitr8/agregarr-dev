@@ -315,6 +315,37 @@ Season tiles in generated collection posters now carry an `S{n}` badge. Six tile
 
 </details>
 
+## Troubleshooting
+
+The built-in health check panel (Settings > About) runs periodic checks and surfaces actionable warnings. Each check below links to guidance on what it means and how to resolve it.
+
+### Version Staleness
+Your container is running an older version. Pull the latest image and restart.
+
+### Connection: Plex
+Plex is unreachable from the container. Check that the Plex IP/port in Settings > Plex is correct and that the Plex server is running.
+
+### Connection: Sonarr
+One or more Sonarr instances are unreachable. Check the hostname, port, and API key in Settings > Services for each instance named in the warning.
+
+### Connection: Radarr
+One or more Radarr instances are unreachable. Same as Sonarr — verify hostname, port, and API key.
+
+### Connection: TMDB
+TMDB API is unreachable. This usually means a network issue from the container. Check DNS and outbound connectivity.
+
+### Connection: Ratings Proxy
+The ratings proxy (api.agregarr.org) is unreachable. Ratings data may be stale. This can be a transient outage — silence the check if it persists and ratings are not critical to your setup.
+
+### Collections Error State
+One or more collection configs have sync errors. Open Settings > Collections and check the named configs. Common causes: source API down, invalid source URL, rate limiting.
+
+### Orphaned Collection Keys
+Collection configs point at Plex collections that no longer exist. This happens when a collection is deleted in Plex but the config still references it. Edit the affected configs in Settings > Collections and re-save to clear the stale reference.
+
+### Timezone Configuration
+The container timezone is UTC while Sonarr is configured. Air-date calculations may be off by one day. Set the `TZ` environment variable in your container config (e.g., `TZ=America/New_York`).
+
 ## License
 
 GPL-3.0, same as upstream.

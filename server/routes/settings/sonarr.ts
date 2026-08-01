@@ -3,6 +3,7 @@ import {
   generateCollectionTag,
   type TagSource,
 } from '@server/lib/collections/services/ArrTagUtils';
+import { runHealthChecks } from '@server/lib/healthcheck';
 import type { SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -36,6 +37,7 @@ sonarrRoutes.post('/', (req, res) => {
 
   settings.sonarr = [...settings.sonarr, newSonarr];
   settings.save();
+  runHealthChecks();
 
   return res.status(201).json(newSonarr);
 });
@@ -105,6 +107,7 @@ sonarrRoutes.put<{ id: string }>('/:id', (req, res) => {
     id: Number(req.params.id),
   } as SonarrSettings;
   settings.save();
+  runHealthChecks();
 
   return res.status(200).json(settings.sonarr[sonarrIndex]);
 });
