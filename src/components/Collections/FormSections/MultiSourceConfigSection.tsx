@@ -494,6 +494,12 @@ const MultiSourceConfigSection = ({
                   error: null,
                 },
               }));
+              if (data.title) {
+                const idx = values.sources?.findIndex((s) => s.id === sourceId);
+                if (idx !== undefined && idx >= 0) {
+                  setFieldValue(`sources[${idx}].resolvedTitle`, data.title);
+                }
+              }
               eventSource.close();
               resolve();
             } else if (data.status === 'error') {
@@ -547,7 +553,7 @@ const MultiSourceConfigSection = ({
         };
       });
     },
-    []
+    [values.sources, setFieldValue]
   );
 
   // Detect actual mixed content - episodes vs movies/shows across sources
@@ -983,9 +989,11 @@ const MultiSourceConfigSection = ({
           >
             <div className="flex items-center justify-between">
               <h5 className="text-sm font-medium text-gray-200">
-                {intl.formatMessage(messages.sourceNumber, {
-                  number: index + 1,
-                })}
+                {source.resolvedTitle
+                  ? `${index + 1}. ${source.resolvedTitle}`
+                  : intl.formatMessage(messages.sourceNumber, {
+                      number: index + 1,
+                    })}
               </h5>
               {sources.length > 1 && (
                 <Button

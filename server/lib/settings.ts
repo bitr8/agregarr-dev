@@ -341,6 +341,7 @@ export interface CollectionConfig {
     readonly sonarrTagServerId?: number; // Sonarr instance ID for sonarrtag sources
     readonly sonarrTagId?: number; // Sonarr tag ID for sonarrtag sources
     readonly sonarrTagLabel?: string; // Sonarr tag label for display
+    readonly resolvedTitle?: string;
   }[];
   readonly combineMode?:
     | 'interleaved'
@@ -2262,6 +2263,7 @@ export interface SourceDefinition {
   readonly sonarrTagServerId?: number;
   readonly sonarrTagId?: number;
   readonly sonarrTagLabel?: string;
+  readonly resolvedTitle?: string;
 }
 
 export interface MultiSourceCollectionConfig {

@@ -176,6 +176,7 @@ const portableSourceFields = new Set([
   'customDays',
   'minimumPlays',
   'networksCountry',
+  'resolvedTitle',
 ]);
 
 // --- Export helpers ---

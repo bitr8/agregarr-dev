@@ -252,10 +252,15 @@ export class MultiSourceOrchestrator {
             name: this.dynamicCycleTitle,
           } as MultiSourceCollectionConfig;
 
-          // Persist updated name for subsequent syncs
+          // Persist updated name and source title for subsequent syncs
           this.updateCollectionConfigField(config.id, {
             name: this.dynamicCycleTitle,
           });
+          this.updateSourceResolvedTitle(
+            config.id,
+            activeSource.id,
+            this.dynamicCycleTitle
+          );
 
           logger.info(
             `Dynamic cycle title set for collection ${previousName}: ${this.dynamicCycleTitle}`,
@@ -3487,6 +3492,27 @@ export class MultiSourceOrchestrator {
           error: error instanceof Error ? error.message : String(error),
         }
       );
+    }
+  }
+
+  private updateSourceResolvedTitle(
+    configId: string,
+    sourceId: string,
+    title: string
+  ): void {
+    try {
+      const settings = getSettings();
+      const configs = settings.plex.collectionConfigs || [];
+      const config = configs.find((c) => c.id === configId);
+      if (!config?.sources) return;
+
+      const source = config.sources.find((s) => s.id === sourceId);
+      if (!source || source.resolvedTitle === title) return;
+
+      (source as { resolvedTitle?: string }).resolvedTitle = title;
+      settings.save();
+    } catch {
+      // Non-critical — title is cosmetic
     }
   }
 

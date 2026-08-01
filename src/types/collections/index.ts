@@ -1084,6 +1084,7 @@ export interface CollectionSourceConfig {
   readonly sonarrTagServerId?: number;
   readonly sonarrTagId?: number;
   readonly sonarrTagLabel?: string;
+  readonly resolvedTitle?: string;
 }
 
 /**
@@ -1294,6 +1295,7 @@ export interface SourceDefinition {
   readonly sonarrTagServerId?: number; // Sonarr instance ID for sonarrtag source
   readonly sonarrTagId?: number; // Sonarr tag ID for sonarrtag source
   readonly sonarrTagLabel?: string; // Sonarr tag label for display
+  readonly resolvedTitle?: string;
 }
 
 /**
