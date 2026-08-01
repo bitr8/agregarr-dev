@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "exportedAt": "2026-08-01T01:13:11.270Z",
+  "exportedAt": "2026-08-01T03:30:00.000Z",
   "collections": [
     {
-      "name": "Pensive Thoughts on Rainy Days 🌧",
+      "name": "DYNAMIC_CYCLE_TITLE",
       "type": "multi-source",
       "subtype": "",
       "template": "DYNAMIC_CYCLE_TITLE",
@@ -31,29 +31,12 @@
         "value": "originallyAvailableAt:desc",
         "label": "Release Date (Newest First)"
       },
-      "hideIndividualItems": false,
-      "applyOverlaysDuringSync": false,
-      "autoPoster": true,
-      "useTmdbFranchisePoster": false,
-      "customSummary": "",
-      "enableCustomWallpaper": false,
-      "enableCustomSummary": false,
-      "enableCustomTheme": false,
+      "filterSettings": null,
+      "maxPositionToProcess": null,
       "createPlaceholdersForMissing": false,
-      "searchMissingMovies": false,
-      "searchMissingTV": false,
-      "autoApproveMovies": false,
-      "autoApproveTV": false,
-      "seasonGrabOrder": "first",
-      "timeRestriction": {
-        "alwaysActive": true,
-        "removeFromPlexWhenInactive": false,
-        "inactiveVisibilityConfig": {
-          "usersHome": false,
-          "serverOwnerHome": false,
-          "libraryRecommended": true
-        }
-      },
+      "placeholderReleasedDays": null,
+      "placeholderDaysAhead": null,
+      "autoPoster": true,
       "customSyncSchedule": {
         "enabled": true,
         "scheduleType": "preset",
@@ -63,398 +46,687 @@
       },
       "isMultiSource": true,
       "combineMode": "cycle_lists",
+      "timeRestriction": {
+        "alwaysActive": true,
+        "removeFromPlexWhenInactive": false,
+        "inactiveVisibilityConfig": {
+          "usersHome": false,
+          "serverOwnerHome": false,
+          "libraryRecommended": true
+        }
+      },
       "sources": [
         {
-          "id": "1",
+          "id": "src-0",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/stjiub/list/neon-noir/",
-          "priority": 1
+          "timePeriod": null,
+          "priority": 1,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Neon Noir"
         },
         {
-          "id": "2",
+          "id": "src-1",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/ygeorgoulis/list/mindfuck-surreal-strange-and-weird-films/",
-          "priority": 2
+          "timePeriod": null,
+          "priority": 2,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Mindfuck, surreal, strange and weird films"
         },
         {
-          "id": "3",
+          "id": "src-2",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/crossbonesgt/list/time-loop-movies/",
-          "priority": 3
+          "timePeriod": null,
+          "priority": 3,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Time Loop Movies"
         },
         {
-          "id": "4",
+          "id": "src-3",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/kun/list/the-life-of-the-mind/",
-          "priority": 4
+          "timePeriod": null,
+          "priority": 4,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "The Life of the Mind"
         },
         {
-          "id": "5",
+          "id": "src-4",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/doctorradiohead/list/movies-with-a-stinger-ambiguity-twist-in/",
-          "priority": 5
+          "timePeriod": null,
+          "priority": 5,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Movies with a STINGER/AMBIGUITY/TWIST in the LAST SHOT."
         },
         {
-          "id": "6",
+          "id": "src-5",
           "type": "letterboxd",
           "subtype": "custom",
-          "customUrl": "https://letterboxd.com/pooinanalleyway/list/movies-with-unreliable-narrators/",
-          "priority": 6
+          "customUrl": "https://letterboxd.com/andromelda/list/unreliable-narrator/",
+          "timePeriod": null,
+          "priority": 6,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "unreliable narrator"
         },
         {
-          "id": "7",
+          "id": "src-6",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/terransky16/list/vaporwave-films/",
-          "priority": 7
+          "timePeriod": null,
+          "priority": 7,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Vaporwave Films"
         },
         {
-          "id": "8",
+          "id": "src-7",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/dinkysniff/lists/hidden-gems-reddit-worthwhile-movies",
-          "priority": 8
+          "timePeriod": null,
+          "priority": 8,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Hidden Gems Reddit Worthwhile Movies"
         },
         {
-          "id": "9",
+          "id": "src-8",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/bushmonkey/lists/100-hidden-gems",
-          "priority": 9
+          "timePeriod": null,
+          "priority": 9,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "100 Hidden Gems"
         },
         {
-          "id": "10",
+          "id": "src-9",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/dinkysniff/lists/hidden-gems-den-of-geek-underrated-movies-you-need-to-watch",
-          "priority": 10
+          "timePeriod": null,
+          "priority": 10,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Hidden Gems Den Of Geek Underrated Movies You Need To Watch"
         },
         {
-          "id": "11",
+          "id": "src-10",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/evilbjork/list/slow-cinema-ccc/",
-          "priority": 11
+          "timePeriod": null,
+          "priority": 11,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Slow Cinema / CCC"
         },
         {
-          "id": "12",
+          "id": "src-11",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/lightsweetcrude/list/one-day-one-night-movies/",
-          "priority": 12
+          "timePeriod": null,
+          "priority": 12,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "One Day / One Night Movies"
         },
         {
-          "id": "13",
+          "id": "src-12",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/cinnamonclub/list/liminal-spaces-backrooms-aesthetic/",
-          "priority": 13
+          "timePeriod": null,
+          "priority": 13,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "🛝 liminal spaces | backrooms aesthetic"
         },
         {
-          "id": "14",
+          "id": "src-13",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/darrencb/list/the-city-is-a-character/",
-          "priority": 14
+          "timePeriod": null,
+          "priority": 14,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "The City is a Character"
         },
         {
-          "id": "15",
+          "id": "src-14",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/wwhateley/list/cosmic-horror-cosmicism-and-the-transcendent/",
-          "priority": 15
+          "timePeriod": null,
+          "priority": 15,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Cosmic Horror/Cosmicism and the Transcendent"
         },
         {
-          "id": "16",
+          "id": "src-15",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/zalifornia/list/desert-motelcore/",
-          "priority": 16
+          "timePeriod": null,
+          "priority": 16,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Desert Motelcore"
         },
         {
-          "id": "17",
+          "id": "src-16",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/kun/list/melancholy-as-a-breathtaking-aesthetic-emotion/",
-          "priority": 17
+          "timePeriod": null,
+          "priority": 17,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Mélancholy as a Breathtaking Aesthetic Emotion"
         },
         {
-          "id": "18",
+          "id": "src-17",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/jedimoonshyne/list/isolation-cinemas-of-solitude/",
-          "priority": 18
+          "timePeriod": null,
+          "priority": 18,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "ISOLATION | Cinemas of Solitude"
         },
         {
-          "id": "19",
+          "id": "src-18",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/kmtb/list/single-location-one-room-movies/",
-          "priority": 19
+          "timePeriod": null,
+          "priority": 19,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Single Location/One Room Movies"
         },
         {
-          "id": "20",
+          "id": "src-19",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/cinebro/list/films-with-a-dreamlike-atmosphere/",
-          "priority": 20
+          "timePeriod": null,
+          "priority": 20,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Films with a dreamlike atmosphere."
         },
         {
-          "id": "21",
+          "id": "src-20",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/goatcreature/list/folk-horror-fear-in-fields-forests-and-furrows/",
-          "priority": 21
+          "timePeriod": null,
+          "priority": 21,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Folk Horror - Fear in Fields, Forests and Furrows"
         },
         {
-          "id": "22",
+          "id": "src-21",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/burning_dog/list/body-horror-films/",
-          "priority": 22
+          "timePeriod": null,
+          "priority": 22,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Body Horror Films"
         },
         {
-          "id": "23",
+          "id": "src-22",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/josuffff/list/the-best-of-psychedelic-cinema/",
-          "priority": 23
+          "timePeriod": null,
+          "priority": 23,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "The Best of Psychedelic Cinema"
         },
         {
-          "id": "24",
+          "id": "src-23",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/vince_dimeglio/list/genre-study-southern-gothic/",
-          "priority": 24
+          "timePeriod": null,
+          "priority": 24,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Genre Study - Southern Gothic"
         },
         {
-          "id": "25",
+          "id": "src-24",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/wraithape/list/concrete-cinema-brutalism-on-film/",
-          "priority": 25
+          "timePeriod": null,
+          "priority": 25,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Concrete Cinema: Brutalism On Film"
         },
         {
-          "id": "26",
+          "id": "src-25",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/nmalvarez/list/fever-dream-dissociation-cinema/",
-          "priority": 26
+          "timePeriod": null,
+          "priority": 26,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Fever Dream/Dissociation Cinema"
         },
         {
-          "id": "27",
+          "id": "src-26",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/kun/list/pensive-thoughts-on-rainy-days/",
-          "priority": 27
+          "timePeriod": null,
+          "priority": 27,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Pensive Thoughts on Rainy Days 🌧"
         },
         {
-          "id": "28",
+          "id": "src-27",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/markg/list/heist-movies/",
-          "priority": 28
+          "timePeriod": null,
+          "priority": 28,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Heist Movies"
         },
         {
-          "id": "29",
+          "id": "src-28",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/hammerbros94/list/movies-with-a-synth-score-neon-aesthetic/",
-          "priority": 29
+          "timePeriod": null,
+          "priority": 29,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Movies with a Synth Score/Neon Aesthetic"
         },
         {
-          "id": "30",
+          "id": "src-29",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/sundance/list/sun-soaked-coming-of-age-summer-movies/",
-          "priority": 30
+          "timePeriod": null,
+          "priority": 30,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Sun-Soaked Coming Of Age Summer Movies"
         },
         {
-          "id": "31",
+          "id": "src-30",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/rtpversion1/list/modern-midnight-movies/",
-          "priority": 31
+          "timePeriod": null,
+          "priority": 31,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Modern Midnight Movies"
         },
         {
-          "id": "32",
+          "id": "src-31",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/sketchesbyboze/list/comfort-films/",
-          "priority": 32
+          "timePeriod": null,
+          "priority": 32,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Comfort Films"
         },
         {
-          "id": "33",
+          "id": "src-visually-insane",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/etolkin/list/filmlist:28697007/",
-          "priority": 33
+          "timePeriod": null,
+          "priority": 33,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "🐉🎭✨ 𝕍𝕀𝕊𝕌𝔸𝕃𝕃𝕐 𝙸𝙽𝚂𝙰𝙽𝙴👹🧞‍♀️👁️"
         },
         {
-          "id": "34",
+          "id": "src-style-substance",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/matthewcutchen/list/style-is-substance/",
-          "priority": 34
+          "timePeriod": null,
+          "priority": 34,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "style is substance"
         },
         {
-          "id": "35",
+          "id": "src-conversational",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/stefanoearnest/list/conversational-movies/",
-          "priority": 35
+          "timePeriod": null,
+          "priority": 35,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Conversational Movies"
         },
         {
-          "id": "36",
+          "id": "src-late-night",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/niallhassett/list/weve-been-doing-all-this-late-night-talkingnight/",
-          "priority": 36
+          "timePeriod": null,
+          "priority": 36,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "We've Been Doing All This Late Night Talking(night vibes)"
         },
         {
-          "id": "37",
+          "id": "src-road-movies",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/htsun/list/the-complete-list-of-road-movies/",
-          "priority": 37
+          "timePeriod": null,
+          "priority": 37,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "The Complete List of Road Movies"
         },
         {
-          "id": "38",
+          "id": "src-arthouse",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/yellowromeda/list/tv-s-guide-to-exit-level-art-house/",
-          "priority": 38
+          "timePeriod": null,
+          "priority": 38,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "/tv/'s guide to exit-level art house"
         },
         {
-          "id": "39",
+          "id": "src-food-cinema",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/dubiouslegacy/list/food-movies/",
-          "priority": 39
+          "timePeriod": null,
+          "priority": 39,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Food movies"
         },
         {
-          "id": "40",
+          "id": "src-found-footage",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/horrorville/list/found-footage-horror-movies-ranked/",
-          "priority": 40
+          "timePeriod": null,
+          "priority": 40,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Found Footage Horror Movies, Ranked!"
         },
         {
-          "id": "41",
+          "id": "src-neo-western",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/solofilmclub/list/neo-westerns/",
-          "priority": 41
+          "timePeriod": null,
+          "priority": 41,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Neo Westerns"
         },
         {
-          "id": "42",
+          "id": "src-obscure-gems",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/jhillman/list/responses-to-my-reddit-question-asking-for/",
-          "priority": 42
+          "timePeriod": null,
+          "priority": 42,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Responses to my Reddit question asking for their most obscure 5-star rated film"
         },
         {
-          "id": "43",
+          "id": "src-machete-order",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/justin/lists/star-wars-in-machete-order",
-          "priority": 43
+          "timePeriod": null,
+          "priority": 43,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Star Wars In Machete Order"
         },
         {
-          "id": "44",
+          "id": "src-mcu",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/username57/lists/marvel-cinematic-universe-mcu-timeline",
-          "priority": 44
+          "timePeriod": null,
+          "priority": 44,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Marvel Cinematic Universe Mcu Timeline"
         },
         {
-          "id": "45",
+          "id": "src-wizarding",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/pithermgd/list/wizarding-world/",
-          "priority": 45
+          "timePeriod": null,
+          "priority": 45,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Wizarding World"
         },
         {
-          "id": "46",
+          "id": "src-middle-earth",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/henrymartinson/list/the-complete-cinematic-adaptations-of-the/",
-          "priority": 46
+          "timePeriod": null,
+          "priority": 46,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "The Complete Cinematic Adaptations of the Works of J. R. R. Tolkien (Lord of the Rings, The Hobbit, Middle Earth)"
         },
         {
-          "id": "47",
+          "id": "src-dc",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/username57/lists/dc-extended-universe-dceu-timeline",
-          "priority": 47
+          "timePeriod": null,
+          "priority": 47,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Dc Extended Universe Dceu Timeline"
         },
         {
-          "id": "48",
+          "id": "src-bond",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/superpulse/list/every-james-bond-movie-ranked/",
-          "priority": 48
+          "timePeriod": null,
+          "priority": 48,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Every James Bond Movie Ranked"
         },
         {
-          "id": "49",
+          "id": "src-pixar",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/schaffrillas/list/pixar-ranking/",
-          "priority": 49
+          "timePeriod": null,
+          "priority": 49,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Pixar Ranking"
         },
         {
-          "id": "50",
+          "id": "src-ghibli",
           "type": "letterboxd",
           "subtype": "custom",
           "customUrl": "https://letterboxd.com/briantt/list/studio-ghibli-ranked/",
-          "priority": 50
+          "timePeriod": null,
+          "priority": 50,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Studio Ghibli Ranked"
         },
         {
-          "id": "51",
+          "id": "src-fast-furious",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/stefania19/lists/fast-and-furious-collection",
-          "priority": 51
+          "timePeriod": null,
+          "priority": 51,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Fast And Furious Collection"
         },
         {
-          "id": "52",
+          "id": "src-mission-imp",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/dinkysniff/lists/collection-the-mission-impossible-series",
-          "priority": 52
+          "timePeriod": null,
+          "priority": 52,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Collection The Mission Impossible Series"
         },
         {
-          "id": "53",
+          "id": "src-alien",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/mr-clements/lists/alien-and-predator-chronological-order",
-          "priority": 53
+          "timePeriod": null,
+          "priority": 53,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Alien And Predator Chronological Order"
         },
         {
-          "id": "54",
+          "id": "src-jurassic",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/krissykk/lists/jurassic-park-collection-official-list",
-          "priority": 54
+          "timePeriod": null,
+          "priority": 54,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Jurassic Park Collection Official List"
         },
         {
-          "id": "55",
+          "id": "src-xmen",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/donxy/lists/x-men-universe",
-          "priority": 55
+          "timePeriod": null,
+          "priority": 55,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "X Men Universe"
         },
         {
-          "id": "56",
+          "id": "src-spiderman",
           "type": "trakt",
           "subtype": "custom",
           "customUrl": "https://trakt.tv/users/arachn0id/lists/spider-man-movies",
-          "priority": 56
+          "timePeriod": null,
+          "priority": 56,
+          "customDays": null,
+          "minimumPlays": null,
+          "networksCountry": null,
+          "resolvedTitle": "Spider Man Movies"
         }
       ]
     }
