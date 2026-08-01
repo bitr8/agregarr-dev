@@ -472,6 +472,11 @@ const OverlaySyncCard: React.FC = () => {
                 <span className="min-w-0 flex-1 truncate text-gray-300">
                   {lib.libraryName}
                 </span>
+                {lib.errorCount > 0 && (
+                  <span className="shrink-0 text-red-400">
+                    {lib.errorCount} err
+                  </span>
+                )}
                 <span className="shrink-0 text-gray-500">
                   {lib.successCount +
                     lib.errorCount +
@@ -485,6 +490,46 @@ const OverlaySyncCard: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Error Details */}
+      {totalErrors > 0 && (
+        <div className="mb-4">
+          <button
+            onClick={() => setErrorsOpen(!errorsOpen)}
+            className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
+          >
+            {errorsOpen ? (
+              <ChevronDownIcon className="h-3 w-3" />
+            ) : (
+              <ChevronRightIcon className="h-3 w-3" />
+            )}
+            {totalErrors} error{totalErrors !== 1 && 's'}
+          </button>
+          {errorsOpen && (
+            <div className="mt-1 space-y-2 pl-4">
+              {allLibs
+                .filter((l) => l.itemErrors && l.itemErrors.length > 0)
+                .map((lib) => (
+                  <div key={`${lib.libraryId}-errors`}>
+                    <p className="text-xs font-medium text-gray-300">
+                      {lib.libraryName}
+                    </p>
+                    <div className="mt-0.5 space-y-0.5">
+                      {lib.itemErrors?.map((e) => (
+                        <p key={e.ratingKey} className="text-xs text-gray-500">
+                          {e.title}{' '}
+                          <span className="text-gray-600">
+                            &mdash; {e.error}
+                          </span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
