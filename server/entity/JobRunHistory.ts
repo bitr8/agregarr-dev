@@ -12,16 +12,16 @@ export class JobRunHistory {
   @Column()
   public startedAt: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   public finishedAt: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'integer', nullable: true })
   public durationMs: number | null;
 
   @Column()
   public outcome: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   public error: string | null;
 
   @Column({ type: 'simple-json', nullable: true })
