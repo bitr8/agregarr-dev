@@ -1,4 +1,6 @@
 import TautulliAPI from '@server/api/tautulli';
+import { getRepository } from '@server/datasource';
+import { JobRunHistory } from '@server/entity/JobRunHistory';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -371,6 +373,29 @@ dashboardRoutes.get('/activity', isAuthenticated(), async (req, res) => {
       error: 'Failed to get activity statistics',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+});
+
+/**
+ * GET /api/v1/dashboard/job-history
+ * Get last run per job with detail
+ */
+dashboardRoutes.get('/job-history', isAuthenticated(), async (_req, res) => {
+  try {
+    const repo = getRepository(JobRunHistory);
+    const rows = await repo
+      .createQueryBuilder('r')
+      .where('r.id IN (SELECT MAX(id) FROM job_run_history GROUP BY jobId)')
+      .orderBy('r.startedAt', 'DESC')
+      .getMany();
+
+    res.status(200).json(rows);
+  } catch (error) {
+    logger.error('Failed to get job history', {
+      label: 'Dashboard API',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ error: 'Failed to get job history' });
   }
 });
 

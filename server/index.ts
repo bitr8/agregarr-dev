@@ -2,7 +2,7 @@ import PlexAPI from '@server/api/plexapi';
 import dataSource, { getRepository } from '@server/datasource';
 import { Session } from '@server/entity/Session';
 import { User } from '@server/entity/User';
-import { startJobs } from '@server/job/schedule';
+import { hydrateJobRuns, startJobs } from '@server/job/schedule';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import routes from '@server/routes';
@@ -218,7 +218,8 @@ app
       }
     }
 
-    // Start Jobs
+    // Hydrate job run history from DB, then start scheduled jobs
+    await hydrateJobRuns();
     startJobs();
 
     const server = express();

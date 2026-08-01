@@ -1,4 +1,6 @@
 // Availability sync import removed - not needed for collections-only app
+import { getRepository } from '@server/datasource';
+import { JobRunHistory } from '@server/entity/JobRunHistory';
 import collectionsQuickSync from '@server/lib/collectionsQuickSync';
 import collectionsSync from '@server/lib/collectionsSync';
 import { healthCheckRunning, runHealthChecks } from '@server/lib/healthcheck';
@@ -38,6 +40,129 @@ const WATCHDOG_TIMEOUT_MS = 300_000;
 const jobRuns = new Map<JobId, JobRunRecord[]>();
 
 export const getJobRuns = (id: JobId): JobRunRecord[] => jobRuns.get(id) ?? [];
+
+const MAX_PERSISTED_PER_JOB = 50;
+
+async function getJobDetail(
+  jobId: JobId,
+  runStartedAt?: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    switch (jobId) {
+      case 'plex-collections-sync': {
+        const { default: progress } = await import(
+          '@server/lib/collections/CollectionSyncProgress'
+        );
+        const last = progress.getLastCompleted();
+        if (!last) return null;
+        return {
+          successCount: last.successCount,
+          errorCount: last.errorCount,
+          skippedCount: last.skippedCount,
+          createdCount: last.createdCount,
+          updatedCount: last.updatedCount,
+          outcomes: last.recentOutcomes,
+        };
+      }
+      case 'overlay-application': {
+        const { overlayLibraryService } = await import(
+          '@server/lib/overlays/OverlayLibraryService'
+        );
+        const allLibs = overlayLibraryService.getLastCompletedLibraries();
+        const runStart = runStartedAt ? new Date(runStartedAt).getTime() : 0;
+        const libs = allLibs.filter((l) => l.startTime >= runStart);
+        if (libs.length === 0) return null;
+        return {
+          libraries: libs.map((l) => ({
+            libraryId: l.libraryId,
+            libraryName: l.libraryName,
+            successCount: l.successCount,
+            errorCount: l.errorCount,
+            skippedCount: l.skippedCount,
+            itemErrors: l.itemErrors,
+          })),
+        };
+      }
+      case 'plex-collections-quick-sync':
+        return collectionsQuickSync.lastCompletedSummary as Record<
+          string,
+          unknown
+        > | null;
+      case 'overlay-quick-sync':
+        return overlaysQuickSync.lastCompletedSummary as Record<
+          string,
+          unknown
+        > | null;
+      default:
+        return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function persistJobRun(id: JobId, rec: JobRunRecord): Promise<void> {
+  try {
+    const repo = getRepository(JobRunHistory);
+    const detail = await getJobDetail(id, rec.startedAt);
+
+    const row = new JobRunHistory();
+    row.jobId = id;
+    row.startedAt = rec.startedAt;
+    row.finishedAt = rec.finishedAt;
+    row.durationMs = rec.durationMs;
+    row.outcome = rec.outcome;
+    row.error = rec.error ?? null;
+    row.detail = detail;
+    await repo.save(row);
+
+    await repo.query(
+      `DELETE FROM job_run_history WHERE jobId = ? AND id NOT IN (SELECT id FROM job_run_history WHERE jobId = ? ORDER BY id DESC LIMIT ?)`,
+      [id, id, MAX_PERSISTED_PER_JOB]
+    );
+  } catch (err) {
+    logger.warn('Failed to persist job run', {
+      label: 'Jobs',
+      jobId: id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+export async function hydrateJobRuns(): Promise<void> {
+  try {
+    const repo = getRepository(JobRunHistory);
+    const rows = await repo.find({
+      order: { startedAt: 'DESC' },
+      take: MAX_RUN_HISTORY * 10,
+    });
+
+    const byJob = new Map<string, JobRunRecord[]>();
+    for (const row of rows) {
+      const list = byJob.get(row.jobId) ?? [];
+      if (list.length >= MAX_RUN_HISTORY) continue;
+      list.push({
+        startedAt: row.startedAt,
+        finishedAt: row.finishedAt,
+        durationMs: row.durationMs,
+        outcome: row.outcome as JobRunRecord['outcome'],
+        error: row.error ?? undefined,
+      });
+      byJob.set(row.jobId, list);
+    }
+    for (const [jobId, list] of byJob) {
+      jobRuns.set(jobId as JobId, list);
+    }
+    logger.info(`Hydrated ${byJob.size} jobs from database`, {
+      label: 'Jobs',
+    });
+  } catch (err) {
+    logger.warn('Failed to hydrate job runs', {
+      label: 'Jobs',
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 const isContentionError = (err: unknown): boolean => {
   const msg =
@@ -92,6 +217,7 @@ export const recordRun = (
       rec.finishedAt ??= new Date().toISOString();
       rec.durationMs ??= Date.now() - start;
       if (list.length > MAX_RUN_HISTORY) list.length = MAX_RUN_HISTORY;
+      void persistJobRun(id, rec);
     }
   };
 };

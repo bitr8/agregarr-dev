@@ -11,6 +11,7 @@ import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { scrubSecrets } from '@server/utils/logRedaction';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -111,6 +112,9 @@ interface LibraryProgress {
   errorCount: number;
   skippedCount: number; // Items with no changes (hash matched)
 
+  // Per-item error details for persistence (capped at 50 per library)
+  itemErrors: { title: string; ratingKey: string; error: string }[];
+
   // ETA calculation (private, not serialized)
   _recentItemTimes: number[]; // Rolling window of last 20 item timestamps
   _promise: Promise<void>; // For mutex, not serialized
@@ -134,6 +138,7 @@ export interface LibraryStatus {
   skippedCount: number;
   progressPercent: number; // Clamped 0-100
   estimatedSecondsRemaining: number | null; // Capped at 7200 (2h)
+  itemErrors?: { title: string; ratingKey: string; error: string }[];
 }
 
 /**
@@ -331,6 +336,8 @@ class OverlayLibraryService {
             )
           : 100,
       estimatedSecondsRemaining: null,
+      itemErrors:
+        progress.itemErrors.length > 0 ? [...progress.itemErrors] : undefined,
     });
   }
 
@@ -1243,6 +1250,7 @@ class OverlayLibraryService {
       successCount: 0,
       errorCount: 0,
       skippedCount: 0,
+      itemErrors: [],
       _recentItemTimes: [],
       _promise: deferredPromise,
     });
@@ -1680,6 +1688,16 @@ class OverlayLibraryService {
           this.updateProgress(libraryId, (p) => {
             p.currentItem++;
             p.errorCount++;
+
+            if (p.itemErrors.length < 50) {
+              const raw =
+                error instanceof Error ? error.message : String(error);
+              p.itemErrors.push({
+                title: item.title || 'Unknown',
+                ratingKey: item.ratingKey,
+                error: scrubSecrets(raw).slice(0, 200),
+              });
+            }
 
             // Track timing for ETA even on errors
             p._recentItemTimes.push(Date.now());

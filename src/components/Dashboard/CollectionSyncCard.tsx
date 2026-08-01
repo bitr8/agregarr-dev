@@ -12,6 +12,8 @@ import {
 } from '@app/utils/timeFormatters';
 import {
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   ExclamationTriangleIcon,
   ForwardIcon,
   PlayIcon,
@@ -187,6 +189,7 @@ const ErrorStatCell: React.FC<{
 const CollectionSyncCard: React.FC = () => {
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [errorsOpen, setErrorsOpen] = useState(false);
   const { addToast } = useToasts();
 
   const { data, mutate } = useSWR<SyncProgressResponse>(
@@ -255,6 +258,11 @@ const CollectionSyncCard: React.FC = () => {
   };
 
   if (!status) {
+    const last = data?.lastCompleted;
+    const errorOutcomes = last?.recentOutcomes.filter(
+      (o) => o.outcome === 'error'
+    );
+
     return (
       <div
         className={`rounded-lg border-2 ${
@@ -294,6 +302,56 @@ const CollectionSyncCard: React.FC = () => {
             </Button>
           )}
         </div>
+        {last && !pending && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-gray-400">
+              Last: {last.successCount} synced
+              {last.errorCount > 0 && (
+                <span className="text-red-400">
+                  , {last.errorCount} errored
+                </span>
+              )}
+              {last.completedAt && (
+                <span> &mdash; {formatTimeAgo(last.completedAt)}</span>
+              )}
+            </p>
+            {errorOutcomes && errorOutcomes.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setErrorsOpen(!errorsOpen)}
+                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
+                >
+                  {errorsOpen ? (
+                    <ChevronDownIcon className="h-3 w-3" />
+                  ) : (
+                    <ChevronRightIcon className="h-3 w-3" />
+                  )}
+                  {errorOutcomes.length} error
+                  {errorOutcomes.length !== 1 && 's'}
+                </button>
+                {errorsOpen && (
+                  <div className="mt-1 space-y-1 pl-4">
+                    {errorOutcomes.map((o) => (
+                      <div
+                        key={`${o.configId}-err`}
+                        className="text-xs text-gray-400"
+                      >
+                        <span className="font-medium text-gray-300">
+                          {o.name}
+                        </span>
+                        {o.errorMessage && (
+                          <span className="ml-1 text-gray-500">
+                            &mdash; {o.errorMessage}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }

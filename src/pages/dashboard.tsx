@@ -5,6 +5,7 @@ import CollectionSyncCard from '@app/components/Dashboard/CollectionSyncCard';
 import DashboardStats from '@app/components/Dashboard/DashboardStats';
 import MissingItemsFeed from '@app/components/Dashboard/MissingItemsFeed';
 import OverlaySyncCard from '@app/components/Dashboard/OverlaySyncCard';
+import RecentActivityCard from '@app/components/Dashboard/RecentActivityCard';
 import { Permission, useUser } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
 import { defineMessages, useIntl } from 'react-intl';
@@ -55,6 +56,9 @@ const DashboardPage: NextPage = () => {
           <OverlaySyncCard />
           <CollectionSyncCard />
         </div>
+
+        {/* Job Status */}
+        <RecentActivityCard />
 
         {/* Overview Stats */}
         <DashboardStats />

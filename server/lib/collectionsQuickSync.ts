@@ -28,6 +28,12 @@ class CollectionsQuickSync {
   public running = false;
   private cancelled = false;
   private currentStage = '';
+  public lastCompletedSummary: {
+    itemsMatched: number;
+    collectionsUpdated: number;
+    itemsAdded: number;
+    placeholdersDeleted: number;
+  } | null = null;
 
   /**
    * Get current status for UI display
@@ -82,6 +88,8 @@ class CollectionsQuickSync {
    * Main job execution
    */
   public async run(): Promise<void> {
+    this.lastCompletedSummary = null;
+
     if (this.running) {
       logger.warn('Collections Quick Sync is already running', {
         label: 'Collections Quick Sync',
@@ -298,6 +306,12 @@ class CollectionsQuickSync {
       });
 
       this.setStage('Quick sync completed');
+      this.lastCompletedSummary = {
+        itemsMatched,
+        collectionsUpdated,
+        itemsAdded,
+        placeholdersDeleted,
+      };
     } catch (error) {
       logger.error('Collections Quick Sync failed', {
         label: 'Collections Quick Sync',

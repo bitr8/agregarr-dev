@@ -19,6 +19,10 @@ class OverlaysQuickSync {
   public running = false;
   private cancelled = false;
   private currentStage = '';
+  public lastCompletedSummary: {
+    librariesProcessed: number;
+    itemsProcessed: number;
+  } | null = null;
 
   /**
    * Get current status for UI display
@@ -73,6 +77,8 @@ class OverlaysQuickSync {
    * Main job execution
    */
   public async run(): Promise<void> {
+    this.lastCompletedSummary = null;
+
     if (this.running) {
       logger.warn('Overlays Quick Sync is already running', {
         label: 'Overlays Quick Sync',
@@ -271,6 +277,7 @@ class OverlaysQuickSync {
       });
 
       this.setStage('Quick sync completed');
+      this.lastCompletedSummary = { librariesProcessed, itemsProcessed };
     } catch (error) {
       logger.error('Overlays Quick Sync failed', {
         label: 'Overlays Quick Sync',

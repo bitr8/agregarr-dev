@@ -2,6 +2,8 @@ import Button from '@app/components/Common/Button';
 import { formatTime, formatTimeAgo } from '@app/utils/timeFormatters';
 import {
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   ExclamationTriangleIcon,
   ForwardIcon,
   FunnelIcon,
@@ -30,6 +32,7 @@ interface LibraryStatus {
   skippedCount: number;
   progressPercent: number;
   estimatedSecondsRemaining: number | null;
+  itemErrors?: { title: string; ratingKey: string; error: string }[];
 }
 
 interface JobStatus {
@@ -100,6 +103,7 @@ const getStateLabel = (state: OverlayState): string => {
 const OverlaySyncCard: React.FC = () => {
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [errorsOpen, setErrorsOpen] = useState(false);
   const { addToast } = useToasts();
 
   const { data, mutate } = useSWR<RunningLibrariesResponse>(
@@ -190,6 +194,16 @@ const OverlaySyncCard: React.FC = () => {
   };
 
   if (allLibs.length === 0 && !isActive) {
+    const lastLibs = data?.lastCompleted;
+    const lastSuccess = lastLibs?.reduce((s, l) => s + l.successCount, 0) ?? 0;
+    const lastErrors = lastLibs?.reduce((s, l) => s + l.errorCount, 0) ?? 0;
+    const libsWithErrors = lastLibs?.filter(
+      (l) => l.itemErrors && l.itemErrors.length > 0
+    );
+    const lastFinishedAt = lastLibs?.length
+      ? Math.max(...lastLibs.map((l) => l.startTime + l.runningFor * 1000))
+      : null;
+
     return (
       <div className="rounded-lg border-2 border-stone-700 bg-stone-800 p-6 shadow-sm">
         <div className="flex items-center justify-between">
@@ -208,6 +222,58 @@ const OverlaySyncCard: React.FC = () => {
             {isStarting ? 'Starting...' : 'Start'}
           </Button>
         </div>
+        {lastLibs && lastLibs.length > 0 && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-gray-400">
+              Last: {lastSuccess} overlaid
+              {lastErrors > 0 && (
+                <span className="text-red-400">, {lastErrors} errored</span>
+              )}
+              {lastFinishedAt && (
+                <span> &mdash; {formatTimeAgo(lastFinishedAt)}</span>
+              )}
+            </p>
+            {libsWithErrors && libsWithErrors.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setErrorsOpen(!errorsOpen)}
+                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
+                >
+                  {errorsOpen ? (
+                    <ChevronDownIcon className="h-3 w-3" />
+                  ) : (
+                    <ChevronRightIcon className="h-3 w-3" />
+                  )}
+                  {lastErrors} error{lastErrors !== 1 && 's'}
+                </button>
+                {errorsOpen && (
+                  <div className="mt-1 space-y-2 pl-4">
+                    {libsWithErrors.map((lib) => (
+                      <div key={lib.libraryId}>
+                        <p className="text-xs font-medium text-gray-300">
+                          {lib.libraryName}
+                        </p>
+                        <div className="mt-0.5 space-y-0.5">
+                          {lib.itemErrors?.map((e) => (
+                            <p
+                              key={e.ratingKey}
+                              className="text-xs text-gray-500"
+                            >
+                              {e.title}{' '}
+                              <span className="text-gray-600">
+                                &mdash; {e.error}
+                              </span>
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
