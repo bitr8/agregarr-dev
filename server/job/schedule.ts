@@ -36,7 +36,12 @@ interface ScheduledJob {
 }
 
 const MAX_RUN_HISTORY = 10;
-const WATCHDOG_TIMEOUT_MS = 300_000;
+const LONG_RUNNING_JOBS: ReadonlySet<string> = new Set([
+  'plex-collections-sync',
+  'overlay-application',
+]);
+const WATCHDOG_SHORT_MS = 300_000; // 5min for quick jobs
+const WATCHDOG_LONG_MS = 7_200_000; // 2h for full sync/overlay
 const jobRuns = new Map<JobId, JobRunRecord[]>();
 
 export const getJobRuns = (id: JobId): JobRunRecord[] => jobRuns.get(id) ?? [];
@@ -186,14 +191,19 @@ export const recordRun = (
     jobRuns.set(id, list);
 
     const start = Date.now();
+    const timeoutMs = LONG_RUNNING_JOBS.has(id)
+      ? WATCHDOG_LONG_MS
+      : WATCHDOG_SHORT_MS;
     const watchdog = setTimeout(() => {
       if (rec.outcome === 'running') {
         rec.outcome = 'error';
-        rec.error = 'Job did not complete within 5 minutes';
+        rec.error = `Job did not complete within ${Math.round(
+          timeoutMs / 60_000
+        )} minutes`;
         rec.finishedAt = new Date().toISOString();
         rec.durationMs = Date.now() - start;
       }
-    }, WATCHDOG_TIMEOUT_MS);
+    }, timeoutMs);
 
     try {
       const result = await fn();
