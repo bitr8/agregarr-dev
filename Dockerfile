@@ -80,10 +80,14 @@ RUN mkdir -p /etc/fonts/conf.d && \
   echo '  <dir>/app/config/fonts</dir>' >> /etc/fonts/conf.d/99-agregarr-custom-fonts.conf && \
   echo '</fontconfig>' >> /etc/fonts/conf.d/99-agregarr-custom-fonts.conf
 
-# Install Deno (yt-dlp JS runtime) and yt-dlp from Alpine edge
+# Install Deno (yt-dlp JS runtime) from Alpine edge
 RUN echo "@edge https://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories && \
   echo "@edge https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
-  apk add --no-cache deno@edge yt-dlp@edge
+  apk add --no-cache deno@edge
+
+# Install yt-dlp pinned release
+RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp -O /usr/local/bin/yt-dlp && \
+  chmod a+rx /usr/local/bin/yt-dlp
 
 # Install Chromium and dependencies for Playwright
 RUN apk add --no-cache \
