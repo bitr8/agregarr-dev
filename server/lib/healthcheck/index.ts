@@ -301,7 +301,17 @@ const collectionsErrorStateCheck: HealthCheck = {
     const configs = (settings.plex.collectionConfigs ?? []).filter(
       (c) => !c.missing
     );
-    const errored = configs.filter((c) => c.lastSyncError);
+    const errored = configs.filter((c) => {
+      if (!c.lastSyncError) return false;
+      // Ignore errors older than the most recent successful sync
+      if (
+        c.lastSyncedAt &&
+        c.lastSyncErrorAt &&
+        c.lastSyncedAt > c.lastSyncErrorAt
+      )
+        return false;
+      return true;
+    });
 
     if (!errored.length) return { status: 'ok' };
 
