@@ -120,6 +120,14 @@ const ImportCollections: React.FC<ImportCollectionsProps> = ({ trigger }) => {
       warnings.push('Requires Radarr to be configured (tag-based).');
     if (types.has('sonarrtag'))
       warnings.push('Requires Sonarr to be configured (tag-based).');
+    if (types.has('networks')) warnings.push('Uses FlixPatrol scraping.');
+    if (types.has('originals')) warnings.push('Requires MDBList API key.');
+    if (parsed.some((c) => c.createPlaceholdersForMissing))
+      warnings.push(
+        'Creates placeholders — configure Radarr/Sonarr for download status.'
+      );
+    if (parsed.some((c) => c.comingSoonFilterByTags))
+      warnings.push('Filters by arr tags — configure servers after import.');
 
     if (parsed.some((c) => c.downloadMode === 'direct'))
       warnings.push(

@@ -12,7 +12,10 @@ import { getSettings } from '@server/lib/settings';
 export class IdGenerator {
   private static readonly STARTING_ID = 10000;
 
-  public static generateId(): string {
+  private static resolveNextId(): {
+    settings: ReturnType<typeof getSettings>;
+    nextId: number;
+  } {
     const settings = getSettings();
 
     const allIds = [
@@ -29,11 +32,22 @@ export class IdGenerator {
     );
 
     const counterValue = settings.main.nextConfigId ?? this.STARTING_ID;
-    const nextId = Math.max(maxExisting + 1, counterValue);
+    return { settings, nextId: Math.max(maxExisting + 1, counterValue) };
+  }
 
-    settings.main.nextConfigId = nextId + 1;
+  public static generateId(): string {
+    return this.generateIds(1)[0];
+  }
+
+  public static generateIds(count: number): string[] {
+    if (count <= 0) return [];
+    const { settings, nextId } = this.resolveNextId();
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      ids.push((nextId + i).toString());
+    }
+    settings.main.nextConfigId = nextId + count;
     settings.save();
-
-    return nextId.toString();
+    return ids;
   }
 }

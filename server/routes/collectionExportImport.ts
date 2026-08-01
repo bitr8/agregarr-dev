@@ -5,6 +5,27 @@ import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 
+// --- Deprecated field migration (live: comingSoonDays/comingSoonReleasedDays still written by the form) ---
+
+export function migrateDeprecatedFields(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  const result = { ...config };
+
+  if (
+    result.comingSoonReleasedDays !== undefined &&
+    result.placeholderReleasedDays === undefined
+  )
+    result.placeholderReleasedDays = result.comingSoonReleasedDays;
+  if (
+    result.comingSoonDays !== undefined &&
+    result.placeholderDaysAhead === undefined
+  )
+    result.placeholderDaysAhead = result.comingSoonDays;
+
+  return result;
+}
+
 // --- Field classification (whitelist / stripped) ---
 
 const portableFields = [
@@ -209,10 +230,13 @@ function cleanSources(
 export function buildExportPayload(
   config: CollectionConfig
 ): Record<string, unknown> {
+  const migrated = migrateDeprecatedFields(
+    config as unknown as Record<string, unknown>
+  );
   const result: Record<string, unknown> = {};
 
   for (const field of portableFields) {
-    const value = config[field];
+    const value = migrated[field];
     if (value === undefined) continue;
 
     if (field === 'sources' && Array.isArray(value)) {
@@ -357,6 +381,11 @@ collectionExportImportRoutes.post(
   isAuthenticated(),
   async (req, res) => {
     try {
+      const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+      if (contentLength > 2 * 1024 * 1024) {
+        return res.status(413).json({ error: 'Payload too large (max 2 MB)' });
+      }
+
       const { version, collections, libraryId, nameOverrides } = req.body;
 
       if (version && version !== '1.0') {
@@ -401,21 +430,22 @@ collectionExportImportRoutes.post(
       );
 
       const { IdGenerator } = await import('@server/utils/idGenerator');
+      const ids = IdGenerator.generateIds(collections.length);
 
       const overrides: Record<string, string> =
         nameOverrides && typeof nameOverrides === 'object' ? nameOverrides : {};
 
       const created: CollectionConfig[] = [];
 
-      for (const entry of collections) {
+      for (let i = 0; i < collections.length; i++) {
+        const entry = collections[i];
         const rawName = overrides[entry.name] || entry.name;
         const name = deduplicateName(rawName, existingNames);
         existingNames.add(name);
 
-        const id = IdGenerator.generateId();
         const config = buildConfigFromImport(
           entry,
-          id,
+          ids[i],
           String(libraryId),
           library.name,
           name
