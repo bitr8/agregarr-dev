@@ -136,15 +136,19 @@ describe('getHealthStatus aggregation', () => {
   it('getCheckIds returns all registered check ids', async () => {
     const { getCheckIds } = await import('@server/lib/healthcheck');
     const ids = getCheckIds();
-    expect(ids).toContain('version-staleness');
     expect(ids).toContain('connection:plex');
     expect(ids).toContain('connection:sonarr');
     expect(ids).toContain('connection:radarr');
     expect(ids).toContain('connection:tmdb');
     expect(ids).toContain('connection:ratings-proxy');
+    expect(ids).toContain('connection:flaresolverr');
     expect(ids).toContain('collections-error-state');
     expect(ids).toContain('orphaned-collection-keys');
+    expect(ids).toContain('plex-libraries');
+    expect(ids).toContain('overlay-template-refs');
+    expect(ids).toContain('appdata-writable');
     expect(ids).toContain('timezone-configuration');
-    expect(ids).toHaveLength(9);
+    expect(ids).toContain('job-freshness');
+    expect(ids).toHaveLength(13);
   });
 });

@@ -319,9 +319,6 @@ Season tiles in generated collection posters now carry an `S{n}` badge. Six tile
 
 The built-in health check panel (Settings > About) runs periodic checks and surfaces actionable warnings. Each check below links to guidance on what it means and how to resolve it.
 
-### Version Staleness
-Your container is running an older version. Pull the latest image and restart.
-
 ### Connection: Plex
 Plex is unreachable from the container. Check that the Plex IP/port in Settings > Plex is correct and that the Plex server is running.
 
@@ -335,7 +332,10 @@ One or more Radarr instances are unreachable. Same as Sonarr — verify hostname
 TMDB API is unreachable. This usually means a network issue from the container. Check DNS and outbound connectivity.
 
 ### Connection: Ratings Proxy
-The ratings proxy (api.agregarr.org) is unreachable. Ratings data may be stale. This can be a transient outage — silence the check if it persists and ratings are not critical to your setup.
+The ratings proxy (api.agregarr.org) is unreachable. Ratings data may be stale. This is usually a transient outage.
+
+### Connection: FlareSolverr
+The configured FlareSolverr instance is unreachable. Sources that need Cloudflare solving (FlixPatrol, some Letterboxd pages) will fall back to the built-in browser. Check the URL in Settings > General.
 
 ### Collections Error State
 One or more collection configs have sync errors. Open Settings > Collections and check the named configs. Common causes: source API down, invalid source URL, rate limiting.
@@ -343,8 +343,20 @@ One or more collection configs have sync errors. Open Settings > Collections and
 ### Orphaned Collection Keys
 Collection configs point at Plex collections that no longer exist. This happens when a collection is deleted in Plex but the config still references it. Edit the affected configs in Settings > Collections and re-save to clear the stale reference.
 
+### Plex Libraries
+One or more configured library IDs no longer exist in Plex. This happens when a library is deleted in Plex. Remove the stale library from Settings > Collections and Settings > Overlays.
+
+### Overlay Templates
+An overlay library config references a template that no longer exists. Re-open Settings > Overlays for the named library and remove the stale entry.
+
+### Data Directory
+The config directory is not writable. Check your container volume mount and PUID/PGID settings.
+
 ### Timezone Configuration
 The container timezone is UTC while Sonarr is configured. Air-date calculations may be off by one day. Set the `TZ` environment variable in your container config (e.g., `TZ=America/New_York`).
+
+### Job Health
+A scheduled sync job has failed or is overdue. Check Settings > Jobs for the named job. If it failed, the error message should indicate the cause. If overdue, the job scheduler may be stuck — restart the container.
 
 ## License
 

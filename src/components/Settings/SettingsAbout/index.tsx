@@ -13,6 +13,7 @@ import {
   ExclamationCircleIcon,
   ExclamationTriangleIcon,
   MinusCircleIcon,
+  SpeakerWaveIcon,
   SpeakerXMarkIcon,
 } from '@heroicons/react/24/outline';
 import {
@@ -314,8 +315,9 @@ const SettingsAbout = () => {
                               Docs
                             </a>
                           )}
-                        <button
-                          className="text-xs text-gray-500 hover:text-gray-300"
+                        <Button
+                          buttonType="ghost"
+                          buttonSize="sm"
                           onClick={async () => {
                             if (check.silenced) {
                               await axios.delete(
@@ -329,8 +331,18 @@ const SettingsAbout = () => {
                             revalidateHealth();
                           }}
                         >
-                          {check.silenced ? 'Unsilence' : 'Silence'}
-                        </button>
+                          {check.silenced ? (
+                            <>
+                              <SpeakerWaveIcon className="mr-1 h-3.5 w-3.5" />
+                              Unmute
+                            </>
+                          ) : (
+                            <>
+                              <SpeakerXMarkIcon className="mr-1 h-3.5 w-3.5" />
+                              Mute
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </div>
                     {check.message && (

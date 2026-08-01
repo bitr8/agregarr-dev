@@ -5157,6 +5157,22 @@ components:
         running:
           type: boolean
           example: false
+        lastRun:
+          type: object
+          nullable: true
+          properties:
+            status:
+              type: string
+              enum: [success, failure]
+            startedAt:
+              type: string
+            finishedAt:
+              type: string
+            durationMs:
+              type: number
+            error:
+              type: string
+              nullable: true
     Keyword:
       type: object
       properties:
@@ -6501,6 +6517,83 @@ paths:
                   appDataPath:
                     type: string
                     example: /app/config
+  /status/health:
+    get:
+      summary: Get health check status
+      description: Returns the current health check results including individual check statuses.
+      tags:
+        - status
+      responses:
+        '200':
+          description: Health check status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, warning, error, unknown, disabled]
+                  checkedAt:
+                    type: string
+                    nullable: true
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        status:
+                          type: string
+                          enum: [ok, warning, error, skipped]
+                        message:
+                          type: string
+                          nullable: true
+                        docsUrl:
+                          type: string
+                          nullable: true
+                        durationMs:
+                          type: number
+                        checkedAt:
+                          type: string
+                        silenced:
+                          type: boolean
+  /status/health/{id}/silence:
+    post:
+      summary: Silence a health check
+      description: Silences a specific health check so it does not affect the overall status.
+      tags:
+        - status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Health check silenced
+        '404':
+          description: Unknown health check
+    delete:
+      summary: Unsilence a health check
+      description: Removes the silence on a specific health check.
+      tags:
+        - status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Health check unsilenced
+        '404':
+          description: Unknown health check
   /filesystem/browse:
     get:
       summary: Browse filesystem directories
