@@ -2778,11 +2778,11 @@ const CollectionFormConfigForm = ({
                                     minimumPlays: source.minimumPlays,
                                     priority: source.priority,
                                     networksCountry: source.networksCountry,
-                                    // Radarr/Sonarr tag fields
                                     radarrTagServerId: source.radarrTagServerId,
                                     radarrTagId: source.radarrTagId,
                                     sonarrTagServerId: source.sonarrTagServerId,
                                     sonarrTagId: source.sonarrTagId,
+                                    resolvedTitle: source.resolvedTitle,
                                   })) || [],
                                 combineMode: values.combineMode || 'list_order',
                               } as MultiSourceCollectionConfig

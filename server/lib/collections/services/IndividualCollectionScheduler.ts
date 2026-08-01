@@ -878,6 +878,7 @@ export class IndividualCollectionScheduler {
               sonarrTagServerId: source.sonarrTagServerId,
               sonarrTagId: source.sonarrTagId,
               sonarrTagLabel: source.sonarrTagLabel,
+              resolvedTitle: source.resolvedTitle,
             })) || [],
           combineMode:
             (extendedConfig.combineMode as MultiSourceCombineMode) ||

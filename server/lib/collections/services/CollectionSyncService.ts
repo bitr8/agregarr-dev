@@ -797,6 +797,7 @@ export class CollectionSyncService {
                     sonarrTagServerId: source.sonarrTagServerId,
                     sonarrTagId: source.sonarrTagId,
                     sonarrTagLabel: source.sonarrTagLabel,
+                    resolvedTitle: source.resolvedTitle,
                   })) || [],
                 combineMode:
                   (config.combineMode as MultiSourceCombineMode) ||
