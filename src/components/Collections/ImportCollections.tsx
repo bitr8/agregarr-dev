@@ -103,6 +103,16 @@ const ImportCollections: React.FC<ImportCollectionsProps> = ({ trigger }) => {
         subtype: c.subtype ? String(c.subtype) : undefined,
         sourceCount: Array.isArray(c.sources) ? c.sources.length : undefined,
         maxItems: typeof c.maxItems === 'number' ? c.maxItems : undefined,
+        sources:
+          c.isMultiSource && Array.isArray(c.sources)
+            ? (c.sources as Record<string, unknown>[]).map((s, j) => ({
+                id: String(j),
+                name:
+                  String(s.resolvedTitle || s.customUrl || '') ||
+                  `Source ${j + 1}`,
+                type: String(s.type || ''),
+              }))
+            : undefined,
       })),
     [parsed]
   );
@@ -144,10 +154,29 @@ const ImportCollections: React.FC<ImportCollectionsProps> = ({ trigger }) => {
   }, [parsed]);
 
   const handleImport = useCallback(
-    async (selectedIds: string[]) => {
+    async (
+      selectedIds: string[],
+      sourceSelections: Record<string, string[]>
+    ) => {
       if (!parsed || !selectedLibrary) return;
 
-      const selected = selectedIds.map((i) => parsed[parseInt(i, 10)]);
+      const selected = selectedIds.map((i) => {
+        const coll = parsed[parseInt(i, 10)];
+        if (
+          coll.isMultiSource &&
+          Array.isArray(coll.sources) &&
+          sourceSelections[i]
+        ) {
+          const kept = new Set(sourceSelections[i]);
+          return {
+            ...coll,
+            sources: (coll.sources as Record<string, unknown>[]).filter(
+              (_, j) => kept.has(String(j))
+            ),
+          };
+        }
+        return coll;
+      });
 
       setImporting(true);
       try {
