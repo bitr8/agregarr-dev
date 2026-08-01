@@ -2033,6 +2033,7 @@ collectionsRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
                 sonarrTagServerId: source.sonarrTagServerId,
                 sonarrTagId: source.sonarrTagId,
                 sonarrTagLabel: source.sonarrTagLabel,
+                resolvedTitle: source.resolvedTitle,
               })) || [],
             combineMode:
               (extendedConfig.combineMode as
