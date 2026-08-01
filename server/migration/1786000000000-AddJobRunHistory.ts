@@ -21,6 +21,16 @@ export class AddJobRunHistory1786000000000 implements MigrationInterface {
       await queryRunner.query(
         `CREATE INDEX "idx_job_run_history_job_id" ON "job_run_history" ("jobId")`
       );
+    } else {
+      const hasDetail = await queryRunner.hasColumn(
+        'job_run_history',
+        'detail'
+      );
+      if (!hasDetail) {
+        await queryRunner.query(
+          `ALTER TABLE "job_run_history" ADD COLUMN "detail" text`
+        );
+      }
     }
   }
 

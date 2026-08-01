@@ -12911,6 +12911,52 @@ paths:
                     type: string
                     example: 'Tautulli API error'
 
+  /dashboard/job-history:
+    get:
+      summary: Get last job run per job with detail
+      description: Returns the most recent run for each scheduled job, including structured detail.
+      tags:
+        - dashboard
+      responses:
+        '200':
+          description: Job history returned successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    jobId:
+                      type: string
+                    startedAt:
+                      type: string
+                    finishedAt:
+                      type: string
+                      nullable: true
+                    durationMs:
+                      type: integer
+                      nullable: true
+                    outcome:
+                      type: string
+                    error:
+                      type: string
+                      nullable: true
+                    detail:
+                      type: object
+                      nullable: true
+        '500':
+          description: Failed to get job history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
   # Hub Management Endpoints
   /hubs/configs:
     get:
