@@ -142,6 +142,7 @@ describe('getHealthStatus aggregation', () => {
     expect(ids).toContain('connection:tmdb');
     expect(ids).toContain('connection:ratings-proxy');
     expect(ids).toContain('connection:flaresolverr');
+    expect(ids).toContain('connection:maintainerr');
     expect(ids).toContain('collections-error-state');
     expect(ids).toContain('orphaned-collection-keys');
     expect(ids).toContain('plex-libraries');
@@ -149,6 +150,6 @@ describe('getHealthStatus aggregation', () => {
     expect(ids).toContain('appdata-writable');
     expect(ids).toContain('timezone-configuration');
     expect(ids).toContain('job-freshness');
-    expect(ids).toHaveLength(13);
+    expect(ids).toHaveLength(14);
   });
 });

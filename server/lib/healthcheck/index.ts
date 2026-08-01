@@ -253,6 +253,45 @@ const connectionFlareSolverrCheck: HealthCheck = {
   },
 };
 
+const connectionMaintainerrCheck: HealthCheck = {
+  id: 'connection:maintainerr',
+  name: 'Maintainerr Connection',
+  docsUrl: 'https://github.com/bitr8/agregarr-dev#connection-maintainerr',
+  run: async () => {
+    const maintainerr = getSettings().maintainerr;
+    if (!maintainerr?.hostname || !maintainerr?.apiKey) {
+      return { status: 'skipped' };
+    }
+
+    try {
+      const protocol = maintainerr.useSsl ? 'https' : 'http';
+      const port = maintainerr.port ? `:${maintainerr.port}` : '';
+      const urlBase = maintainerr.urlBase ?? '';
+      const baseURL = `${protocol}://${maintainerr.hostname}${port}${urlBase}`;
+      const res = await axios.get(`${baseURL}/api/collections`, {
+        headers: { 'X-Api-Key': maintainerr.apiKey },
+        timeout: 5000,
+      });
+      if (!Array.isArray(res.data)) {
+        return {
+          status: 'warning',
+          message: sanitize('Unexpected response from Maintainerr API'),
+        };
+      }
+      return { status: 'ok' };
+    } catch (err) {
+      return {
+        status: 'error',
+        message: sanitize(
+          `Maintainerr unreachable: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        ),
+      };
+    }
+  },
+};
+
 const collectionsErrorStateCheck: HealthCheck = {
   id: 'collections-error-state',
   name: 'Collection Sync Errors',
@@ -603,6 +642,7 @@ const checks: HealthCheck[] = [
   connectionTmdbCheck,
   connectionRatingsProxyCheck,
   connectionFlareSolverrCheck,
+  connectionMaintainerrCheck,
   collectionsErrorStateCheck,
   orphanedCollectionKeysCheck,
   plexLibrariesCheck,
