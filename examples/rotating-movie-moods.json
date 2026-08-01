@@ -1,0 +1,462 @@
+{
+  "version": "1.0",
+  "exportedAt": "2026-08-01T01:13:11.270Z",
+  "collections": [
+    {
+      "name": "Pensive Thoughts on Rainy Days 🌧",
+      "type": "multi-source",
+      "subtype": "",
+      "template": "DYNAMIC_CYCLE_TITLE",
+      "visibilityConfig": {
+        "usersHome": true,
+        "serverOwnerHome": true,
+        "libraryRecommended": false
+      },
+      "sortOrderHome": 0,
+      "sortOrderLibrary": 0,
+      "isLibraryPromoted": true,
+      "randomizeHomeOrder": false,
+      "tmdbCustomCollectionUrl": "",
+      "traktCustomListUrl": "",
+      "imdbCustomListUrl": "",
+      "letterboxdCustomListUrl": "",
+      "mdblistCustomListUrl": "",
+      "anilistCustomListUrl": "",
+      "maxItems": 50,
+      "customDays": 30,
+      "minimumPlays": 3,
+      "sortOrder": "default",
+      "showUnwatchedOnly": false,
+      "smartCollectionSort": {
+        "value": "originallyAvailableAt:desc",
+        "label": "Release Date (Newest First)"
+      },
+      "hideIndividualItems": false,
+      "applyOverlaysDuringSync": false,
+      "autoPoster": true,
+      "useTmdbFranchisePoster": false,
+      "customSummary": "",
+      "enableCustomWallpaper": false,
+      "enableCustomSummary": false,
+      "enableCustomTheme": false,
+      "createPlaceholdersForMissing": false,
+      "searchMissingMovies": false,
+      "searchMissingTV": false,
+      "autoApproveMovies": false,
+      "autoApproveTV": false,
+      "seasonGrabOrder": "first",
+      "timeRestriction": {
+        "alwaysActive": true,
+        "removeFromPlexWhenInactive": false,
+        "inactiveVisibilityConfig": {
+          "usersHome": false,
+          "serverOwnerHome": false,
+          "libraryRecommended": true
+        }
+      },
+      "customSyncSchedule": {
+        "enabled": true,
+        "scheduleType": "preset",
+        "preset": "6h",
+        "customCron": "",
+        "intervalHours": 6
+      },
+      "isMultiSource": true,
+      "combineMode": "cycle_lists",
+      "sources": [
+        {
+          "id": "1",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/stjiub/list/neon-noir/",
+          "priority": 1
+        },
+        {
+          "id": "2",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/ygeorgoulis/list/mindfuck-surreal-strange-and-weird-films/",
+          "priority": 2
+        },
+        {
+          "id": "3",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/crossbonesgt/list/time-loop-movies/",
+          "priority": 3
+        },
+        {
+          "id": "4",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/kun/list/the-life-of-the-mind/",
+          "priority": 4
+        },
+        {
+          "id": "5",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/doctorradiohead/list/movies-with-a-stinger-ambiguity-twist-in/",
+          "priority": 5
+        },
+        {
+          "id": "6",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/pooinanalleyway/list/movies-with-unreliable-narrators/",
+          "priority": 6
+        },
+        {
+          "id": "7",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/terransky16/list/vaporwave-films/",
+          "priority": 7
+        },
+        {
+          "id": "8",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/dinkysniff/lists/hidden-gems-reddit-worthwhile-movies",
+          "priority": 8
+        },
+        {
+          "id": "9",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/bushmonkey/lists/100-hidden-gems",
+          "priority": 9
+        },
+        {
+          "id": "10",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/dinkysniff/lists/hidden-gems-den-of-geek-underrated-movies-you-need-to-watch",
+          "priority": 10
+        },
+        {
+          "id": "11",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/evilbjork/list/slow-cinema-ccc/",
+          "priority": 11
+        },
+        {
+          "id": "12",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/lightsweetcrude/list/one-day-one-night-movies/",
+          "priority": 12
+        },
+        {
+          "id": "13",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/cinnamonclub/list/liminal-spaces-backrooms-aesthetic/",
+          "priority": 13
+        },
+        {
+          "id": "14",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/darrencb/list/the-city-is-a-character/",
+          "priority": 14
+        },
+        {
+          "id": "15",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/wwhateley/list/cosmic-horror-cosmicism-and-the-transcendent/",
+          "priority": 15
+        },
+        {
+          "id": "16",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/zalifornia/list/desert-motelcore/",
+          "priority": 16
+        },
+        {
+          "id": "17",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/kun/list/melancholy-as-a-breathtaking-aesthetic-emotion/",
+          "priority": 17
+        },
+        {
+          "id": "18",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/jedimoonshyne/list/isolation-cinemas-of-solitude/",
+          "priority": 18
+        },
+        {
+          "id": "19",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/kmtb/list/single-location-one-room-movies/",
+          "priority": 19
+        },
+        {
+          "id": "20",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/cinebro/list/films-with-a-dreamlike-atmosphere/",
+          "priority": 20
+        },
+        {
+          "id": "21",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/goatcreature/list/folk-horror-fear-in-fields-forests-and-furrows/",
+          "priority": 21
+        },
+        {
+          "id": "22",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/burning_dog/list/body-horror-films/",
+          "priority": 22
+        },
+        {
+          "id": "23",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/josuffff/list/the-best-of-psychedelic-cinema/",
+          "priority": 23
+        },
+        {
+          "id": "24",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/vince_dimeglio/list/genre-study-southern-gothic/",
+          "priority": 24
+        },
+        {
+          "id": "25",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/wraithape/list/concrete-cinema-brutalism-on-film/",
+          "priority": 25
+        },
+        {
+          "id": "26",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/nmalvarez/list/fever-dream-dissociation-cinema/",
+          "priority": 26
+        },
+        {
+          "id": "27",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/kun/list/pensive-thoughts-on-rainy-days/",
+          "priority": 27
+        },
+        {
+          "id": "28",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/markg/list/heist-movies/",
+          "priority": 28
+        },
+        {
+          "id": "29",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/hammerbros94/list/movies-with-a-synth-score-neon-aesthetic/",
+          "priority": 29
+        },
+        {
+          "id": "30",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/sundance/list/sun-soaked-coming-of-age-summer-movies/",
+          "priority": 30
+        },
+        {
+          "id": "31",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/rtpversion1/list/modern-midnight-movies/",
+          "priority": 31
+        },
+        {
+          "id": "32",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/sketchesbyboze/list/comfort-films/",
+          "priority": 32
+        },
+        {
+          "id": "33",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/etolkin/list/filmlist:28697007/",
+          "priority": 33
+        },
+        {
+          "id": "34",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/matthewcutchen/list/style-is-substance/",
+          "priority": 34
+        },
+        {
+          "id": "35",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/stefanoearnest/list/conversational-movies/",
+          "priority": 35
+        },
+        {
+          "id": "36",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/niallhassett/list/weve-been-doing-all-this-late-night-talkingnight/",
+          "priority": 36
+        },
+        {
+          "id": "37",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/htsun/list/the-complete-list-of-road-movies/",
+          "priority": 37
+        },
+        {
+          "id": "38",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/yellowromeda/list/tv-s-guide-to-exit-level-art-house/",
+          "priority": 38
+        },
+        {
+          "id": "39",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/dubiouslegacy/list/food-movies/",
+          "priority": 39
+        },
+        {
+          "id": "40",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/horrorville/list/found-footage-horror-movies-ranked/",
+          "priority": 40
+        },
+        {
+          "id": "41",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/solofilmclub/list/neo-westerns/",
+          "priority": 41
+        },
+        {
+          "id": "42",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/jhillman/list/responses-to-my-reddit-question-asking-for/",
+          "priority": 42
+        },
+        {
+          "id": "43",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/justin/lists/star-wars-in-machete-order",
+          "priority": 43
+        },
+        {
+          "id": "44",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/username57/lists/marvel-cinematic-universe-mcu-timeline",
+          "priority": 44
+        },
+        {
+          "id": "45",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/pithermgd/list/wizarding-world/",
+          "priority": 45
+        },
+        {
+          "id": "46",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/henrymartinson/list/the-complete-cinematic-adaptations-of-the/",
+          "priority": 46
+        },
+        {
+          "id": "47",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/username57/lists/dc-extended-universe-dceu-timeline",
+          "priority": 47
+        },
+        {
+          "id": "48",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/superpulse/list/every-james-bond-movie-ranked/",
+          "priority": 48
+        },
+        {
+          "id": "49",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/schaffrillas/list/pixar-ranking/",
+          "priority": 49
+        },
+        {
+          "id": "50",
+          "type": "letterboxd",
+          "subtype": "custom",
+          "customUrl": "https://letterboxd.com/briantt/list/studio-ghibli-ranked/",
+          "priority": 50
+        },
+        {
+          "id": "51",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/stefania19/lists/fast-and-furious-collection",
+          "priority": 51
+        },
+        {
+          "id": "52",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/dinkysniff/lists/collection-the-mission-impossible-series",
+          "priority": 52
+        },
+        {
+          "id": "53",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/mr-clements/lists/alien-and-predator-chronological-order",
+          "priority": 53
+        },
+        {
+          "id": "54",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/krissykk/lists/jurassic-park-collection-official-list",
+          "priority": 54
+        },
+        {
+          "id": "55",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/donxy/lists/x-men-universe",
+          "priority": 55
+        },
+        {
+          "id": "56",
+          "type": "trakt",
+          "subtype": "custom",
+          "customUrl": "https://trakt.tv/users/arachn0id/lists/spider-man-movies",
+          "priority": 56
+        }
+      ]
+    }
+  ]
+}
