@@ -292,44 +292,6 @@ const connectionMaintainerrCheck: HealthCheck = {
   },
 };
 
-const collectionsErrorStateCheck: HealthCheck = {
-  id: 'collections-error-state',
-  name: 'Collection Sync Errors',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#collections-error-state',
-  run: async () => {
-    const settings = getSettings();
-    const configs = (settings.plex.collectionConfigs ?? []).filter(
-      (c) => !c.missing
-    );
-    const errored = configs.filter((c) => {
-      if (!c.lastSyncError) return false;
-      // Ignore errors older than the most recent successful sync
-      if (
-        c.lastSyncedAt &&
-        c.lastSyncErrorAt &&
-        c.lastSyncedAt > c.lastSyncErrorAt
-      )
-        return false;
-      return true;
-    });
-
-    if (!errored.length) return { status: 'ok' };
-
-    const details = errored.slice(0, 3).map((c) => {
-      const name = c.name || `config ${c.id}`;
-      const err = c.lastSyncError
-        ? `: ${String(c.lastSyncError).slice(0, 60)}`
-        : '';
-      return `${name}${err}`;
-    });
-    const suffix = errored.length > 3 ? ` (+${errored.length - 3} more)` : '';
-    return {
-      status: 'warning',
-      message: sanitize(`${details.join('; ')}${suffix}`),
-    };
-  },
-};
-
 const orphanedCollectionKeysCheck: HealthCheck = {
   id: 'orphaned-collection-keys',
   name: 'Orphaned Collection Keys',
@@ -653,7 +615,6 @@ const checks: HealthCheck[] = [
   connectionRatingsProxyCheck,
   connectionFlareSolverrCheck,
   connectionMaintainerrCheck,
-  collectionsErrorStateCheck,
   orphanedCollectionKeysCheck,
   plexLibrariesCheck,
   overlayTemplateRefsCheck,
