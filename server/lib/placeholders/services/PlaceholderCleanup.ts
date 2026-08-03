@@ -280,10 +280,14 @@ export async function cleanupPlaceholderForRealContent(
     const boundRecord = records.find((r) => {
       const root = rootOf(r.configId, r.mediaType);
       if (!root) return false;
-      const abs = resolveRecordPath(root, r.placeholderPath);
-      if (norm(abs) === target) {
-        boundAbs = abs;
-        return true;
+      try {
+        const abs = resolveRecordPath(root, r.placeholderPath);
+        if (norm(abs) === target) {
+          boundAbs = abs;
+          return true;
+        }
+      } catch {
+        return false;
       }
       return false;
     });

@@ -1,6 +1,7 @@
 import type { PlaceholderItem } from '@server/entity/PlaceholderItem';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isContainedPath } from '@server/utils/fileSystemHelpers';
 import { constants as fsConstants } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
@@ -58,7 +59,13 @@ export class PlaceholderOwnershipError extends Error {
  * double-join those ('/root' + '/abs' -> '/root/abs'), so branch on isAbsolute.
  */
 export function resolveRecordPath(root: string, storedPath: string): string {
-  return path.isAbsolute(storedPath) ? storedPath : path.join(root, storedPath);
+  const resolved = path.isAbsolute(storedPath)
+    ? storedPath
+    : path.join(root, storedPath);
+  if (!isContainedPath(resolved, root)) {
+    throw new Error('Stored placeholder path escapes library root');
+  }
+  return resolved;
 }
 
 /**
@@ -99,33 +106,44 @@ export function resolvePlaceholderPaths(
   const { title, year, tmdbId, mediaType, libraryPath, sonarrFolderName } =
     options;
 
+  let result: ResolvedPlaceholderPaths;
+
   if (mediaType === 'movie') {
     const yearStr = year ? ` (${year})` : '';
     const folderName = `${sanitizeFilename(title)}${yearStr}`;
     const movieFolder = path.join(libraryPath, folderName);
     const filename = `${folderName} {tmdb-${tmdbId}} {edition-Trailer}.mp4`;
-    return {
+    result = {
       folderName,
       destinationPath: path.join(movieFolder, filename),
       markerPath: path.join(movieFolder, '.comingsoon'),
     };
+  } else {
+    let folderName: string;
+    if (sonarrFolderName) {
+      folderName = sonarrFolderName;
+    } else {
+      const yearStr = year ? ` (${year})` : '';
+      folderName = `${sanitizeFilename(title)}${yearStr}`;
+    }
+    const seasonDir = path.join(libraryPath, folderName, 'Season 00');
+    result = {
+      folderName,
+      destinationPath: path.join(seasonDir, 'S00E00.Trailer.mp4'),
+      markerPath: path.join(seasonDir, '.comingsoon'),
+    };
   }
 
-  // TV: sonarrFolderName wins verbatim (matches Sonarr's on-disk naming so Plex
-  // doesn't split the show); otherwise sanitized "Title (Year)".
-  let folderName: string;
-  if (sonarrFolderName) {
-    folderName = sonarrFolderName;
-  } else {
-    const yearStr = year ? ` (${year})` : '';
-    folderName = `${sanitizeFilename(title)}${yearStr}`;
+  if (
+    !isContainedPath(result.destinationPath, libraryPath) ||
+    !isContainedPath(result.markerPath, libraryPath)
+  ) {
+    throw new Error(
+      `Placeholder path escapes library root: ${result.folderName}`
+    );
   }
-  const seasonDir = path.join(libraryPath, folderName, 'Season 00');
-  return {
-    folderName,
-    destinationPath: path.join(seasonDir, 'S00E00.Trailer.mp4'),
-    markerPath: path.join(seasonDir, '.comingsoon'),
-  };
+
+  return result;
 }
 
 /**
