@@ -35,6 +35,40 @@ import path from 'path';
 
 const router = Router();
 
+const MAX_ZIP_ENTRIES = 100;
+const MAX_ZIP_EXPANDED_BYTES = 50 * 1024 * 1024;
+const MAX_ZIP_ENTRY_BYTES = 20 * 1024 * 1024;
+const MAX_ZIP_RATIO = 1000;
+
+function validateZipEntries(
+  entries: Record<string, { size: number; compressedSize: number }>
+): void {
+  const keys = Object.keys(entries);
+  if (keys.length > MAX_ZIP_ENTRIES) {
+    throw new Error(`Archive has too many entries (${keys.length})`);
+  }
+  let totalExpanded = 0;
+  for (const name of keys) {
+    const entry = entries[name];
+    if (entry.size > MAX_ZIP_ENTRY_BYTES) {
+      throw new Error(`Entry too large: ${name}`);
+    }
+    if (entry.size > 0 && entry.compressedSize === 0) {
+      throw new Error(`Invalid entry metadata: ${name}`);
+    }
+    if (
+      entry.compressedSize > 0 &&
+      entry.size / entry.compressedSize > MAX_ZIP_RATIO
+    ) {
+      throw new Error(`Suspicious compression ratio: ${name}`);
+    }
+    totalExpanded += entry.size;
+  }
+  if (totalExpanded > MAX_ZIP_EXPANDED_BYTES) {
+    throw new Error(`Archive expanded size exceeds limit`);
+  }
+}
+
 router.use(isAuthenticated());
 
 // --- Multer configurations ---
@@ -245,7 +279,13 @@ router.post('/poster-template', (req, res) => {
       const zip = new StreamZip.async({ file: tempPath });
 
       try {
+        const entries = await zip.entries();
+        validateZipEntries(entries);
+
         const templateJsonData = await zip.entryData('template.json');
+        if (templateJsonData.length > MAX_ZIP_ENTRY_BYTES) {
+          throw new Error('template.json exceeds size limit');
+        }
         const templateJson = JSON.parse(templateJsonData.toString('utf8'));
 
         name = templateJson.name;
@@ -253,10 +293,12 @@ router.post('/poster-template', (req, res) => {
         templateData = templateJson.templateData;
         version = templateJson.version;
 
-        const entries = await zip.entries();
         for (const entryName of Object.keys(entries)) {
           if (entryName.startsWith('assets/')) {
             const entryData = await zip.entryData(entryName);
+            if (entryData.length > MAX_ZIP_ENTRY_BYTES) {
+              throw new Error(`Entry too large after extraction: ${entryName}`);
+            }
 
             if (entryName.startsWith('assets/icons/')) {
               const originalFilename = path.basename(entryName);
@@ -317,6 +359,7 @@ router.post('/poster-template', (req, res) => {
             zipError instanceof Error ? zipError.message : 'Unknown error',
         });
       } finally {
+        await zip.close().catch(() => undefined);
         if (fs.existsSync(tempPath)) {
           await fs.promises.unlink(tempPath);
         }
@@ -583,7 +626,13 @@ router.post('/overlay-template', (req, res) => {
       const zip = new StreamZip.async({ file: tempPath });
 
       try {
+        const entries = await zip.entries();
+        validateZipEntries(entries);
+
         const templateJsonData = await zip.entryData('template.json');
+        if (templateJsonData.length > MAX_ZIP_ENTRY_BYTES) {
+          throw new Error('template.json exceeds size limit');
+        }
         const templateJson = JSON.parse(templateJsonData.toString('utf8'));
 
         name = templateJson.name;
@@ -593,10 +642,12 @@ router.post('/overlay-template', (req, res) => {
         applicationCondition = templateJson.applicationCondition;
         version = templateJson.version;
 
-        const entries = await zip.entries();
         for (const entryName of Object.keys(entries)) {
           if (entryName.startsWith('assets/')) {
             const entryData = await zip.entryData(entryName);
+            if (entryData.length > MAX_ZIP_ENTRY_BYTES) {
+              throw new Error(`Entry too large after extraction: ${entryName}`);
+            }
 
             if (entryName.startsWith('assets/icons/')) {
               const originalFilename = path.basename(entryName);
@@ -657,6 +708,7 @@ router.post('/overlay-template', (req, res) => {
             zipError instanceof Error ? zipError.message : 'Unknown error',
         });
       } finally {
+        await zip.close().catch(() => undefined);
         if (fs.existsSync(tempPath)) {
           await fs.promises.unlink(tempPath);
         }
