@@ -51,9 +51,18 @@ import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
 const settingsRoutes = Router();
 
+settingsRoutes.use((req, res, next) => {
+  if (req.session?.userId !== 1 || req.user?.id !== 1) {
+    return res.status(403).json({
+      status: 403,
+      error: 'Only the server owner can access settings.',
+    });
+  }
+  next();
+});
+
 settingsRoutes.use('/radarr', radarrRoutes);
 settingsRoutes.use('/sonarr', sonarrRoutes);
-// Discover settings routes removed - discovery functionality not needed in Agregarr
 
 const filteredMainSettings = (
   user: User,
@@ -136,13 +145,6 @@ settingsRoutes.get('/plex', (_req, res) => {
 });
 
 settingsRoutes.post('/plex', async (req, res, next) => {
-  if (!req.session?.userId || req.user?.id !== 1) {
-    return res.status(403).json({
-      status: 403,
-      error: 'Only the server owner can modify Plex settings.',
-    });
-  }
-
   const userRepository = getRepository(User);
   const settings = getSettings();
 
