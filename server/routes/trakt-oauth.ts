@@ -1,6 +1,5 @@
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import { isAuthenticated } from '@server/middleware/auth';
 import { TRAKT_OOB_REDIRECT_URI } from '@server/utils/traktAuth';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
@@ -260,9 +259,21 @@ async function callbackTraktOauth(
   }
 }
 
-traktOAuthRoutes.get('/oauth/proxy', isAuthenticated(), proxyTraktOauth);
-traktOAuthRoutes.get('/oauth/callback', callbackTraktOauth); // must remain open: Trakt redirects here
-traktOAuthRoutes.post('/oauth/exchange', isAuthenticated(), exchangeTraktOauth);
-traktOAuthRoutes.get('/oauth/start', isAuthenticated(), startTraktOauth);
+const isOwner =
+  (): ((req: Request, res: Response, next: NextFunction) => void) =>
+  (req, res, next) => {
+    if (req.session?.userId !== 1 || req.user?.id !== 1) {
+      return res.status(403).json({
+        status: 403,
+        error: 'Only the server owner can manage Trakt OAuth.',
+      });
+    }
+    next();
+  };
+
+traktOAuthRoutes.get('/oauth/proxy', isOwner(), proxyTraktOauth);
+traktOAuthRoutes.get('/oauth/callback', callbackTraktOauth);
+traktOAuthRoutes.post('/oauth/exchange', isOwner(), exchangeTraktOauth);
+traktOAuthRoutes.get('/oauth/start', isOwner(), startTraktOauth);
 
 export default traktOAuthRoutes;
