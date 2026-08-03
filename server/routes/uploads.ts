@@ -23,6 +23,7 @@ import {
 } from '@server/lib/wallpaperStorage';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { isContainedPath } from '@server/utils/fileSystemHelpers';
 import archiver from 'archiver';
 import { randomUUID } from 'crypto';
 import { Router } from 'express';
@@ -488,15 +489,14 @@ router.get('/overlay-template-export/:id', async (req, res) => {
         if (iconUrlMatch) {
           const [, iconType, iconFilename] = iconUrlMatch;
           if (iconType === 'user') {
-            const iconFilePath = path.join(
-              process.cwd(),
-              'config',
-              'icons',
-              iconFilename
-            );
-            if (fs.existsSync(iconFilePath)) {
+            const iconsRoot = path.join(process.cwd(), 'config', 'icons');
+            const iconFilePath = path.join(iconsRoot, iconFilename);
+            if (
+              isContainedPath(iconFilePath, iconsRoot) &&
+              fs.existsSync(iconFilePath)
+            ) {
               archive.file(iconFilePath, {
-                name: `assets/icons/${iconFilename}`,
+                name: `assets/icons/${path.basename(iconFilename)}`,
               });
               logger.debug(`Added user icon to archive: ${iconFilename}`);
             }
@@ -512,10 +512,8 @@ router.get('/overlay-template-export/:id', async (req, res) => {
 
           for (const possiblePath of possiblePaths) {
             const resolvedPath = path.resolve(possiblePath);
-            const isContained = allowedDirs.some((dir) =>
-              resolvedPath.startsWith(path.resolve(dir) + path.sep)
-            );
-            if (!isContained) continue;
+            if (!allowedDirs.some((dir) => isContainedPath(resolvedPath, dir)))
+              continue;
             if (fs.existsSync(resolvedPath)) {
               archive.file(resolvedPath, {
                 name: `assets/images/${path.basename(assetPath)}`,

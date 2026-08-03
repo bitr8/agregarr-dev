@@ -23,6 +23,7 @@ import {
 } from '@server/lib/sourceColors';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { isContainedPath } from '@server/utils/fileSystemHelpers';
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -1192,18 +1193,15 @@ router.get('/templates/:id/export', async (req, res, next) => {
         if (iconUrlMatch) {
           const [, iconType, filename] = iconUrlMatch;
 
-          // Only bundle user-uploaded icons, skip system icons
           if (iconType === 'user') {
-            const iconFilePath = path.join(
-              process.cwd(),
-              'config',
-              'icons',
-              filename
-            );
-
-            if (fs.existsSync(iconFilePath)) {
+            const iconsRoot = path.join(process.cwd(), 'config', 'icons');
+            const iconFilePath = path.join(iconsRoot, filename);
+            if (
+              isContainedPath(iconFilePath, iconsRoot) &&
+              fs.existsSync(iconFilePath)
+            ) {
               archive.file(iconFilePath, {
-                name: `assets/icons/${filename}`,
+                name: `assets/icons/${path.basename(filename)}`,
               });
               logger.debug(`Added user icon to archive: ${filename}`);
             }
@@ -1219,10 +1217,8 @@ router.get('/templates/:id/export', async (req, res, next) => {
 
           for (const possiblePath of possiblePaths) {
             const resolvedPath = path.resolve(possiblePath);
-            const isContained = allowedDirs.some((dir) =>
-              resolvedPath.startsWith(path.resolve(dir) + path.sep)
-            );
-            if (!isContained) continue;
+            if (!allowedDirs.some((dir) => isContainedPath(resolvedPath, dir)))
+              continue;
             if (fs.existsSync(resolvedPath)) {
               const relativeName = `assets/images/${path.basename(assetPath)}`;
               archive.file(resolvedPath, { name: relativeName });

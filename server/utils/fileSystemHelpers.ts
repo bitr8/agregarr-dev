@@ -1,5 +1,15 @@
+import fsSync from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
+
+export function isContainedPath(filePath: string, root: string): boolean {
+  try {
+    const real = fsSync.realpathSync(filePath);
+    return real.startsWith(fsSync.realpathSync(root) + path.sep);
+  } catch {
+    return path.resolve(filePath).startsWith(path.resolve(root) + path.sep);
+  }
+}
 
 /**
  * Sanitize string for use in file/folder names
