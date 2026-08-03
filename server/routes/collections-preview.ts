@@ -13,6 +13,7 @@ import { getSettings, getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
+import { validateExternalUrl as validateCollectionUrl } from './collections';
 
 const collectionsPreviewRoutes = Router();
 
@@ -407,6 +408,10 @@ async function processMultiSourcePreview(
 
       // Add type-specific fields
       if (source.customUrl) {
+        const urlCheck = validateCollectionUrl(source.customUrl, source.type);
+        if (!urlCheck.isValid) {
+          throw new Error(urlCheck.error || 'Invalid custom URL');
+        }
         if (source.type === 'trakt')
           sourceConfigRecord.traktCustomListUrl = source.customUrl;
         else if (source.type === 'tmdb')

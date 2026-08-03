@@ -2008,7 +2008,22 @@ collectionsRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
           );
           const orchestrator = new MultiSourceOrchestrator();
 
-          // Convert to MultiSourceCollectionConfig format
+          for (const source of extendedConfig.sources || []) {
+            if (source.customUrl) {
+              const urlCheck = validateExternalUrl(
+                source.customUrl,
+                source.type
+              );
+              if (!urlCheck.isValid) {
+                return res.status(400).json({
+                  error:
+                    urlCheck.error ||
+                    `Invalid custom URL for ${source.type} source`,
+                });
+              }
+            }
+          }
+
           const multiSourceConfig = {
             ...extendedConfig,
             type: 'multi-source' as const,
