@@ -1,4 +1,5 @@
 import logger from '@server/logger';
+import { validateExternalUrl } from '@server/utils/urlValidator';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
@@ -313,10 +314,12 @@ export async function downloadIcon(
 ): Promise<IconMetadata> {
   try {
     logger.debug('Downloading icon from URL', { url });
+    await validateExternalUrl(url);
 
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
       timeout: 30000,
+      maxRedirects: 0,
       maxContentLength: MAX_ICON_SIZE,
       headers: {
         'User-Agent': 'Agregarr/1.0.0',

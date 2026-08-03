@@ -1,6 +1,7 @@
 import { getRepository } from '@server/datasource';
 import { CollectionMetadata } from '@server/entity/CollectionMetadata';
 import logger from '@server/logger';
+import { validateExternalUrl } from '@server/utils/urlValidator';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -506,12 +507,13 @@ export async function downloadAndSavePoster(
   originalName?: string
 ): Promise<string | null> {
   try {
+    await validateExternalUrl(url);
     const axios = await import('axios');
 
-    // Download the image
     const response = await axios.default.get(url, {
       responseType: 'arraybuffer',
       timeout: 30000,
+      maxRedirects: 0,
       maxContentLength: MAX_FILE_SIZE,
       headers: {
         'User-Agent': 'Agregarr/1.0.0',
