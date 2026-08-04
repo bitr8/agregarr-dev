@@ -37,6 +37,10 @@ export class CloudflareSolver {
     { count: number; backoffUntil: number }
   > = new Map();
 
+  private static backoffKey(domain: string, useFlareSolverr: boolean): string {
+    return `${useFlareSolverr ? 'flaresolverr' : 'playwright'}:${domain}`;
+  }
+
   /**
    * Fetch page content using Playwright, bypassing Cloudflare.
    * Results are cached for 5 minutes — the same URL is often requested
@@ -55,9 +59,12 @@ export class CloudflareSolver {
       return await inProgress;
     }
 
-    // Check backoff before starting new network work
+    // Determine solver method and domain — backoff is per-method so
+    // Playwright failures don't block FlareSolverr and vice versa
     const domain = new URL(url).hostname;
-    const failure = this.solveFailures.get(domain);
+    const solverrUrl = getSettings().main.flareSolverrUrl;
+    const failureKey = this.backoffKey(domain, !!solverrUrl);
+    const failure = this.solveFailures.get(failureKey);
     if (failure && failure.backoffUntil > Date.now()) {
       const waitSecs = Math.round((failure.backoffUntil - Date.now()) / 1000);
       throw new Error(
@@ -66,7 +73,6 @@ export class CloudflareSolver {
     }
 
     // Start fetching — prefer FlareSolverr when configured
-    const solverrUrl = getSettings().main.flareSolverrUrl;
     const fetchPromise = solverrUrl
       ? this.fetchWithFlareSolverr(url, solverrUrl)
       : this.fetchWithBrowser(url);
@@ -77,14 +83,14 @@ export class CloudflareSolver {
       if (!isChallengeHtml(content)) {
         this.htmlCache.set(url, { html: content, fetchedAt: Date.now() });
       }
-      this.solveFailures.delete(domain);
+      this.solveFailures.delete(failureKey);
       return content;
     } catch (error) {
-      const prev = this.solveFailures.get(domain);
+      const prev = this.solveFailures.get(failureKey);
       const count = (prev?.count ?? 0) + 1;
       const backoffMs =
         this.BACKOFF_BASE_MS * Math.pow(2, Math.min(count - 1, 4));
-      this.solveFailures.set(domain, {
+      this.solveFailures.set(failureKey, {
         count,
         backoffUntil: Date.now() + backoffMs,
       });
@@ -315,7 +321,7 @@ export class CloudflareSolver {
       for (const url of urls) {
         // Short-circuit if domain is in backoff (avoid log spam)
         const domain = new URL(url).hostname;
-        const failure = this.solveFailures.get(domain);
+        const failure = this.solveFailures.get(this.backoffKey(domain, true));
         if (failure && failure.backoffUntil > Date.now()) continue;
 
         try {
