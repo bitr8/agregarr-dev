@@ -22,7 +22,29 @@ vi.mock('@server/logger', () => ({
   },
 }));
 
-import FlixPatrolAPI from './flixpatrol';
+import FlixPatrolAPI, { parsePlatformSubtype } from './flixpatrol';
+
+describe('parsePlatformSubtype', () => {
+  it.each([
+    ['netflix_top_10', 'netflix', undefined],
+    ['viki-tv_top_10', 'viki-tv', undefined],
+    ['hbo-max_top_10', 'hbo-max', undefined],
+    ['apple-tv_top_10', 'apple-tv', undefined],
+    ['apple-tv-store_top_10', 'apple-tv-store', undefined],
+    ['amazon-prime_top_10', 'amazon-prime', undefined],
+    ['discovery-plus_top_10', 'discovery-plus', undefined],
+    ['google-tv_top_10', 'google-tv', undefined],
+    ['netflix-kids_top_10', 'netflix', 'kids'],
+    ['amazon-prime-kids_top_10', 'amazon-prime', 'kids'],
+  ])(
+    '%s -> basePlatform=%s, contentFilter=%s',
+    (input, expectedPlatform, expectedFilter) => {
+      const { basePlatform, contentFilter } = parsePlatformSubtype(input);
+      expect(basePlatform).toBe(expectedPlatform);
+      expect(contentFilter).toBe(expectedFilter);
+    }
+  );
+});
 
 describe('FlixPatrolAPI', () => {
   describe('getAvailableCountries', () => {
