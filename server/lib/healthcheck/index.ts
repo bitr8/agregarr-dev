@@ -20,7 +20,6 @@ type HealthCheckStatus = 'ok' | 'warning' | 'error' | 'skipped';
 interface HealthCheck {
   id: string;
   name: string;
-  docsUrl?: string;
   run: () => Promise<{ status: HealthCheckStatus; message?: string }>;
 }
 
@@ -29,7 +28,6 @@ export interface HealthCheckResult {
   name: string;
   status: HealthCheckStatus;
   message?: string;
-  docsUrl?: string;
   durationMs: number;
   checkedAt: string;
 }
@@ -72,7 +70,7 @@ const failureCounts = new Map<string, number>();
 const connectionPlexCheck: HealthCheck = {
   id: 'connection:plex',
   name: 'Plex Connection',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#connection-plex',
+
   run: async () => {
     const settings = getSettings();
     if (!settings.plex.ip) return { status: 'skipped' };
@@ -118,7 +116,7 @@ const buildConnectionArrCheck = (
 ): HealthCheck => ({
   id: `connection:${service}`,
   name: `${service[0].toUpperCase()}${service.slice(1)} Connection`,
-  docsUrl: `https://github.com/bitr8/agregarr-dev#connection-${service}`,
+
   run: async () => {
     const settings = getSettings();
     const instances =
@@ -170,7 +168,7 @@ const buildConnectionArrCheck = (
 const connectionTmdbCheck: HealthCheck = {
   id: 'connection:tmdb',
   name: 'TMDB Connection',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#connection-tmdb',
+
   run: async () => {
     try {
       const res = await fetch(
@@ -195,7 +193,7 @@ const connectionTmdbCheck: HealthCheck = {
 const connectionRatingsProxyCheck: HealthCheck = {
   id: 'connection:ratings-proxy',
   name: 'Ratings Proxy',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#connection-ratings-proxy',
+
   run: async () => {
     try {
       const res = await fetch('https://api.agregarr.org', {
@@ -221,7 +219,7 @@ const connectionRatingsProxyCheck: HealthCheck = {
 const connectionFlareSolverrCheck: HealthCheck = {
   id: 'connection:flaresolverr',
   name: 'FlareSolverr Connection',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#connection-flaresolverr',
+
   run: async () => {
     const url = getSettings().main.flareSolverrUrl;
     if (!url) return { status: 'skipped' };
@@ -256,7 +254,7 @@ const connectionFlareSolverrCheck: HealthCheck = {
 const connectionMaintainerrCheck: HealthCheck = {
   id: 'connection:maintainerr',
   name: 'Maintainerr Connection',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#connection-maintainerr',
+
   run: async () => {
     const maintainerr = getSettings().maintainerr;
     if (!maintainerr?.hostname || !maintainerr?.apiKey) {
@@ -295,7 +293,7 @@ const connectionMaintainerrCheck: HealthCheck = {
 const orphanedCollectionKeysCheck: HealthCheck = {
   id: 'orphaned-collection-keys',
   name: 'Orphaned Collection Keys',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#orphaned-collection-keys',
+
   run: async () => {
     const settings = getSettings();
     const configs = settings.plex.collectionConfigs ?? [];
@@ -369,7 +367,7 @@ const orphanedCollectionKeysCheck: HealthCheck = {
 const plexLibrariesCheck: HealthCheck = {
   id: 'plex-libraries',
   name: 'Plex Libraries',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#plex-libraries',
+
   run: async () => {
     const settings = getSettings();
     if (!settings.plex.ip) return { status: 'skipped' };
@@ -432,7 +430,7 @@ const plexLibrariesCheck: HealthCheck = {
 const overlayTemplateRefsCheck: HealthCheck = {
   id: 'overlay-template-refs',
   name: 'Overlay Templates',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#overlay-templates',
+
   run: async () => {
     let configs: OverlayLibraryConfig[];
     let templates: OverlayTemplate[];
@@ -478,7 +476,7 @@ const overlayTemplateRefsCheck: HealthCheck = {
 const appdataWritableCheck: HealthCheck = {
   id: 'appdata-writable',
   name: 'Data Directory',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#data-directory',
+
   run: async () => {
     const base = appDataPath();
     const dirs = [
@@ -520,7 +518,7 @@ const appdataWritableCheck: HealthCheck = {
 const timezoneConfigurationCheck: HealthCheck = {
   id: 'timezone-configuration',
   name: 'Timezone',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#timezone-configuration',
+
   run: async () => {
     const tz = process.env.TZ;
 
@@ -554,7 +552,7 @@ const timezoneConfigurationCheck: HealthCheck = {
 const jobFreshnessCheck: HealthCheck = {
   id: 'job-freshness',
   name: 'Job Health',
-  docsUrl: 'https://github.com/bitr8/agregarr-dev#job-health',
+
   run: async () => {
     const { getJobRuns } = await import('@server/job/schedule');
     const settings = getSettings();
@@ -664,7 +662,7 @@ export async function runHealthChecks(): Promise<void> {
               name: check.name,
               status: count >= 2 ? 'error' : 'warning',
               message: result.message,
-              docsUrl: check.docsUrl,
+
               durationMs: Date.now() - start,
               checkedAt: new Date().toISOString(),
             };
@@ -676,7 +674,7 @@ export async function runHealthChecks(): Promise<void> {
               name: check.name,
               status: result.status,
               message: result.message,
-              docsUrl: check.docsUrl,
+
               durationMs: Date.now() - start,
               checkedAt: new Date().toISOString(),
             };
@@ -693,7 +691,6 @@ export async function runHealthChecks(): Promise<void> {
                 ? 'warning'
                 : 'error',
             message: sanitize(err instanceof Error ? err.message : String(err)),
-            docsUrl: check.docsUrl,
             durationMs: Date.now() - start,
             checkedAt: new Date().toISOString(),
           });
@@ -738,7 +735,6 @@ export function getHealthStatus(): HealthStatusResponse {
       name: check.name,
       status: (r?.status ?? 'skipped') as HealthCheckStatus,
       message: r?.message,
-      docsUrl: check.docsUrl,
       durationMs: r?.durationMs ?? 0,
       checkedAt: r?.checkedAt ?? lastRunAt ?? '',
       silenced: silenced.has(check.id),

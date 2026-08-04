@@ -57,7 +57,6 @@ interface HealthCheckResult {
   durationMs: number;
   checkedAt: string;
   silenced: boolean;
-  docsUrl?: string;
 }
 
 interface HealthStatusResponse {
@@ -303,18 +302,6 @@ const SettingsAbout = () => {
                         {check.name}
                       </span>
                       <div className="flex items-center space-x-2">
-                        {check.docsUrl &&
-                          (check.status === 'warning' ||
-                            check.status === 'error') && (
-                            <a
-                              href={check.docsUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-orange-400 hover:underline"
-                            >
-                              Docs
-                            </a>
-                          )}
                         <Button
                           buttonType="ghost"
                           buttonSize="sm"
