@@ -225,19 +225,9 @@ const connectionFlareSolverrCheck: HealthCheck = {
     if (!url) return { status: 'skipped' };
 
     try {
-      const endpoint = url.replace(/\/+$/, '') + '/v1';
-      const res = await axios.post(
-        endpoint,
-        { cmd: 'sessions.list' },
-        { timeout: 5000 }
-      );
-      if (res.data?.status === 'ok') return { status: 'ok' };
-      return {
-        status: 'warning',
-        message: sanitize(
-          `Unexpected response: ${JSON.stringify(res.data?.status)}`
-        ),
-      };
+      const base = url.replace(/\/+$/, '');
+      await axios.get(base, { timeout: 5000 });
+      return { status: 'ok' };
     } catch (err) {
       return {
         status: 'error',
