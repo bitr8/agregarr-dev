@@ -20,8 +20,11 @@ import {
 } from '@server/utils/dateHelpers';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import { hasStreamingProviderIcon } from './DefaultMappingsService';
-import type { SeasonFallbackMode } from './maintainerrCountdown';
-import { computeDaysUntilAction } from './maintainerrCountdown';
+import type { SeasonFallback } from './maintainerrCountdown';
+import {
+  computeDaysUntilAction,
+  NO_SEASON_FALLBACK,
+} from './maintainerrCountdown';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
 // Captured defensively: the app replaces the global Intl with the andyearnshaw
@@ -241,9 +244,10 @@ const rtInflightRequests = new Map<string, Promise<RTRating | null>>();
  *                               When provided, skips individual IMDb API calls for items in the map.
  *                               null means "checked, no rating available" (avoids redundant API calls).
  * @param seasonFallback - Whether a show with no Maintainerr schedule of its own may
- *                         inherit one from its seasons, per the library's season-countdown
- *                         toggles. Defaults to 'off': a caller that has not read the config
- *                         cannot put a season's deletion date on a show poster.
+ *                         inherit one from its seasons, and which season's date it takes,
+ *                         per the library's "Show poster countdown" setting. Defaults to
+ *                         NO_SEASON_FALLBACK: a caller that has not read the config cannot
+ *                         put a season's deletion date on a show poster.
  * @returns Object containing the context and a flag indicating if critical APIs failed.
  *          When criticalApiFailed is true, callers should skip overlay application
  *          to avoid regenerating posters with incomplete data.
@@ -285,7 +289,7 @@ export async function buildRenderContext(
   maintainerrCollections?: MaintainerrCollection[],
   preloadedImdbRatings?: Map<string, number | null>,
   requiredContextFields?: Set<string>,
-  seasonFallback: SeasonFallbackMode = 'off'
+  seasonFallback: SeasonFallback = NO_SEASON_FALLBACK
 ): Promise<BuildRenderContextResult> {
   // Track if critical APIs failed (IMDb rating is critical for rating overlays)
   let criticalApiFailed = false;

@@ -3,7 +3,7 @@ import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
-import { seasonFallbackModeFor } from '@server/lib/overlays/maintainerrCountdown';
+import { seasonFallbackFor } from '@server/lib/overlays/maintainerrCountdown';
 import {
   buildRenderContext,
   checkMonitoringStatus,
@@ -217,7 +217,7 @@ overlayTestRouter.post('/', async (req, res) => {
       undefined,
       // Same derivation as a real library run, so a test never shows a
       // season-derived countdown the library itself would withhold.
-      seasonFallbackModeFor(config)
+      seasonFallbackFor(config)
     );
 
     // For test endpoint, log warning but continue even if APIs failed

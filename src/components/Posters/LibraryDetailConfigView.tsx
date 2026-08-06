@@ -184,6 +184,7 @@ interface LibraryConfig {
   enableEpisodeScanning?: boolean;
   enableMaintainerrSeasonOverlays?: boolean;
   requireAllSeasonsLeaving?: boolean;
+  useLatestSeasonDate?: boolean;
   maintainerrConfigured?: boolean;
 }
 
@@ -334,6 +335,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
     useState(false);
   const [requireAllSeasonsLeaving, setRequireAllSeasonsLeaving] =
     useState(false);
+  const [useLatestSeasonDate, setUseLatestSeasonDate] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -396,6 +398,9 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
     }
     if (configData?.requireAllSeasonsLeaving !== undefined) {
       setRequireAllSeasonsLeaving(configData.requireAllSeasonsLeaving);
+    }
+    if (configData?.useLatestSeasonDate !== undefined) {
+      setUseLatestSeasonDate(configData.useLatestSeasonDate);
     }
     if (configData?.tmdbLanguage !== undefined) {
       setTmdbLanguage(configData.tmdbLanguage);
@@ -592,6 +597,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
             enableEpisodeScanning,
             enableMaintainerrSeasonOverlays,
             requireAllSeasonsLeaving,
+            useLatestSeasonDate,
           }),
         }
       );
@@ -607,6 +613,20 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
       alert(intl.formatMessage(messages.saveFailed));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Derived so the dropdown can never drift from the two stored booleans.
+  const showPosterCountdown = !requireAllSeasonsLeaving
+    ? 'any'
+    : useLatestSeasonDate
+    ? 'all-latest'
+    : 'all-earliest';
+
+  const handleShowPosterCountdownChange = (value: string) => {
+    setRequireAllSeasonsLeaving(value !== 'any');
+    if (value !== 'any') {
+      setUseLatestSeasonDate(value === 'all-latest');
     }
   };
 
@@ -733,6 +753,53 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
             </div>
           )}
 
+          {/* Show Poster Countdown Mode - Only for show libraries */}
+          {libraryType === 'show' && (
+            <div className="mt-4 border-t border-stone-700 pt-4">
+              <div className="flex items-center gap-4">
+                <label
+                  htmlFor="showPosterCountdown"
+                  className={`text-sm font-medium ${
+                    configData?.maintainerrConfigured
+                      ? 'text-white'
+                      : 'text-stone-400'
+                  }`}
+                >
+                  Show poster countdown
+                </label>
+                <select
+                  id="showPosterCountdown"
+                  value={showPosterCountdown}
+                  disabled={!configData?.maintainerrConfigured}
+                  onChange={(e) =>
+                    handleShowPosterCountdownChange(e.target.value)
+                  }
+                  className={`rounded-md border-stone-600 bg-stone-700 px-3 py-1.5 text-sm text-white ${
+                    configData?.maintainerrConfigured
+                      ? ''
+                      : 'cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  <option value="any">Any season</option>
+                  <option value="all-earliest">All seasons (earliest)</option>
+                  <option value="all-latest">All seasons (latest)</option>
+                </select>
+              </div>
+              {!configData?.maintainerrConfigured && (
+                <p className="mt-1 text-xs text-amber-500">
+                  Connect Maintainerr in Settings to enable this.
+                </p>
+              )}
+              <p className="mt-1 text-xs text-stone-400">
+                When a show&apos;s seasons are in Maintainerr collections, this
+                decides when the show poster gets a countdown and which date it
+                shows. Any season shows the soonest date. All seasons only marks
+                a show once every season is scheduled to leave. A show directly
+                in a Maintainerr collection always uses its own date.
+              </p>
+            </div>
+          )}
+
           {/* Maintainerr Season Countdown Toggle - Only for show libraries */}
           {libraryType === 'show' && (
             <div className="mt-4 border-t border-stone-700 pt-4">
@@ -773,43 +840,8 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                     Season collections trigger a full-library scan in
                     Maintainerr.
                   </p>
-                  {!configData?.maintainerrConfigured && (
-                    <p className="mt-1 text-xs text-amber-500">
-                      Connect Maintainerr in Settings to enable this.
-                    </p>
-                  )}
                 </div>
               </div>
-
-              {/* Sub-toggle: scopes the countdown the show poster inherits from
-                  its seasons. Meaningless while the parent is off, so hidden. */}
-              {enableMaintainerrSeasonOverlays && (
-                <div className="ml-12 mt-3 flex items-center gap-3">
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      checked={requireAllSeasonsLeaving}
-                      onChange={(e) =>
-                        setRequireAllSeasonsLeaving(e.target.checked)
-                      }
-                      className="peer sr-only"
-                    />
-                    <div className="peer h-5 w-9 rounded-full bg-stone-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-500 peer-checked:after:translate-x-full" />
-                  </label>
-                  <div>
-                    <span className="text-sm font-medium text-white">
-                      Only overlay the show when every season is leaving
-                    </span>
-                    <p className="text-xs text-stone-400">
-                      The show poster only gets the countdown once all of its
-                      seasons are scheduled to leave, and it shows the date the
-                      last season goes. Leave this off to keep the current
-                      behavior: any leaving season puts its date on the show
-                      poster.
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

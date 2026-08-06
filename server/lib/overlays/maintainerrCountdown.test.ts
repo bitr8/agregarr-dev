@@ -7,7 +7,7 @@ import {
   collectSeasonCandidateKeys,
   computeDaysUntilAction,
   hasDeletionSchedule,
-  seasonFallbackModeFor,
+  seasonFallbackFor,
 } from './maintainerrCountdown';
 
 /**
@@ -173,7 +173,8 @@ describe('computeDaysUntilAction', () => {
  * What makes this worth locking down is that the modes disagree on purpose. `'any'`
  * says "a season is going" and dates the poster by the first departure; `'all'`
  * says "the show is going" and will not commit unless it can prove every season is
- * scheduled, dating the poster by the last one. Every unprovable case in `'all'` -
+ * scheduled, dating the poster by the season that goes last or the one that goes
+ * first, whichever the library asked for. Every unprovable case in `'all'` -
  * a season staying, a row it cannot attribute to a season, a count that does not
  * line up with Plex - has to come back null, because a wrong date here tells a user
  * a show is leaving when it is not.
@@ -198,10 +199,18 @@ describe('computeDaysUntilAction show-level season fallback', () => {
   });
 
   function forShow(
-    seasonFallback: 'off' | 'any' | 'all',
-    totalSeasons?: number
+    mode: 'off' | 'any' | 'all',
+    totalSeasons?: number,
+    // The engine's own default. Spelled out here so an earliest-mode case reads
+    // as a deliberate choice rather than an omission.
+    useLatestSeasonDate = true
   ) {
-    return { mediaType: 'show', tmdbId: 100, seasonFallback, totalSeasons };
+    return {
+      mediaType: 'show',
+      tmdbId: 100,
+      seasonFallback: { mode, useLatestSeasonDate },
+      totalSeasons,
+    };
   }
 
   it("takes nothing from the seasons in 'off' mode", () => {
@@ -250,6 +259,33 @@ describe('computeDaysUntilAction show-level season fallback', () => {
     expect(result?.childItemsMatched).toBe(2);
   });
 
+  it("'any' lets an episode row drive the date without counting it as a season", () => {
+    const episodes = makeCollection({
+      id: 1,
+      title: 'Episodes',
+      type: 'episode',
+      deleteAfterDays: 35, // episode => 5, the soonest date on offer
+      media: [makeMedia({ mediaServerId: 'episode-1' })],
+    });
+    const seasons = makeCollection({
+      id: 2,
+      title: 'Seasons',
+      deleteAfterDays: 45, // season 1 => 15
+      media: [makeMedia(SEASON_1)],
+    });
+
+    const result = computeDaysUntilAction(
+      [seasons, episodes],
+      SHOW_KEY,
+      forShow('any')
+    );
+    expect(result?.days).toBe(5);
+    expect(result?.collection.title).toBe('Episodes');
+    // One SEASON is leaving. The episode drives the date, but counting it as a
+    // season would make `seasonsLeavingCount` lie about what it is named for.
+    expect(result?.childItemsMatched).toBe(1);
+  });
+
   it("'all' dates the show by the season that leaves LAST", () => {
     const collection = makeCollection({
       deleteAfterDays: 45, // season 1 => 15, season 2 => 25
@@ -289,6 +325,100 @@ describe('computeDaysUntilAction show-level season fallback', () => {
     expect(result?.days).toBe(15);
     expect(result?.collection.title).toBe('Slow');
     expect(result?.childItemsMatched).toBe(2);
+  });
+
+  it("'all' dates the show by the latest season when no date preference is given", () => {
+    const collection = makeCollection({
+      deleteAfterDays: 45, // season 1 => 15, season 2 => 25
+      media: [makeMedia(SEASON_1), makeMedia(SEASON_2)],
+    });
+
+    // Deliberately derived from a config where the flag is genuinely ABSENT: a
+    // library row written before the `useLatestSeasonDate` column existed reads
+    // as undefined, and that must mean "latest" - the behavior every
+    // all-seasons library had before the dropdown - not "earliest".
+    const result = computeDaysUntilAction([collection], SHOW_KEY, {
+      mediaType: 'show',
+      tmdbId: 100,
+      seasonFallback: seasonFallbackFor({ requireAllSeasonsLeaving: true }),
+      totalSeasons: 2,
+    });
+    expect(result?.days).toBe(25);
+    expect(result?.childItemsMatched).toBe(2);
+  });
+
+  it("'all' earliest dates the show by the season that leaves FIRST", () => {
+    const collection = makeCollection({
+      deleteAfterDays: 45, // season 1 => 15, season 2 => 25
+      media: [makeMedia(SEASON_1), makeMedia(SEASON_2)],
+    });
+
+    // The mirror of the latest case on identical data: this answers "when does
+    // the deletion start", so 15 rather than 25.
+    const result = computeDaysUntilAction(
+      [collection],
+      SHOW_KEY,
+      forShow('all', 2, false)
+    );
+    expect(result?.days).toBe(15);
+    expect(result?.childItemsMatched).toBe(2);
+  });
+
+  it("'all' earliest takes each season's soonest collection, then the soonest of those", () => {
+    const slow = makeCollection({
+      id: 1,
+      title: 'Slow',
+      deleteAfterDays: 45, // season 1 => 15, season 2 => 25
+      media: [makeMedia(SEASON_1), makeMedia(SEASON_2)],
+    });
+    const fast = makeCollection({
+      id: 2,
+      title: 'Fast',
+      deleteAfterDays: 30, // season 2 => 10
+      media: [makeMedia(SEASON_2)],
+    });
+
+    // Season 2 leaves in 10 (Fast beats Slow's 25), season 1 in 15, so the first
+    // departure is season 2's. Only the per-season minimum survives into the
+    // cross-season reduce, so the winner has to be Fast, not Slow's 15.
+    const result = computeDaysUntilAction(
+      [slow, fast],
+      SHOW_KEY,
+      forShow('all', 2, false)
+    );
+    expect(result?.days).toBe(10);
+    // Asserted because a reduce that tracks days alone would report Fast's date
+    // under whichever collection it happened to be holding.
+    expect(result?.collection.title).toBe('Fast');
+    expect(result?.childItemsMatched).toBe(2);
+  });
+
+  it("'all' earliest still stays silent while one season is unscheduled", () => {
+    const collection = makeCollection({
+      media: [makeMedia(SEASON_1), makeMedia(SEASON_2)],
+    });
+
+    // Picking the earliest date is a presentation choice; it does not lower the
+    // bar for proving the show is leaving at all.
+    expect(
+      computeDaysUntilAction([collection], SHOW_KEY, forShow('all', 3, false))
+    ).toBeNull();
+  });
+
+  it("'all' earliest still stays silent when a matched row carries no key", () => {
+    const collection = makeCollection({
+      media: [
+        makeMedia(SEASON_1),
+        makeMedia({ mediaServerId: undefined, plexId: undefined }),
+      ],
+    });
+
+    // Earliest mode is the one where an unattributable row is most tempting to
+    // shrug off - it can only ever be beaten by an earlier date, never change
+    // the answer upward. It is still a season we cannot prove is going.
+    expect(
+      computeDaysUntilAction([collection], SHOW_KEY, forShow('all', 2, false))
+    ).toBeNull();
   });
 
   it("'all' stays silent while one season is unscheduled", () => {
@@ -488,53 +618,56 @@ describe('computeDaysUntilAction show-level season fallback', () => {
       computeDaysUntilAction([collection], SHOW_KEY, {
         mediaType: 'movie',
         tmdbId: 100,
-        seasonFallback: 'any',
+        seasonFallback: { mode: 'any', useLatestSeasonDate: true },
       })
     ).toBeNull();
   });
 });
 
 /**
- * The parent toggle gates the fallback and the sub-toggle only narrows it, so a
- * stored `requireAllSeasonsLeaving` must stay inert while the parent is off rather
- * than turning the fallback back on.
+ * One input, and pointedly not two: the "Season deletion countdown" toggle is not
+ * consulted here. It gates the season-poster subpass and the departed-season
+ * cleanup, and a user is entitled to want the show poster marked without every
+ * season poster being overlaid as well. Wiring that toggle back in would silently
+ * take the show countdown away from those libraries.
+ *
+ * Which leaves the show-level fallback answering to its own control, whose default
+ * - an unset config - is "Any season", develop's behavior.
  */
-describe('seasonFallbackModeFor', () => {
-  it.each([
-    [false, false],
-    [false, true],
-  ])(
-    'is off while the season countdown is off (sub-toggle %s/%s)',
-    (enableMaintainerrSeasonOverlays, requireAllSeasonsLeaving) => {
-      expect(
-        seasonFallbackModeFor({
-          enableMaintainerrSeasonOverlays,
-          requireAllSeasonsLeaving,
-        })
-      ).toBe('off');
-    }
-  );
-
-  it('is any with the season countdown on and the sub-toggle off', () => {
-    expect(
-      seasonFallbackModeFor({
-        enableMaintainerrSeasonOverlays: true,
-        requireAllSeasonsLeaving: false,
-      })
-    ).toBe('any');
+describe('seasonFallbackFor', () => {
+  it('is all when the library asks for every season', () => {
+    expect(seasonFallbackFor({ requireAllSeasonsLeaving: true }).mode).toBe(
+      'all'
+    );
   });
 
-  it('is all with both on', () => {
+  it('is any when the library does not', () => {
+    expect(seasonFallbackFor({ requireAllSeasonsLeaving: false }).mode).toBe(
+      'any'
+    );
+  });
+
+  it('is any for a config predating the columns', () => {
+    expect(seasonFallbackFor({}).mode).toBe('any');
+  });
+
+  it('reads an absent date preference as latest', () => {
+    // The column defaults to true. A row loaded before the migration ran has no
+    // value at all, and must not read as "earliest" - that would move the date
+    // on every existing all-seasons library without anyone touching a setting.
+    expect(seasonFallbackFor({}).useLatestSeasonDate).toBe(true);
     expect(
-      seasonFallbackModeFor({
-        enableMaintainerrSeasonOverlays: true,
+      seasonFallbackFor({ requireAllSeasonsLeaving: true }).useLatestSeasonDate
+    ).toBe(true);
+  });
+
+  it('honours an explicit earliest', () => {
+    expect(
+      seasonFallbackFor({
         requireAllSeasonsLeaving: true,
+        useLatestSeasonDate: false,
       })
-    ).toBe('all');
-  });
-
-  it('is off for a config predating both columns', () => {
-    expect(seasonFallbackModeFor({})).toBe('off');
+    ).toEqual({ mode: 'all', useLatestSeasonDate: false });
   });
 });
 

@@ -166,6 +166,9 @@ router.post('/:libraryId', async (req, res, next) => {
       if ('requireAllSeasonsLeaving' in req.body) {
         config.requireAllSeasonsLeaving = !!req.body.requireAllSeasonsLeaving;
       }
+      if ('useLatestSeasonDate' in req.body) {
+        config.useLatestSeasonDate = !!req.body.useLatestSeasonDate;
+      }
     } else {
       // Create new
       config = new OverlayLibraryConfig({
@@ -178,6 +181,11 @@ router.post('/:libraryId', async (req, res, next) => {
         enableMaintainerrSeasonOverlays:
           !!req.body.enableMaintainerrSeasonOverlays,
         requireAllSeasonsLeaving: !!req.body.requireAllSeasonsLeaving,
+        // Defaults to true, so an absent field must not coerce to false.
+        useLatestSeasonDate:
+          'useLatestSeasonDate' in req.body
+            ? !!req.body.useLatestSeasonDate
+            : true,
       });
     }
 

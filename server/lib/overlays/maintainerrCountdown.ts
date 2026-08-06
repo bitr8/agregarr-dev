@@ -21,31 +21,57 @@ export interface MaintainerrCountdown {
  * How a show poster may inherit a countdown from its seasons, when the show's own
  * ratingKey is in no collection.
  *
- * - `'off'` - never. The library's "Season deletion countdown" toggle is off, so a
- *   season leaving is a season's business and the show poster stays clean.
+ * - `'off'` - never. Not a user setting: it is what a caller with no library config
+ *   to read names, so a code path that never consulted the library cannot put a
+ *   season's deletion date on a show poster.
  * - `'any'` - one leaving season is enough, and the show shows the SOONEST season's
- *   date. Every collection type contributes, matching the pre-sub-toggle behaviour.
+ *   date. Every collection type contributes. This is the default a library gets.
  * - `'all'` - the show only gets a countdown once every one of its seasons is
- *   scheduled, and it shows the LAST one to go, i.e. the day the show itself
- *   disappears from Plex. Season-typed collections only.
+ *   scheduled, dated by the last or the first season to go (see `SeasonFallback`).
+ *   Season-typed collections only.
  */
 export type SeasonFallbackMode = 'off' | 'any' | 'all';
 
 /**
- * Read a library's two season-countdown toggles as a single mode.
+ * The mode plus the date it picks. They travel together because a mode alone
+ * cannot be acted on: 'all' has to know which end of the departure window the
+ * show poster is dated by, and separating them lets a caller thread one and
+ * forget the other.
+ */
+export interface SeasonFallback {
+  mode: SeasonFallbackMode;
+  /** Under 'all': date the show by the LAST season to go, not the first. */
+  useLatestSeasonDate: boolean;
+}
+
+/** The fallback a caller with no library config may use: none. */
+export const NO_SEASON_FALLBACK: SeasonFallback = {
+  mode: 'off',
+  useLatestSeasonDate: true,
+};
+
+/**
+ * Read a library's "Show poster countdown" dropdown as a `SeasonFallback`.
+ *
+ * One setting, not two: the "Season deletion countdown" toggle gates the
+ * season-poster subpass and departed-season cleanup only. A user who wants the
+ * show poster marked without season posters being touched must be able to have
+ * that, so the show-level fallback answers to its own control.
  *
  * Every caller that builds a show's render context goes through here, so the
- * parent toggle gates the show-level fallback in exactly one place and the
- * sub-toggle cannot be honoured on one code path and ignored on another.
+ * dropdown cannot be honoured on one code path and ignored on another. An unset
+ * config reads as 'any' with the latest date, which is the dropdown's default.
  */
-export function seasonFallbackModeFor(config: {
-  enableMaintainerrSeasonOverlays?: boolean;
+export function seasonFallbackFor(config: {
   requireAllSeasonsLeaving?: boolean;
-}): SeasonFallbackMode {
-  if (!config.enableMaintainerrSeasonOverlays) {
-    return 'off';
-  }
-  return config.requireAllSeasonsLeaving ? 'all' : 'any';
+  useLatestSeasonDate?: boolean;
+}): SeasonFallback {
+  return {
+    mode: config.requireAllSeasonsLeaving ? 'all' : 'any',
+    // The column defaults to true, so an absent value means "not stored yet"
+    // (a row read before the migration ran), never "earliest".
+    useLatestSeasonDate: config.useLatestSeasonDate ?? true,
+  };
 }
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -174,7 +200,7 @@ function mediaKey(media: MaintainerrMedia): string | undefined {
  * from its seasons: Maintainerr stamps season rows with the parent series'
  * tmdbId, which is the only join available. `opts.seasonFallback` decides whether
  * and how (see `SeasonFallbackMode`); it defaults to `'off'`, so a caller that
- * has not consulted the library toggle cannot leak a season's date onto a show.
+ * has not consulted the library config cannot leak a season's date onto a show.
  * A direct ratingKey hit always wins outright: the show has its own schedule and
  * what its seasons are doing is beside the point. That holds even when the hit
  * yields no usable date. A show Maintainerr is scheduling by an unreadable
@@ -192,7 +218,7 @@ export function computeDaysUntilAction(
   opts?: {
     mediaType?: string;
     tmdbId?: number;
-    seasonFallback?: SeasonFallbackMode;
+    seasonFallback?: SeasonFallback;
     /** The show's Plex `childCount`. Required by `'all'`, ignored otherwise. */
     totalSeasons?: number;
   }
@@ -233,13 +259,18 @@ export function computeDaysUntilAction(
     return { ...best, childItemsMatched: 0 };
   }
 
-  const mode = opts?.seasonFallback ?? 'off';
-  if (mode === 'off' || opts?.mediaType !== 'show' || !opts?.tmdbId) {
+  const fallback = opts?.seasonFallback ?? NO_SEASON_FALLBACK;
+  if (fallback.mode === 'off' || opts?.mediaType !== 'show' || !opts?.tmdbId) {
     return null;
   }
 
-  return mode === 'all'
-    ? allSeasonsCountdown(collections, opts.tmdbId, opts.totalSeasons)
+  return fallback.mode === 'all'
+    ? allSeasonsCountdown(
+        collections,
+        opts.tmdbId,
+        opts.totalSeasons,
+        fallback.useLatestSeasonDate
+      )
     : anySeasonCountdown(collections, opts.tmdbId);
 }
 
@@ -248,10 +279,12 @@ export function computeDaysUntilAction(
  * show's tmdbId, across all collection types (episode-typed collections included,
  * as they were before the sub-toggle existed).
  *
- * `childItemsMatched` counts DISTINCT keys rather than rows, so a season sitting
- * in two collections is one departing season, not two. Rows Maintainerr sent
- * without a key still drive the date but cannot be counted, since they are
- * indistinguishable from each other.
+ * `childItemsMatched` counts DISTINCT keys from season-typed collections only,
+ * so a season sitting in two collections is one departing season, not two, and
+ * an episode row never masquerades as a season (`seasonsLeavingCount` is named
+ * for what it counts). Episode rows still drive the date; so do rows Maintainerr
+ * sent without a key, which cannot be counted because they are indistinguishable
+ * from each other.
  */
 function anySeasonCountdown(
   collections: MaintainerrCollection[],
@@ -277,7 +310,7 @@ function anySeasonCountdown(
 
       matches.push({ collection, days });
       const key = mediaKey(media);
-      if (key) {
+      if (key && collection.type === 'season') {
         childKeys.add(key);
       }
     }
@@ -294,14 +327,16 @@ function anySeasonCountdown(
 }
 
 /**
- * `'all'` fallback: a countdown only when EVERY season of the show is scheduled,
- * dated by the last one to leave. That is the day the show's listing disappears
- * from Plex rather than the day it gets shorter.
+ * `'all'` fallback: a countdown only when EVERY season of the show is scheduled.
+ * `useLatestSeasonDate` picks which end of the departure window the show is dated
+ * by - the last season to leave (the day the show's listing disappears from Plex)
+ * or the first (the day it starts getting shorter). Both answer real questions, so
+ * the library chooses.
  *
  * Only season-typed collections count (same filter as `collectSeasonCandidateKeys`);
  * an episode-typed collection says nothing about whether a season is going.
  * Within a season the soonest collection wins, exactly as for a directly matched
- * item; across seasons the latest of those wins.
+ * item; across seasons the chosen end of those wins.
  *
  * Anything that stops us PROVING every season is leaving returns null rather than
  * a guess: no `totalSeasons` (Plex gave no `childCount`), a matched row with no
@@ -313,7 +348,8 @@ function anySeasonCountdown(
 function allSeasonsCountdown(
   collections: MaintainerrCollection[],
   tmdbId: number,
-  totalSeasons: number | undefined
+  totalSeasons: number | undefined,
+  useLatestSeasonDate: boolean
 ): MaintainerrCountdown | null {
   if (!totalSeasons || totalSeasons <= 0) {
     return null;
@@ -355,8 +391,13 @@ function allSeasonsCountdown(
     return null;
   }
 
-  const last = [...bySeason.values()].reduce((max, curr) =>
-    curr.days > max.days ? curr : max
-  );
-  return { ...last, childItemsMatched: bySeason.size };
+  // Strict comparison in both directions, so a tie keeps the first season
+  // encountered rather than flipping with the direction.
+  const chosen = [...bySeason.values()].reduce((best, curr) => {
+    const beats = useLatestSeasonDate
+      ? curr.days > best.days
+      : curr.days < best.days;
+    return beats ? curr : best;
+  });
+  return { ...chosen, childItemsMatched: bySeason.size };
 }

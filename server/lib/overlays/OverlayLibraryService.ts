@@ -29,8 +29,8 @@ import type {
 import {
   collectSeasonCandidateKeys,
   computeDaysUntilAction,
-  seasonFallbackModeFor,
-  type SeasonFallbackMode,
+  seasonFallbackFor,
+  type SeasonFallback,
 } from './maintainerrCountdown';
 import {
   buildRenderContext,
@@ -1667,7 +1667,7 @@ class OverlayLibraryService {
             libraryId,
             config.libraryName,
             maintainerrCollections,
-            seasonFallbackModeFor(config)
+            seasonFallbackFor(config)
           );
 
           // Update counts AFTER outcome is known
@@ -2012,7 +2012,7 @@ class OverlayLibraryService {
                 // read whatever a concurrent library job left in the shared cache.
                 undefined,
                 // Moot without collections, but kept honest to the config.
-                seasonFallbackModeFor(config),
+                seasonFallbackFor(config),
                 contextOverrides,
                 aggregatedMedia
               );
@@ -2053,9 +2053,10 @@ class OverlayLibraryService {
    * will use item.type for TMDB API calls to prevent fetching wrong posters
    *
    * @param seasonFallback - Whether a show with no Maintainerr schedule of its own
-   *   may inherit one from its seasons. Derived from the library config by every
-   *   caller (see `seasonFallbackModeFor`) so the two season-countdown toggles reach
-   *   the countdown; 'off' is the safe default for a caller with no config to hand.
+   *   may inherit one from its seasons, and which season's date it takes. Derived
+   *   from the library config by every caller (see `seasonFallbackFor`) so the
+   *   "Show poster countdown" setting reaches the countdown by one route;
+   *   NO_SEASON_FALLBACK is the safe value for a caller with no config to hand.
    * @param requireOverlayMatch - When true, an item whose conditions match no
    *   template is skipped before any poster work. Callers that visit items only
    *   because an external source nominated them (the Maintainerr season subpass)
@@ -2071,7 +2072,7 @@ class OverlayLibraryService {
     libraryId: string,
     libraryName: string,
     maintainerrCollections: MaintainerrCollection[] | undefined,
-    seasonFallback: SeasonFallbackMode,
+    seasonFallback: SeasonFallback,
     contextOverrides?: Partial<OverlayRenderContext>,
     aggregatedMediaOverride?: Map<string, AggregatedMediaInfo>,
     requireOverlayMatch?: boolean
@@ -2921,8 +2922,8 @@ class OverlayLibraryService {
           config.libraryName,
           collections,
           // A season is matched by its own ratingKey, never by the show-level
-          // fallback, so the mode only has to be honest rather than special.
-          seasonFallbackModeFor(config),
+          // fallback, so the setting only has to be honest rather than special.
+          seasonFallbackFor(config),
           // buildRenderContext reads a show item's `index` as an episode number.
           // Correct both fields here rather than withholding `index` from the item,
           // so the context says what a season actually is. `episodeNumber` must be
