@@ -163,6 +163,9 @@ router.post('/:libraryId', async (req, res, next) => {
         config.enableMaintainerrSeasonOverlays =
           !!req.body.enableMaintainerrSeasonOverlays;
       }
+      if ('requireAllSeasonsLeaving' in req.body) {
+        config.requireAllSeasonsLeaving = !!req.body.requireAllSeasonsLeaving;
+      }
     } else {
       // Create new
       config = new OverlayLibraryConfig({
@@ -174,6 +177,7 @@ router.post('/:libraryId', async (req, res, next) => {
         enableEpisodeScanning: !!req.body.enableEpisodeScanning,
         enableMaintainerrSeasonOverlays:
           !!req.body.enableMaintainerrSeasonOverlays,
+        requireAllSeasonsLeaving: !!req.body.requireAllSeasonsLeaving,
       });
     }
 

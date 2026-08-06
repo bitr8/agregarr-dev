@@ -20,6 +20,7 @@ import {
 } from '@server/utils/dateHelpers';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import { hasStreamingProviderIcon } from './DefaultMappingsService';
+import type { SeasonFallbackMode } from './maintainerrCountdown';
 import { computeDaysUntilAction } from './maintainerrCountdown';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 
@@ -239,6 +240,10 @@ const rtInflightRequests = new Map<string, Promise<RTRating | null>>();
  * @param preloadedImdbRatings - Optional pre-fetched IMDb ratings map (imdbId -> rating | null)
  *                               When provided, skips individual IMDb API calls for items in the map.
  *                               null means "checked, no rating available" (avoids redundant API calls).
+ * @param seasonFallback - Whether a show with no Maintainerr schedule of its own may
+ *                         inherit one from its seasons, per the library's season-countdown
+ *                         toggles. Defaults to 'off': a caller that has not read the config
+ *                         cannot put a season's deletion date on a show poster.
  * @returns Object containing the context and a flag indicating if critical APIs failed.
  *          When criticalApiFailed is true, callers should skip overlay application
  *          to avoid regenerating posters with incomplete data.
@@ -279,7 +284,8 @@ export async function buildRenderContext(
   isPlaceholder = false,
   maintainerrCollections?: MaintainerrCollection[],
   preloadedImdbRatings?: Map<string, number | null>,
-  requiredContextFields?: Set<string>
+  requiredContextFields?: Set<string>,
+  seasonFallback: SeasonFallbackMode = 'off'
 ): Promise<BuildRenderContextResult> {
   // Track if critical APIs failed (IMDb rating is critical for rating overlays)
   let criticalApiFailed = false;
@@ -1111,7 +1117,16 @@ export async function buildRenderContext(
       const selected = computeDaysUntilAction(
         maintainerrCollections,
         item.ratingKey,
-        { mediaType, tmdbId }
+        {
+          mediaType,
+          tmdbId,
+          seasonFallback,
+          // Plex counts Specials in childCount, which is what 'all' needs: the
+          // show only leaves once every season including season 0 does. Read
+          // from the item itself so it cannot disagree with seasonsAvailable.
+          // Absent on a season item, where 'all' has no meaning anyway.
+          totalSeasons: item.type === 'show' ? item.childCount : undefined,
+        }
       );
 
       if (selected) {

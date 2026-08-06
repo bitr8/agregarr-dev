@@ -183,6 +183,7 @@ interface LibraryConfig {
   tmdbLanguage?: string;
   enableEpisodeScanning?: boolean;
   enableMaintainerrSeasonOverlays?: boolean;
+  requireAllSeasonsLeaving?: boolean;
   maintainerrConfigured?: boolean;
 }
 
@@ -331,6 +332,8 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
   const [enableEpisodeScanning, setEnableEpisodeScanning] = useState(false);
   const [enableMaintainerrSeasonOverlays, setEnableMaintainerrSeasonOverlays] =
     useState(false);
+  const [requireAllSeasonsLeaving, setRequireAllSeasonsLeaving] =
+    useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -390,6 +393,9 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
       setEnableMaintainerrSeasonOverlays(
         configData.enableMaintainerrSeasonOverlays
       );
+    }
+    if (configData?.requireAllSeasonsLeaving !== undefined) {
+      setRequireAllSeasonsLeaving(configData.requireAllSeasonsLeaving);
     }
     if (configData?.tmdbLanguage !== undefined) {
       setTmdbLanguage(configData.tmdbLanguage);
@@ -585,6 +591,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
             tmdbLanguage: tmdbLanguage || undefined,
             enableEpisodeScanning,
             enableMaintainerrSeasonOverlays,
+            requireAllSeasonsLeaving,
           }),
         }
       );
@@ -773,6 +780,36 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Sub-toggle: scopes the countdown the show poster inherits from
+                  its seasons. Meaningless while the parent is off, so hidden. */}
+              {enableMaintainerrSeasonOverlays && (
+                <div className="ml-12 mt-3 flex items-center gap-3">
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={requireAllSeasonsLeaving}
+                      onChange={(e) =>
+                        setRequireAllSeasonsLeaving(e.target.checked)
+                      }
+                      className="peer sr-only"
+                    />
+                    <div className="peer h-5 w-9 rounded-full bg-stone-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-500 peer-checked:after:translate-x-full" />
+                  </label>
+                  <div>
+                    <span className="text-sm font-medium text-white">
+                      Only overlay the show when every season is leaving
+                    </span>
+                    <p className="text-xs text-stone-400">
+                      The show poster only gets the countdown once all of its
+                      seasons are scheduled to leave, and it shows the date the
+                      last season goes. Leave this off to keep the current
+                      behavior: any leaving season puts its date on the show
+                      poster.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
