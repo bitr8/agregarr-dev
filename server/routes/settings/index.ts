@@ -26,7 +26,7 @@ import type {
   MainSettings,
   WatchlistSyncSettings,
 } from '@server/lib/settings';
-import { getSettings } from '@server/lib/settings';
+import { getSettings, normalizeCloudflareSolvers } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 // Discover settings routes removed - discovery functionality not needed in Agregarr
@@ -93,7 +93,17 @@ settingsRoutes.get('/main', (req, res, next) => {
 settingsRoutes.post('/main', (req, res, next) => {
   const settings = getSettings();
 
-  const { watchProviderRegion: rawRegion, ...mainBody } = req.body;
+  const {
+    watchProviderRegion: rawRegion,
+    cloudflareSolvers: rawSolvers,
+    ...mainBody
+  } = req.body;
+
+  const solvers =
+    rawSolvers !== undefined ? normalizeCloudflareSolvers(rawSolvers) : null;
+  if (rawSolvers !== undefined && !solvers) {
+    return next({ status: 400, message: 'Invalid Cloudflare solver list.' });
+  }
 
   if (rawRegion !== undefined) {
     const region = String(rawRegion).trim().toUpperCase();
@@ -111,6 +121,12 @@ settingsRoutes.post('/main', (req, res, next) => {
 
   if (!req.user) {
     return next({ status: 400, message: 'User missing from request.' });
+  }
+
+  // lodash merge is by-index for arrays and keeps excess stored elements,
+  // which resurrects deleted rows — assign the list directly instead
+  if (solvers) {
+    settings.main.cloudflareSolvers = solvers;
   }
 
   settings.main = merge(settings.main, mainBody);

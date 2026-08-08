@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import axios from 'axios';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ settings: undefined as unknown }));
 
@@ -11,15 +12,31 @@ vi.mock('@server/lib/settings', async (importOriginal) => {
   };
 });
 
-import { flareSolverrRequiredCheck } from '@server/lib/healthcheck';
+vi.mock('axios', () => ({
+  default: { get: vi.fn(), post: vi.fn() },
+}));
+
+import {
+  connectionFlareSolverrCheck,
+  flareSolverrRequiredCheck,
+} from '@server/lib/healthcheck';
+
+const mockGet = vi.mocked(axios.get);
 
 const settingsWith = (
   configs: Record<string, unknown>[],
-  flareSolverrUrl?: string
+  cloudflareSolvers?: { id: string; name: string; url: string }[]
 ) => ({
-  main: { flareSolverrUrl },
+  main: { cloudflareSolvers },
   plex: { collectionConfigs: configs },
 });
+
+const solverOne = {
+  id: 'a',
+  name: 'FlareSolverr',
+  url: 'http://solver-a:8191',
+};
+const solverTwo = { id: 'b', name: 'Byparr', url: 'http://solver-b:8191' };
 
 describe('flareSolverrRequiredCheck', () => {
   it('skips when no networks configs exist', async () => {
@@ -27,11 +44,24 @@ describe('flareSolverrRequiredCheck', () => {
     expect((await flareSolverrRequiredCheck.run()).status).toBe('skipped');
   });
 
-  it('errors when a networks config exists without a solver URL', async () => {
+  it('errors when a networks config exists without any solver', async () => {
     state.settings = settingsWith([{ type: 'networks' }]);
     const result = await flareSolverrRequiredCheck.run();
     expect(result.status).toBe('error');
     expect(result.message).toContain('Byparr');
+  });
+
+  it('errors when the solver list is empty', async () => {
+    state.settings = settingsWith([{ type: 'networks' }], []);
+    expect((await flareSolverrRequiredCheck.run()).status).toBe('error');
+  });
+
+  it('errors when entries exist but none has a URL', async () => {
+    state.settings = settingsWith(
+      [{ type: 'networks' }],
+      [{ id: 'a', name: 'Empty', url: '' }]
+    );
+    expect((await flareSolverrRequiredCheck.run()).status).toBe('error');
   });
 
   it('detects networks sources inside multi-source configs', async () => {
@@ -49,11 +79,49 @@ describe('flareSolverrRequiredCheck', () => {
     expect((await flareSolverrRequiredCheck.run()).status).toBe('error');
   });
 
-  it('passes when the solver URL is set', async () => {
-    state.settings = settingsWith(
-      [{ type: 'networks' }],
-      'http://flaresolverr:8191'
-    );
+  it('passes when a solver is configured', async () => {
+    state.settings = settingsWith([{ type: 'networks' }], [solverOne]);
     expect((await flareSolverrRequiredCheck.run()).status).toBe('ok');
+  });
+});
+
+describe('connectionFlareSolverrCheck', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('skips when no solvers are configured', async () => {
+    state.settings = settingsWith([]);
+    expect((await connectionFlareSolverrCheck.run()).status).toBe('skipped');
+    state.settings = settingsWith([], []);
+    expect((await connectionFlareSolverrCheck.run()).status).toBe('skipped');
+  });
+
+  it('reports ok with a count when all solvers respond', async () => {
+    state.settings = settingsWith([], [solverOne, solverTwo]);
+    mockGet.mockResolvedValue({ data: {} });
+    const result = await connectionFlareSolverrCheck.run();
+    expect(result.status).toBe('ok');
+    expect(result.message).toContain('2/2');
+  });
+
+  it('warns naming the dead instance when only some fail', async () => {
+    state.settings = settingsWith([], [solverOne, solverTwo]);
+    mockGet
+      .mockResolvedValueOnce({ data: {} })
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const result = await connectionFlareSolverrCheck.run();
+    expect(result.status).toBe('warning');
+    expect(result.message).toContain('Byparr');
+    expect(result.message).not.toContain("'FlareSolverr'");
+  });
+
+  it('errors when every solver is unreachable', async () => {
+    state.settings = settingsWith([], [solverOne, solverTwo]);
+    mockGet.mockRejectedValue(new Error('ECONNREFUSED'));
+    const result = await connectionFlareSolverrCheck.run();
+    expect(result.status).toBe('error');
+    expect(result.message).toContain('FlareSolverr');
+    expect(result.message).toContain('Byparr');
   });
 });

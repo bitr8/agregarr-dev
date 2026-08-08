@@ -5,8 +5,27 @@ import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import globalMessages from '@app/i18n/globalMessages';
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
+import { Bars3Icon, PlusIcon, TrashIcon } from '@heroicons/react/24/solid';
 import type {
+  CloudflareSolverInstance,
   MainSettings,
   MaintainerrSettings,
   MDBListSettings,
@@ -142,13 +161,99 @@ const messages = defineMessages({
   letterboxdUsePlainHttp: 'Use Plain HTTP for Letterboxd',
   letterboxdUsePlainHttpTip:
     'Use direct HTTP requests instead of browser automation (Playwright) for Letterboxd page fetching. Much faster and works unless Cloudflare challenges return.',
-  flareSolverrUrl: 'FlareSolverr URL',
-  flareSolverrUrlTip:
-    'URL of your FlareSolverr or Byparr instance (e.g. http://flaresolverr:8191). Required for FlixPatrol-based collections such as Networks Top 10 — Cloudflare blocks all other fetching methods.',
+  cloudflareSolvers: 'Cloudflare Solvers',
+  cloudflareSolversTip:
+    'FlareSolverr or Byparr instances, tried in order until one succeeds. Drag to set priority. Required for FlixPatrol-based collections such as Networks Top 10 — Cloudflare blocks all other fetching methods.',
+  cloudflareSolverNamePlaceholder: 'Name (e.g. FlareSolverr)',
+  cloudflareSolverUrlPlaceholder: 'http://flaresolverr:8191',
+  addCloudflareSolver: 'Add Solver',
+  deleteCloudflareSolver: 'Delete solver',
+  dragToReorder: 'Drag to reorder',
   toastFetchingSettingsSuccess: 'Fetching settings saved successfully!',
   toastFetchingSettingsFailure:
     'Something went wrong while saving fetching settings.',
 });
+
+const newSolverId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+
+interface SortableSolverRowProps {
+  solver: CloudflareSolverInstance;
+  namePlaceholder: string;
+  urlPlaceholder: string;
+  dragLabel: string;
+  deleteLabel: string;
+  onChange: (solver: CloudflareSolverInstance) => void;
+  onDelete: () => void;
+}
+
+const SortableSolverRow = ({
+  solver,
+  namePlaceholder,
+  urlPlaceholder,
+  dragLabel,
+  deleteLabel,
+  onChange,
+  onDelete,
+}: SortableSolverRowProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: solver.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? 'none' : transition,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 rounded-lg bg-stone-800 p-2 shadow ring-1 ring-stone-500 ${
+        isDragging ? 'z-50 opacity-50' : ''
+      }`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab p-1 text-gray-400 transition-colors hover:text-white active:cursor-grabbing"
+        aria-label={dragLabel}
+        title={dragLabel}
+      >
+        <Bars3Icon className="h-4 w-4" />
+      </div>
+      <input
+        type="text"
+        value={solver.name}
+        placeholder={namePlaceholder}
+        onChange={(e) => onChange({ ...solver, name: e.target.value })}
+        className="!w-1/3 !flex-none"
+      />
+      <input
+        type="text"
+        value={solver.url}
+        placeholder={urlPlaceholder}
+        onChange={(e) => onChange({ ...solver, url: e.target.value })}
+      />
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={deleteLabel}
+        title={deleteLabel}
+        className="p-1 text-gray-400 transition-colors hover:text-white"
+      >
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    </li>
+  );
+};
 
 interface SettingsSourcesProps {
   onComplete?: () => void;
@@ -167,6 +272,13 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
   const [maintainerrTestSuccess, setMaintainerrTestSuccess] = useState(false);
   const [testingService, setTestingService] = useState<string | null>(null);
   const [isDisconnectingTrakt, setIsDisconnectingTrakt] = useState(false);
+
+  const solverDndSensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Store the values that were successfully tested to detect changes
   const [testedTraktBasicClientId, setTestedTraktBasicClientId] =
@@ -368,14 +480,16 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
       <Formik
         initialValues={{
           letterboxdUsePlainHttp: dataMain?.letterboxdUsePlainHttp ?? true,
-          flareSolverrUrl: dataMain?.flareSolverrUrl ?? '',
+          cloudflareSolvers: dataMain?.cloudflareSolvers ?? [],
         }}
         enableReinitialize
         onSubmit={async (values) => {
           try {
             await axios.post('/api/v1/settings/main', {
               letterboxdUsePlainHttp: values.letterboxdUsePlainHttp,
-              flareSolverrUrl: values.flareSolverrUrl || undefined,
+              cloudflareSolvers: values.cloudflareSolvers.filter((s) =>
+                s.url.trim()
+              ),
             });
             revalidateMain();
             addToast(
@@ -419,21 +533,86 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
               </div>
             </div>
             <div className="form-row">
-              <label htmlFor="flareSolverrUrl" className="text-label">
-                <span>{intl.formatMessage(messages.flareSolverrUrl)}</span>
+              <label className="text-label">
+                <span>{intl.formatMessage(messages.cloudflareSolvers)}</span>
                 <span className="label-tip">
-                  {intl.formatMessage(messages.flareSolverrUrlTip)}
+                  {intl.formatMessage(messages.cloudflareSolversTip)}
                 </span>
               </label>
               <div className="form-input-area">
-                <div className="form-input-field">
-                  <Field
-                    type="text"
-                    id="flareSolverrUrl"
-                    name="flareSolverrUrl"
-                    placeholder="http://flaresolverr:8191"
-                  />
-                </div>
+                <DndContext
+                  sensors={solverDndSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event: DragEndEvent) => {
+                    const { active, over } = event;
+                    if (!over || active.id === over.id) return;
+                    const oldIndex = values.cloudflareSolvers.findIndex(
+                      (s) => s.id === active.id
+                    );
+                    const newIndex = values.cloudflareSolvers.findIndex(
+                      (s) => s.id === over.id
+                    );
+                    if (oldIndex === -1 || newIndex === -1) return;
+                    setFieldValue(
+                      'cloudflareSolvers',
+                      arrayMove(values.cloudflareSolvers, oldIndex, newIndex)
+                    );
+                  }}
+                >
+                  <SortableContext
+                    items={values.cloudflareSolvers.map((s) => s.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <ul className="space-y-2">
+                      {values.cloudflareSolvers.map((solver, index) => (
+                        <SortableSolverRow
+                          key={solver.id}
+                          solver={solver}
+                          namePlaceholder={intl.formatMessage(
+                            messages.cloudflareSolverNamePlaceholder
+                          )}
+                          urlPlaceholder={intl.formatMessage(
+                            messages.cloudflareSolverUrlPlaceholder
+                          )}
+                          dragLabel={intl.formatMessage(messages.dragToReorder)}
+                          deleteLabel={intl.formatMessage(
+                            messages.deleteCloudflareSolver
+                          )}
+                          onChange={(updated) => {
+                            const next = [...values.cloudflareSolvers];
+                            next[index] = updated;
+                            setFieldValue('cloudflareSolvers', next);
+                          }}
+                          onDelete={() => {
+                            setFieldValue(
+                              'cloudflareSolvers',
+                              values.cloudflareSolvers.filter(
+                                (s) => s.id !== solver.id
+                              )
+                            );
+                          }}
+                        />
+                      ))}
+                      <li className="rounded-lg border-2 border-dashed border-stone-400 shadow">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFieldValue('cloudflareSolvers', [
+                              ...values.cloudflareSolvers,
+                              { id: newSolverId(), name: '', url: '' },
+                            ])
+                          }
+                          className="flex w-full items-center justify-center gap-2 p-2 text-stone-400 transition hover:text-white"
+                        >
+                          <PlusIcon className="h-5 w-5" />
+                          <span>
+                            {intl.formatMessage(messages.addCloudflareSolver)}
+                          </span>
+                        </button>
+                      </li>
+                    </ul>
+                  </SortableContext>
+                </DndContext>
               </div>
             </div>
             <div className="actions">

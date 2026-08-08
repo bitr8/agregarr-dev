@@ -630,6 +630,36 @@ export interface WatchlistSyncSettings {
 
 // Quota interface removed - request system not needed in Agregarr
 
+export interface CloudflareSolverInstance {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export const normalizeCloudflareSolvers = (
+  input: unknown
+): CloudflareSolverInstance[] | null => {
+  if (!Array.isArray(input)) return null;
+  const result: CloudflareSolverInstance[] = [];
+  const seenIds = new Set<string>();
+  for (const entry of input) {
+    if (typeof entry !== 'object' || entry === null) return null;
+    const e = entry as Record<string, unknown>;
+    const url = typeof e.url === 'string' ? e.url.trim() : '';
+    if (!url) continue;
+    // The UI keys rows and deletes by id — duplicates would delete both rows
+    let id = typeof e.id === 'string' && e.id ? e.id : randomUUID();
+    if (seenIds.has(id)) id = randomUUID();
+    seenIds.add(id);
+    result.push({
+      id,
+      name: typeof e.name === 'string' ? e.name.trim() : '',
+      url,
+    });
+  }
+  return result;
+};
+
 export interface MainSettings {
   apiKey: string;
   // Gates the unauthenticated /plex-webhook route; not the admin apiKey, which grants full API access
@@ -670,8 +700,8 @@ export interface MainSettings {
   trailerIncludeWords?: string; // Comma-separated words — all must match in title (empty = no filter)
   // Letterboxd fetching method
   letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: true)
-  // FlareSolverr proxy URL (e.g. http://localhost:8191). When set, used for all Cloudflare-challenged fetches instead of built-in Playwright.
-  flareSolverrUrl?: string;
+  // Cloudflare solver instances (FlareSolverr/Byparr), tried in array order. Empty = built-in Playwright.
+  cloudflareSolvers?: CloudflareSolverInstance[];
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   healthChecksEnabled?: boolean;
   silencedHealthChecks?: string[];
@@ -977,6 +1007,45 @@ class Settings {
       );
     }
 
+    this.data.completedMigrations.push(migrationId);
+    this.save();
+  }
+
+  /**
+   * Migrate the single flareSolverrUrl setting to the cloudflareSolvers priority list
+   */
+  public migrateFlareSolverrUrlToSolverList(): void {
+    const migrationId = 'flaresolverr-url-to-solver-list';
+
+    if (!this.data.completedMigrations) {
+      this.data.completedMigrations = [];
+    }
+
+    if (this.data.completedMigrations.includes(migrationId)) {
+      return;
+    }
+
+    const legacyMain = this.data.main as MainSettings & {
+      flareSolverrUrl?: string;
+    };
+
+    if (
+      legacyMain.flareSolverrUrl &&
+      !this.data.main.cloudflareSolvers?.some((s) => s?.url)
+    ) {
+      this.data.main.cloudflareSolvers = [
+        {
+          id: randomUUID(),
+          name: 'FlareSolverr',
+          url: legacyMain.flareSolverrUrl,
+        },
+      ];
+      logger.info('Migrated FlareSolverr URL to Cloudflare solver list', {
+        label: 'Settings Migration',
+      });
+    }
+
+    delete legacyMain.flareSolverrUrl;
     this.data.completedMigrations.push(migrationId);
     this.save();
   }

@@ -81,6 +81,9 @@ app
     // Migrate placeholder settings from global to per-library format
     settings.migratePlaceholderSettingsToPerLibrary();
 
+    // Migrate single FlareSolverr URL to the cloudflareSolvers priority list
+    settings.migrateFlareSolverrUrlToSolverList();
+
     // Seed default source colors and poster template (one-time setup)
     try {
       const { seedSourceColors } = await import(

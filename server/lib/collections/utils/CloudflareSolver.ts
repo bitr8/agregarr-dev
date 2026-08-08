@@ -1,3 +1,4 @@
+import type { CloudflareSolverInstance } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import axios from 'axios';
@@ -6,9 +7,9 @@ import { chromium, type BrowserContext } from 'playwright';
 /**
  * Cloudflare Challenge Solver
  *
- * When flareSolverrUrl is configured, delegates to the FlareSolverr sidecar
- * (same pattern as Prowlarr/Jackett). Otherwise falls back to built-in
- * Playwright headless browser.
+ * When cloudflareSolvers are configured, delegates to FlareSolverr-protocol
+ * sidecars (FlareSolverr/Byparr), trying entries in priority order. Otherwise
+ * falls back to built-in Playwright headless browser.
  */
 function isChallengeTitle(title: string): boolean {
   return (
@@ -37,12 +38,20 @@ export class CloudflareSolver {
     { count: number; backoffUntil: number }
   > = new Map();
 
-  private static backoffKey(domain: string, useFlareSolverr: boolean): string {
-    return `${useFlareSolverr ? 'flaresolverr' : 'playwright'}:${domain}`;
+  // Backoff is per solver instance (URL) + domain, so one dead instance
+  // doesn't block the others. Playwright uses the literal key 'playwright'.
+  // ponytail: edited-away solver URLs orphan their entries for process
+  // lifetime; bounded by distinct URLs ever configured — sweep if it matters.
+  private static backoffKey(domain: string, instance: string): string {
+    return `${instance}:${domain}`;
+  }
+
+  private static getSolvers(): CloudflareSolverInstance[] {
+    return (getSettings().main.cloudflareSolvers ?? []).filter((s) => s?.url);
   }
 
   /**
-   * Fetch page content using Playwright, bypassing Cloudflare.
+   * Fetch page content, bypassing Cloudflare.
    * Results are cached for 5 minutes — the same URL is often requested
    * multiple times in quick succession (validate → extractTitle → page 1 fetch).
    */
@@ -59,27 +68,72 @@ export class CloudflareSolver {
       return await inProgress;
     }
 
-    // Determine solver method and domain — backoff is per-method so
-    // Playwright failures don't block FlareSolverr and vice versa
+    const fetchPromise = this.fetchUncached(url);
+    this.fetchInProgress.set(url, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      this.fetchInProgress.delete(url);
+    }
+  }
+
+  /**
+   * Walk configured solvers in priority order; first success wins.
+   * No Playwright fallback when solvers are configured — an outage
+   * surfaces in the health check, not a silent slow fallback.
+   */
+  private static async fetchUncached(url: string): Promise<string> {
     const domain = new URL(url).hostname;
-    const solverrUrl = getSettings().main.flareSolverrUrl;
-    const failureKey = this.backoffKey(domain, !!solverrUrl);
+    const solvers = this.getSolvers();
+
+    if (!solvers.length) {
+      return this.attemptFetch(url, domain, 'playwright', () =>
+        this.fetchWithBrowser(url)
+      );
+    }
+
+    const failures: string[] = [];
+    for (const solver of solvers) {
+      try {
+        return await this.attemptFetch(url, domain, solver.url, () =>
+          this.fetchWithFlareSolverr(url, solver.url)
+        );
+      } catch (error) {
+        failures.push(
+          `${solver.name || solver.url}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    throw new Error(
+      `All ${
+        solvers.length
+      } Cloudflare solver(s) failed for ${domain}: ${failures.join('; ')}`
+    );
+  }
+
+  /**
+   * Run one solve attempt with backoff bookkeeping for the given instance.
+   */
+  private static async attemptFetch(
+    url: string,
+    domain: string,
+    instance: string,
+    fetch: () => Promise<string>
+  ): Promise<string> {
+    const failureKey = this.backoffKey(domain, instance);
     const failure = this.solveFailures.get(failureKey);
     if (failure && failure.backoffUntil > Date.now()) {
       const waitSecs = Math.round((failure.backoffUntil - Date.now()) / 1000);
       throw new Error(
-        `Cloudflare solver backing off for ${domain} (${failure.count} consecutive failures, ${waitSecs}s remaining)`
+        `backing off for ${domain} (${failure.count} consecutive failures, ${waitSecs}s remaining)`
       );
     }
 
-    // Start fetching — prefer FlareSolverr when configured
-    const fetchPromise = solverrUrl
-      ? this.fetchWithFlareSolverr(url, solverrUrl)
-      : this.fetchWithBrowser(url);
-    this.fetchInProgress.set(url, fetchPromise);
-
     try {
-      const content = await fetchPromise;
+      const content = await fetch();
       if (!isChallengeHtml(content)) {
         this.htmlCache.set(url, { html: content, fetchedAt: Date.now() });
       }
@@ -95,14 +149,12 @@ export class CloudflareSolver {
         backoffUntil: Date.now() + backoffMs,
       });
       logger.warn(
-        `Cloudflare solve failed for ${domain}, backoff ${Math.round(
+        `Cloudflare solve failed for ${domain} via ${instance}, backoff ${Math.round(
           backoffMs / 1000
         )}s (${count} consecutive)`,
         { label: 'Cloudflare Solver' }
       );
       throw error;
-    } finally {
-      this.fetchInProgress.delete(url);
     }
   }
 
@@ -314,22 +366,19 @@ export class CloudflareSolver {
   ): Promise<Map<string, string>> {
     if (urls.length === 0) return new Map();
 
-    // When FlareSolverr is configured, route through fetchPage for backoff/cache
-    const solverrUrl = getSettings().main.flareSolverrUrl;
-    if (solverrUrl) {
+    // When solvers are configured, route through fetchPage for backoff/cache.
+    // No backoff short-circuit here: fetchPage serves cached pages even when
+    // every solver is backing off, and its backoff throw is cheap.
+    const solvers = this.getSolvers();
+    if (solvers.length) {
       const results = new Map<string, string>();
       for (const url of urls) {
-        // Short-circuit if domain is in backoff (avoid log spam)
-        const domain = new URL(url).hostname;
-        const failure = this.solveFailures.get(this.backoffKey(domain, true));
-        if (failure && failure.backoffUntil > Date.now()) continue;
-
         try {
           const html = await this.fetchPage(url);
           results.set(url, html);
         } catch (error) {
           logger.debug(
-            `FlareSolverr batch: failed for ${url}: ${
+            `Solver batch: failed for ${url}: ${
               error instanceof Error ? error.message : 'Unknown'
             }`,
             { label: 'Cloudflare Solver' }
