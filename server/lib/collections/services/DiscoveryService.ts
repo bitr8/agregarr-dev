@@ -2135,7 +2135,8 @@ export class DiscoveryService {
       // Download and save the new poster
       const filename = await downloadAndSavePoster(
         posterUrl,
-        `${collection.title} (${libraryName})`
+        `${collection.title} (${libraryName})`,
+        { skipSsrfValidation: true }
       );
 
       if (filename) {

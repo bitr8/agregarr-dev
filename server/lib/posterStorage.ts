@@ -504,10 +504,13 @@ export async function getPosterUsage(filename: string): Promise<
  */
 export async function downloadAndSavePoster(
   url: string,
-  originalName?: string
+  originalName?: string,
+  options?: { skipSsrfValidation?: boolean }
 ): Promise<string | null> {
   try {
-    await validateExternalUrl(url);
+    if (!options?.skipSsrfValidation) {
+      await validateExternalUrl(url);
+    }
     const axios = await import('axios');
 
     const response = await axios.default.get(url, {
