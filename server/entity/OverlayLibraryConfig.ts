@@ -48,6 +48,17 @@ export class OverlayLibraryConfig {
   @Column({ type: 'boolean', default: false })
   public enableMaintainerrSeasonOverlays: boolean;
 
+  // "Show poster countdown": hold the show poster's countdown back until every
+  // season of the show is scheduled to leave. Independent of
+  // enableMaintainerrSeasonOverlays, which governs the season posters.
+  @Column({ type: 'boolean', default: false })
+  public requireAllSeasonsLeaving: boolean;
+
+  // Only consulted when requireAllSeasonsLeaving is on: date the show by the
+  // last season to leave (true) or the first (false).
+  @Column({ type: 'boolean', default: true })
+  public useLatestSeasonDate: boolean;
+
   @CreateDateColumn()
   public createdAt: Date;
 
