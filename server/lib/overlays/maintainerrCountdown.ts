@@ -2,6 +2,7 @@ import type {
   MaintainerrCollection,
   MaintainerrMedia,
 } from '@server/api/maintainerr';
+import logger from '@server/logger';
 
 /**
  * Result of a Maintainerr deletion-countdown lookup for a single Plex ratingKey:
@@ -42,6 +43,13 @@ export interface SeasonFallback {
   mode: SeasonFallbackMode;
   /** Under 'all': date the show by the LAST season to go, not the first. */
   useLatestSeasonDate: boolean;
+  /**
+   * Under 'all': only season collections from this Plex library section count.
+   * Maintainerr stamps rows with the parent tmdbId, which another library's
+   * copy of the show shares — without the scope, a foreign season key can make
+   * the distinct count hit `totalSeasons` exactly and forge the proof.
+   */
+  librarySectionId?: number | string;
 }
 
 /** The fallback a caller with no library config may use: none. */
@@ -65,12 +73,14 @@ export const NO_SEASON_FALLBACK: SeasonFallback = {
 export function seasonFallbackFor(config: {
   requireAllSeasonsLeaving?: boolean;
   useLatestSeasonDate?: boolean;
+  libraryId?: number | string;
 }): SeasonFallback {
   return {
     mode: config.requireAllSeasonsLeaving ? 'all' : 'any',
     // The column defaults to true, so an absent value means "not stored yet"
     // (a row read before the migration ran), never "earliest".
     useLatestSeasonDate: config.useLatestSeasonDate ?? true,
+    librarySectionId: config.libraryId,
   };
 }
 
@@ -265,12 +275,7 @@ export function computeDaysUntilAction(
   }
 
   return fallback.mode === 'all'
-    ? allSeasonsCountdown(
-        collections,
-        opts.tmdbId,
-        opts.totalSeasons,
-        fallback.useLatestSeasonDate
-      )
+    ? allSeasonsCountdown(collections, opts.tmdbId, opts.totalSeasons, fallback)
     : anySeasonCountdown(collections, opts.tmdbId);
 }
 
@@ -342,26 +347,42 @@ function anySeasonCountdown(
  * a guess: no `totalSeasons` (Plex gave no `childCount`), a matched row with no
  * ratingKey to identify its season, or a distinct-season count that misses
  * `totalSeasons` in either direction. Short means a season is staying; long means
- * rows we cannot attribute (a stale season, another library's copy of the show)
- * inflated the join.
+ * rows we cannot attribute (a stale season) inflated the join.
+ *
+ * The tmdbId join reaches every library, and another library's copy of the show
+ * has different season ratingKeys — enough foreign keys and the distinct count
+ * lands on `totalSeasons` exactly, proving "all leaving" for a show that is
+ * keeping a season. `librarySectionId` scopes the join to the library being
+ * rendered (string compare: Maintainerr sends string ids, Agregarr numbers).
  */
 function allSeasonsCountdown(
   collections: MaintainerrCollection[],
   tmdbId: number,
   totalSeasons: number | undefined,
-  useLatestSeasonDate: boolean
+  fallback: SeasonFallback
 ): MaintainerrCountdown | null {
   if (!totalSeasons || totalSeasons <= 0) {
     return null;
   }
 
+  const { useLatestSeasonDate, librarySectionId } = fallback;
   const bySeason = new Map<
     string,
     { collection: MaintainerrCollection; days: number }
   >();
+  let scopedOutCollections = 0;
 
   for (const collection of collections) {
     if (collection.type !== 'season' || !hasDeletionSchedule(collection)) {
+      continue;
+    }
+    if (
+      librarySectionId != null &&
+      String(collection.libraryId) !== String(librarySectionId)
+    ) {
+      if (collection.media.some((m) => Number(m.tmdbId) === tmdbId)) {
+        scopedOutCollections++;
+      }
       continue;
     }
 
@@ -388,6 +409,14 @@ function allSeasonsCountdown(
   }
 
   if (bySeason.size !== totalSeasons) {
+    // A libraryId mismatch (legacy Maintainerr omitting it, or a numbering-space
+    // drift) filters everything and reads as "nothing scheduled" — leave a trace
+    if (bySeason.size === 0 && scopedOutCollections > 0) {
+      logger.debug(
+        `All-seasons countdown: every season collection for tmdbId ${tmdbId} was outside library section ${librarySectionId} (${scopedOutCollections} scoped out)`,
+        { label: 'Maintainerr Countdown' }
+      );
+    }
     return null;
   }
 

@@ -484,6 +484,109 @@ describe('computeDaysUntilAction show-level season fallback', () => {
     ).toBeNull();
   });
 
+  it("'all' does not let another library's season key complete the proof", () => {
+    const local = makeCollection({
+      id: 1,
+      libraryId: 1,
+      media: [makeMedia(SEASON_1)],
+    });
+    // Same show in a second library: same tmdbId, different season ratingKey.
+    // One local season scheduled out of two — a foreign key must not close the gap.
+    const foreign = makeCollection({
+      id: 2,
+      libraryId: 2,
+      media: [makeMedia({ mediaServerId: 'season-1-other-library' })],
+    });
+
+    expect(
+      computeDaysUntilAction([local, foreign], SHOW_KEY, {
+        mediaType: 'show',
+        tmdbId: 100,
+        seasonFallback: {
+          mode: 'all',
+          useLatestSeasonDate: true,
+          librarySectionId: 1,
+        },
+        totalSeasons: 2,
+      })
+    ).toBeNull();
+  });
+
+  it("'all' still fires when the local library alone accounts for every season", () => {
+    const local = makeCollection({
+      id: 1,
+      libraryId: 1,
+      deleteAfterDays: 45, // season 1 => 15, season 2 => 25
+      media: [makeMedia(SEASON_1), makeMedia(SEASON_2)],
+    });
+    // Without the scope this foreign row overshoots the count (3 keys vs 2)
+    // and would silence a show whose local proof is complete.
+    const foreign = makeCollection({
+      id: 2,
+      libraryId: 2,
+      media: [makeMedia({ mediaServerId: 'season-1-other-library' })],
+    });
+
+    const result = computeDaysUntilAction([local, foreign], SHOW_KEY, {
+      mediaType: 'show',
+      tmdbId: 100,
+      seasonFallback: {
+        mode: 'all',
+        useLatestSeasonDate: true,
+        // String section id against numeric collection ids: both sides coerce.
+        librarySectionId: '1',
+      },
+      totalSeasons: 2,
+    });
+
+    expect(result?.days).toBe(25);
+  });
+
+  it("'all' ignores a foreign keyless row instead of aborting the local proof", () => {
+    const local = makeCollection({
+      id: 1,
+      libraryId: 1,
+      deleteAfterDays: 45,
+      media: [makeMedia(SEASON_1), makeMedia(SEASON_2)],
+    });
+    // A keyless row aborts the proof — but only from a collection in scope.
+    const foreign = makeCollection({
+      id: 2,
+      libraryId: 2,
+      media: [makeMedia({ mediaServerId: undefined, plexId: undefined })],
+    });
+
+    const result = computeDaysUntilAction([local, foreign], SHOW_KEY, {
+      mediaType: 'show',
+      tmdbId: 100,
+      seasonFallback: {
+        mode: 'all',
+        useLatestSeasonDate: true,
+        librarySectionId: 1,
+      },
+      totalSeasons: 2,
+    });
+
+    expect(result?.days).toBe(25);
+  });
+
+  it("'all' counts every library when the fallback names no section", () => {
+    const local = makeCollection({
+      id: 1,
+      libraryId: 1,
+      media: [makeMedia(SEASON_1)],
+    });
+    const foreign = makeCollection({
+      id: 2,
+      libraryId: 2,
+      media: [makeMedia({ mediaServerId: 'season-1-other-library' })],
+    });
+
+    expect(
+      computeDaysUntilAction([local, foreign], SHOW_KEY, forShow('all', 2))
+    ).not.toBeNull();
+  });
+
   it("'all' stays silent when Plex reported no childCount", () => {
     const collection = makeCollection({
       media: [makeMedia(SEASON_1), makeMedia(SEASON_2)],
@@ -668,6 +771,11 @@ describe('seasonFallbackFor', () => {
         useLatestSeasonDate: false,
       })
     ).toEqual({ mode: 'all', useLatestSeasonDate: false });
+  });
+
+  it("carries the config's library id as the section scope", () => {
+    expect(seasonFallbackFor({ libraryId: 3 }).librarySectionId).toBe(3);
+    expect(seasonFallbackFor({}).librarySectionId).toBeUndefined();
   });
 });
 
