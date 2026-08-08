@@ -142,12 +142,9 @@ const messages = defineMessages({
   letterboxdUsePlainHttp: 'Use Plain HTTP for Letterboxd',
   letterboxdUsePlainHttpTip:
     'Use direct HTTP requests instead of browser automation (Playwright) for Letterboxd page fetching. Much faster and works unless Cloudflare challenges return.',
-  flixpatrolUsePlainHttp: 'Use Plain HTTP for FlixPatrol',
-  flixpatrolUsePlainHttpTip:
-    'Use direct HTTP requests instead of browser automation (Playwright) for FlixPatrol page fetching. Much faster and works unless Cloudflare challenges return.',
   flareSolverrUrl: 'FlareSolverr URL',
   flareSolverrUrlTip:
-    'URL of your FlareSolverr instance (e.g. http://flaresolverr:8191). When set, Cloudflare-challenged fetches use FlareSolverr instead of the built-in browser.',
+    'URL of your FlareSolverr or Byparr instance (e.g. http://flaresolverr:8191). Required for FlixPatrol-based collections such as Networks Top 10 — Cloudflare blocks all other fetching methods.',
   toastFetchingSettingsSuccess: 'Fetching settings saved successfully!',
   toastFetchingSettingsFailure:
     'Something went wrong while saving fetching settings.',
@@ -360,7 +357,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
         </div>
       </div>
 
-      {/* Fetching Settings (Letterboxd / FlixPatrol plain HTTP) */}
+      {/* Fetching Settings (Letterboxd plain HTTP / FlareSolverr) */}
       <div className="section">
         <div className="mb-6">
           <h3 className="heading">
@@ -371,7 +368,6 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
       <Formik
         initialValues={{
           letterboxdUsePlainHttp: dataMain?.letterboxdUsePlainHttp ?? true,
-          flixpatrolUsePlainHttp: dataMain?.flixpatrolUsePlainHttp ?? false,
           flareSolverrUrl: dataMain?.flareSolverrUrl ?? '',
         }}
         enableReinitialize
@@ -379,7 +375,6 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
           try {
             await axios.post('/api/v1/settings/main', {
               letterboxdUsePlainHttp: values.letterboxdUsePlainHttp,
-              flixpatrolUsePlainHttp: values.flixpatrolUsePlainHttp,
               flareSolverrUrl: values.flareSolverrUrl || undefined,
             });
             revalidateMain();
@@ -418,32 +413,6 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
                     setFieldValue(
                       'letterboxdUsePlainHttp',
                       !values.letterboxdUsePlainHttp
-                    );
-                  }}
-                />
-              </div>
-            </div>
-            <div className="form-row">
-              <label
-                htmlFor="flixpatrolUsePlainHttp"
-                className="checkbox-label"
-              >
-                <span className="mr-2">
-                  {intl.formatMessage(messages.flixpatrolUsePlainHttp)}
-                </span>
-                <span className="label-tip">
-                  {intl.formatMessage(messages.flixpatrolUsePlainHttpTip)}
-                </span>
-              </label>
-              <div className="form-input-area">
-                <Field
-                  type="checkbox"
-                  id="flixpatrolUsePlainHttp"
-                  name="flixpatrolUsePlainHttp"
-                  onChange={() => {
-                    setFieldValue(
-                      'flixpatrolUsePlainHttp',
-                      !values.flixpatrolUsePlainHttp
                     );
                   }}
                 />

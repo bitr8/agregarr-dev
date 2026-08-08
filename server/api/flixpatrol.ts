@@ -1,6 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
 import cacheManager from '@server/lib/cache';
-import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { JSDOM } from 'jsdom';
 
@@ -278,15 +277,6 @@ class FlixPatrolAPI extends ExternalAPI {
   }
 
   private async fetchFlixPatrolPage(url: string): Promise<string> {
-    const usePlainHttp = getSettings().main.flixpatrolUsePlainHttp ?? false;
-
-    if (usePlainHttp) {
-      const { FlixPatrolHttpClient } = await import(
-        '@server/lib/collections/utils/FlixPatrolHttpClient'
-      );
-      return FlixPatrolHttpClient.fetchPage(url);
-    }
-
     const { CloudflareSolver } = await import(
       '@server/lib/collections/utils/CloudflareSolver'
     );

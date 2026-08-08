@@ -17,7 +17,7 @@ import path from 'path';
 
 type HealthCheckStatus = 'ok' | 'warning' | 'error' | 'skipped';
 
-interface HealthCheck {
+export interface HealthCheck {
   id: string;
   name: string;
   run: () => Promise<{ status: HealthCheckStatus; message?: string }>;
@@ -238,6 +238,33 @@ const connectionFlareSolverrCheck: HealthCheck = {
         ),
       };
     }
+  },
+};
+
+// Missing-flagged configs still sync (CollectionSyncService filters only filtered_hub),
+// so they still require the solver — no missing exclusion here.
+export const flareSolverrRequiredCheck: HealthCheck = {
+  id: 'flaresolverr-required',
+  name: 'Cloudflare Solver',
+
+  run: async () => {
+    const { main, plex } = getSettings();
+    const usesFlixPatrol = (plex.collectionConfigs ?? []).some(
+      (c) =>
+        c.type === 'networks' ||
+        (c.sources ?? []).some((s) => s.type === 'networks')
+    );
+    if (!usesFlixPatrol) return { status: 'skipped' };
+
+    if (!main.flareSolverrUrl) {
+      return {
+        status: 'error',
+        message:
+          'Networks Top 10 collections fetch from FlixPatrol, which sits behind a Cloudflare challenge the built-in browser cannot reliably pass. Install FlareSolverr or Byparr and set its URL in Settings > Sources.',
+      };
+    }
+
+    return { status: 'ok', message: 'Solver URL configured' };
   },
 };
 
@@ -602,6 +629,7 @@ const checks: HealthCheck[] = [
   connectionTmdbCheck,
   connectionRatingsProxyCheck,
   connectionFlareSolverrCheck,
+  flareSolverrRequiredCheck,
   connectionMaintainerrCheck,
   orphanedCollectionKeysCheck,
   plexLibrariesCheck,
