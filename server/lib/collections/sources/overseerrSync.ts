@@ -938,6 +938,15 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
     config: CollectionConfig,
     plexClient: PlexAPI
   ): Promise<void> {
+    // Sort title override: user-provided value wins unconditionally
+    if (config.sortTitleOverride) {
+      await plexClient.updateCollectionSortTitle(
+        collectionRatingKey,
+        config.sortTitleOverride
+      );
+      return;
+    }
+
     const sortOrderLibrary = config.sortOrderLibrary;
     const isLibraryPromoted = config.isLibraryPromoted;
 
@@ -1368,11 +1377,15 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
       // Apply metadata to smart collection (sort title, visibility, poster)
       // Replicate what updateCollectionMetadata does in BaseCollectionSync
       if (smartCollectionRatingKey) {
-        // Calculate and apply sort title (handles promotion with exclamation marks)
-        const sortOrderLibrary = config.sortOrderLibrary;
-        const isLibraryPromoted = config.isLibraryPromoted;
-
-        if (sortOrderLibrary !== undefined) {
+        // Sort title override: user-provided value wins unconditionally
+        if (config.sortTitleOverride) {
+          await plexClient.updateCollectionSortTitle(
+            smartCollectionRatingKey,
+            config.sortTitleOverride
+          );
+        } else if (config.sortOrderLibrary !== undefined) {
+          const sortOrderLibrary = config.sortOrderLibrary;
+          const isLibraryPromoted = config.isLibraryPromoted;
           let sortTitle: string;
 
           // Treat sortOrderLibrary > 0 as promoted even if isLibraryPromoted is undefined

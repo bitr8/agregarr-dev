@@ -77,6 +77,10 @@ const messages = defineMessages({
   customSummaryPlaceholder: 'Enter a custom description for this collection...',
   customSummaryHelp:
     'Custom description text for the collection. Will be synced to Plex.',
+  sortTitle: 'Sort Title',
+  sortTitlePlaceholder: 'Leave blank for automatic ordering',
+  sortTitleHelp:
+    'Override the auto-generated sort title. Use prefixes like !010_ to control position relative to other tools.',
   overlayConfigWarningTitle: 'No Overlay Templates Configured',
   overlayConfigWarningMessage:
     'You have enabled placeholder creation and overlay application, but no overlay templates are configured for {libraryNames}. Placeholders will be created without status overlays showing monitored status, release dates, etc.',
@@ -1856,6 +1860,8 @@ const CollectionFormConfigForm = ({
           customWallpaper:
             (config as CollectionFormConfig).customWallpaper || '',
           customSummary: (config as CollectionFormConfig).customSummary || '',
+          sortTitleOverride:
+            (config as CollectionFormConfig).sortTitleOverride || '',
           customTheme: (config as CollectionFormConfig).customTheme || '',
           // Custom URL fields (default to empty strings to prevent uncontrolled->controlled warnings)
           traktCustomListUrl:
@@ -2438,6 +2444,7 @@ const CollectionFormConfigForm = ({
             // Wallpaper, summary, and theme settings
             customWallpaper: values.customWallpaper,
             customSummary: values.customSummary,
+            sortTitleOverride: values.sortTitleOverride?.trim() || '',
             customTheme: values.customTheme,
             enableCustomWallpaper: values.enableCustomWallpaper,
             enableCustomSummary: values.enableCustomSummary,
@@ -3856,6 +3863,34 @@ const CollectionFormConfigForm = ({
                                     )}
                                   </div>
 
+                                  {/* Sort Title Override */}
+                                  <div className="form-row">
+                                    <label
+                                      htmlFor="sortTitleOverride"
+                                      className="text-label"
+                                    >
+                                      {intl.formatMessage(messages.sortTitle)}
+                                    </label>
+                                    <div className="form-input-area">
+                                      <div className="form-input-field">
+                                        <Field
+                                          type="text"
+                                          id="sortTitleOverride"
+                                          name="sortTitleOverride"
+                                          placeholder={intl.formatMessage(
+                                            messages.sortTitlePlaceholder
+                                          )}
+                                          className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
+                                        />
+                                        <div className="label-tip mt-1">
+                                          {intl.formatMessage(
+                                            messages.sortTitleHelp
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
                                   {/* Enable Theme Checkbox */}
                                   <div className="mb-4">
                                     <div className="flex items-center">
@@ -5155,6 +5190,34 @@ const CollectionFormConfigForm = ({
                                       </div>
                                     </div>
                                   )}
+                                </div>
+
+                                {/* Sort Title Override */}
+                                <div className="form-row">
+                                  <label
+                                    htmlFor="sortTitleOverride"
+                                    className="text-label"
+                                  >
+                                    {intl.formatMessage(messages.sortTitle)}
+                                  </label>
+                                  <div className="form-input-area">
+                                    <div className="form-input-field">
+                                      <Field
+                                        type="text"
+                                        id="sortTitleOverride"
+                                        name="sortTitleOverride"
+                                        placeholder={intl.formatMessage(
+                                          messages.sortTitlePlaceholder
+                                        )}
+                                        className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
+                                      />
+                                      <div className="label-tip mt-1">
+                                        {intl.formatMessage(
+                                          messages.sortTitleHelp
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </div>

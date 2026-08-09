@@ -457,6 +457,7 @@ const CollectionSettings = ({
           randomizeHomeOrder: config.randomizeHomeOrder,
           customWallpaper: config.customWallpaper,
           customSummary: config.customSummary,
+          sortTitleOverride: config.sortTitleOverride,
           customTheme: config.customTheme,
           enableCustomWallpaper: config.enableCustomWallpaper,
           enableCustomSummary: config.enableCustomSummary,
@@ -985,6 +986,9 @@ const CollectionSettings = ({
         }),
         ...(preExistingConfig.customSummary && {
           customSummary: preExistingConfig.customSummary,
+        }),
+        ...(preExistingConfig.sortTitleOverride !== undefined && {
+          sortTitleOverride: preExistingConfig.sortTitleOverride,
         }),
         ...(preExistingConfig.customTheme && {
           customTheme: preExistingConfig.customTheme,

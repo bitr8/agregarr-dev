@@ -161,6 +161,7 @@ export interface PreExistingCollectionConfig {
   enableCustomWallpaper?: boolean; // Enable custom wallpaper sync to Plex
   enableCustomSummary?: boolean; // Enable custom summary sync to Plex
   enableCustomTheme?: boolean; // Enable custom theme sync to Plex
+  sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto)
 }
 
 // Form metadata type for identifying config handling behavior
@@ -464,6 +465,7 @@ export interface CollectionFormConfig {
   readonly enableCustomWallpaper?: boolean; // Enable custom wallpaper sync to Plex
   readonly enableCustomSummary?: boolean; // Enable custom summary sync to Plex
   readonly enableCustomTheme?: boolean; // Enable custom theme sync to Plex
+  readonly sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto)
   // Time restriction settings
   readonly timeRestriction?: {
     readonly alwaysActive: boolean; // If true, collection is always active (default)
@@ -685,6 +687,7 @@ export interface CollectionConfigCreateRequest {
   readonly enableCustomWallpaper?: boolean; // Enable custom wallpaper sync to Plex
   readonly enableCustomSummary?: boolean; // Enable custom summary sync to Plex
   readonly enableCustomTheme?: boolean; // Enable custom theme sync to Plex
+  readonly sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto)
   readonly showUnwatchedOnly?: boolean; // If true, create a smart collection that filters to unwatched items only
   readonly smartCollectionSort?: SmartCollectionSortOption; // Sort option for smart collections
   readonly selectionMode?: 'exclude' | 'include';
@@ -814,6 +817,7 @@ export const toCollectionCreateRequest = (
     enableCustomWallpaper: config.enableCustomWallpaper,
     enableCustomSummary: config.enableCustomSummary,
     enableCustomTheme: config.enableCustomTheme,
+    sortTitleOverride: config.sortTitleOverride,
     // Smart collection support
     showUnwatchedOnly: config.showUnwatchedOnly,
     smartCollectionSort: config.smartCollectionSort,

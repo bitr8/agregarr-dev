@@ -2951,6 +2951,28 @@ export class MultiSourceOrchestrator {
     config: MultiSourceCollectionConfig,
     currentTitleSort?: string
   ): Promise<void> {
+    // Sort title override: user-provided value wins unconditionally
+    if (config.sortTitleOverride) {
+      try {
+        await plexClient.updateCollectionSortTitle(
+          collectionRatingKey,
+          config.sortTitleOverride,
+          currentTitleSort
+        );
+      } catch (error) {
+        logger.error(
+          `Failed to update sortTitle override for multi-source collection: ${collectionName}`,
+          {
+            label: 'Multi-Source Orchestrator',
+            configId: config.id,
+            collectionRatingKey,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+      return;
+    }
+
     // Only update sortTitle if we have sortOrderLibrary defined
     if (config.sortOrderLibrary === undefined) {
       return;

@@ -603,7 +603,9 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
 
       // Align separator sort title with user ordering (matching prefix, underscore to float before group)
       try {
-        const sortTitle = this.buildSeparatorSortTitle(config, separatorTitle);
+        const sortTitle = config.sortTitleOverride
+          ? config.sortTitleOverride
+          : this.buildSeparatorSortTitle(config, separatorTitle);
         await plexClient.updateCollectionSortTitle(
           separatorRatingKey,
           sortTitle

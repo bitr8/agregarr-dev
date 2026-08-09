@@ -499,6 +499,9 @@ const AllCollectionsView: React.FC = () => {
         ...(preExistingConfig.customSummary && {
           customSummary: preExistingConfig.customSummary,
         }),
+        ...(preExistingConfig.sortTitleOverride !== undefined && {
+          sortTitleOverride: preExistingConfig.sortTitleOverride,
+        }),
         ...(preExistingConfig.customTheme && {
           customTheme: preExistingConfig.customTheme,
         }),

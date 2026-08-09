@@ -2228,8 +2228,17 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       );
     });
 
-    // Only update sortTitle if everLibraryPromoted is not explicitly false
-    if (
+    // Sort title override: user-provided value wins unconditionally
+    const effectiveOverride =
+      options.config?.sortTitleOverride || matchingConfig?.sortTitleOverride;
+    if (effectiveOverride) {
+      await plexClient.updateCollectionSortTitle(
+        collectionRatingKey,
+        effectiveOverride,
+        options.existingTitleSort
+      );
+    } else if (
+      // Only update sortTitle if everLibraryPromoted is not explicitly false
       sortOrderLibrary !== undefined &&
       matchingConfig?.everLibraryPromoted !== false
     ) {

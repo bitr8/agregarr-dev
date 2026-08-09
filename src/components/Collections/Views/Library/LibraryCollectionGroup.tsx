@@ -76,6 +76,12 @@ function isLibraryPromoted(
   return collection.isLibraryPromoted === true;
 }
 
+function hasSortTitleOverride(
+  collection: CollectionFormConfig | PlexHubConfig | PreExistingCollectionConfig
+): boolean {
+  return !!(collection as CollectionFormConfig).sortTitleOverride;
+}
+
 function findPromotedDividerIndex(
   allConfigs: {
     config: CollectionFormConfig | PlexHubConfig | PreExistingCollectionConfig;
@@ -184,10 +190,12 @@ const SortableItem = ({
     (config.visibilityConfig?.usersHome ||
       config.visibilityConfig?.serverOwnerHome);
 
-  // Disable dragging for greyed out items and A-Z collections on Library tab
+  // Disable dragging for greyed out items, A-Z collections on Library tab,
+  // and collections with a manual sort title override
   const isDraggingDisabled =
     isGreyedInRecommended ||
-    (activeTab === 'library' && !isLibraryPromoted(config));
+    (activeTab === 'library' && !isLibraryPromoted(config)) ||
+    (activeTab === 'library' && hasSortTitleOverride(config));
 
   const {
     attributes,
@@ -476,7 +484,12 @@ const SortableItem = ({
                         onPromoteCollection(config as CollectionFormConfig)
                       }
                       className="text-orange-400 hover:text-orange-300"
-                      title="Promote to top section with custom ordering"
+                      title={
+                        hasSortTitleOverride(config)
+                          ? 'Sort position is manually set in collection settings'
+                          : 'Promote to top section with custom ordering'
+                      }
+                      disabled={hasSortTitleOverride(config)}
                     >
                       <span className="text-xs">↑</span>
                     </Button>
@@ -491,7 +504,12 @@ const SortableItem = ({
                         )
                       }
                       className="text-orange-400 hover:text-orange-300"
-                      title="Promote to top section with custom ordering"
+                      title={
+                        hasSortTitleOverride(config)
+                          ? 'Sort position is manually set in collection settings'
+                          : 'Promote to top section with custom ordering'
+                      }
+                      disabled={hasSortTitleOverride(config)}
                     >
                       <span className="text-xs">↑</span>
                     </Button>
@@ -510,7 +528,12 @@ const SortableItem = ({
                         onDemoteCollection(config as CollectionFormConfig)
                       }
                       className="text-yellow-400 hover:text-yellow-300"
-                      title="Demote to alphabetical section"
+                      title={
+                        hasSortTitleOverride(config)
+                          ? 'Sort position is manually set in collection settings'
+                          : 'Demote to alphabetical section'
+                      }
+                      disabled={hasSortTitleOverride(config)}
                     >
                       <span className="text-xs">↓</span>
                     </Button>
@@ -525,7 +548,12 @@ const SortableItem = ({
                         )
                       }
                       className="text-yellow-400 hover:text-yellow-300"
-                      title="Demote to alphabetical section"
+                      title={
+                        hasSortTitleOverride(config)
+                          ? 'Sort position is manually set in collection settings'
+                          : 'Demote to alphabetical section'
+                      }
+                      disabled={hasSortTitleOverride(config)}
                     >
                       <span className="text-xs">↓</span>
                     </Button>

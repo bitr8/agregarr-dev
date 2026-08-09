@@ -1663,6 +1663,30 @@ export class HubSyncService {
           continue;
         }
 
+        // Sort title override: user-provided value wins unconditionally
+        if (config.sortTitleOverride) {
+          try {
+            await plexClient.updateCollectionSortTitle(
+              config.collectionRatingKey,
+              config.sortTitleOverride
+            );
+          } catch (error) {
+            logger.error(
+              `Failed to update sortTitle override for pre-existing collection ${
+                config.name
+              }: ${extractErrorMessage(error)}`,
+              {
+                label: 'Hub Sync Service',
+                collectionId: config.id,
+                collectionName: config.name,
+                collectionRatingKey: config.collectionRatingKey,
+                error: extractErrorMessage(error),
+              }
+            );
+          }
+          continue;
+        }
+
         // Only update sortTitle if everLibraryPromoted is not explicitly false
         if (config.everLibraryPromoted === false) {
           // If everLibraryPromoted is explicitly false: DO NOT touch sortTitle at all

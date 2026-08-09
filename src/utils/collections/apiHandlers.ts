@@ -66,6 +66,9 @@ export const saveIndividualConfigs = async (
         ...(preExistingConfig.customSummary && {
           customSummary: preExistingConfig.customSummary,
         }),
+        ...(preExistingConfig.sortTitleOverride !== undefined && {
+          sortTitleOverride: preExistingConfig.sortTitleOverride,
+        }),
         ...(preExistingConfig.customTheme && {
           customTheme: preExistingConfig.customTheme,
         }),
@@ -422,6 +425,9 @@ export const saveIndividualConfigs = async (
         }),
         ...(collectionConfig.customSummary && {
           customSummary: collectionConfig.customSummary,
+        }),
+        ...(collectionConfig.sortTitleOverride !== undefined && {
+          sortTitleOverride: collectionConfig.sortTitleOverride,
         }),
         ...(collectionConfig.customTheme && {
           customTheme: collectionConfig.customTheme,
