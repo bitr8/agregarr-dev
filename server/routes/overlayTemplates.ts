@@ -497,12 +497,14 @@ router.post('/', async (req, res, next) => {
     }
 
     // Validate template data structure - check for variable elements
-    const variableElements =
+    // Conditional variable elements are mutually exclusive at render time
+    const unconditionalVariables =
       templateData.elements?.filter(
-        (el: { type: string }) => el.type === 'variable'
+        (el: { type: string; condition?: unknown }) =>
+          el.type === 'variable' && !el.condition
       ) || [];
 
-    if (variableElements.length > 1) {
+    if (unconditionalVariables.length > 1) {
       return res.status(400).json({
         error:
           'Template has multiple variable elements. Each template can only contain one variable element.',
@@ -594,13 +596,13 @@ router.put('/:id', async (req, res, next) => {
     if (description !== undefined) template.description = description;
     if (type !== undefined) template.type = type;
     if (templateData) {
-      // Validate template data structure - check for variable elements
-      const variableElements =
+      const unconditionalVariables =
         templateData.elements?.filter(
-          (el: { type: string }) => el.type === 'variable'
+          (el: { type: string; condition?: unknown }) =>
+            el.type === 'variable' && !el.condition
         ) || [];
 
-      if (variableElements.length > 1) {
+      if (unconditionalVariables.length > 1) {
         return res.status(400).json({
           error:
             'Template has multiple variable elements. Each template can only contain one variable element.',

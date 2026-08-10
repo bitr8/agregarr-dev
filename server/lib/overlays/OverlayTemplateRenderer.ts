@@ -538,24 +538,21 @@ class OverlayTemplateRendererService {
     elements: OverlayElement[],
     context: OverlayRenderContext
   ): boolean {
-    // Find all variable elements in the template
-    const variableElements = elements.filter((el) => el.type === 'variable');
+    const variableElements = elements.filter(
+      (el) => el.type === 'variable' && evaluateCondition(el.condition, context)
+    );
 
-    // If no variable elements, overlay can be applied
     if (variableElements.length === 0) {
       return true;
     }
 
-    // Check if all variable segments have values available in context
     for (const element of variableElements) {
       const props = element.properties as OverlayVariableElementProps;
 
-      // Check all variable segments in this element
       for (const segment of props.segments) {
         if (segment.type === 'variable' && segment.field) {
           const value = context[segment.field];
 
-          // If any required variable is missing, skip entire overlay
           if (value === undefined || value === null) {
             return false;
           }
