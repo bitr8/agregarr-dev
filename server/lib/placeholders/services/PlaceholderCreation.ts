@@ -1092,12 +1092,14 @@ async function waitForPlexDiscovery(
 
     // Title-based fallback logic
     // After items have been appearing for at least 60 seconds (6 attempts)
-    // AND items have stopped appearing for 1 consecutive cycle (10 seconds)
+    // AND items have stopped appearing for 2 consecutive cycles (20 seconds)
+    // OR nothing was ever discovered after 2 minutes (12 attempts)
     const elapsedTime = attempt * pollInterval;
     const shouldAttemptFallback =
-      itemsStartedAppearing &&
       elapsedTime >= minTimeBeforeFallback &&
-      consecutiveNoDiscovery >= waitCyclesAfterStop;
+      (itemsStartedAppearing
+        ? consecutiveNoDiscovery >= waitCyclesAfterStop
+        : attempt >= 12);
 
     if (shouldAttemptFallback && stillMissing.length > 0) {
       logger.info(
