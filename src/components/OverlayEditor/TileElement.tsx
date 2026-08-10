@@ -2,11 +2,54 @@ import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useRef } from 'react';
 import { Group, Rect } from 'react-konva';
-import type { OverlayElement, OverlayTileElementProps } from './types';
+import type {
+  ColorScale,
+  OverlayElement,
+  OverlayRenderContext,
+  OverlayTileElementProps,
+} from './types';
+
+function parseHex(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [
+    parseInt(h.substring(0, 2), 16),
+    parseInt(h.substring(2, 4), 16),
+    parseInt(h.substring(4, 6), 16),
+  ];
+}
+
+function lerpColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = parseHex(a);
+  const [br, bg, bb] = parseHex(b);
+  const toHex = (n: number) => Math.round(n).toString(16).padStart(2, '0');
+  return `#${toHex(ar + (br - ar) * t)}${toHex(ag + (bg - ag) * t)}${toHex(
+    ab + (bb - ab) * t
+  )}`;
+}
+
+function resolveColorScale(
+  scale: ColorScale,
+  context?: OverlayRenderContext
+): string | null {
+  if (!context) return null;
+  const raw = context[scale.field];
+  if (typeof raw !== 'number') return null;
+  const t = Math.max(
+    0,
+    Math.min(1, (raw - scale.min) / (scale.max - scale.min))
+  );
+  if (scale.midColor) {
+    return t < 0.5
+      ? lerpColor(scale.fromColor, scale.midColor, t * 2)
+      : lerpColor(scale.midColor, scale.toColor, (t - 0.5) * 2);
+  }
+  return lerpColor(scale.fromColor, scale.toColor, t);
+}
 
 interface TileElementComponentProps {
   element: OverlayElement;
   isSelected: boolean;
+  renderContext?: OverlayRenderContext;
   onSelect: (node: Konva.Node) => void;
   onDragMove: (node: Konva.Node) => void;
   onDragEnd: (x: number, y: number) => void;
@@ -22,12 +65,16 @@ interface TileElementComponentProps {
 export const TileElement: React.FC<TileElementComponentProps> = ({
   element,
   isSelected,
+  renderContext,
   onSelect,
   onDragMove,
   onDragEnd,
   onTransformEnd,
 }) => {
   const props = element.properties as OverlayTileElementProps;
+  const fillColor =
+    (props.colorScale && resolveColorScale(props.colorScale, renderContext)) ||
+    props.fillColor;
   const groupRef = useRef<Konva.Group | null>(null);
 
   // Determine corner radii (with backward compatibility)
@@ -105,7 +152,7 @@ export const TileElement: React.FC<TileElementComponentProps> = ({
       <Rect
         width={element.width}
         height={element.height}
-        fill={props.fillColor}
+        fill={fillColor}
         opacity={props.fillOpacity / 100}
         stroke={props.borderColor}
         strokeWidth={props.borderWidth || 0}

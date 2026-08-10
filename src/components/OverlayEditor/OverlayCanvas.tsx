@@ -214,7 +214,7 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
         case 'text':
           return <TextElement {...shapeProps} />;
         case 'tile':
-          return <TileElement {...shapeProps} />;
+          return <TileElement {...shapeProps} renderContext={renderContext} />;
         case 'variable':
           return (
             <VariableElement {...shapeProps} renderContext={renderContext} />
@@ -253,7 +253,9 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
         case 'text':
           return <TextElement {...previewProps} />;
         case 'tile':
-          return <TileElement {...previewProps} />;
+          return (
+            <TileElement {...previewProps} renderContext={renderContext} />
+          );
         case 'variable':
           return (
             <VariableElement {...previewProps} renderContext={renderContext} />
