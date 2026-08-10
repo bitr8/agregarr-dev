@@ -1,3 +1,4 @@
+import { evaluateCondition } from '@app/utils/conditionEvaluator';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Box } from 'konva/lib/shapes/Transformer';
@@ -6,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -227,6 +229,33 @@ export const PosterCanvas = forwardRef<PosterCanvasRef, PosterCanvasProps>(
       (a, b) => a.layerOrder - b.layerOrder
     );
 
+    // Build condition context from preview collection for client-side evaluation
+    const conditionContext = useMemo(
+      () =>
+        previewCollectionConfig
+          ? {
+              collectionName: previewCollectionConfig.name,
+              collectionType: previewCollectionConfig.type,
+              collectionSubtype: previewCollectionConfig.subtype,
+              mediaType: previewCollectionConfig.mediaType,
+              itemCount: previewCollectionConfig.posterUrls?.length ?? 0,
+            }
+          : undefined,
+      [previewCollectionConfig]
+    );
+
+    const visibleElements = useMemo(
+      () =>
+        conditionContext
+          ? sortedElements.filter(
+              (el) =>
+                !el.condition ||
+                evaluateCondition(el.condition, conditionContext)
+            )
+          : sortedElements,
+      [sortedElements, conditionContext]
+    );
+
     // Update transformer when selection changes
     useEffect(() => {
       if (transformerRef.current && selectedShapeRef) {
@@ -335,8 +364,8 @@ export const PosterCanvas = forwardRef<PosterCanvasRef, PosterCanvasProps>(
                 sourceColorsData={sourceColorsData}
               />
 
-              {/* Elements sorted by layer order */}
-              {sortedElements.map(renderElement)}
+              {/* Elements sorted by layer order, filtered by conditions */}
+              {visibleElements.map(renderElement)}
 
               {/* Snap-to-guide lines */}
               <SnapLines

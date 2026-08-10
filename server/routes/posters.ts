@@ -731,7 +731,8 @@ router.delete('/saved/:id', async (req, res, next) => {
 router.get('/templates/:id/preview', async (req, res, next) => {
   try {
     const templateId = parseInt(req.params.id);
-    const { collectionName, collectionType, mediaType } = req.query;
+    const { collectionName, collectionType, collectionSubtype, mediaType } =
+      req.query;
 
     if (isNaN(templateId)) {
       return res.status(400).json({
@@ -743,6 +744,7 @@ router.get('/templates/:id/preview', async (req, res, next) => {
       const previewBuffer = await generateTemplatePreview(templateId, {
         collectionName: (collectionName as string) || 'Preview Collection',
         collectionType: collectionType as string,
+        collectionSubtype: collectionSubtype as string,
         mediaType: (mediaType as 'movie' | 'tv') || 'movie',
       });
 

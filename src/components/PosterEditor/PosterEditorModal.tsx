@@ -134,6 +134,7 @@ export interface PreviewCollectionConfig {
   id?: string;
   name: string;
   type?: string;
+  subtype?: string;
   mediaType?: 'movie' | 'tv';
   sourceName?: string;
   posterUrls?: string[];
@@ -718,6 +719,7 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
                               name: previewName,
                               sourceName: selected.name,
                               type: selected.type,
+                              subtype: selected.subtype,
                               mediaType: selected.mediaType || 'movie',
                             });
                             setSelectedPreviewCollectionId(selected.id);
