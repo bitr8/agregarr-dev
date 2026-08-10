@@ -37,6 +37,8 @@ const messages = defineMessages({
   selectSubtype: 'Select sub-type...',
   comingSoonVolumesWarning:
     'Coming Soon requires media volume mounts for placeholder creation',
+  traktVipNotice:
+    'Trakt limits free accounts to one connected app. VIP recommended for use alongside other Trakt integrations.',
   seeSetupGuide: 'See setup guide',
   minimumItems: 'Minimum Items',
   minimumItemsHelp:
@@ -730,6 +732,14 @@ const CollectionTypeSection = ({
               ) : null;
             })()}
         </div>
+      )}
+
+      {/* Trakt VIP Info - appears when type='trakt' is selected */}
+      {values.type === 'trakt' && (
+        <Alert
+          title={intl.formatMessage(messages.traktVipNotice)}
+          type="info"
+        />
       )}
 
       {/* Coming Soon Volume Info - appears when type='comingsoon' is selected */}

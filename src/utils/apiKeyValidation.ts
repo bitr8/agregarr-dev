@@ -174,11 +174,19 @@ export function validateApiKeysForCollectionType(
       });
       break;
 
+    case 'networks':
+      requirements.push({
+        service: 'Cloudflare Solver (FlareSolverr or Byparr)',
+        required: true,
+        configured: !!settings.main?.cloudflareSolvers?.some((s) => s?.url),
+        settingsPath: '/settings/general',
+      });
+      break;
+
     // These don't require API keys
     case 'imdb':
     case 'tmdb':
     case 'letterboxd':
-    case 'networks':
     case 'anilist':
     case 'multi-source':
     case 'recently_added':
