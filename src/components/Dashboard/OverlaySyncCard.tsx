@@ -157,7 +157,19 @@ const OverlaySyncCard: React.FC = () => {
     if (isStopping) return;
     setIsStopping(true);
     try {
-      await axios.post('/api/v1/settings/jobs/overlay-application/cancel');
+      const stopPromises: Promise<unknown>[] = [
+        axios.post('/api/v1/settings/jobs/overlay-application/cancel'),
+      ];
+      for (const lib of liveLibs) {
+        if (lib.state === 'running') {
+          stopPromises.push(
+            axios
+              .post(`/api/v1/overlay-library-configs/${lib.libraryId}/stop`)
+              .catch(() => undefined)
+          );
+        }
+      }
+      await Promise.all(stopPromises);
       addToast('Overlay job cancelled', {
         appearance: 'success',
         autoDismiss: true,

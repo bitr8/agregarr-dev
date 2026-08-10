@@ -45,8 +45,12 @@ const RunningJobsCard: React.FC = () => {
 
     setStoppingIds((prev) => new Set(prev).add(libraryId));
     try {
-      // Cancel via the scheduled jobs system (same as Jobs settings page)
-      await axios.post('/api/v1/settings/jobs/overlay-application/cancel');
+      await Promise.all([
+        axios.post('/api/v1/settings/jobs/overlay-application/cancel'),
+        axios
+          .post(`/api/v1/overlay-library-configs/${libraryId}/stop`)
+          .catch(() => undefined),
+      ]);
       addToast('Overlay job cancelled', {
         appearance: 'success',
         autoDismiss: true,
