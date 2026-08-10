@@ -385,25 +385,24 @@ const SettingsMain = () => {
                     </span>
                   </label>
                   <div className="form-input-area">
-                    <div className="form-input-field flex items-center gap-2">
-                      <input
-                        type="range"
+                    <div className="form-input-field">
+                      <Field
+                        type="number"
                         id="overlayConcurrency"
                         name="overlayConcurrency"
-                        min={1}
-                        max={5}
-                        step={1}
-                        value={values.overlayConcurrency}
-                        onChange={(e) =>
-                          setFieldValue(
-                            'overlayConcurrency',
-                            Number(e.target.value)
-                          )
-                        }
+                        min="1"
+                        max="10"
+                        className="short"
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          const val = Number(e.target.value);
+                          if (Number.isFinite(val)) {
+                            setFieldValue(
+                              'overlayConcurrency',
+                              Math.max(1, Math.min(10, Math.floor(val)))
+                            );
+                          }
+                        }}
                       />
-                      <span className="text-sm font-medium">
-                        {values.overlayConcurrency}
-                      </span>
                     </div>
                   </div>
                 </div>

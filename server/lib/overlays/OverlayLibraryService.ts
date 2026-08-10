@@ -1608,7 +1608,7 @@ class OverlayLibraryService {
       const rawConcurrency = Number(getSettings().overlays?.overlayConcurrency);
       const concurrency =
         Number.isFinite(rawConcurrency) && rawConcurrency >= 1
-          ? Math.min(5, Math.floor(rawConcurrency))
+          ? Math.min(10, Math.floor(rawConcurrency))
           : 1;
       let cancelled = false;
 

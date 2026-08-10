@@ -123,7 +123,7 @@ settingsRoutes.post('/main', (req, res, next) => {
 
   if (rawConcurrency !== undefined) {
     const val = Number(rawConcurrency);
-    if (Number.isInteger(val) && val >= 1 && val <= 5) {
+    if (Number.isInteger(val) && val >= 1 && val <= 10) {
       if (!settings.overlays) {
         settings.overlays = {
           defaultPosterSource: 'tmdb',
