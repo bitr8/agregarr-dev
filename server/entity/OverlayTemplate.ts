@@ -22,6 +22,7 @@ export interface OverlayElement {
   width: number; // Absolute pixels
   height: number; // Absolute pixels
   rotation?: number; // Rotation in degrees (0-360)
+  condition?: ApplicationCondition;
 
   // Type-specific properties (discriminated union)
   properties:

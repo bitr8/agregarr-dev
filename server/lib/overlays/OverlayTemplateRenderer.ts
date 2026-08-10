@@ -588,6 +588,13 @@ class OverlayTemplateRendererService {
       const overlays: sharp.OverlayOptions[] = [];
 
       for (const element of sortedElements) {
+        if (
+          element.condition &&
+          !evaluateCondition(element.condition, context)
+        ) {
+          continue;
+        }
+
         const overlayBuffer = await this.renderElement(
           element,
           posterWidth,
