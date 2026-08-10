@@ -15672,6 +15672,38 @@ paths:
         '500':
           description: Failed to start single item overlay application
 
+  /overlay-library-configs/{libraryId}/stop:
+    post:
+      summary: Stop overlay application for a library
+      description: Requests cancellation of a running overlay application job for the specified library.
+      tags:
+        - overlays
+      parameters:
+        - name: libraryId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Plex library ID
+      responses:
+        '200':
+          description: Stop requested or already in progress
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Stop requested'
+                  libraryId:
+                    type: string
+                    example: '4'
+        '401':
+          description: Authentication required
+        '404':
+          description: No running job found for this library
+
   /overlay-library-configs/{libraryId}/status:
     get:
       summary: Get overlay application status for library
