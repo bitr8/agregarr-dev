@@ -13785,6 +13785,11 @@ paths:
           schema:
             type: string
           description: Collection type
+        - name: collectionSubtype
+          in: query
+          schema:
+            type: string
+          description: Collection subtype for condition evaluation
         - name: mediaType
           in: query
           schema:
