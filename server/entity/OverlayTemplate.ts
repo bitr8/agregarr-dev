@@ -52,9 +52,19 @@ export interface OverlayTextElementProps {
 /**
  * Tile element - decorative rectangle (no text)
  */
+export interface ColorScale {
+  field: string;
+  min: number;
+  max: number;
+  fromColor: string;
+  toColor: string;
+  midColor?: string;
+}
+
 export interface OverlayTileElementProps {
   fillColor: string;
   fillOpacity: number; // 0-100
+  colorScale?: ColorScale;
   borderColor?: string;
   borderWidth?: number; // Absolute pixels in template canvas
   borderRadius?: number; // Absolute pixels (deprecated - use individual corners)

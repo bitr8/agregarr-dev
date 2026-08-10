@@ -33,9 +33,19 @@ export interface OverlayTextElementProps {
   opacity?: number; // 0-100
 }
 
+export interface ColorScale {
+  field: string;
+  min: number;
+  max: number;
+  fromColor: string;
+  toColor: string;
+  midColor?: string;
+}
+
 export interface OverlayTileElementProps {
   fillColor: string;
   fillOpacity: number;
+  colorScale?: ColorScale;
   borderColor?: string;
   borderWidth?: number;
   borderRadius?: number; // Deprecated - use individual corners

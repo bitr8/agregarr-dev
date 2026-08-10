@@ -1,5 +1,6 @@
 import type {
   ApplicationCondition,
+  ColorScale,
   IconMapping,
   OverlayElement,
   OverlayMappedIconElementProps,
@@ -486,6 +487,46 @@ export interface OverlayRenderContext {
   [key: string]: string | number | boolean | Date | string[] | undefined;
 }
 
+function parseHex(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [
+    parseInt(h.substring(0, 2), 16),
+    parseInt(h.substring(2, 4), 16),
+    parseInt(h.substring(4, 6), 16),
+  ];
+}
+
+function toHex(r: number, g: number, b: number): string {
+  return (
+    '#' +
+    [r, g, b].map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')
+  );
+}
+
+function lerpColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = parseHex(a);
+  const [br, bg, bb] = parseHex(b);
+  return toHex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
+}
+
+export function resolveColorScale(
+  scale: ColorScale,
+  context: OverlayRenderContext
+): string | null {
+  const raw = context[scale.field];
+  if (typeof raw !== 'number') return null;
+  const t = Math.max(
+    0,
+    Math.min(1, (raw - scale.min) / (scale.max - scale.min))
+  );
+  if (scale.midColor) {
+    return t < 0.5
+      ? lerpColor(scale.fromColor, scale.midColor, t * 2)
+      : lerpColor(scale.midColor, scale.toColor, (t - 0.5) * 2);
+  }
+  return lerpColor(scale.fromColor, scale.toColor, t);
+}
+
 /**
  * Service for rendering overlay templates onto posters
  */
@@ -740,7 +781,8 @@ class OverlayTemplateRendererService {
             posterWidth,
             posterHeight,
             templateWidth,
-            templateHeight
+            templateHeight,
+            context
           );
           break;
         case 'variable':
@@ -893,9 +935,13 @@ class OverlayTemplateRendererService {
     posterWidth: number,
     posterHeight: number,
     templateWidth: number,
-    templateHeight: number
+    templateHeight: number,
+    context: OverlayRenderContext
   ): Promise<Buffer> {
     const props = element.properties as OverlayTileElementProps;
+    const fillColor =
+      (props.colorScale && resolveColorScale(props.colorScale, context)) ||
+      props.fillColor;
 
     // Calculate uniform scale factor to handle non-standard aspect ratios
     const scaleX = posterWidth / templateWidth;
@@ -953,7 +999,7 @@ class OverlayTemplateRendererService {
       <svg width="${width}" height="${height}">
         <path
           d="${path}"
-          fill="${props.fillColor}"
+          fill="${fillColor}"
           fill-opacity="${props.fillOpacity / 100}"
           ${
             borderWidth > 0 && props.borderColor
