@@ -238,7 +238,10 @@ export const PosterCanvas = forwardRef<PosterCanvasRef, PosterCanvasProps>(
               collectionType: previewCollectionConfig.type,
               collectionSubtype: previewCollectionConfig.subtype,
               mediaType: previewCollectionConfig.mediaType,
-              itemCount: previewCollectionConfig.posterUrls?.length ?? 0,
+              itemCount:
+                previewCollectionConfig.totalItems ??
+                previewCollectionConfig.posterUrls?.length ??
+                0,
             }
           : undefined,
       [previewCollectionConfig]

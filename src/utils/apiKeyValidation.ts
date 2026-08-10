@@ -179,7 +179,7 @@ export function validateApiKeysForCollectionType(
         service: 'Cloudflare Solver (FlareSolverr or Byparr)',
         required: true,
         configured: !!settings.main?.cloudflareSolvers?.some((s) => s?.url),
-        settingsPath: '/settings/general',
+        settingsPath: '/settings/sources',
       });
       break;
 

@@ -138,6 +138,7 @@ export interface PreviewCollectionConfig {
   mediaType?: 'movie' | 'tv';
   sourceName?: string;
   posterUrls?: string[];
+  totalItems?: number;
 }
 
 export interface PosterEditorModalProps {
@@ -253,6 +254,7 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
   const [selectedPreviewCollectionId, setSelectedPreviewCollectionId] =
     useState<string>('');
   const [previewPosterUrls, setPreviewPosterUrls] = useState<string[]>([]);
+  const [previewTotalItems, setPreviewTotalItems] = useState<number>(0);
 
   // Use external config if provided, otherwise use internal state
   const rawPreviewCollectionConfig =
@@ -270,8 +272,9 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
         rawPreviewCollectionConfig.sourceName ||
         rawPreviewCollectionConfig.name,
       posterUrls: previewPosterUrls,
+      totalItems: previewTotalItems || previewPosterUrls.length,
     };
-  }, [rawPreviewCollectionConfig, previewPosterUrls]);
+  }, [rawPreviewCollectionConfig, previewPosterUrls, previewTotalItems]);
   const setPreviewCollectionConfig =
     externalSetPreviewConfig || setInternalPreviewConfig;
 
@@ -529,6 +532,7 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
         if (response.ok) {
           const data = await response.json();
           setPreviewPosterUrls(data.posterUrls || []);
+          setPreviewTotalItems(data.totalItems ?? data.posterUrls?.length ?? 0);
         } else {
           setPreviewPosterUrls([]);
         }

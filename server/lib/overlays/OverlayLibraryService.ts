@@ -1605,8 +1605,11 @@ class OverlayLibraryService {
       }
 
       // Process each item (concurrency-limited)
-      const rawConcurrency = getSettings().overlays?.overlayConcurrency ?? 1;
-      const concurrency = Math.max(1, Math.min(5, rawConcurrency || 1));
+      const rawConcurrency = Number(getSettings().overlays?.overlayConcurrency);
+      const concurrency =
+        Number.isFinite(rawConcurrency) && rawConcurrency >= 1
+          ? Math.min(5, Math.floor(rawConcurrency))
+          : 1;
       let cancelled = false;
 
       const processItem = async (item: PlexLibraryItem) => {

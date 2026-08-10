@@ -1924,7 +1924,7 @@ export async function generatePosterSVG(
       collectionType,
       collectionSubtype: config.collectionSubtype,
       mediaType: config.mediaType,
-      itemCount: itemsWithPosters.length,
+      itemCount: items.length,
     }
   );
 

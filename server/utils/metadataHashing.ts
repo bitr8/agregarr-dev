@@ -1,6 +1,7 @@
 import type {
   OverlayMappedIconElementProps,
   OverlayTemplateData,
+  OverlayTileElementProps,
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import { createHash } from 'crypto';
@@ -103,6 +104,18 @@ export function extractUsedContextFields(
         const props = element.properties as OverlayMappedIconElementProps;
         if (props.field) {
           usedFields.add(props.field);
+        }
+      }
+      if (element.type === 'tile') {
+        const props = element.properties as OverlayTileElementProps;
+        if (props.colorScale?.field) {
+          usedFields.add(props.colorScale.field);
+        }
+      }
+      if (element.condition) {
+        const conditionFields = extractFieldsFromCondition(element.condition);
+        for (const field of conditionFields) {
+          usedFields.add(field);
         }
       }
     }

@@ -20,6 +20,7 @@ import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 import MappedIconMappingModal from './MappedIconMappingModal';
 import type {
+  ColorScale,
   IconMapping,
   OverlayElement,
   OverlayMappedIconElementProps,
@@ -667,6 +668,118 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             }
             className="w-full"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 flex items-center gap-2 text-xs text-stone-300">
+            <input
+              type="checkbox"
+              checked={!!props.colorScale}
+              onChange={(e) => {
+                const newScale: ColorScale | undefined = e.target.checked
+                  ? {
+                      field: 'imdbRating',
+                      min: 0,
+                      max: 10,
+                      fromColor: '#ef4444',
+                      toColor: '#22c55e',
+                    }
+                  : undefined;
+                handleUpdateElement(element.id, {
+                  properties: { ...props, colorScale: newScale },
+                });
+              }}
+            />
+            Color Scale
+          </label>
+          {props.colorScale &&
+            (() => {
+              const scale = props.colorScale;
+              const updateScale = (patch: Partial<ColorScale>) =>
+                handleUpdateElement(element.id, {
+                  properties: {
+                    ...props,
+                    colorScale: { ...scale, ...patch },
+                  },
+                });
+              return (
+                <div className="mt-2 space-y-2 rounded border border-stone-600 p-2">
+                  <label className="mb-1 block text-xs text-stone-400">
+                    Field
+                    <select
+                      value={scale.field}
+                      onChange={(e) => updateScale({ field: e.target.value })}
+                      className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
+                    >
+                      <option value="imdbRating">IMDb Rating</option>
+                      <option value="rtCriticRating">RT Critic Score</option>
+                      <option value="rtAudienceRating">
+                        RT Audience Score
+                      </option>
+                    </select>
+                  </label>
+                  <div className="flex gap-2">
+                    <label className="flex-1 text-xs text-stone-400">
+                      Min
+                      <input
+                        type="number"
+                        value={scale.min}
+                        onChange={(e) =>
+                          updateScale({ min: Number(e.target.value) })
+                        }
+                        className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
+                      />
+                    </label>
+                    <label className="flex-1 text-xs text-stone-400">
+                      Max
+                      <input
+                        type="number"
+                        value={scale.max}
+                        onChange={(e) =>
+                          updateScale({ max: Number(e.target.value) })
+                        }
+                        className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <label className="flex-1 text-xs text-stone-400">
+                      Low
+                      <input
+                        type="color"
+                        value={scale.fromColor}
+                        onChange={(e) =>
+                          updateScale({ fromColor: e.target.value })
+                        }
+                        className="mt-1 h-6 w-full rounded border border-stone-600"
+                      />
+                    </label>
+                    <label className="flex-1 text-xs text-stone-400">
+                      Mid
+                      <input
+                        type="color"
+                        value={scale.midColor || '#eab308'}
+                        onChange={(e) =>
+                          updateScale({ midColor: e.target.value })
+                        }
+                        className="mt-1 h-6 w-full rounded border border-stone-600"
+                      />
+                    </label>
+                    <label className="flex-1 text-xs text-stone-400">
+                      High
+                      <input
+                        type="color"
+                        value={scale.toColor}
+                        onChange={(e) =>
+                          updateScale({ toColor: e.target.value })
+                        }
+                        className="mt-1 h-6 w-full rounded border border-stone-600"
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })()}
         </div>
 
         <div>
@@ -2177,11 +2290,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           </button>
           <button
             onClick={handleAddVariable}
-            disabled={elements.some((el) => el.type === 'variable')}
+            disabled={elements.some(
+              (el) => el.type === 'variable' && !el.condition
+            )}
             className="flex flex-col items-center rounded-lg bg-stone-700 p-2 text-xs text-stone-200 transition-colors hover:bg-stone-600 disabled:cursor-not-allowed disabled:opacity-50"
             title={
-              elements.some((el) => el.type === 'variable')
-                ? 'Only one variable element allowed per overlay'
+              elements.some((el) => el.type === 'variable' && !el.condition)
+                ? 'Only one unconditional variable element allowed per overlay'
                 : undefined
             }
           >
