@@ -1604,55 +1604,29 @@ class OverlayLibraryService {
         await this.runEpisodeScan(plexApi, libraryId, requiredContextFields);
       }
 
-      // Process each item
-      for (const item of allItems) {
-        // CRITICAL: Skip episodes and seasons - overlays only apply to movies and shows
+      // Process each item (concurrency-limited)
+      const rawConcurrency = getSettings().overlays?.overlayConcurrency ?? 1;
+      const concurrency = Math.max(1, Math.min(5, rawConcurrency || 1));
+      let cancelled = false;
+
+      const processItem = async (item: PlexLibraryItem) => {
         if (item.type === 'episode' || item.type === 'season') {
           this.updateProgress(libraryId, (p) => {
-            p.currentItem++; // Advance currentItem to maintain accurate progress %
+            p.currentItem++;
             p.filteredCount++;
           });
-          continue;
+          return;
         }
 
-        // Check for cancellation FIRST
-        if (checkCancelled && checkCancelled()) {
-          // Transition to cancelling state
-          const progress = this.runningLibraries.get(libraryId);
-          if (progress) {
-            progress.state = 'cancelling';
-          }
-
-          logger.info(
-            'Overlay application cancelled during library processing',
-            {
-              label: 'OverlayLibrary',
-              libraryId,
-              processedItems: progress?.currentItem || 0,
-              totalItems: allItems.length,
-            }
-          );
-
-          // Mark cancelled (not completed)
-          if (progress) {
-            progress.state = 'cancelled';
-            progress.completedAt = Date.now();
-          }
-          return; // Exit early, don't continue processing
-        }
-
-        // Update current item title (before processing)
         this.updateProgress(libraryId, (p) => {
           p.currentTitle = item.title || '';
         });
 
         try {
-          // Use batch-prefetched metadata, falling back to individual fetch on miss
           const fullMetadata =
             batchMetadata.get(item.ratingKey) ??
             (await plexApi.getMetadata(item.ratingKey));
 
-          // Merge full metadata with library item
           const itemWithFullMetadata = {
             ...item,
             Media: fullMetadata.Media,
@@ -1670,16 +1644,12 @@ class OverlayLibraryService {
             seasonFallbackFor(config)
           );
 
-          // Update counts AFTER outcome is known
           this.updateProgress(libraryId, (p) => {
             p.currentItem++;
-
-            // Track timing for ETA
             p._recentItemTimes.push(Date.now());
             if (p._recentItemTimes.length > 20) {
               p._recentItemTimes.shift();
             }
-
             if (result.skipped) {
               p.skippedCount++;
             } else {
@@ -1687,11 +1657,9 @@ class OverlayLibraryService {
             }
           });
         } catch (error) {
-          // Update error count AFTER failure
           this.updateProgress(libraryId, (p) => {
             p.currentItem++;
             p.errorCount++;
-
             if (p.itemErrors.length < 50) {
               const raw =
                 error instanceof Error ? error.message : String(error);
@@ -1701,8 +1669,6 @@ class OverlayLibraryService {
                 error: scrubSecrets(raw).slice(0, 200),
               });
             }
-
-            // Track timing for ETA even on errors
             p._recentItemTimes.push(Date.now());
             if (p._recentItemTimes.length > 20) {
               p._recentItemTimes.shift();
@@ -1716,8 +1682,44 @@ class OverlayLibraryService {
             stack: error instanceof Error ? error.stack : undefined,
             errorDetails: error,
           });
-          // Continue with next item
         }
+      };
+
+      const active: Promise<void>[] = [];
+      try {
+        for (const item of allItems) {
+          if (checkCancelled?.()) {
+            cancelled = true;
+            break;
+          }
+          const p = processItem(item).finally(() => {
+            active.splice(active.indexOf(p), 1);
+          });
+          active.push(p);
+          if (active.length >= concurrency) {
+            await Promise.race(active);
+          }
+        }
+      } finally {
+        await Promise.allSettled(active);
+      }
+
+      if (cancelled) {
+        const progress = this.runningLibraries.get(libraryId);
+        if (progress) {
+          progress.state = 'cancelling';
+        }
+        logger.info('Overlay application cancelled during library processing', {
+          label: 'OverlayLibrary',
+          libraryId,
+          processedItems: progress?.currentItem || 0,
+          totalItems: allItems.length,
+        });
+        if (progress) {
+          progress.state = 'cancelled';
+          progress.completedAt = Date.now();
+        }
+        return;
       }
 
       // Seasons never appear in the library listing above; Maintainerr nominates

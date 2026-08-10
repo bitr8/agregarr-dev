@@ -52,6 +52,9 @@ const messages = defineMessages({
   watchProviderRegion: 'Watch Provider Region',
   watchProviderRegionTip:
     'Region used by the Streaming Provider overlay to determine available services',
+  overlayConcurrency: 'Parallel Items',
+  overlayConcurrencyTip:
+    'Number of items to process simultaneously during overlay application. Higher values are faster but use more memory.',
   enableTmdbPosterCache: 'Enable TMDB Poster Cache',
   enableTmdbPosterCacheTip:
     'Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)',
@@ -87,9 +90,9 @@ const SettingsMain = () => {
     data,
     error,
     mutate: revalidate,
-  } = useSWR<MainSettings & { watchProviderRegion?: string }>(
-    '/api/v1/settings/main'
-  );
+  } = useSWR<
+    MainSettings & { watchProviderRegion?: string; overlayConcurrency?: number }
+  >('/api/v1/settings/main');
   const { data: countriesData } = useSWR<TmdbCountry[]>('/api/v1/countries');
 
   const MainSettingsSchema = Yup.object().shape({
@@ -172,6 +175,7 @@ const SettingsMain = () => {
             enableTmdbPosterCache: data?.enableTmdbPosterCache ?? true,
             healthChecksEnabled: data?.healthChecksEnabled ?? true,
             watchProviderRegion: data?.watchProviderRegion ?? 'US',
+            overlayConcurrency: data?.overlayConcurrency ?? 1,
             trustProxy: data?.trustProxy,
             logLevel: data?.logLevel ?? 'info',
           }}
@@ -188,6 +192,7 @@ const SettingsMain = () => {
                 enableTmdbPosterCache: values.enableTmdbPosterCache,
                 healthChecksEnabled: values.healthChecksEnabled,
                 watchProviderRegion: values.watchProviderRegion,
+                overlayConcurrency: values.overlayConcurrency,
                 trustProxy: values.trustProxy,
                 logLevel: values.logLevel,
               });
@@ -369,6 +374,36 @@ const SettingsMain = () => {
                             </option>
                           ))}
                       </Field>
+                    </div>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="overlayConcurrency" className="text-label">
+                    {intl.formatMessage(messages.overlayConcurrency)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.overlayConcurrencyTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field flex items-center gap-2">
+                      <input
+                        type="range"
+                        id="overlayConcurrency"
+                        name="overlayConcurrency"
+                        min={1}
+                        max={5}
+                        step={1}
+                        value={values.overlayConcurrency}
+                        onChange={(e) =>
+                          setFieldValue(
+                            'overlayConcurrency',
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                      <span className="text-sm font-medium">
+                        {values.overlayConcurrency}
+                      </span>
                     </div>
                   </div>
                 </div>

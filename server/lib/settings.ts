@@ -735,6 +735,7 @@ export interface OverlaySettings {
   defaultPosterSource: 'tmdb' | 'plex' | 'local';
   initialSetupComplete: boolean;
   watchProviderRegion?: string;
+  overlayConcurrency?: number;
 }
 
 export type JobId =

@@ -87,6 +87,7 @@ settingsRoutes.get('/main', (req, res, next) => {
   res.status(200).json({
     ...filteredMainSettings(req.user, settings.main),
     watchProviderRegion: settings.overlays?.watchProviderRegion ?? 'US',
+    overlayConcurrency: settings.overlays?.overlayConcurrency ?? 1,
   });
 });
 
@@ -95,6 +96,7 @@ settingsRoutes.post('/main', (req, res, next) => {
 
   const {
     watchProviderRegion: rawRegion,
+    overlayConcurrency: rawConcurrency,
     cloudflareSolvers: rawSolvers,
     ...mainBody
   } = req.body;
@@ -119,6 +121,19 @@ settingsRoutes.post('/main', (req, res, next) => {
     settings.overlays.watchProviderRegion = region;
   }
 
+  if (rawConcurrency !== undefined) {
+    const val = Number(rawConcurrency);
+    if (Number.isInteger(val) && val >= 1 && val <= 5) {
+      if (!settings.overlays) {
+        settings.overlays = {
+          defaultPosterSource: 'tmdb',
+          initialSetupComplete: false,
+        };
+      }
+      settings.overlays.overlayConcurrency = val;
+    }
+  }
+
   if (!req.user) {
     return next({ status: 400, message: 'User missing from request.' });
   }
@@ -139,6 +154,7 @@ settingsRoutes.post('/main', (req, res, next) => {
   return res.status(200).json({
     ...filteredMainSettings(req.user, settings.main),
     watchProviderRegion: settings.overlays?.watchProviderRegion ?? 'US',
+    overlayConcurrency: settings.overlays?.overlayConcurrency ?? 1,
   });
 });
 
