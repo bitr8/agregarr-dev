@@ -10,6 +10,7 @@ import type {
   TextElementProps,
 } from '@server/entity/PosterTemplate';
 import { PosterTemplate } from '@server/entity/PosterTemplate';
+import { evaluateCondition } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import axios from 'axios';
@@ -1567,7 +1568,8 @@ async function generateUnifiedLayeredElements(
   dynamicLogo?: string,
   itemsWithPosters: CollectionItemWithPoster[] = [],
   personImageBase64?: string,
-  personImageUrl?: string
+  personImageUrl?: string,
+  conditionContext?: Record<string, unknown>
 ): Promise<string> {
   // Sort elements by layer order to ensure proper rendering sequence
   const sortedElements = [...elements].sort(
@@ -1577,6 +1579,16 @@ async function generateUnifiedLayeredElements(
   const renderedElements: string[] = [];
 
   for (const element of sortedElements) {
+    if (
+      element.condition &&
+      conditionContext &&
+      !evaluateCondition(
+        element.condition,
+        conditionContext as Parameters<typeof evaluateCondition>[1]
+      )
+    ) {
+      continue;
+    }
     try {
       let elementContent = '';
 
@@ -1906,7 +1918,14 @@ export async function generatePosterSVG(
     config.dynamicLogo,
     itemsWithPosters,
     personImageBase64,
-    config.personImageUrl
+    config.personImageUrl,
+    {
+      collectionName,
+      collectionType,
+      collectionSubtype: config.collectionSubtype,
+      mediaType: config.mediaType,
+      itemCount: itemsWithPosters.length,
+    }
   );
 
   return `

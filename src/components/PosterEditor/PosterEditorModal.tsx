@@ -1,3 +1,4 @@
+import type { ApplicationCondition } from '@app/components/OverlayEditor/types';
 import { Dialog, Transition } from '@headlessui/react';
 import { Squares2X2Icon } from '@heroicons/react/24/outline';
 import {
@@ -57,6 +58,7 @@ export interface LayeredElement {
   width: number;
   height: number;
   rotation?: number; // Rotation in degrees (0-360)
+  condition?: ApplicationCondition;
 
   // Type-specific properties (discriminated union)
   properties:

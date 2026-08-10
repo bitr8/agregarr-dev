@@ -2532,6 +2532,203 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                   </div>
                 </div>
               )}
+              {/* Visibility Condition */}
+              <div className="border-t border-stone-600 pt-3">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={!!selectedElement.condition}
+                    onChange={(e) => {
+                      updateElement(
+                        selectedElement.id,
+                        e.target.checked
+                          ? {
+                              condition: {
+                                sections: [
+                                  {
+                                    rules: [
+                                      {
+                                        field: 'collectionSubtype',
+                                        operator: 'eq' as const,
+                                        value: '',
+                                      },
+                                    ],
+                                  },
+                                ],
+                              },
+                            }
+                          : { condition: undefined }
+                      );
+                    }}
+                    className="h-4 w-4 rounded border-stone-600 bg-stone-700 text-indigo-500 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs text-stone-300">
+                    Show conditionally
+                  </span>
+                </label>
+                {selectedElement.condition && (
+                  <div className="mt-2 space-y-2">
+                    {selectedElement.condition.sections[0]?.rules.map(
+                      (rule, ruleIndex) => (
+                        <div
+                          key={ruleIndex}
+                          className="flex items-center space-x-1"
+                        >
+                          {ruleIndex > 0 && (
+                            <span className="text-[10px] text-stone-500">
+                              AND
+                            </span>
+                          )}
+                          <select
+                            value={rule.field}
+                            onChange={(e) => {
+                              const newRules = [
+                                ...selectedElement.condition!.sections[0].rules,
+                              ];
+                              const isNumeric = e.target.value === 'itemCount';
+                              newRules[ruleIndex] = {
+                                ...rule,
+                                field: e.target.value,
+                                operator: isNumeric ? 'gte' : 'eq',
+                                value: isNumeric ? 0 : '',
+                              };
+                              updateElement(selectedElement.id, {
+                                condition: {
+                                  sections: [{ rules: newRules }],
+                                },
+                              });
+                            }}
+                            className="w-28 rounded border border-stone-600 bg-stone-700 px-1 py-0.5 text-[11px] text-white"
+                          >
+                            <option value="collectionType">
+                              Collection Type
+                            </option>
+                            <option value="collectionSubtype">Subtype</option>
+                            <option value="mediaType">Media Type</option>
+                            <option value="collectionName">Name</option>
+                            <option value="itemCount">Item Count</option>
+                          </select>
+                          <select
+                            value={rule.operator}
+                            onChange={(e) => {
+                              const newRules = [
+                                ...selectedElement.condition!.sections[0].rules,
+                              ];
+                              newRules[ruleIndex] = {
+                                ...rule,
+                                operator: e.target
+                                  .value as (typeof rule)['operator'],
+                              };
+                              updateElement(selectedElement.id, {
+                                condition: {
+                                  sections: [{ rules: newRules }],
+                                },
+                              });
+                            }}
+                            className="w-16 rounded border border-stone-600 bg-stone-700 px-1 py-0.5 text-[11px] text-white"
+                          >
+                            <option value="eq">=</option>
+                            <option value="neq">≠</option>
+                            <option value="contains">contains</option>
+                            {rule.field === 'itemCount' && (
+                              <>
+                                <option value="gt">&gt;</option>
+                                <option value="gte">≥</option>
+                                <option value="lt">&lt;</option>
+                                <option value="lte">≤</option>
+                              </>
+                            )}
+                          </select>
+                          <input
+                            type={
+                              rule.field === 'itemCount' ? 'number' : 'text'
+                            }
+                            value={String(rule.value ?? '')}
+                            onChange={(e) => {
+                              const newRules = [
+                                ...selectedElement.condition!.sections[0].rules,
+                              ];
+                              newRules[ruleIndex] = {
+                                ...rule,
+                                value:
+                                  rule.field === 'itemCount'
+                                    ? Number(e.target.value)
+                                    : e.target.value,
+                              };
+                              updateElement(selectedElement.id, {
+                                condition: {
+                                  sections: [{ rules: newRules }],
+                                },
+                              });
+                            }}
+                            placeholder={
+                              rule.field === 'collectionSubtype'
+                                ? 'genre'
+                                : rule.field === 'collectionType'
+                                ? 'plex'
+                                : rule.field === 'mediaType'
+                                ? 'movie'
+                                : ''
+                            }
+                            className="w-20 rounded border border-stone-600 bg-stone-700 px-1 py-0.5 text-[11px] text-white placeholder-stone-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newRules =
+                                selectedElement.condition!.sections[0].rules.filter(
+                                  (_, i) => i !== ruleIndex
+                                );
+                              if (newRules.length === 0) {
+                                updateElement(selectedElement.id, {
+                                  condition: undefined,
+                                });
+                              } else {
+                                updateElement(selectedElement.id, {
+                                  condition: {
+                                    sections: [{ rules: newRules }],
+                                  },
+                                });
+                              }
+                            }}
+                            className="flex-shrink-0 text-stone-500 hover:text-red-400"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentRules =
+                          selectedElement.condition!.sections[0].rules;
+                        updateElement(selectedElement.id, {
+                          condition: {
+                            sections: [
+                              {
+                                rules: [
+                                  ...currentRules,
+                                  {
+                                    ruleOperator: 'and' as const,
+                                    field: 'collectionSubtype',
+                                    operator: 'eq' as const,
+                                    value: '',
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        });
+                      }}
+                      className="flex items-center space-x-1 text-[11px] text-indigo-400 hover:text-indigo-300"
+                    >
+                      <PlusIcon className="h-3 w-3" />
+                      <span>Add rule</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="text-xs text-stone-500">

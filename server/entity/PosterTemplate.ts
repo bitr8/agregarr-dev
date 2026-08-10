@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import type { ApplicationCondition } from './OverlayTemplate';
 
 // New unified layering system types
 export interface LayeredElement {
@@ -18,6 +19,7 @@ export interface LayeredElement {
   width: number;
   height: number;
   rotation?: number; // Rotation in degrees (0-360)
+  condition?: ApplicationCondition;
 
   // Type-specific properties (discriminated union)
   properties:
