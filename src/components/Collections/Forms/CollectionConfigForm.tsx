@@ -77,10 +77,10 @@ const messages = defineMessages({
   customSummaryPlaceholder: 'Enter a custom description for this collection...',
   customSummaryHelp:
     'Custom description text for the collection. Will be synced to Plex.',
-  sortTitle: 'Sort Title',
-  sortTitlePlaceholder: 'Leave blank for automatic ordering',
+  sortTitle: 'Sort Title Prefix',
+  sortTitlePlaceholder: 'e.g. !020_',
   sortTitleHelp:
-    'Override the auto-generated sort title. Use prefixes like !010_ to control position relative to other tools.',
+    'Prefix prepended to the collection name for sort ordering. Use prefixes like !010_ to control position relative to other tools.',
   overlayConfigWarningTitle: 'No Overlay Templates Configured',
   overlayConfigWarningMessage:
     'You have enabled placeholder creation and overlay application, but no overlay templates are configured for {libraryNames}. Placeholders will be created without status overlays showing monitored status, release dates, etc.',

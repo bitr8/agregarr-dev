@@ -1663,12 +1663,12 @@ export class HubSyncService {
           continue;
         }
 
-        // Sort title override: user-provided value wins unconditionally
+        // Sort title override: prefix + collection name
         if (config.sortTitleOverride) {
           try {
             await plexClient.updateCollectionSortTitle(
               config.collectionRatingKey,
-              config.sortTitleOverride
+              `${config.sortTitleOverride}${config.name}`
             );
           } catch (error) {
             logger.error(

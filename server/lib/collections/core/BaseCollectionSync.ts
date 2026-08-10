@@ -2228,13 +2228,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       );
     });
 
-    // Sort title override: user-provided value wins unconditionally
+    // Sort title override: prefix + collection name
     const effectiveOverride =
       options.config?.sortTitleOverride || matchingConfig?.sortTitleOverride;
     if (effectiveOverride) {
       await plexClient.updateCollectionSortTitle(
         collectionRatingKey,
-        effectiveOverride,
+        `${effectiveOverride}${collectionName}`,
         options.existingTitleSort
       );
     } else if (
