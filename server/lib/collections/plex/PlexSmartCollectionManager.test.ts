@@ -1,0 +1,165 @@
+import type PlexAPI from '@server/api/plexapi';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@server/logger', () => ({
+  default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+const mockSettings = {
+  plex: { machineId: 'test-machine-id' },
+};
+vi.mock('@server/lib/settings', () => ({
+  getSettings: () => mockSettings,
+}));
+
+import PlexSmartCollectionManager from './PlexSmartCollectionManager';
+
+function createManager() {
+  const mockPlexApi = {
+    safePostQuery: vi.fn().mockResolvedValue({
+      MediaContainer: { Metadata: [{ ratingKey: '99999' }] },
+    }),
+    safePutQuery: vi.fn().mockResolvedValue(undefined),
+    addLabelToCollection: vi.fn().mockResolvedValue(undefined),
+  };
+  const manager = new PlexSmartCollectionManager(
+    mockPlexApi as unknown as PlexAPI
+  );
+  return { manager, mockPlexApi };
+}
+
+describe('PlexSmartCollectionManager.createFilteredHub', () => {
+  it('creates type=4 collection for recently_added_episodes', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createFilteredHub(
+      'Test Episodes',
+      '3',
+      'tv',
+      'recently_added_episodes'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    expect(createUrl).toContain('type=4');
+    expect(createUrl).not.toContain('type=2');
+  });
+
+  it('uses show.label!= cross-level filter for recently_added_episodes', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createFilteredHub(
+      'Test Episodes',
+      '3',
+      'tv',
+      'recently_added_episodes'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(createUrl);
+    expect(decodedUri).toContain('show.label!=trailer-placeholder');
+    expect(decodedUri).not.toMatch(/[^.]label!=trailer-placeholder/);
+  });
+
+  it('creates type=2 collection for recently_released_episodes (shows, not episodes)', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createFilteredHub(
+      'Test Shows',
+      '3',
+      'tv',
+      'recently_released_episodes'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    expect(createUrl).toContain('type=2');
+  });
+
+  it('creates type=1 collection for movie recently_added', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createFilteredHub(
+      'Test Movies',
+      '1',
+      'movie',
+      'recently_added'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    expect(createUrl).toContain('type=1');
+  });
+
+  it('skips collection exclusions for recently_added_episodes', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createFilteredHub(
+      'Test Episodes',
+      '3',
+      'tv',
+      'recently_added_episodes',
+      undefined,
+      ['Excluded Collection']
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(createUrl);
+    expect(decodedUri).not.toContain('collection!=');
+  });
+
+  it('applies collection exclusions for recently_added', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createFilteredHub(
+      'Test Added',
+      '3',
+      'tv',
+      'recently_added',
+      undefined,
+      ['Excluded Collection']
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(createUrl);
+    expect(decodedUri).toContain('collection!=');
+  });
+
+  it('returns null for recently_added_episodes on movie libraries', async () => {
+    const { manager } = createManager();
+
+    const result = await manager.createFilteredHub(
+      'Test Episodes',
+      '1',
+      'movie',
+      'recently_added_episodes'
+    );
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('PlexSmartCollectionManager.updateFilteredHubUri', () => {
+  it('uses type=4 in filter URI for recently_added_episodes', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.updateFilteredHubUri(
+      '99999',
+      '3',
+      'tv',
+      'recently_added_episodes'
+    );
+
+    const putUrl = mockPlexApi.safePutQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(putUrl);
+    expect(decodedUri).toContain('type=4');
+    expect(decodedUri).toContain('show.label!=trailer-placeholder');
+  });
+
+  it('uses type=2 in filter URI for recently_added on TV', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.updateFilteredHubUri('99999', '3', 'tv', 'recently_added');
+
+    const putUrl = mockPlexApi.safePutQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(putUrl);
+    expect(decodedUri).toContain('type=2');
+  });
+});

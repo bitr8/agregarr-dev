@@ -1714,16 +1714,16 @@ export const getTemplatePresets = (
       case 'recently_added_episodes':
         return [
           {
-            label: 'Recently Added Episodes',
-            value: 'Recently Added Episodes',
+            label: 'New Episodes Today',
+            value: 'New Episodes Today',
           },
           {
-            label: 'Latest Episodes',
-            value: 'Latest Episodes',
+            label: 'Fresh Episodes',
+            value: 'Fresh Episodes',
           },
           {
-            label: 'New Episodes',
-            value: 'New Episodes',
+            label: 'Just Added',
+            value: 'Just Added',
           },
           { label: 'Custom', value: 'custom' },
         ];
