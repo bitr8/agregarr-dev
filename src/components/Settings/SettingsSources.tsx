@@ -158,12 +158,16 @@ const messages = defineMessages({
   overseerrDownloadsTitleSettings:
     'Seerr, Radarr, and Sonarr are configured on the Downloads page',
   fetchingSettings: 'Fetching Settings',
-  letterboxdUsePlainHttp: 'Use Plain HTTP for Letterboxd',
-  letterboxdUsePlainHttpTip:
-    'Use direct HTTP requests instead of browser automation (Playwright) for Letterboxd page fetching. Much faster and works unless Cloudflare challenges return.',
+  letterboxdUseFlareSolverr: 'Use Cloudflare Solver for Letterboxd',
+  letterboxdUseFlareSolverrTip:
+    'Route Letterboxd page fetching through your configured solver. Falls back to built-in browser automation if no solver is configured. Only needed if plain HTTP is blocked (common on VPS/VPN IPs). Leave off for fastest fetching.',
+  flixpatrolSolverRequired: 'FlixPatrol / Networks Top 10',
+  flixpatrolSolverRequiredLabel: 'Cloudflare Solver required',
+  flixpatrolSolverRequiredTip:
+    'FlixPatrol sits behind Cloudflare and always requires a Cloudflare solver. Configure one below.',
   cloudflareSolvers: 'Cloudflare Solvers',
   cloudflareSolversTip:
-    'FlareSolverr or Byparr instances, tried in order until one succeeds. Drag to set priority. Required for FlixPatrol-based collections such as Networks Top 10 — Cloudflare blocks all other fetching methods.',
+    'FlareSolverr, Byparr, or Trawl instances, tried in order until one succeeds. Drag to set priority.',
   cloudflareSolverNamePlaceholder: 'Name (e.g. FlareSolverr)',
   cloudflareSolverUrlPlaceholder: 'http://flaresolverr:8191',
   addCloudflareSolver: 'Add Solver',
@@ -508,21 +512,21 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
           <form className="section" onSubmit={handleSubmit}>
             <div className="form-row">
               <label
-                htmlFor="letterboxdUsePlainHttp"
+                htmlFor="letterboxdUseFlareSolverr"
                 className="checkbox-label"
               >
                 <span className="mr-2">
-                  {intl.formatMessage(messages.letterboxdUsePlainHttp)}
+                  {intl.formatMessage(messages.letterboxdUseFlareSolverr)}
                 </span>
                 <span className="label-tip">
-                  {intl.formatMessage(messages.letterboxdUsePlainHttpTip)}
+                  {intl.formatMessage(messages.letterboxdUseFlareSolverrTip)}
                 </span>
               </label>
               <div className="form-input-area">
-                <Field
+                <input
                   type="checkbox"
-                  id="letterboxdUsePlainHttp"
-                  name="letterboxdUsePlainHttp"
+                  id="letterboxdUseFlareSolverr"
+                  checked={!values.letterboxdUsePlainHttp}
                   onChange={() => {
                     setFieldValue(
                       'letterboxdUsePlainHttp',
@@ -530,6 +534,22 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
                     );
                   }}
                 />
+              </div>
+            </div>
+            <div className="form-row">
+              <label className="checkbox-label">
+                <span className="mr-2">
+                  {intl.formatMessage(messages.flixpatrolSolverRequired)}
+                </span>
+                <span className="label-tip">
+                  {intl.formatMessage(messages.flixpatrolSolverRequiredTip)}
+                </span>
+              </label>
+              <div className="form-input-area flex items-center gap-2">
+                <input type="checkbox" checked={true} disabled={true} />
+                <span className="text-sm text-stone-400">
+                  {intl.formatMessage(messages.flixpatrolSolverRequiredLabel)}
+                </span>
               </div>
             </div>
             <div className="form-row">

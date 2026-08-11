@@ -7,6 +7,7 @@ import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import { getAdminUser } from '@server/lib/collections/core/CollectionUtilities';
+import { LetterboxdHttpClient } from '@server/lib/collections/utils/LetterboxdHttpClient';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { appDataPath } from '@server/utils/appDataVolume';
@@ -282,11 +283,39 @@ export const flareSolverrRequiredCheck: HealthCheck = {
       return {
         status: 'error',
         message:
-          'Networks Top 10 collections fetch from FlixPatrol, which sits behind a Cloudflare challenge the built-in browser cannot reliably pass. Install FlareSolverr or Byparr and add it as a Cloudflare solver in Settings > Sources.',
+          'Networks Top 10 collections fetch from FlixPatrol, which sits behind a Cloudflare challenge the built-in browser cannot reliably pass. Install FlareSolverr, Byparr, or Trawl and add it as a Cloudflare solver in Settings > Sources.',
       };
     }
 
     return { status: 'ok', message: 'Solver configured' };
+  },
+};
+
+export const letterboxdChallengeCheck: HealthCheck = {
+  id: 'letterboxd-cloudflare',
+  name: 'Letterboxd Cloudflare',
+
+  run: async () => {
+    const { main } = getSettings();
+    if (!(main.letterboxdUsePlainHttp ?? true)) return { status: 'skipped' };
+
+    const lastChallenge = LetterboxdHttpClient.getLastChallengeDetected();
+    if (!lastChallenge) return { status: 'ok' };
+
+    const hoursAgo = (Date.now() - lastChallenge.getTime()) / 3600000;
+    if (hoursAgo > 8) return { status: 'ok' };
+
+    const label =
+      hoursAgo < 1
+        ? `${Math.round(hoursAgo * 60)}m ago`
+        : `${Math.round(hoursAgo)}h ago`;
+    const hasSolvers = main.cloudflareSolvers?.some((s) => s?.url);
+    return {
+      status: 'warning',
+      message: hasSolvers
+        ? `Letterboxd was blocked by Cloudflare ${label}. Enable "Use Cloudflare Solver for Letterboxd" in Settings > Sources to use your configured solvers.`
+        : `Letterboxd was blocked by Cloudflare ${label}. Enable "Use Cloudflare Solver for Letterboxd" in Settings > Sources. Install FlareSolverr, Byparr, or Trawl, or leave unconfigured for built-in browser automation.`,
+    };
   },
 };
 
@@ -652,6 +681,7 @@ const checks: HealthCheck[] = [
   connectionRatingsProxyCheck,
   connectionFlareSolverrCheck,
   flareSolverrRequiredCheck,
+  letterboxdChallengeCheck,
   connectionMaintainerrCheck,
   orphanedCollectionKeysCheck,
   plexLibrariesCheck,
