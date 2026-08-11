@@ -82,6 +82,7 @@ export class LetterboxdHttpClient {
           throw new Error('Cloudflare challenge detected');
         }
 
+        this.lastChallengeDetected = null;
         return html;
       } catch (error) {
         const isCloudflare =
