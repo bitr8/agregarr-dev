@@ -841,6 +841,11 @@ const MultiSourceConfigSection = ({
               'Highest rated English-language movies on IMDb (movies only)',
           },
           {
+            value: 'bottom_100',
+            label: 'Bottom 100',
+            description: 'Lowest rated movies on IMDb (movies only)',
+          },
+          {
             value: 'popular',
             label: 'Popular (Meter)',
             description: 'Most viewed by IMDb users based on page views',

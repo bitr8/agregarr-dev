@@ -36,6 +36,7 @@ export enum ImdbTopList {
   TOP_250_MOVIES = 'top250movies',
   TOP_250_ENGLISH_MOVIES = 'top250englishmovies',
   TOP_250_TV = 'top250tv',
+  BOTTOM_100 = 'bottom100',
   POPULAR_MOVIES = 'popularmovies',
   POPULAR_TV = 'populartv',
   MOST_POPULAR_MOVIES = 'mostpopularmovies',
@@ -87,6 +88,10 @@ class ImdbAPI {
         case ImdbTopList.TOP_250_TV:
           url = 'https://www.imdb.com/chart/toptv/';
           expectedType = 'tv';
+          break;
+        case ImdbTopList.BOTTOM_100:
+          url = 'https://www.imdb.com/chart/bottom/';
+          expectedType = 'movie';
           break;
         case ImdbTopList.POPULAR_MOVIES:
           url = 'https://www.imdb.com/chart/moviemeter/';
