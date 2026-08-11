@@ -3872,21 +3872,19 @@ const CollectionFormConfigForm = ({
                                       {intl.formatMessage(messages.sortTitle)}
                                     </label>
                                     <div className="form-input-area">
-                                      <div className="form-input-field">
-                                        <Field
-                                          type="text"
-                                          id="sortTitleOverride"
-                                          name="sortTitleOverride"
-                                          placeholder={intl.formatMessage(
-                                            messages.sortTitlePlaceholder
-                                          )}
-                                          className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
-                                        />
-                                        <div className="label-tip mt-1">
-                                          {intl.formatMessage(
-                                            messages.sortTitleHelp
-                                          )}
-                                        </div>
+                                      <Field
+                                        type="text"
+                                        id="sortTitleOverride"
+                                        name="sortTitleOverride"
+                                        placeholder={intl.formatMessage(
+                                          messages.sortTitlePlaceholder
+                                        )}
+                                        className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
+                                      />
+                                      <div className="label-tip mt-1">
+                                        {intl.formatMessage(
+                                          messages.sortTitleHelp
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -5201,21 +5199,19 @@ const CollectionFormConfigForm = ({
                                     {intl.formatMessage(messages.sortTitle)}
                                   </label>
                                   <div className="form-input-area">
-                                    <div className="form-input-field">
-                                      <Field
-                                        type="text"
-                                        id="sortTitleOverride"
-                                        name="sortTitleOverride"
-                                        placeholder={intl.formatMessage(
-                                          messages.sortTitlePlaceholder
-                                        )}
-                                        className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
-                                      />
-                                      <div className="label-tip mt-1">
-                                        {intl.formatMessage(
-                                          messages.sortTitleHelp
-                                        )}
-                                      </div>
+                                    <Field
+                                      type="text"
+                                      id="sortTitleOverride"
+                                      name="sortTitleOverride"
+                                      placeholder={intl.formatMessage(
+                                        messages.sortTitlePlaceholder
+                                      )}
+                                      className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
+                                    />
+                                    <div className="label-tip mt-1">
+                                      {intl.formatMessage(
+                                        messages.sortTitleHelp
+                                      )}
                                     </div>
                                   </div>
                                 </div>
