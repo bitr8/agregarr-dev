@@ -553,6 +553,12 @@ const CollectionTypeSection = ({
             description:
               'Shows sorted by most recent episode added (TV libraries only)',
           },
+          {
+            value: 'recently_added_episodes',
+            label: 'Recently Added Episodes (Individual)',
+            description:
+              'Individual episodes sorted by date added (TV libraries only)',
+          },
         ];
       default:
         return [];

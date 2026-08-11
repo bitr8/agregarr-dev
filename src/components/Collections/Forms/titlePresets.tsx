@@ -1711,6 +1711,22 @@ export const getTemplatePresets = (
           },
           { label: 'Custom', value: 'custom' },
         ];
+      case 'recently_added_episodes':
+        return [
+          {
+            label: 'Recently Added Episodes',
+            value: 'Recently Added Episodes',
+          },
+          {
+            label: 'Latest Episodes',
+            value: 'Latest Episodes',
+          },
+          {
+            label: 'New Episodes',
+            value: 'New Episodes',
+          },
+          { label: 'Custom', value: 'custom' },
+        ];
       default:
         // Fallback if no subtype selected yet
         return [

@@ -405,6 +405,8 @@ export const getSubtypeLabel = (type: string, subtype?: string): string => {
           return 'Recently Released';
         case 'recently_released_episodes':
           return 'Recently Added Episodes';
+        case 'recently_added_episodes':
+          return 'Recently Added Episodes (Individual)';
         default:
           return subtype;
       }

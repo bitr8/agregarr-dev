@@ -167,26 +167,32 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
     const subtype = config.subtype as
       | 'recently_added'
       | 'recently_released'
-      | 'recently_released_episodes';
+      | 'recently_released_episodes'
+      | 'recently_added_episodes';
     if (
       !subtype ||
       ![
         'recently_added',
         'recently_released',
         'recently_released_episodes',
+        'recently_added_episodes',
       ].includes(subtype)
     ) {
       throw this.createSyncError(
         CollectionSyncErrorType.CONFIGURATION_ERROR,
-        `Invalid filtered_hub subtype: ${subtype}. Must be 'recently_added', 'recently_released', or 'recently_released_episodes'`
+        `Invalid filtered_hub subtype: ${subtype}. Must be 'recently_added', 'recently_released', 'recently_released_episodes', or 'recently_added_episodes'`
       );
     }
 
-    // Validate that recently_released_episodes is only used with TV libraries
-    if (subtype === 'recently_released_episodes' && mediaType !== 'tv') {
+    // Validate that episode-related subtypes are only used with TV libraries
+    if (
+      (subtype === 'recently_released_episodes' ||
+        subtype === 'recently_added_episodes') &&
+      mediaType !== 'tv'
+    ) {
       throw this.createSyncError(
         CollectionSyncErrorType.CONFIGURATION_ERROR,
-        `The 'recently_released_episodes' subtype is only supported for TV libraries`
+        `The '${subtype}' subtype is only supported for TV libraries`
       );
     }
 
@@ -460,8 +466,9 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
     // Update config with rating key
     this.updateConfigWithRatingKey(config, collectionRatingKey);
 
-    // Generate poster if autoPoster is enabled
-    const shouldGeneratePoster = config.autoPoster ?? true;
+    // Generate poster if autoPoster is enabled (skip for episode-level hubs — no show-level TMDB data)
+    const shouldGeneratePoster =
+      subtype !== 'recently_added_episodes' && (config.autoPoster ?? true);
 
     if (shouldGeneratePoster) {
       try {

@@ -294,7 +294,8 @@ class PlexSmartCollectionManager {
     subtype:
       | 'recently_added'
       | 'recently_released'
-      | 'recently_released_episodes',
+      | 'recently_released_episodes'
+      | 'recently_added_episodes',
     maxItems?: number,
     excludeCollectionTitles?: string[]
   ): Promise<string | null> {
@@ -310,7 +311,12 @@ class PlexSmartCollectionManager {
         }
       );
 
-      const type = mediaType === 'movie' ? 1 : 2;
+      const type =
+        subtype === 'recently_added_episodes'
+          ? 4
+          : mediaType === 'movie'
+          ? 1
+          : 2;
 
       // All filtered hubs use label-based exclusion (same mechanism for movies and TV)
       const labelFilter = encodeURIComponent('trailer-placeholder');
@@ -333,12 +339,22 @@ class PlexSmartCollectionManager {
         }
         const sortParam = 'episode.addedAt:desc';
         filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
+      } else if (subtype === 'recently_added_episodes') {
+        if (mediaType !== 'tv') {
+          throw new Error(
+            `recently_added_episodes subtype is only supported for TV libraries`
+          );
+        }
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=addedAt:desc&show.label!=${labelFilter}`;
       } else {
         throw new Error(`Unsupported filtered hub subtype: ${subtype}`);
       }
 
-      // Add collection exclusion filters
-      if (excludeCollectionTitles?.length) {
+      // Add collection exclusion filters (skipped for episode-level hubs — Plex ignores them at type=4)
+      if (
+        excludeCollectionTitles?.length &&
+        subtype !== 'recently_added_episodes'
+      ) {
         for (const colTitle of excludeCollectionTitles) {
           filterUri += `&collection!=${encodeURIComponent(colTitle.trim())}`;
         }
@@ -803,7 +819,8 @@ class PlexSmartCollectionManager {
     subtype:
       | 'recently_added'
       | 'recently_released'
-      | 'recently_released_episodes',
+      | 'recently_released_episodes'
+      | 'recently_added_episodes',
     maxItems?: number,
     excludeCollectionTitles?: string[]
   ): Promise<void> {
@@ -820,7 +837,12 @@ class PlexSmartCollectionManager {
         }
       );
 
-      const type = mediaType === 'movie' ? 1 : 2;
+      const type =
+        subtype === 'recently_added_episodes'
+          ? 4
+          : mediaType === 'movie'
+          ? 1
+          : 2;
 
       // All filtered hubs use label-based exclusion (same logic as createFilteredHub)
       const labelFilter = encodeURIComponent('trailer-placeholder');
@@ -843,12 +865,22 @@ class PlexSmartCollectionManager {
         }
         const sortParam = 'episode.addedAt:desc';
         filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
+      } else if (subtype === 'recently_added_episodes') {
+        if (mediaType !== 'tv') {
+          throw new Error(
+            `recently_added_episodes subtype is only supported for TV libraries`
+          );
+        }
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=addedAt:desc&show.label!=${labelFilter}`;
       } else {
         throw new Error(`Unsupported filtered hub subtype: ${subtype}`);
       }
 
-      // Add collection exclusion filters
-      if (excludeCollectionTitles?.length) {
+      // Add collection exclusion filters (skipped for episode-level hubs — Plex ignores them at type=4)
+      if (
+        excludeCollectionTitles?.length &&
+        subtype !== 'recently_added_episodes'
+      ) {
         for (const colTitle of excludeCollectionTitles) {
           filterUri += `&collection!=${encodeURIComponent(colTitle.trim())}`;
         }
