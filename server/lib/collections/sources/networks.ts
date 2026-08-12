@@ -774,7 +774,19 @@ export class NetworksCollectionSync extends BaseCollectionSync<'networks'> {
       return null;
     }
 
-    const bestMatch = scoredResults[0];
+    // When the collection targets a specific type, prefer the best same-type
+    // result that has an exact title match. Without the title gate, an
+    // unrelated same-type search result could beat a correct cross-type one.
+    const normalizedTitle = originalTitle.toLowerCase();
+    const sameTypeTitleMatches = scoredResults.filter((r) => {
+      if (r.mediaType !== collectionMediaType) return false;
+      const t = r.mediaType === 'movie' ? r.result.title : r.result.name;
+      return t != null && t.toLowerCase() === normalizedTitle;
+    });
+    const usedSameTypePreference = sameTypeTitleMatches.length > 0;
+    const bestMatch = usedSameTypePreference
+      ? sameTypeTitleMatches[0]
+      : scoredResults[0];
 
     // Log scoring details for debugging
     logger.debug(`TMDB match scoring for "${originalTitle}"`, {
@@ -794,6 +806,7 @@ export class NetworksCollectionSync extends BaseCollectionSync<'networks'> {
       movieCount: movieResults.length,
       tvCount: tvResults.length,
       collectionType: collectionMediaType,
+      sameTypePreferred: usedSameTypePreference,
     });
 
     return {
