@@ -100,7 +100,8 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
           'letterboxd',
           9999,
           mediaType,
-          libraryCache
+          libraryCache,
+          config.id
         );
         if (!randomResult) {
           throw this.createSyncError(

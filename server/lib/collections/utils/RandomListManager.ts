@@ -291,13 +291,15 @@ https://letterboxd.com/dave/list/imdb-top-250/
     sourceType: 'trakt' | 'tmdb' | 'imdb' | 'letterboxd',
     maxItems: number,
     targetMediaType?: 'movie' | 'tv',
-    libraryCache?: LibraryItemsCache
+    libraryCache?: LibraryItemsCache,
+    configId?: string
   ): Promise<{ url: string; title: string } | null> {
     const result = await this.getRandomUrl(
       sourceType,
       maxItems,
       targetMediaType,
-      libraryCache
+      libraryCache,
+      configId
     );
     if (!result) {
       return null;
@@ -497,6 +499,80 @@ https://letterboxd.com/dave/list/imdb-top-250/
   }
 
   /**
+   * Resolve a configId to the real config entry. Multi-source temp configs use
+   * the format `${parentId}-${sourceId}` — strip the suffix to find the parent.
+   */
+  private static resolveConfigEntry(
+    configs: { id: string }[],
+    configId: string
+  ): { config: Record<string, unknown>; index: number } | undefined {
+    let idx = configs.findIndex((c) => c.id === configId);
+    if (idx === -1) {
+      const dashIdx = configId.lastIndexOf('-');
+      if (dashIdx > 0) {
+        const parentId = configId.substring(0, dashIdx);
+        idx = configs.findIndex((c) => c.id === parentId);
+      }
+    }
+    if (idx === -1) return undefined;
+    return { config: configs[idx] as Record<string, unknown>, index: idx };
+  }
+
+  /**
+   * Read the last-used random URL for a config from settings
+   */
+  private static async getLastRandomUrl(
+    configId: string
+  ): Promise<string | undefined> {
+    try {
+      const { getSettings } = await import('@server/lib/settings');
+      const settings = getSettings();
+      const configs = settings.plex.collectionConfigs || [];
+      const entry = this.resolveConfigEntry(configs, configId);
+      return (entry?.config?.lastRandomUrl as string) || undefined;
+    } catch (error) {
+      logger.debug('Failed to read lastRandomUrl', {
+        label: 'RandomListManager',
+        configId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * Persist the selected random URL on the config so the next sync can avoid it
+   */
+  private static async persistLastRandomUrl(
+    configId: string,
+    url: string
+  ): Promise<void> {
+    try {
+      const { getSettings } = await import('@server/lib/settings');
+      const settings = getSettings();
+      const configs = settings.plex.collectionConfigs || [];
+      const entry = this.resolveConfigEntry(configs, configId);
+      if (entry) {
+        const updated = {
+          ...configs[entry.index],
+        } as (typeof configs)[number] & {
+          lastRandomUrl?: string;
+        };
+        updated.lastRandomUrl = url;
+        configs[entry.index] = updated;
+        settings.plex.collectionConfigs = configs;
+        settings.save();
+      }
+    } catch (error) {
+      logger.warn('Failed to persist lastRandomUrl', {
+        label: 'RandomListManager',
+        configId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
    * Get a random URL from available lists for a source type
    * Validates that the URL contains enough items of the target media type
    */
@@ -504,7 +580,8 @@ https://letterboxd.com/dave/list/imdb-top-250/
     sourceType: 'trakt' | 'tmdb' | 'imdb' | 'letterboxd',
     maxItems: number,
     targetMediaType?: 'movie' | 'tv',
-    libraryCache?: LibraryItemsCache
+    libraryCache?: LibraryItemsCache,
+    configId?: string
   ): Promise<string | null> {
     const urls = await this.getRandomUrls(sourceType, targetMediaType);
     if (urls.length === 0) {
@@ -515,13 +592,25 @@ https://letterboxd.com/dave/list/imdb-top-250/
       return null;
     }
 
+    // Read last-used URL to guarantee rotation across syncs
+    const lastUsedUrl = configId
+      ? await this.getLastRandomUrl(configId)
+      : undefined;
+
     // If no media type validation needed, pick from unclaimed URLs
     if (!targetMediaType) {
-      const available = urls.filter((u) => !this.syncRunSelectedUrls.has(u));
+      let available = urls.filter((u) => !this.syncRunSelectedUrls.has(u));
+      // Exclude last-used URL to guarantee rotation (unless it's the only option)
+      if (lastUsedUrl && available.length > 1) {
+        available = available.filter((u) => u !== lastUsedUrl);
+      }
       const pool = available.length > 0 ? available : urls;
       const randomIndex = Math.floor(Math.random() * pool.length);
       const selectedUrl = pool[randomIndex];
       this.syncRunSelectedUrls.add(selectedUrl);
+      if (configId) {
+        await this.persistLastRandomUrl(configId, selectedUrl);
+      }
 
       logger.info(`Selected random URL for ${sourceType}: ${selectedUrl}`, {
         label: 'RandomListManager',
@@ -556,13 +645,19 @@ https://letterboxd.com/dave/list/imdb-top-250/
         libraryCache
       );
       if (libraryUrls.length > 0) {
-        const available = libraryUrls.filter(
+        let available = libraryUrls.filter(
           (u) => !this.syncRunSelectedUrls.has(u)
         );
+        if (lastUsedUrl && available.length > 1) {
+          available = available.filter((u) => u !== lastUsedUrl);
+        }
         const pool = available.length > 0 ? available : libraryUrls;
         const randomIndex = Math.floor(Math.random() * pool.length);
         const selectedUrl = pool[randomIndex];
         this.syncRunSelectedUrls.add(selectedUrl);
+        if (configId) {
+          await this.persistLastRandomUrl(configId, selectedUrl);
+        }
         logger.info(
           `Selected TMDB collection from user library: ${selectedUrl}`,
           {
@@ -577,8 +672,10 @@ https://letterboxd.com/dave/list/imdb-top-250/
     }
 
     // Try up to 500 random URLs to find one suitable for target media type
+    // Prioritise URLs that aren't the last-used one to guarantee rotation
     const maxAttempts = Math.min(500, urls.length);
     const triedUrls = new Set<string>();
+    let lastUsedFallback: string | null = null;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let randomIndex: number;
@@ -618,7 +715,16 @@ https://letterboxd.com/dave/list/imdb-top-250/
         );
 
         if (isValid) {
+          // Skip last-used URL on first pass — remember it as fallback
+          if (lastUsedUrl && selectedUrl === lastUsedUrl && !lastUsedFallback) {
+            lastUsedFallback = selectedUrl;
+            continue;
+          }
+
           this.syncRunSelectedUrls.add(selectedUrl);
+          if (configId) {
+            await this.persistLastRandomUrl(configId, selectedUrl);
+          }
           logger.info(
             `Selected validated random URL for ${sourceType}: ${selectedUrl}`,
             {
@@ -641,10 +747,28 @@ https://letterboxd.com/dave/list/imdb-top-250/
       }
     }
 
+    // If the only valid URL was the last-used one, use it rather than returning null
+    if (lastUsedFallback) {
+      this.syncRunSelectedUrls.add(lastUsedFallback);
+      logger.info(
+        `Only valid URL for ${sourceType} is the same as last sync, reusing: ${lastUsedFallback}`,
+        {
+          label: 'RandomListManager',
+          sourceType,
+          targetMediaType,
+          lastUsedFallback,
+        }
+      );
+      return lastUsedFallback;
+    }
+
     // All unclaimed URLs exhausted — reuse one already claimed by this run
     const reusable = urls.filter((u) => this.syncRunSelectedUrls.has(u));
     if (reusable.length > 0) {
       const fallback = reusable[Math.floor(Math.random() * reusable.length)];
+      if (configId) {
+        await this.persistLastRandomUrl(configId, fallback);
+      }
       logger.info(
         `All unique URLs exhausted for ${sourceType}, reusing: ${fallback}`,
         {

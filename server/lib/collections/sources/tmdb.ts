@@ -1097,7 +1097,8 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           'tmdb',
           9999,
           mediaType,
-          libraryCache
+          libraryCache,
+          config.id
         );
         if (!randomResult) {
           logger.warn(

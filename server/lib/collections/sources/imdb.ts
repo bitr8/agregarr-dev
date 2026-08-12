@@ -167,7 +167,8 @@ export class ImdbCollectionSync extends BaseCollectionSync<'imdb'> {
           'imdb',
           9999,
           mediaType,
-          libraryCache
+          libraryCache,
+          config.id
         );
         if (!randomResult) {
           throw this.createSyncError(
