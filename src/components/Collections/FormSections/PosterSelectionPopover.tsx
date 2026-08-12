@@ -100,8 +100,12 @@ const PosterSelectionPopover: React.FC<PosterSelectionPopoverProps> = ({
     }[];
   } | null>(null);
 
-  // Close popover when clicking outside
+  // Close popover when clicking outside (suspend while a portaled child modal is open)
   useEffect(() => {
+    if (!isOpen || isEditorOpen || deleteConfirmation !== null) {
+      return;
+    }
+
     const handleClickOutside = (event: MouseEvent) => {
       if (
         popoverRef.current &&
@@ -111,12 +115,9 @@ const PosterSelectionPopover: React.FC<PosterSelectionPopoverProps> = ({
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () =>
-        document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen, onClose]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, isEditorOpen, deleteConfirmation, onClose]);
 
   // Reset URL input state when popover closes
   useEffect(() => {
