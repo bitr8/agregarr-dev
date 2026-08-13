@@ -1117,7 +1117,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
         // Store the dynamic title for use in generateCollectionNameWithCustom
         if (config.template === 'DYNAMIC_RANDOM_TITLE') {
           this.dynamicRandomTitle = listTitle;
-          this.updateCollectionConfigField(config.id, { name: listTitle });
+          const prefix = config.dynamicTitlePrefix || '';
+          const prefixedName = prefix ? `${prefix} ${listTitle}` : listTitle;
+          this.updateCollectionConfigField(config.id, { name: prefixedName });
         }
 
         logger.info(`Using random TMDB collection: ${randomUrl}`, {
@@ -1277,7 +1279,10 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
   ): Promise<string> {
     // Handle DYNAMIC_RANDOM_TITLE using stored title from fetchSourceData
     if (config.template === 'DYNAMIC_RANDOM_TITLE' && this.dynamicRandomTitle) {
-      return this.dynamicRandomTitle;
+      const prefix = config.dynamicTitlePrefix || '';
+      return prefix
+        ? `${prefix} ${this.dynamicRandomTitle}`
+        : this.dynamicRandomTitle;
     }
 
     // Fall back to base implementation for other templates

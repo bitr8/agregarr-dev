@@ -139,6 +139,9 @@ export const saveIndividualConfigs = async (
         ...(collectionConfig.customTVTemplate && {
           customTVTemplate: collectionConfig.customTVTemplate,
         }),
+        ...(collectionConfig.dynamicTitlePrefix !== undefined && {
+          dynamicTitlePrefix: collectionConfig.dynamicTitlePrefix,
+        }),
         visibilityConfig: collectionConfig.visibilityConfig,
         ...(collectionConfig.maxItems !== undefined && {
           maxItems: collectionConfig.maxItems,
