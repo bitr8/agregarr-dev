@@ -164,6 +164,10 @@ components:
         csrfProtection:
           type: boolean
           example: false
+        excludeFromOrderingLabel:
+          type: string
+          description: Comma-separated Plex labels. Collections carrying any of these labels are excluded from ordering, visibility, and sort title enforcement.
+          example: shortlist
         hideAvailable:
           type: boolean
           example: false

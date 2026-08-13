@@ -195,8 +195,7 @@ const SettingsMain = () => {
                 tmdbLanguage: values.tmdbLanguage,
                 enableTmdbPosterCache: values.enableTmdbPosterCache,
                 healthChecksEnabled: values.healthChecksEnabled,
-                excludeFromOrderingLabel:
-                  values.excludeFromOrderingLabel || undefined,
+                excludeFromOrderingLabel: values.excludeFromOrderingLabel || '',
                 watchProviderRegion: values.watchProviderRegion,
                 overlayConcurrency: values.overlayConcurrency,
                 trustProxy: values.trustProxy,

@@ -1404,6 +1404,13 @@ export class DiscoveryService {
     try {
       allCollections = await plexClient.getAllCollections();
 
+      const exclusionLabels = (
+        getSettings().main.excludeFromOrderingLabel ?? ''
+      )
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+
       // Add ALL collections - this is the source of truth for accurate titles
       for (const collection of allCollections) {
         const libraryId = String(collection.libraryKey);
@@ -1457,16 +1464,13 @@ export class DiscoveryService {
                 config.libraryId === libraryId
             );
 
-          // Check if this collection carries any ordering-exclusion label (comma-separated)
-          const exclusionLabels = (settings.main.excludeFromOrderingLabel ?? '')
-            .split(',')
-            .map((s) => s.trim().toLowerCase())
-            .filter(Boolean);
           const hasExclusionLabel =
             exclusionLabels.length > 0 &&
-            collection.labels?.some((l) => {
-              const tag = typeof l === 'string' ? l : l.tag;
-              return tag ? exclusionLabels.includes(tag.toLowerCase()) : false;
+            (collection.labels ?? []).some((tag) => {
+              const t = String(tag).toLowerCase();
+              return exclusionLabels.some(
+                (excl) => t === excl || t.startsWith(excl + '_')
+              );
             });
 
           if (existingPreExisting) {
