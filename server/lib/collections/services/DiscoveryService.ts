@@ -1457,16 +1457,17 @@ export class DiscoveryService {
                 config.libraryId === libraryId
             );
 
-          // Check if this collection carries the ordering-exclusion label
-          const exclusionLabel = settings.main.excludeFromOrderingLabel
-            ?.trim()
-            .toLowerCase();
-          const hasExclusionLabel = exclusionLabel
-            ? collection.labels?.some((l) => {
-                const tag = typeof l === 'string' ? l : l.tag;
-                return tag?.toLowerCase() === exclusionLabel;
-              })
-            : false;
+          // Check if this collection carries any ordering-exclusion label (comma-separated)
+          const exclusionLabels = (settings.main.excludeFromOrderingLabel ?? '')
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean);
+          const hasExclusionLabel =
+            exclusionLabels.length > 0 &&
+            collection.labels?.some((l) => {
+              const tag = typeof l === 'string' ? l : l.tag;
+              return tag ? exclusionLabels.includes(tag.toLowerCase()) : false;
+            });
 
           if (existingPreExisting) {
             // Update exclusion flag on every discovery pass so adding/removing the label takes effect

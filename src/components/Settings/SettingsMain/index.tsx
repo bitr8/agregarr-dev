@@ -63,7 +63,7 @@ const messages = defineMessages({
     'Run periodic health checks to detect connection issues and configuration problems',
   excludeFromOrderingLabel: 'Exclude from Ordering (Plex Label)',
   excludeFromOrderingLabelTip:
-    'Collections with this Plex label will be excluded from ordering, visibility, and sort title enforcement. Useful when other tools (Shortlist, Kometa) manage their own collections.',
+    'Collections with any of these Plex labels (comma-separated) will be excluded from ordering, visibility, and sort title enforcement. Useful when other tools (Shortlist, Kometa) manage their own collections.',
   logLevel: 'Log Level',
   logLevelTip: 'Controls how much detail appears in logs',
   resetAgregarr: 'Reset',
@@ -480,7 +480,7 @@ const SettingsMain = () => {
                         id="excludeFromOrderingLabel"
                         name="excludeFromOrderingLabel"
                         type="text"
-                        placeholder="e.g. shortlist"
+                        placeholder="e.g. shortlist, kometa"
                       />
                     </div>
                   </div>

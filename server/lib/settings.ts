@@ -705,7 +705,7 @@ export interface MainSettings {
   letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: true)
   // Cloudflare solver instances (FlareSolverr/Byparr), tried in array order. Empty = built-in Playwright.
   cloudflareSolvers?: CloudflareSolverInstance[];
-  excludeFromOrderingLabel?: string; // Plex label — collections with this label are excluded from ordering/visibility enforcement
+  excludeFromOrderingLabel?: string; // Comma-separated Plex labels — collections with any of these are excluded from ordering/visibility enforcement
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   healthChecksEnabled?: boolean;
   silencedHealthChecks?: string[];
