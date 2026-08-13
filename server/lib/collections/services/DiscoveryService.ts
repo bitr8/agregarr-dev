@@ -1913,10 +1913,12 @@ export class DiscoveryService {
                 config.collectionRatingKeys.length > 0))
         );
 
-        // Check pre-existing collections for this library
+        // Check pre-existing collections for this library (skip excluded ones)
         const libraryPreExisting = preExistingConfigs.filter(
           (config) =>
-            config.libraryId === library.key && config.collectionRatingKey
+            config.libraryId === library.key &&
+            config.collectionRatingKey &&
+            !config.excludeFromOrdering
         );
 
         // Process both types of collections

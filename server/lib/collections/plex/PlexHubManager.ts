@@ -1,5 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
 import type { PlexHubManagementResponse } from '@server/interfaces/api/plexInterfaces';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 
 /**
@@ -316,12 +317,22 @@ class PlexHubManager {
         return false;
       }
 
+      // Build set of excluded hub identifiers (collections another tool owns)
+      const settings = getSettings();
+      const excludedIdentifiers = new Set(
+        (settings.plex.preExistingCollectionConfigs || [])
+          .filter((c) => c.excludeFromOrdering && c.libraryId === sectionId)
+          .map(
+            (c) => `custom.collection.${c.libraryId}.${c.collectionRatingKey}`
+          )
+      );
+
       // Get current hub order from Plex
       const hubManagement = await this.getHubManagement(sectionId);
       const currentHubs = hubManagement.MediaContainer.Hub;
-      const currentOrder = currentHubs.map(
-        (h: { identifier: string }) => h.identifier
-      );
+      const currentOrder = currentHubs
+        .map((h: { identifier: string }) => h.identifier)
+        .filter((id: string) => !excludedIdentifiers.has(id));
 
       // Create complete desired order: our managed items first, then all unmanaged items at bottom
       const managedItemsSet = new Set(desiredOrder);
@@ -445,7 +456,7 @@ class PlexHubManager {
             const actualOrder =
               verificationHubManagement.MediaContainer.Hub.map(
                 (h: { identifier: string }) => h.identifier
-              );
+              ).filter((id: string) => !excludedIdentifiers.has(id));
 
             // Check if item landed immediately after predecessor
             const actualPredecessorIndex =
@@ -536,7 +547,7 @@ class PlexHubManager {
                 currentOrder.push(
                   ...refreshed.MediaContainer.Hub.map(
                     (h: { identifier: string }) => h.identifier
-                  )
+                  ).filter((id: string) => !excludedIdentifiers.has(id))
                 );
               } else {
                 const itemToMove = currentOrder.splice(currentPosition, 1)[0];
@@ -583,7 +594,7 @@ class PlexHubManager {
         );
         const actualOrder = verificationHubManagement.MediaContainer.Hub.map(
           (h: { identifier: string }) => h.identifier
-        );
+        ).filter((id: string) => !excludedIdentifiers.has(id));
 
         const orderMatches =
           JSON.stringify(actualOrder) === JSON.stringify(completeDesiredOrder);
