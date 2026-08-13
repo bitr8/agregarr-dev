@@ -398,6 +398,7 @@ const CollectionSettings = ({
           template: config.template,
           customMovieTemplate: config.customMovieTemplate,
           customTVTemplate: config.customTVTemplate,
+          dynamicTitlePrefix: config.dynamicTitlePrefix,
           visibilityConfig: config.visibilityConfig,
           maxItems: config.maxItems,
           mediaType: config.mediaType,
@@ -627,6 +628,7 @@ const CollectionSettings = ({
       template: '',
       customMovieTemplate: '', // Initialize empty custom movie template
       customTVTemplate: '', // Initialize empty custom TV template
+      dynamicTitlePrefix: '', // Initialize empty dynamic title prefix
       visibilityConfig: {
         usersHome: true,
         serverOwnerHome: true,

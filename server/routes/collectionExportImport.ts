@@ -35,6 +35,7 @@ const portableFields = [
   'template',
   'customMovieTemplate',
   'customTVTemplate',
+  'dynamicTitlePrefix',
   'visibilityConfig',
   'sortOrderHome',
   'sortOrderLibrary',

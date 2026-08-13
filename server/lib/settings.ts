@@ -93,6 +93,7 @@ export interface CollectionConfig {
   readonly template: string; // Collection template
   readonly customMovieTemplate?: string; // Custom template for movie collections when mediaType is 'both'
   readonly customTVTemplate?: string; // Custom template for TV collections when mediaType is 'both'
+  readonly dynamicTitlePrefix?: string; // Text to prepend to dynamic titles (DYNAMIC_RANDOM_TITLE / DYNAMIC_CYCLE_TITLE)
   readonly visibilityConfig: {
     usersHome: boolean;
     serverOwnerHome: boolean;

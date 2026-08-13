@@ -246,15 +246,19 @@ export class MultiSourceOrchestrator {
 
         if (this.dynamicCycleTitle) {
           const previousName = config.name;
-          collectionNameForSync = this.dynamicCycleTitle;
+          const prefix = config.dynamicTitlePrefix || '';
+          const prefixedName = prefix
+            ? `${prefix} ${this.dynamicCycleTitle}`
+            : this.dynamicCycleTitle;
+          collectionNameForSync = prefixedName;
           configForSync = {
             ...configForSync,
-            name: this.dynamicCycleTitle,
+            name: prefixedName,
           } as MultiSourceCollectionConfig;
 
           // Persist updated name and source title for subsequent syncs
           this.updateCollectionConfigField(config.id, {
-            name: this.dynamicCycleTitle,
+            name: prefixedName,
           });
           this.updateSourceResolvedTitle(
             config.id,
