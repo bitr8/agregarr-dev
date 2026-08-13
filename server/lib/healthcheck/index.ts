@@ -374,6 +374,11 @@ const orphanedCollectionKeysCheck: HealthCheck = {
     const entries: KeyEntry[] = [];
     for (const config of configs) {
       if (config.missing) continue;
+      if (
+        !config.isActive &&
+        config.timeRestriction?.removeFromPlexWhenInactive
+      )
+        continue;
       if (config.collectionRatingKey) {
         entries.push({
           key: String(config.collectionRatingKey),

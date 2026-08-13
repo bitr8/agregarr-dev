@@ -207,10 +207,9 @@ export const recordRun = (
 
     try {
       const result = await fn();
-      if (rec.outcome !== 'running') return;
       rec.outcome = result === 'skipped' ? 'skipped' : 'success';
+      rec.error = undefined;
     } catch (err) {
-      if (rec.outcome !== 'running') return;
       if (isContentionError(err)) {
         rec.outcome = 'skipped';
         rec.error = 'Skipped — another job is running';
@@ -224,8 +223,8 @@ export const recordRun = (
     } finally {
       clearTimeout(watchdog);
       if (rec.outcome === 'running') rec.outcome = 'success';
-      rec.finishedAt ??= new Date().toISOString();
-      rec.durationMs ??= Date.now() - start;
+      rec.finishedAt = new Date().toISOString();
+      rec.durationMs = Date.now() - start;
       if (list.length > MAX_RUN_HISTORY) list.length = MAX_RUN_HISTORY;
       void persistJobRun(id, rec);
     }
