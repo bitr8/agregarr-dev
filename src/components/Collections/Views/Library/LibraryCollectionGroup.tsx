@@ -190,10 +190,13 @@ const SortableItem = ({
     (config.visibilityConfig?.usersHome ||
       config.visibilityConfig?.serverOwnerHome);
 
-  // Disable dragging for greyed out items, A-Z collections on Library tab,
-  // and collections with a manual sort title override
+  const isExcludedFromOrdering =
+    isPreExisting &&
+    Boolean((config as PreExistingCollectionConfig).excludeFromOrdering);
+
   const isDraggingDisabled =
     isGreyedInRecommended ||
+    isExcludedFromOrdering ||
     (activeTab === 'library' && !isLibraryPromoted(config)) ||
     (activeTab === 'library' && hasSortTitleOverride(config));
 
@@ -271,7 +274,11 @@ const SortableItem = ({
         {/* Collection/Hub Info */}
         <div className="flex-1">
           <div className="mb-2 flex items-center">
-            <h5 className="text-base font-medium text-white">
+            <h5
+              className={`text-base font-medium ${
+                isExcludedFromOrdering ? 'text-gray-500' : 'text-white'
+              }`}
+            >
               {config.name === 'DYNAMIC_RANDOM_TITLE' ? (
                 <em>{intl.formatMessage(messages.titleWillUpdate)}</em>
               ) : isCollection &&
