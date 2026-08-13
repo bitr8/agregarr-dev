@@ -436,6 +436,7 @@ export interface PreExistingCollectionConfig {
   };
   isActive: boolean; // Whether collection is currently active (computed from time restrictions)
   missing?: boolean; // True if collection no longer exists in Plex
+  excludeFromOrdering?: boolean; // True if collection has the ordering-exclusion label
   // Sync status tracking fields
   lastSyncedAt?: string; // ISO string timestamp of last successful sync to Plex
   lastModifiedAt?: string; // ISO string timestamp when config was last modified
@@ -704,6 +705,7 @@ export interface MainSettings {
   letterboxdUsePlainHttp?: boolean; // Use plain HTTP (axios) instead of Playwright for Letterboxd page fetching (default: true)
   // Cloudflare solver instances (FlareSolverr/Byparr), tried in array order. Empty = built-in Playwright.
   cloudflareSolvers?: CloudflareSolverInstance[];
+  excludeFromOrderingLabel?: string; // Plex label — collections with this label are excluded from ordering/visibility enforcement
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   healthChecksEnabled?: boolean;
   silencedHealthChecks?: string[];

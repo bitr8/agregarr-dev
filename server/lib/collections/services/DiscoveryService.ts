@@ -1457,6 +1457,25 @@ export class DiscoveryService {
                 config.libraryId === libraryId
             );
 
+          // Check if this collection carries the ordering-exclusion label
+          const exclusionLabel = settings.main.excludeFromOrderingLabel
+            ?.trim()
+            .toLowerCase();
+          const hasExclusionLabel = exclusionLabel
+            ? collection.labels?.some((l) => {
+                const tag = typeof l === 'string' ? l : l.tag;
+                return tag?.toLowerCase() === exclusionLabel;
+              })
+            : false;
+
+          if (existingPreExisting) {
+            // Update exclusion flag on every discovery pass so adding/removing the label takes effect
+            if (existingPreExisting.excludeFromOrdering !== hasExclusionLabel) {
+              existingPreExisting.excludeFromOrdering = hasExclusionLabel;
+              settings.save();
+            }
+          }
+
           if (
             existingPreExisting &&
             existingPreExisting.name !== collection.title
@@ -1508,6 +1527,12 @@ export class DiscoveryService {
               isPromotedToHub: boolean;
             }
           ).isPromotedToHub = false;
+
+          if (hasExclusionLabel) {
+            (
+              collectionConfig as PreExistingCollectionConfig
+            ).excludeFromOrdering = true;
+          }
 
           // Link discovered poster to this config (if we downloaded one)
           // Check if we have a poster stored for this collection

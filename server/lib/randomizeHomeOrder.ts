@@ -193,6 +193,7 @@ class RandomizeHomeOrder {
       // Add pre-existing collections (only those positioned on home screen)
       if (settings.plex.preExistingCollectionConfigs) {
         settings.plex.preExistingCollectionConfigs.forEach((config) => {
+          if (config.excludeFromOrdering) return;
           const sortOrder = config.sortOrderHome || 0;
           if (sortOrder > 0) {
             if (!itemsByLibrary.has(config.libraryId)) {

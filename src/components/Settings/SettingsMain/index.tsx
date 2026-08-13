@@ -61,6 +61,9 @@ const messages = defineMessages({
   enableHealthChecks: 'Enable Health Checks',
   enableHealthChecksTip:
     'Run periodic health checks to detect connection issues and configuration problems',
+  excludeFromOrderingLabel: 'Exclude from Ordering (Plex Label)',
+  excludeFromOrderingLabelTip:
+    'Collections with this Plex label will be excluded from ordering, visibility, and sort title enforcement. Useful when other tools (Shortlist, Kometa) manage their own collections.',
   logLevel: 'Log Level',
   logLevelTip: 'Controls how much detail appears in logs',
   resetAgregarr: 'Reset',
@@ -174,6 +177,7 @@ const SettingsMain = () => {
             tmdbLanguage: data?.tmdbLanguage ?? 'en',
             enableTmdbPosterCache: data?.enableTmdbPosterCache ?? true,
             healthChecksEnabled: data?.healthChecksEnabled ?? true,
+            excludeFromOrderingLabel: data?.excludeFromOrderingLabel ?? '',
             watchProviderRegion: data?.watchProviderRegion ?? 'US',
             overlayConcurrency: data?.overlayConcurrency ?? 1,
             trustProxy: data?.trustProxy,
@@ -191,6 +195,8 @@ const SettingsMain = () => {
                 tmdbLanguage: values.tmdbLanguage,
                 enableTmdbPosterCache: values.enableTmdbPosterCache,
                 healthChecksEnabled: values.healthChecksEnabled,
+                excludeFromOrderingLabel:
+                  values.excludeFromOrderingLabel || undefined,
                 watchProviderRegion: values.watchProviderRegion,
                 overlayConcurrency: values.overlayConcurrency,
                 trustProxy: values.trustProxy,
@@ -456,6 +462,27 @@ const SettingsMain = () => {
                         );
                       }}
                     />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label
+                    htmlFor="excludeFromOrderingLabel"
+                    className="text-label"
+                  >
+                    {intl.formatMessage(messages.excludeFromOrderingLabel)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.excludeFromOrderingLabelTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field
+                        id="excludeFromOrderingLabel"
+                        name="excludeFromOrderingLabel"
+                        type="text"
+                        placeholder="e.g. shortlist"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="form-row">

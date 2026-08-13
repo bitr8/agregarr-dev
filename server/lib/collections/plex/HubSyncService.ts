@@ -531,68 +531,71 @@ export class HubSyncService {
       }
 
       try {
-        // Calculate current promotion status
-        const shouldBePromotedToHub =
-          this.calculateIsPromotedToHub(preExistingConfig);
+        if (!preExistingConfig.excludeFromOrdering) {
+          // Calculate current promotion status
+          const shouldBePromotedToHub =
+            this.calculateIsPromotedToHub(preExistingConfig);
 
-        if (shouldBePromotedToHub) {
-          // Collection should be in hub management - update visibility
-          // Evaluate time restrictions and get effective visibility config
-          const effectiveVisibilityConfig =
-            this.evaluateAndUpdateTimeRestriction(
-              preExistingConfig,
-              'preExisting'
+          if (shouldBePromotedToHub) {
+            // Collection should be in hub management - update visibility
+            // Evaluate time restrictions and get effective visibility config
+            const effectiveVisibilityConfig =
+              this.evaluateAndUpdateTimeRestriction(
+                preExistingConfig,
+                'preExisting'
+              );
+
+            // Convert effective visibility config to Plex format
+            const plexVisibility = {
+              promotedToOwnHome:
+                effectiveVisibilityConfig?.serverOwnerHome || false,
+              promotedToSharedHome:
+                effectiveVisibilityConfig?.usersHome || false,
+              promotedToRecommended:
+                effectiveVisibilityConfig?.libraryRecommended || false,
+            };
+
+            await plexClient.updateHubVisibility(
+              preExistingConfig.libraryId,
+              hubIdentifier,
+              plexVisibility
             );
 
-          // Convert effective visibility config to Plex format
-          const plexVisibility = {
-            promotedToOwnHome:
-              effectiveVisibilityConfig?.serverOwnerHome || false,
-            promotedToSharedHome: effectiveVisibilityConfig?.usersHome || false,
-            promotedToRecommended:
-              effectiveVisibilityConfig?.libraryRecommended || false,
-          };
+            logger.debug(
+              `Updated hub visibility for pre-existing collection ${preExistingConfig.name}`,
+              {
+                label: 'Hub Sync Service',
+                collectionId: preExistingConfig.id,
+                hubIdentifier,
+                plexVisibility,
+              }
+            );
+          } else {
+            // Pre-existing collections are NEVER deleted from hub management
+            // Just hide them by setting all visibility to false
+            const hideVisibility = {
+              promotedToOwnHome: false,
+              promotedToSharedHome: false,
+              promotedToRecommended: false,
+            };
 
-          await plexClient.updateHubVisibility(
-            preExistingConfig.libraryId,
-            hubIdentifier,
-            plexVisibility
-          );
-
-          logger.debug(
-            `Updated hub visibility for pre-existing collection ${preExistingConfig.name}`,
-            {
-              label: 'Hub Sync Service',
-              collectionId: preExistingConfig.id,
+            await plexClient.updateHubVisibility(
+              preExistingConfig.libraryId,
               hubIdentifier,
-              plexVisibility,
-            }
-          );
-        } else {
-          // Pre-existing collections are NEVER deleted from hub management
-          // Just hide them by setting all visibility to false
-          const hideVisibility = {
-            promotedToOwnHome: false,
-            promotedToSharedHome: false,
-            promotedToRecommended: false,
-          };
+              hideVisibility
+            );
 
-          await plexClient.updateHubVisibility(
-            preExistingConfig.libraryId,
-            hubIdentifier,
-            hideVisibility
-          );
-
-          logger.debug(
-            `Hidden pre-existing collection (not deleted): ${preExistingConfig.name}`,
-            {
-              label: 'Hub Sync Service',
-              collectionId: preExistingConfig.id,
-              hubIdentifier,
-              reason:
-                'no visibility configured, hidden but preserved in hub management',
-            }
-          );
+            logger.debug(
+              `Hidden pre-existing collection (not deleted): ${preExistingConfig.name}`,
+              {
+                label: 'Hub Sync Service',
+                collectionId: preExistingConfig.id,
+                hubIdentifier,
+                reason:
+                  'no visibility configured, hidden but preserved in hub management',
+              }
+            );
+          }
         }
 
         // Auto-generate poster if enabled (similar to CollectionConfig)
@@ -1448,6 +1451,10 @@ export class HubSyncService {
       const libraryOrderingItems = orderingItemsByLibrary.get(libraryId);
       if (libraryOrderingItems) {
         sortedConfigs.forEach((config) => {
+          if (config.excludeFromOrdering) {
+            return;
+          }
+
           // Skip missing pre-existing collections - they don't exist in Plex
           if (config.missing) {
             logger.debug(
@@ -1660,6 +1667,10 @@ export class HubSyncService {
 
         // Skip configs without rating keys
         if (!config.collectionRatingKey) {
+          continue;
+        }
+
+        if (config.excludeFromOrdering) {
           continue;
         }
 
