@@ -495,7 +495,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     // Handle special dynamic random title template
     if (config.template === 'DYNAMIC_RANDOM_TITLE') {
       // DYNAMIC_RANDOM_TITLE should be handled by each subclass in fetchSourceData
-      // Fall back to config.name if not handled
+      // Fall back to config.name (which may already include prefix from a previous sync)
       return config.name;
     }
 

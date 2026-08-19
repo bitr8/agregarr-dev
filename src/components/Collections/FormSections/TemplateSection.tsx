@@ -138,6 +138,13 @@ const TemplateSection = ({
               setFieldValue('customMovieTemplate', '');
               setFieldValue('customTVTemplate', '');
             }
+            if (
+              e.target.value !== 'DYNAMIC_RANDOM_TITLE' &&
+              e.target.value !== 'DYNAMIC_CYCLE_TITLE'
+            ) {
+              // Clear dynamic title prefix when not using dynamic titles
+              setFieldValue('dynamicTitlePrefix', '');
+            }
           }}
         >
           {(() => {
@@ -165,6 +172,26 @@ const TemplateSection = ({
           })()}
         </Field>
       </div>
+
+      {/* Dynamic title prefix input */}
+      {(values.template === 'DYNAMIC_RANDOM_TITLE' ||
+        values.template === 'DYNAMIC_CYCLE_TITLE') && (
+        <div className="mt-2">
+          <div className="form-input-field">
+            <Field
+              type="text"
+              name="dynamicTitlePrefix"
+              placeholder="Title prefix (e.g. 🎬)"
+              onChange={handleChange}
+            />
+          </div>
+          <div className="label-tip">
+            This text will be prepended to the dynamic title. Example: if prefix
+            is &quot;🎬&quot; and the list title is &quot;Musical&quot;, the
+            collection will be named &quot;🎬 Musical&quot;.
+          </div>
+        </div>
+      )}
 
       {/* Custom template input */}
       {values.template === 'custom' && (

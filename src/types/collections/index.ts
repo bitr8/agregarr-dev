@@ -207,6 +207,7 @@ export interface CollectionFormConfig {
   readonly template?: string; // Collection title template (for preset templates or single media type) - optional for hubs/pre-existing
   readonly customMovieTemplate?: string; // Custom template for movie collections when mediaType is 'both'
   readonly customTVTemplate?: string; // Custom template for TV collections when mediaType is 'both'
+  readonly dynamicTitlePrefix?: string; // Text to prepend to dynamic titles (DYNAMIC_RANDOM_TITLE / DYNAMIC_CYCLE_TITLE)
   readonly visibilityConfig: {
     usersHome: boolean;
     serverOwnerHome: boolean;
@@ -521,6 +522,7 @@ export interface CollectionConfigCreateRequest {
   readonly template?: string;
   readonly customMovieTemplate?: string;
   readonly customTVTemplate?: string;
+  readonly dynamicTitlePrefix?: string;
   readonly visibilityConfig: {
     usersHome: boolean;
     serverOwnerHome: boolean;
@@ -714,6 +716,7 @@ export const toCollectionCreateRequest = (
     template: config.template,
     customMovieTemplate: config.customMovieTemplate,
     customTVTemplate: config.customTVTemplate,
+    dynamicTitlePrefix: config.dynamicTitlePrefix,
     visibilityConfig: config.visibilityConfig,
     // Explicitly exclude isActive - backend computes this
     maxItems: config.maxItems,
