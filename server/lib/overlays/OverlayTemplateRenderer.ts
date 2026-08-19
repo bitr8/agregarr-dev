@@ -643,12 +643,26 @@ class OverlayTemplateRendererService {
         );
 
         if (overlayBuffer) {
-          // Get overlay buffer metadata
-          const overlayMeta = await sharp(overlayBuffer).metadata();
-          let overlayWidth = overlayMeta.width ?? 0;
-          let overlayHeight = overlayMeta.height ?? 0;
+          // The unrotated buffer's centre is the element's anchor point
+          // (matches the editor for fixed-size and auto-sized elements alike)
+          const unrotatedMeta = await sharp(overlayBuffer).metadata();
+          let anchorWidth = unrotatedMeta.width ?? 0;
+          let anchorHeight = unrotatedMeta.height ?? 0;
+          let overlayWidth = anchorWidth;
+          let overlayHeight = anchorHeight;
 
           let safeOverlayBuffer = overlayBuffer;
+
+          if (element.rotation && element.rotation !== 0) {
+            // sharp.rotate() expands the canvas; content stays centred in it
+            safeOverlayBuffer = await this.applyRotation(
+              safeOverlayBuffer,
+              element.rotation
+            );
+            const rotatedMeta = await sharp(safeOverlayBuffer).metadata();
+            overlayWidth = rotatedMeta.width ?? overlayWidth;
+            overlayHeight = rotatedMeta.height ?? overlayHeight;
+          }
 
           // Ensure overlay dimensions never exceed the base poster size
           if (
@@ -657,7 +671,7 @@ class OverlayTemplateRendererService {
             overlayWidth === 0 ||
             overlayHeight === 0
           ) {
-            safeOverlayBuffer = await sharp(overlayBuffer)
+            safeOverlayBuffer = await sharp(safeOverlayBuffer)
               .resize({
                 width: Math.min(overlayWidth || posterWidth, posterWidth),
                 height: Math.min(overlayHeight || posterHeight, posterHeight),
@@ -665,27 +679,28 @@ class OverlayTemplateRendererService {
               })
               .toBuffer();
 
-            // Recalculate dimensions after resize to ensure correct positioning
             const safeMeta = await sharp(safeOverlayBuffer).metadata();
-            overlayWidth = safeMeta.width ?? overlayWidth;
-            overlayHeight = safeMeta.height ?? overlayHeight;
+            const resizedWidth = safeMeta.width ?? overlayWidth;
+            const resizedHeight = safeMeta.height ?? overlayHeight;
+
+            // The clamp shrinks the content, so shrink the anchor with it
+            // (multiply before dividing: integer products are float-exact)
+            if (overlayWidth > 0) {
+              anchorWidth = (anchorWidth * resizedWidth) / overlayWidth;
+            }
+            if (overlayHeight > 0) {
+              anchorHeight = (anchorHeight * resizedHeight) / overlayHeight;
+            }
+            overlayWidth = resizedWidth;
+            overlayHeight = resizedHeight;
           }
 
-          // Scale position from template coordinates to poster coordinates
-          // Use uniform scaling with offsets to handle non-standard aspect ratios
-
-          // Use actual buffer dimensions for positioning (handles elements like mapped-icon
-          // where content size is determined by the element's settings, not element.width/height)
-          const centerX = Math.round(
-            offsetX + element.x * scale + overlayWidth / 2
-          );
-          const centerY = Math.round(
-            offsetY + element.y * scale + overlayHeight / 2
-          );
-
-          // Position the buffer so its center aligns with the calculated center
-          const left = centerX - Math.round(overlayWidth / 2);
-          const top = centerY - Math.round(overlayHeight / 2);
+          const left =
+            Math.round(offsetX + element.x * scale + anchorWidth / 2) -
+            Math.round(overlayWidth / 2);
+          const top =
+            Math.round(offsetY + element.y * scale + anchorHeight / 2) -
+            Math.round(overlayHeight / 2);
 
           overlays.push({
             input: safeOverlayBuffer,
@@ -828,11 +843,8 @@ class OverlayTemplateRendererService {
           return null;
       }
 
-      // Apply rotation if specified
-      if (buffer && element.rotation && element.rotation !== 0) {
-        buffer = await this.applyRotation(buffer, element.rotation);
-      }
-
+      // Rotation is applied by the caller after the unrotated buffer's
+      // dimensions have been captured for positioning
       return buffer;
     } catch (error) {
       logger.error('Failed to render element', {
