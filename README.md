@@ -6,7 +6,7 @@ Active fork of [Agregarr](https://github.com/agregarr/agregarr) with performance
 
 > [!TIP]
 >
-> **Latest release: [v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0).** FlixPatrol collections work again (Cloudflare was blocking every scrape since March), health checks surface problems before you notice them, and library essentials generate genre/decade/resolution collections from what Plex already knows. Full [release notes](https://github.com/bitr8/agregarr-dev/releases).
+> **Latest release: [v2.9.1](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.1).** Run more than one Cloudflare solver (FlareSolverr, Byparr, or both) with automatic failover, and a health check that flags a missing solver instead of letting Networks collections fail silently. Full [release notes](https://github.com/bitr8/agregarr-dev/releases).
 
 ## Docker
 
@@ -15,7 +15,7 @@ Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agr
 | Tag             | What it tracks                                             |
 | --------------- | ---------------------------------------------------------- |
 | `:latest`       | Stable releases. Recommended for most users.               |
-| `:2.9.0` (etc.) | Pinned to a specific release.                              |
+| `:2.9.1` (etc.) | Pinned to a specific release.                              |
 | `:develop`      | Bleeding edge. Builds on every push to develop, may break. |
 
 **Multi-arch** release tags ship amd64 and arm64 (Apple Silicon, RPi 4+). The `:develop` tag builds amd64 only.
@@ -54,9 +54,9 @@ services:
 
 For general Agregarr configuration (services, collections, overlays etc.), see the [upstream docs](https://agregarr.org/docs/installation).
 
-### FlareSolverr
+### Cloudflare solvers
 
-FlixPatrol sits behind Cloudflare and blocks automated requests at the TLS layer. If you use FlixPatrol collections (Networks Top 10, streaming charts), you need FlareSolverr. The Docker image bundles headless Chromium as a fallback, but FlareSolverr is more reliable.
+FlixPatrol sits behind Cloudflare and blocks automated requests at the TLS layer. If you use FlixPatrol collections (Networks Top 10, streaming charts), you need a Cloudflare solver: FlareSolverr, [Byparr](https://github.com/ThePhaseless/Byparr), or both. The Docker image bundles headless Chromium as a fallback, but a dedicated solver is far more reliable.
 
 ```yaml
   flaresolverr:
@@ -67,7 +67,7 @@ FlixPatrol sits behind Cloudflare and blocks automated requests at the TLS layer
     restart: unless-stopped
 ```
 
-Set the URL under **Settings > Sources > FlareSolverr URL** (e.g. `http://flaresolverr:8191`).
+Add your instances under **Settings > Sources > Cloudflare Solvers** (e.g. `http://flaresolverr:8191`). You can run more than one: fetches try them in priority order, and a failing instance gets backed off per domain instead of blocking the rest.
 
 ## Relationship to upstream
 
@@ -86,6 +86,7 @@ Detail for each feature is in the [release notes](https://github.com/bitr8/agreg
 - **Per-user targeting**: restrict a collection to a single Plex user via label filtering. ([v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0), cherry-pick from upstream [#555](https://github.com/agregarr/agregarr/pull/555))
 - **Label collections**: build a collection from a Plex label. (Contributed by [Damienlee69](https://github.com/Damienlee69), [v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
 - **Export/import**: back up collection configs as JSON and restore them on the same or a different instance. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
+- **Dynamic title prefix**: prepend your own text to rotating random/cycle collection titles. (Contributed by [gh0st-runner](https://github.com/gh0st-runner))
 - **Last Episode Added sort** for smart collections.
 
 ### Overlays
