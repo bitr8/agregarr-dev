@@ -2359,6 +2359,7 @@ export interface MultiSourceCollectionConfig {
   readonly libraryName: string;
   readonly maxItems?: number;
   readonly template?: string;
+  readonly dynamicTitlePrefix?: string; // Text to prepend to dynamic titles (DYNAMIC_RANDOM_TITLE / DYNAMIC_CYCLE_TITLE)
   readonly sources: readonly SourceDefinition[];
   readonly combineMode: MultiSourceCombineMode;
   readonly customSyncSchedule?: CustomSyncSchedule;
