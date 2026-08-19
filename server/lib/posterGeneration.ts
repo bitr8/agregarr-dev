@@ -2002,6 +2002,7 @@ export async function generatePosterBuffer(
         const buffer = await applyTemplate(templateId, {
           collectionName: config.collectionName,
           collectionType: config.collectionType || 'custom',
+          collectionSubtype: config.collectionSubtype,
           mediaType: config.mediaType || 'movie',
           items: config.items || [],
           dynamicLogo: config.dynamicLogo,

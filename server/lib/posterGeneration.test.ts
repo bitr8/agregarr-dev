@@ -1,5 +1,13 @@
-import { renderSeasonBadge } from '@server/lib/posterGeneration';
-import { describe, expect, it } from 'vitest';
+import {
+  generatePosterBuffer,
+  renderSeasonBadge,
+} from '@server/lib/posterGeneration';
+import { applyTemplate } from '@server/lib/posterTemplates';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@server/lib/posterTemplates', () => ({
+  applyTemplate: vi.fn().mockResolvedValue(Buffer.from('png')),
+}));
 
 // A representative tile from a 3x2 grid on a 1000x1500 poster.
 const W = 300;
@@ -68,5 +76,32 @@ describe('renderSeasonBadge', () => {
 
   it('produces no NaN in any coordinate', () => {
     expect(renderSeasonBadge(9, W, H)).not.toContain('NaN');
+  });
+});
+
+describe('generatePosterBuffer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes the condition context fields through to applyTemplate', async () => {
+    await generatePosterBuffer({
+      collectionName: 'PG-13',
+      collectionType: 'plex',
+      collectionSubtype: 'contentRating',
+      mediaType: 'movie',
+      autoPosterTemplate: 42,
+      items: [],
+    });
+
+    expect(applyTemplate).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        collectionName: 'PG-13',
+        collectionType: 'plex',
+        collectionSubtype: 'contentRating',
+        mediaType: 'movie',
+      })
+    );
   });
 });

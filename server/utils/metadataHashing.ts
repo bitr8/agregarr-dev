@@ -156,6 +156,9 @@ export function calculatePosterInputHash(config: {
   personImageUrl?: string;
 }): string {
   return calculateInputHash({
+    // Bump when render semantics change so affected posters regenerate once.
+    // Scoped to subtype-carrying configs: only their output changed in v2.
+    ...(config.collectionSubtype ? { posterRenderVersion: 2 } : {}),
     templateId: config.templateId,
     templateData: config.templateData, // Hash the actual template content
     itemIds: [...config.itemIds].sort(), // Ensure sorted for consistency

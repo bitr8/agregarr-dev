@@ -445,6 +445,7 @@ const PosterUploadSection = ({
                       libraryName={library.name}
                       addToast={addToast}
                       collectionConfig={{
+                        id: values.id,
                         name: values.name || 'Collection',
                         type: values.type,
                         subtype: values.subtype,

@@ -1,4 +1,5 @@
 import type { ApplicationCondition } from '@app/components/OverlayEditor/types';
+import { isLibraryEssentialsPattern } from '@app/utils/collections/collectionUtils';
 import { Dialog, Transition } from '@headlessui/react';
 import { Squares2X2Icon } from '@heroicons/react/24/outline';
 import {
@@ -22,6 +23,7 @@ import { LayerPanel } from './LayerPanel';
 import { PosterCanvas, type PosterCanvasRef } from './PosterCanvas';
 
 const messages = defineMessages({
+  previewValue: 'Preview Value',
   createPosterTitle: 'Create Poster',
   createTemplateTitle: 'Create Template',
   editPosterTitle: 'Edit Poster',
@@ -371,6 +373,12 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
       subtype?: string;
       mediaType?: 'movie' | 'tv';
       libraryId?: string;
+      template?: string;
+      customMovieTemplate?: string;
+      customTVTemplate?: string;
+      selectionMode?: 'include' | 'exclude';
+      includeValues?: string[];
+      excludeValues?: string[];
     }[];
   }>(isOpen ? '/api/v1/collections' : null);
 
@@ -409,6 +417,12 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
         mediaType: c.mediaType || ('movie' as const),
         source: 'agregarr' as const,
         libraryId: c.libraryId,
+        template: c.template,
+        customMovieTemplate: c.customMovieTemplate,
+        customTVTemplate: c.customTVTemplate,
+        selectionMode: c.selectionMode,
+        includeValues: c.includeValues,
+        excludeValues: c.excludeValues,
       })
     );
 
@@ -420,6 +434,12 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
       mediaType: c.mediaType || ('movie' as const),
       source: 'preexisting' as const,
       libraryId: c.libraryId,
+      template: undefined,
+      customMovieTemplate: undefined,
+      customTVTemplate: undefined,
+      selectionMode: undefined,
+      includeValues: undefined,
+      excludeValues: undefined,
     }));
 
     return [...agregarrCollections, ...preExisting];
@@ -447,6 +467,94 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
 
     return grouped;
   }, [allPreviewCollections]);
+
+  // Essentials configs generate one collection per library value, so conditions
+  // must be previewed against a generated collection's name, not the config's.
+  const selectedPreviewSource = useMemo(
+    () =>
+      rawPreviewCollectionConfig
+        ? allPreviewCollections.find(
+            (c) => c.id === rawPreviewCollectionConfig.id
+          )
+        : undefined,
+    [rawPreviewCollectionConfig, allPreviewCollections]
+  );
+
+  const isEssentialsPreview = isLibraryEssentialsPattern(
+    selectedPreviewSource?.type,
+    selectedPreviewSource?.subtype
+  );
+
+  const { data: essentialsValuesData } = useSWR<{
+    values: { key: string; title: string }[];
+  }>(
+    isEssentialsPreview && selectedPreviewSource?.libraryId
+      ? `/api/v1/plex/library/${selectedPreviewSource.libraryId}/attributes/${selectedPreviewSource.subtype}`
+      : null,
+    { revalidateOnFocus: false }
+  );
+
+  const essentialsPreviewValues = useMemo(() => {
+    if (!selectedPreviewSource) return [];
+    const all = essentialsValuesData?.values || [];
+    const selectionMode = selectedPreviewSource.selectionMode ?? 'include';
+    const includeValues = selectedPreviewSource.includeValues ?? [];
+    const excludeValues = selectedPreviewSource.excludeValues ?? [];
+    return selectionMode === 'include'
+      ? all.filter((v) => includeValues.includes(v.key))
+      : all.filter((v) => !excludeValues.includes(v.key));
+  }, [essentialsValuesData, selectedPreviewSource]);
+
+  const [selectedPreviewValue, setSelectedPreviewValue] = useState('');
+  const selectedPreviewSourceId = rawPreviewCollectionConfig?.id;
+
+  useEffect(() => {
+    setSelectedPreviewValue('');
+  }, [selectedPreviewSourceId]);
+
+  useEffect(() => {
+    if (!isEssentialsPreview || essentialsPreviewValues.length === 0) {
+      if (selectedPreviewValue) {
+        setSelectedPreviewValue('');
+      }
+      return;
+    }
+    if (
+      !essentialsPreviewValues.some((v) => v.title === selectedPreviewValue)
+    ) {
+      setSelectedPreviewValue(essentialsPreviewValues[0].title);
+    }
+  }, [isEssentialsPreview, selectedPreviewValue, essentialsPreviewValues]);
+
+  const effectivePreviewCollectionConfig = useMemo(() => {
+    if (
+      !previewCollectionConfig ||
+      !isEssentialsPreview ||
+      !selectedPreviewValue
+    ) {
+      return previewCollectionConfig;
+    }
+    const src = selectedPreviewSource;
+    const mediaType = previewCollectionConfig.mediaType || 'movie';
+    const template =
+      src?.template === 'custom'
+        ? (mediaType === 'tv'
+            ? src.customTVTemplate
+            : src?.customMovieTemplate) || '{value}'
+        : src?.template || '{value}';
+    // Mirror TemplateEngine.processTemplate: plural token first, label casing
+    const name = template
+      .replace(/{value}/g, selectedPreviewValue)
+      .replace(/{mediaType}s/g, mediaType === 'tv' ? 'TV Shows' : 'Movies')
+      .replace(/{mediaType}/g, mediaType === 'tv' ? 'TV Show' : 'Movie')
+      .replace(/{subtype}/g, src?.subtype || '');
+    return { ...previewCollectionConfig, name };
+  }, [
+    previewCollectionConfig,
+    isEssentialsPreview,
+    selectedPreviewValue,
+    selectedPreviewSource,
+  ]);
 
   // Fetch source colors for background rendering
   const { data: sourceColorsData } = useSWR<{
@@ -769,6 +877,31 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
                       <p className="mt-1 text-xs text-stone-500">
                         {intl.formatMessage(messages.sampleCollectionHelp)}
                       </p>
+                      {isEssentialsPreview &&
+                        essentialsPreviewValues.length > 0 && (
+                          <div className="mt-2">
+                            <label
+                              htmlFor="previewValue"
+                              className="mb-2 block text-sm font-medium text-stone-300"
+                            >
+                              {intl.formatMessage(messages.previewValue)}
+                            </label>
+                            <select
+                              id="previewValue"
+                              className="w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white focus:border-orange-500 focus:outline-none"
+                              value={selectedPreviewValue}
+                              onChange={(e) =>
+                                setSelectedPreviewValue(e.target.value)
+                              }
+                            >
+                              {essentialsPreviewValues.map((v) => (
+                                <option key={v.key} value={v.title}>
+                                  {v.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                     </div>
                   </div>
 
@@ -779,7 +912,7 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
                       ref={canvasRef}
                       posterData={posterData}
                       onChange={handlePosterDataChange}
-                      previewCollectionConfig={previewCollectionConfig}
+                      previewCollectionConfig={effectivePreviewCollectionConfig}
                       mode={mode}
                       currentlyEditingSource={currentlyEditingSource}
                       snapToGuides={snapToGuides}

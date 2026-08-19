@@ -59,6 +59,7 @@ interface PosterSelectionPopoverProps {
   ) => void;
   // Collection config for poster generation
   collectionConfig?: {
+    id?: string;
     name: string;
     type?: string;
     subtype?: string;
@@ -651,8 +652,10 @@ const PosterSelectionPopover: React.FC<PosterSelectionPopoverProps> = ({
         mode="create-poster"
         onSave={handlePosterSave}
         previewCollectionConfig={{
+          id: collectionConfig?.id,
           name: collectionConfig?.name || 'Collection',
           type: collectionConfig?.type,
+          subtype: collectionConfig?.subtype,
           mediaType: collectionConfig?.mediaType || 'movie',
         }}
       />
