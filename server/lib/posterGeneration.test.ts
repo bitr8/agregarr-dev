@@ -1,4 +1,6 @@
+import { loadIconFile } from '@server/lib/iconManager';
 import {
+  embedSVGIconInSVG,
   generatePosterBuffer,
   renderSeasonBadge,
 } from '@server/lib/posterGeneration';
@@ -7,6 +9,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/lib/posterTemplates', () => ({
   applyTemplate: vi.fn().mockResolvedValue(Buffer.from('png')),
+}));
+
+vi.mock('@server/lib/iconManager', () => ({
+  loadIconFile: vi.fn(),
 }));
 
 // A representative tile from a 3x2 grid on a 1000x1500 poster.
@@ -103,5 +109,60 @@ describe('generatePosterBuffer', () => {
         mediaType: 'movie',
       })
     );
+  });
+});
+
+describe('embedSVGIconInSVG', () => {
+  // Trimmed from a real Inkscape export: prefixed namespaces are declared on
+  // the root <svg>, so inlining its children into another SVG is malformed XML.
+  const inkscapeIcon = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="92.604164mm"
+   height="92.604149mm"
+   viewBox="0 0 92.604164 92.604149"
+   version="1.1"
+   id="svg5"
+   sodipodi:docname="BBFC_18_2019.svg"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview5"
+     pagecolor="#ffffff"
+     inkscape:current-layer="svg5" />
+  <defs
+     id="defs1" />
+  <path
+     fill="#d70723"
+     d="m 46.298689,5.6839984 c -22.433731,0 -40.6159126,18.1821646 -40.6159126,40.6158966 0,22.42728 18.1821816,40.615912 40.6159126,40.615912 22.433731,0 40.615913,-18.188632 40.615913,-40.615912 0,-22.433732 -18.182182,-40.6158966 -40.615913,-40.6158966"
+     id="path4"
+     style="fill:#dc0a0a;fill-opacity:1;stroke-width:1.6541" />
+</svg>`;
+
+  it('renders an Inkscape-exported icon into a poster sharp can rasterise', async () => {
+    vi.mocked(loadIconFile).mockResolvedValue(Buffer.from(inkscapeIcon));
+    const sharp = (await import('sharp')).default;
+
+    const fragment = await embedSVGIconInSVG(
+      '/api/v1/posters/icons/user/bbfc-18.svg',
+      { x: 0, y: 456, width: 996, height: 526 }
+    );
+
+    expect(fragment).toContain('data:image/png;base64,');
+    const poster = `<svg width="1000" height="1500" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${fragment}</svg>`;
+    const { data, info } = await sharp(Buffer.from(poster))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    let red = 0;
+    for (let i = 0; i < data.length; i += info.channels) {
+      if (data[i + 3] === 255 && data[i] > 200 && data[i + 1] < 40) red++;
+    }
+    // Circle area at this scale is ~167k px; a stretched or clipped icon misses the band.
+    expect(red).toBeGreaterThan(150_000);
+    expect(red).toBeLessThan(185_000);
   });
 });

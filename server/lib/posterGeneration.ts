@@ -1339,9 +1339,9 @@ async function embedRasterIconInSVG(
 }
 
 /**
- * Embed an SVG icon in SVG format
+ * Embed an SVG icon as a rasterised image
  */
-async function embedSVGIconInSVG(
+export async function embedSVGIconInSVG(
   iconPath: string,
   element: {
     x: number;
@@ -1370,80 +1370,30 @@ async function embedSVGIconInSVG(
     }
 
     const buffer = await loadIconFile(filename, iconType as 'user' | 'system');
-    const svgContent = buffer.toString('utf-8');
 
-    // Extract actual SVG dimensions and viewBox from the SVG
-    let svgWidth = 100; // fallback
-    let svgHeight = 100; // fallback
-    let viewBoxMinX = 0;
-    let viewBoxMinY = 0;
+    // Rasterise separately: inlined markup breaks on foreign namespaces.
+    const { width = 1, height = 1 } = await sharp(buffer).metadata();
+    const scale = Math.max(
+      1,
+      Math.min(element.width / width, element.height / height)
+    );
+    const png = await sharp(buffer, { density: 72 * scale })
+      .resize(Math.round(element.width), Math.round(element.height), {
+        fit: 'inside',
+      })
+      .png()
+      .toBuffer();
 
-    // Try to get dimensions from viewBox first (most reliable)
-    const viewBoxMatch = svgContent.match(/viewBox=["']([^"']+)["']/i);
-    if (viewBoxMatch) {
-      const viewBoxValues = viewBoxMatch[1].split(/[\s,]+/);
-      if (viewBoxValues.length >= 4) {
-        viewBoxMinX = parseFloat(viewBoxValues[0]);
-        viewBoxMinY = parseFloat(viewBoxValues[1]);
-        svgWidth = parseFloat(viewBoxValues[2]);
-        svgHeight = parseFloat(viewBoxValues[3]);
-      }
-    } else {
-      // Fallback to width/height attributes
-      const widthMatch = svgContent.match(/width=["']?([^"'\s>]+)/i);
-      const heightMatch = svgContent.match(/height=["']?([^"'\s>]+)/i);
-      if (widthMatch) svgWidth = parseFloat(widthMatch[1]);
-      if (heightMatch) svgHeight = parseFloat(heightMatch[1]);
-    }
-
-    // Validate SVG dimensions - prevent division by zero or NaN
-    if (
-      !Number.isFinite(svgWidth) ||
-      !Number.isFinite(svgHeight) ||
-      svgWidth <= 0 ||
-      svgHeight <= 0
-    ) {
-      logger.warn('Invalid SVG dimensions, cannot embed icon', {
-        iconPath,
-        svgWidth,
-        svgHeight,
-      });
-      return null;
-    }
-
-    // Calculate scale to fit the element dimensions while maintaining aspect ratio
-    const scaleX = element.width / svgWidth;
-    const scaleY = element.height / svgHeight;
-    const scale = Math.min(scaleX, scaleY); // Use minimum to ensure it fits within bounds
-
-    // Calculate final dimensions and centering offset
-    const scaledWidth = svgWidth * scale;
-    const scaledHeight = svgHeight * scale;
-    const offsetX = (element.width - scaledWidth) / 2;
-    const offsetY = (element.height - scaledHeight) / 2;
-
-    // Extract the inner content (remove outer <svg> tag)
-    const svgMatch = svgContent.match(/<svg[^>]*>(.*)<\/svg>/s);
-    const innerSvg = svgMatch ? svgMatch[1] : svgContent;
-
-    // Clean the SVG content by removing XML declaration, comments, and DOCTYPE
-    const cleanInnerSvg = innerSvg
-      .replace(/<\?xml[^>]*\?>/gi, '') // Remove XML declaration
-      .replace(/<!--[\s\S]*?-->/gi, '') // Remove comments
-      .replace(/<!DOCTYPE[^>]*>/gi, '') // Remove DOCTYPE
-      .trim();
-
-    // Build transform: translate to position, scale, then translate viewBox offset
-    // This ensures the SVG's coordinate system is properly aligned
-    const result = `
-      <g transform="translate(${element.x + offsetX}, ${
-      element.y + offsetY
-    }) scale(${scale}) translate(${-viewBoxMinX}, ${-viewBoxMinY})">
-        ${cleanInnerSvg}
-      </g>
+    return `
+      <image
+        x="${element.x}"
+        y="${element.y}"
+        width="${element.width}"
+        height="${element.height}"
+        xlink:href="data:image/png;base64,${png.toString('base64')}"
+        preserveAspectRatio="xMidYMid meet"
+      />
     `;
-
-    return result;
   } catch (error) {
     logger.error(`Failed to embed SVG icon ${iconPath}:`, error);
     return null;
