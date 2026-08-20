@@ -86,7 +86,7 @@ RUN echo "@edge https://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/rep
   apk add --no-cache deno@edge
 
 # Install yt-dlp pinned release
-RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp -O /usr/local/bin/yt-dlp && \
+RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp -O /usr/local/bin/yt-dlp && \
   chmod a+rx /usr/local/bin/yt-dlp
 
 # Install Chromium and dependencies for Playwright
