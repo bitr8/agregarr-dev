@@ -303,6 +303,7 @@ class FlixPatrolAPI extends ExternalAPI {
 
       // Try today's date first, then yesterday if needed
       const dates = this.getDatesToTry(region);
+      let todayResult: FlixPatrolPlatformData | undefined;
 
       for (const dateInfo of dates) {
         try {
@@ -362,7 +363,12 @@ class FlixPatrolAPI extends ExternalAPI {
             }
           }
 
-          if (!hasData && dateInfo.isYesterday === false) {
+          if (
+            !this.hasRequestedData(result, requestedMediaType) &&
+            dateInfo.isYesterday === false &&
+            dates.length > 1
+          ) {
+            todayResult = result;
             // Today's data is empty, try yesterday
             logger.warn(
               `No data found for today (${dateInfo.date}), trying yesterday`,
@@ -402,6 +408,10 @@ class FlixPatrolAPI extends ExternalAPI {
               }
             );
             continue;
+          }
+
+          if (todayResult) {
+            return todayResult;
           }
 
           // If this is yesterday's attempt or we only had one date, throw the error
@@ -499,6 +509,15 @@ class FlixPatrolAPI extends ExternalAPI {
     }
 
     return null;
+  }
+
+  private hasRequestedData(
+    result: FlixPatrolPlatformData,
+    requestedMediaType?: 'movie' | 'tv' | 'both'
+  ): boolean {
+    if (requestedMediaType === 'tv') return result.tvShows.length > 0;
+    if (requestedMediaType === 'movie') return result.movies.length > 0;
+    return result.movies.length > 0 || result.tvShows.length > 0;
   }
 
   /**
@@ -1373,7 +1392,11 @@ class FlixPatrolAPI extends ExternalAPI {
         const sectionText = topSections[i].toLowerCase().trim();
 
         // Look for explicit content type indicators immediately after "TOP 10"
-        if (sectionText.startsWith('overall')) {
+        const label = sectionText.split(/\d+\./, 1)[0];
+        if (tableCount > 1 && /\(from\s[^)]*channel/.test(label)) {
+          // Supplementary storefront chart with different title links; never a fallback
+          sectionType = 'channels';
+        } else if (sectionText.startsWith('overall')) {
           sectionType = 'overall';
         } else if (
           sectionText.startsWith('movies') ||
