@@ -99,10 +99,12 @@ describe('parseStreamingOverviewHtml', () => {
   type ParsedLists = {
     tvShows: { title: string; flixpatrolUrl?: string }[];
     movies: { title: string }[];
+    date?: string;
+    fallbackOnly?: boolean;
   };
   const parse = (
     html: string,
-    mediaType: 'movie' | 'tv',
+    mediaType: 'movie' | 'tv' | 'both',
     platform = 'apple-tv'
   ) =>
     (
@@ -111,7 +113,7 @@ describe('parseStreamingOverviewHtml', () => {
           html: string,
           platform: string,
           region: string,
-          mediaType: 'movie' | 'tv'
+          mediaType: 'movie' | 'tv' | 'both'
         ) => Promise<ParsedLists>;
       }
     ).parseStreamingOverviewHtml(html, platform, 'united-states', mediaType);
@@ -224,5 +226,95 @@ describe('parseStreamingOverviewHtml', () => {
     expect(result.tvShows.map((i) => i.flixpatrolUrl)).not.toContain(
       'https://flixpatrol.com/title/silo/'
     );
+  });
+
+  // Captured live 22/08/2026 04:05Z: for two hours after FlixPatrol starts
+  // publishing the day, Apple's section holds only the Amazon Channels chart.
+  const channelsOnly = fs.readFileSync(
+    path.join(
+      __dirname,
+      '__fixtures__',
+      'flixpatrol-us-apple-tv-channels-only.html'
+    ),
+    'utf8'
+  );
+  const crunchyroll = fs.readFileSync(
+    path.join(__dirname, '__fixtures__', 'flixpatrol-us-crunchyroll.html'),
+    'utf8'
+  );
+  const mockPages = (api: FlixPatrolAPI, ...pages: (string | Error)[]) => {
+    const spy = vi.spyOn(
+      api as unknown as { fetchFlixPatrolPage: () => Promise<string> },
+      'fetchFlixPatrolPage'
+    );
+    for (const page of pages) {
+      if (page instanceof Error) spy.mockRejectedValueOnce(page);
+      else spy.mockResolvedValueOnce(page);
+    }
+    return spy;
+  };
+
+  it('flags a list that only came from the overall chart', async () => {
+    const result = await parse(channelsOnly, 'tv');
+    expect(result.tvShows).toHaveLength(10);
+    expect(result.fallbackOnly).toBe(true);
+
+    const native = await parse(fixture, 'tv');
+    expect(native.fallbackOnly).toBeUndefined();
+
+    expect((await parse(channelsOnly, 'both')).fallbackOnly).toBe(true);
+    expect((await parse(fixture, 'both')).fallbackOnly).toBeUndefined();
+  });
+
+  it("prefers yesterday's own TV table over today's channels-only chart", async () => {
+    const api = new FlixPatrolAPI();
+    const fetchPage = mockPages(api, channelsOnly, fixture);
+
+    const result = await api.getPlatformTop10(
+      'apple-tv_top_10',
+      'united-states',
+      'tv'
+    );
+
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+    const urls = result.tvShows.map((i) => i.flixpatrolUrl);
+    expect(urls).toContain('https://flixpatrol.com/title/silo-2023/');
+    expect(urls).not.toContain('https://flixpatrol.com/title/silo/');
+    expect(result.tvShows.map((i) => i.title)).not.toContain(
+      'The Bourne Identity'
+    );
+  });
+
+  it("keeps today's chart when yesterday is overall-only too", async () => {
+    const yesterday = crunchyroll.replace('August 21, 2026', 'August 20, 2026');
+    expect(yesterday).not.toBe(crunchyroll);
+    const api = new FlixPatrolAPI();
+    const fetchPage = mockPages(api, crunchyroll, yesterday);
+
+    const result = await api.getPlatformTop10(
+      'crunchyroll_top_10',
+      'united-states',
+      'tv'
+    );
+
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(result.tvShows).toHaveLength(10);
+    expect(result.date).toBe(
+      (await parse(crunchyroll, 'tv', 'crunchyroll')).date
+    );
+  });
+
+  it("keeps today's channels-only chart when yesterday cannot be fetched", async () => {
+    const api = new FlixPatrolAPI();
+    const fetchPage = mockPages(api, channelsOnly, new Error('503'));
+
+    const result = await api.getPlatformTop10(
+      'apple-tv_top_10',
+      'united-states',
+      'tv'
+    );
+
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(result.tvShows).toHaveLength(10);
   });
 });

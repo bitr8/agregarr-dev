@@ -38,6 +38,8 @@ export interface FlixPatrolPlatformData {
   date: string;
   tvShows: FlixPatrolListItem[];
   movies: FlixPatrolListItem[];
+  /** Requested list was filled from the platform's overall chart, not its own Movies/TV table */
+  fallbackOnly?: boolean;
   platformLogo?: {
     spriteUrl: string;
     position: string;
@@ -363,15 +365,17 @@ class FlixPatrolAPI extends ExternalAPI {
             }
           }
 
+          // ponytail: overall-only platforms (Crunchyroll) pay one extra fetch per sync; allowlist them if it matters
           if (
-            !this.hasRequestedData(result, requestedMediaType) &&
+            !this.hasNativeData(result, requestedMediaType) &&
             dateInfo.isYesterday === false &&
             dates.length > 1
           ) {
             todayResult = result;
-            // Today's data is empty, try yesterday
             logger.warn(
-              `No data found for today (${dateInfo.date}), trying yesterday`,
+              result.fallbackOnly
+                ? `Only the overall chart is published for today (${dateInfo.date}), trying yesterday`
+                : `No data found for today (${dateInfo.date}), trying yesterday`,
               {
                 label: 'FlixPatrol API',
                 platform,
@@ -379,6 +383,15 @@ class FlixPatrolAPI extends ExternalAPI {
               }
             );
             continue;
+          }
+
+          if (
+            dateInfo.isYesterday &&
+            todayResult &&
+            !this.hasNativeData(result, requestedMediaType) &&
+            this.hasRequestedData(todayResult, requestedMediaType)
+          ) {
+            return todayResult;
           }
 
           if (dateInfo.isYesterday) {
@@ -518,6 +531,15 @@ class FlixPatrolAPI extends ExternalAPI {
     if (requestedMediaType === 'tv') return result.tvShows.length > 0;
     if (requestedMediaType === 'movie') return result.movies.length > 0;
     return result.movies.length > 0 || result.tvShows.length > 0;
+  }
+
+  private hasNativeData(
+    result: FlixPatrolPlatformData,
+    requestedMediaType?: 'movie' | 'tv' | 'both'
+  ): boolean {
+    return (
+      this.hasRequestedData(result, requestedMediaType) && !result.fallbackOnly
+    );
   }
 
   /**
@@ -1044,6 +1066,7 @@ class FlixPatrolAPI extends ExternalAPI {
           // Apply fallback logic: use overall content only if specific content wasn't found
           if (overallItems.length > 0) {
             if (requestedMediaType === 'tv' && result.tvShows.length === 0) {
+              result.fallbackOnly = true;
               result.tvShows = overallItems.map((item) => ({
                 ...item,
                 type: 'tv' as const,
@@ -1060,6 +1083,7 @@ class FlixPatrolAPI extends ExternalAPI {
               requestedMediaType === 'movie' &&
               result.movies.length === 0
             ) {
+              result.fallbackOnly = true;
               result.movies = overallItems.map((item) => ({
                 ...item,
                 type: 'movie' as const,
@@ -1074,6 +1098,9 @@ class FlixPatrolAPI extends ExternalAPI {
               );
             } else if (requestedMediaType === 'both') {
               // For "both", always include overall content
+              if (result.movies.length === 0 && result.tvShows.length === 0) {
+                result.fallbackOnly = true;
+              }
               result.movies = [
                 ...(result.movies || []),
                 ...overallItems.map((item) => ({

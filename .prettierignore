@@ -10,3 +10,6 @@ public/
 # prettier 2.8.4 joins `> [!TIP]` onto the line below it, which stops GitHub
 # rendering the alert. Fixed in prettier 3; drop this when we upgrade.
 *.md
+
+# captured HTML test fixtures, kept byte-exact
+server/api/__fixtures__/
