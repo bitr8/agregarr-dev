@@ -214,6 +214,8 @@ export const linkCollectionConfig = async (
             tmdbCustomCollectionUrl: masterConfig.tmdbCustomCollectionUrl,
             imdbCustomListUrl: masterConfig.imdbCustomListUrl,
             letterboxdCustomListUrl: masterConfig.letterboxdCustomListUrl,
+            mdblistCustomListUrl: masterConfig.mdblistCustomListUrl,
+            anilistCustomListUrl: masterConfig.anilistCustomListUrl,
             sortOrder: masterConfig.sortOrder,
             customPoster: masterConfig.customPoster,
             useTmdbFranchisePoster: masterConfig.useTmdbFranchisePoster,

@@ -1537,6 +1537,11 @@ components:
           description: 'Custom MDBList list URL (e.g., https://mdblist.com/lists/username/listname)'
           example: 'https://mdblist.com/lists/garycrawfordgc/netflix-shows'
           nullable: true
+        anilistCustomListUrl:
+          type: string
+          description: 'Custom AniList list URL (e.g., https://anilist.co/animelist/{listname} or https://anilist.co/user/{username}/animelist/{listname})'
+          example: 'https://anilist.co/user/username/animelist/my-list'
+          nullable: true
         sortOrder:
           type: string
           enum:
@@ -2402,6 +2407,11 @@ components:
           type: string
           description: "Selected country for Networks collections (e.g., 'united-states', 'world')"
           example: 'united-states'
+          nullable: true
+        anilistCustomListUrl:
+          type: string
+          description: 'Custom AniList list URL (e.g., https://anilist.co/animelist/{listname} or https://anilist.co/user/{username}/animelist/{listname})'
+          example: 'https://anilist.co/user/username/animelist/my-list'
           nullable: true
         sortOrder:
           type: string
