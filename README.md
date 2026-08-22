@@ -75,7 +75,7 @@ This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream 
 
 ## What's different
 
-Detail for each feature is in the [release notes](https://github.com/bitr8/agregarr-dev/releases) for the version that shipped it.
+Detail for each feature is in the [release notes](https://github.com/bitr8/agregarr-dev/releases) for the version that shipped it. Entries marked `:develop` are on the develop image and not yet in a tagged release.
 
 ### Collections
 
@@ -86,13 +86,19 @@ Detail for each feature is in the [release notes](https://github.com/bitr8/agreg
 - **Per-user targeting**: restrict a collection to a single Plex user via label filtering. ([v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0), cherry-pick from upstream [#555](https://github.com/agregarr/agregarr/pull/555))
 - **Label collections**: build a collection from a Plex label. (Contributed by [Damienlee69](https://github.com/Damienlee69), [v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
 - **Export/import**: back up collection configs as JSON and restore them on the same or a different instance. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
-- **Dynamic title prefix**: prepend your own text to rotating random/cycle collection titles. (Contributed by [gh0st-runner](https://github.com/gh0st-runner))
-- **Last Episode Added sort** for smart collections.
+- **Dynamic title prefix**: prepend your own text to rotating random/cycle collection titles. (Contributed by [gh0st-runner](https://github.com/gh0st-runner), `:develop`)
+- **Ordering exclusion label**: collections carrying a label you list under **Settings > General > Exclude from Ordering (Plex Label)** are left out of hub ordering, visibility enforcement, and sort title management. Built for running Shortlist or Kometa alongside Agregarr. (`:develop`)
+- **Episode-level filtered hubs**: a `recently_added_episodes` subtype that filters by episode rather than show, so a "New Episodes Today" row only shows what actually dropped today. (`:develop`)
+- **Sort title override**: per-collection sort title prefix that pins a collection's place in Plex's alphabetical order without touching hub ordering. (`:develop`)
+- **IMDb Bottom 100** as a collection source, same shape as the Top 250. (`:develop`)
+- **Last Episode Added sort** for smart collections. ([v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0))
 
 ### Overlays
 
 - **Dashboard sync progress cards**: live progress, stats, ETA, start/stop for both collection and overlay syncs. ![Collection Sync Dashboard](public/images/collection-sync-dashboard.png)
-- **Maintainerr season deletion countdown**: reads Maintainerr's collection data and draws the countdown on season posters using your templates. ([v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0)) ![Season deletion countdown](public/images/maintainerr-season-countdown.png)
+- **Maintainerr season deletion countdown**: reads Maintainerr's collection data and draws the countdown on season posters using your templates. ([v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0)) A per-library option also puts the countdown on the show poster once every season is scheduled to leave. (Contributed by [Rubeanie](https://github.com/Rubeanie), `:develop`) ![Season deletion countdown](public/images/maintainerr-season-countdown.png)
+- **Parallel overlay processing**: **Settings > General > Parallel Items** runs 1 to 10 items at once (default 1, so nothing changes until you raise it). The stop button now cancels per-library jobs mid-run instead of waiting for the batch. (`:develop`)
+- **Conditional elements and colour scaling**: template elements can render only when a context condition holds (resolution, media type, whether a release date exists), and `colorScale` on tile elements interpolates between two colours over a numeric range, previewed live in the editor. (`:develop`)
 - **Episode media scanning**: aggregates actual episode files for resolution/HDR/DV badges instead of trusting show-level metadata. Per-library toggle. ([v2.5.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.5.0))
 - **Next-episode countdowns** sourced from Sonarr (no gap when episodes air). ([v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0))
 - **Estimated release date flag**: templates can distinguish fabricated dates from published ones. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
@@ -109,7 +115,7 @@ Retroactive filter application, self-healing for stuck DB records, direct Plex d
 
 ### Health checks
 
-Thirteen diagnostic checks run on a schedule and surface results in **Settings > Health**. Transient failures get a grace window, checks can be muted individually, and job runs are persisted with per-job detail. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
+Fifteen diagnostic checks run on a schedule and surface results in **Settings > About**. Transient failures get a grace window, checks can be muted individually, and job runs are persisted with per-job detail. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
 
 ### Security
 
