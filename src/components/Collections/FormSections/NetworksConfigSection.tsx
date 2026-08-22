@@ -43,6 +43,7 @@ interface NetworksConfigSectionProps {
 const NetworksConfigSection = ({
   values,
   setFieldValue,
+  touched,
   isVisible = true,
   getTemplatePresets,
 }: NetworksConfigSectionProps) => {
@@ -157,6 +158,11 @@ const NetworksConfigSection = ({
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
               const newPlatform = e.target.value;
               setFieldValue('subtype', newPlatform);
+
+              // FlixPatrol "Top 10" tables can run longer than 10 rows.
+              if (newPlatform.endsWith('_top_10') && !touched.maxItems) {
+                setFieldValue('maxItems', 10);
+              }
 
               // Auto-select first template option when platform is selected (same as other collection types)
               if (newPlatform && getTemplatePresets) {
