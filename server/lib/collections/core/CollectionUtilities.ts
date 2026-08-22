@@ -57,6 +57,26 @@ export function extractErrorMessage(error: unknown): string {
 }
 
 /**
+ * Convert an unknown catch value into a fresh Error, preferring a nested
+ * CollectionSyncError's originalError message so re-wrapping doesn't discard
+ * the deepest available cause. Always builds a new Error instance (never
+ * returns the caught value by reference) — logging-only helper, so the
+ * original stack/identity is not preserved, only its message text.
+ */
+export function extractErrorCause(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (
+    error &&
+    typeof error === 'object' &&
+    'originalError' in error &&
+    error.originalError instanceof Error
+  ) {
+    return new Error(error.originalError.message);
+  }
+  return new Error(extractErrorMessage(error));
+}
+
+/**
  * Create URL-encoded form data from object
  */
 export function createFormData(

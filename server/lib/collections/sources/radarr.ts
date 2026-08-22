@@ -2,6 +2,7 @@ import type PlexAPI from '@server/api/plexapi';
 import RadarrAPI from '@server/api/servarr/radarr';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  extractErrorCause,
   findPlexItemsByTmdbIds,
   type LibraryItemsCache,
 } from '@server/lib/collections/core/CollectionUtilities';
@@ -140,7 +141,7 @@ export class RadarrTagCollectionSync extends BaseCollectionSync<'radarrtag'> {
         CollectionSyncErrorType.COLLECTION_ERROR,
         `Failed to process Radarr Tag collection ${config.name}`,
         { configId: config.id, configName: config.name },
-        error instanceof Error ? error : new Error(String(error))
+        extractErrorCause(error)
       );
     }
   }
