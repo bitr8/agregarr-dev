@@ -1,6 +1,7 @@
 import type PlexAPI from '@server/api/plexapi';
 import type { CollectionConfig } from '@server/lib/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CollectionSyncErrorType } from './types';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
@@ -28,6 +29,7 @@ const settings = {
 };
 vi.mock('@server/lib/settings', () => ({ getSettings: () => settings }));
 
+import logger from '@server/logger';
 import { BaseCollectionSync } from './BaseCollectionSync';
 
 class TestSync extends BaseCollectionSync<'tmdb'> {
@@ -135,5 +137,96 @@ describe('createOrUpdateCollectionStandardized: key survives a failed create', (
     await expect(run(failAfterCreate('187608'), cfg)).rejects.toThrow();
 
     expect(stored()).toBeUndefined();
+  });
+});
+
+// Mirrors radarr.ts's own processConfiguration catch: wraps a real failure
+// into a CollectionSyncError plain object (not an Error instance) before it
+// reaches processCollections' outer catch, which is where fork#76b's
+// "[object Object]" swallow happened.
+class ThrowingSync extends BaseCollectionSync<'tmdb'> {
+  constructor(private readonly innerError: Error) {
+    super('tmdb');
+  }
+  protected async validateConfiguration(): Promise<void> {
+    return;
+  }
+  protected async processConfiguration(cfg: CollectionConfig): Promise<never> {
+    throw this.createSyncError(
+      CollectionSyncErrorType.COLLECTION_ERROR,
+      `Failed to process Radarr Tag collection ${cfg.name}`,
+      { configId: cfg.id, configName: cfg.name },
+      this.innerError
+    );
+  }
+  protected createTemplateContext(): never {
+    throw new Error('not used');
+  }
+  public async fetchSourceData(): Promise<never> {
+    throw new Error('not used');
+  }
+  public mapSourceDataToItems(): never {
+    throw new Error('not used');
+  }
+  protected async createCollection(): Promise<never> {
+    throw new Error('not used');
+  }
+}
+
+describe('processCollections: surfaces the real cause instead of [object Object]', () => {
+  beforeEach(() => {
+    vi.mocked(logger.error).mockClear();
+    settings.plex.collectionConfigs = [config()];
+  });
+
+  it('logs the inner cause on the final "Failed to process configuration" line', async () => {
+    const innerError = new Error('Request failed with status code 401');
+    const sync = new ThrowingSync(innerError);
+    const onError = vi.fn();
+
+    await sync.processCollections(
+      [config()],
+      {} as PlexAPI,
+      [],
+      undefined,
+      undefined,
+      { onError }
+    );
+
+    // The propagated cause, exactly as it would reach a caller inspecting
+    // syncError.originalError. Before the fix this stringified to "[object
+    // Object]" (String() of a plain CollectionSyncError literal).
+    expect(onError).toHaveBeenCalledTimes(1);
+    const syncError = onError.mock.calls[0][0] as {
+      originalError?: Error;
+    };
+    expect(syncError.originalError).toBeInstanceOf(Error);
+    expect(syncError.originalError?.message).not.toBe('[object Object]');
+    expect(syncError.originalError?.message).toBe(
+      'Request failed with status code 401'
+    );
+    // Logging-only contract: a FRESH Error, never the caught inner object
+    // returned by reference — consumers of onError must keep seeing what
+    // they always saw (a rebuilt Error), never the raw AxiosError/etc.
+    expect(syncError.originalError).not.toBe(innerError);
+
+    const errorCalls = vi.mocked(logger.error).mock.calls as unknown as [
+      string,
+      { error?: string; cause?: string }
+    ][];
+    const finalCall = errorCalls.find(([message]) =>
+      message.startsWith('Failed to process configuration')
+    );
+
+    expect(finalCall).toBeDefined();
+    const meta = finalCall?.[1];
+
+    // `error` carries the stage/wrapper text, `cause` the deep message —
+    // mirrors overseerrSync.ts's error+cause logging convention.
+    expect(meta?.error).not.toBe('[object Object]');
+    expect(meta?.error).toBe(
+      'Failed to process Radarr Tag collection Neon Noir'
+    );
+    expect(meta?.cause).toBe('Request failed with status code 401');
   });
 });

@@ -25,6 +25,7 @@ import {
   clearConfigRatingKey,
   createCollectionLabel,
   createSyncError,
+  extractErrorCause,
   extractErrorMessage,
   getCollectionMediaType,
   handleRateLimit,
@@ -392,7 +393,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             CollectionSyncErrorType.COLLECTION_ERROR,
             `Failed to process configuration ${config.name}`,
             { configId: config.id, configName: config.name },
-            error instanceof Error ? error : new Error(String(error))
+            extractErrorCause(error)
           );
 
           errors.push(syncError);
@@ -404,6 +405,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           logger.error(syncError.message, {
             label: `${this.source} Collections`,
             ...syncError.details,
+            error: extractErrorMessage(error),
+            cause: syncError.originalError?.message,
           });
         }
       }
@@ -428,12 +431,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         CollectionSyncErrorType.CONFIGURATION_ERROR,
         `Failed to process ${this.source} collections`,
         {},
-        error instanceof Error ? error : new Error(String(error))
+        extractErrorCause(error)
       );
 
       logger.error(syncError.message, {
         label: `${this.source} Collections`,
-        error: syncError.details,
+        error: extractErrorMessage(error),
+        cause: syncError.originalError?.message,
       });
 
       return { created: 0, updated: 0, error: syncError.message };
