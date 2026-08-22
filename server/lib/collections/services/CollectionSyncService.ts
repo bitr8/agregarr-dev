@@ -30,6 +30,49 @@ import logger from '@server/logger';
 import { syncCacheService } from './SyncCacheService';
 
 /**
+ * Convert a CollectionConfig into the shape MultiSourceOrchestrator expects.
+ * Spreads (not a hand-picked field list) so new CollectionConfig fields reach
+ * multi-source syncs automatically, same as IndividualCollectionScheduler's
+ * per-collection path.
+ */
+export function buildMultiSourceSyncConfig(
+  config: CollectionConfig
+): MultiSourceCollectionConfig {
+  return {
+    ...config,
+    type: 'multi-source' as const,
+    mediaType: getCollectionMediaType(config),
+    maxItems: config.maxItems ?? 50, // Provide default for multi-source
+    template: config.template || '', // Provide default for multi-source
+    sources:
+      config.sources?.map((source) => ({
+        id: source.id,
+        type: source.type as MultiSourceType,
+        subtype: source.subtype || '',
+        customUrl: source.customUrl,
+        timePeriod: source.timePeriod as
+          | 'daily'
+          | 'weekly'
+          | 'monthly'
+          | 'all'
+          | undefined,
+        customDays: source.customDays,
+        minimumPlays: source.minimumPlays,
+        priority: source.priority,
+        networksCountry: source.networksCountry,
+        radarrTagServerId: source.radarrTagServerId,
+        radarrTagId: source.radarrTagId,
+        radarrTagLabel: source.radarrTagLabel,
+        sonarrTagServerId: source.sonarrTagServerId,
+        sonarrTagId: source.sonarrTagId,
+        sonarrTagLabel: source.sonarrTagLabel,
+        resolvedTitle: source.resolvedTitle,
+      })) || [],
+    combineMode: (config.combineMode as MultiSourceCombineMode) || 'list_order',
+  };
+}
+
+/**
  * Service for orchestrating collection synchronization across all sources
  * Replaces the large switch statement in collectionsSync.ts with clean service calls
  */
@@ -761,109 +804,7 @@ export class CollectionSyncService {
               const orchestrator = new MultiSourceOrchestrator();
 
               // Convert CollectionConfig to MultiSourceCollectionConfig format
-              const multiSourceConfig: MultiSourceCollectionConfig = {
-                id: config.id,
-                name: config.name,
-                type: 'multi-source',
-                // Dropping this here is how a whole recovery path goes dead: the
-                // individual scheduler spreads the config and keeps it, so the
-                // two sync routes behave differently.
-                collectionRatingKey: config.collectionRatingKey,
-                visibilityConfig: config.visibilityConfig,
-                mediaType: getCollectionMediaType(config),
-                libraryId: config.libraryId,
-                libraryName: config.libraryName,
-                maxItems: config.maxItems ?? 50, // Provide default for multi-source
-                template: config.template || '', // Provide default for multi-source
-                sources:
-                  config.sources?.map((source) => ({
-                    id: source.id,
-                    type: source.type as MultiSourceType,
-                    subtype: source.subtype || '',
-                    customUrl: source.customUrl,
-                    timePeriod: source.timePeriod as
-                      | 'daily'
-                      | 'weekly'
-                      | 'monthly'
-                      | 'all'
-                      | undefined,
-                    customDays: source.customDays,
-                    minimumPlays: source.minimumPlays,
-                    priority: source.priority,
-                    networksCountry: source.networksCountry,
-                    radarrTagServerId: source.radarrTagServerId,
-                    radarrTagId: source.radarrTagId,
-                    radarrTagLabel: source.radarrTagLabel,
-                    sonarrTagServerId: source.sonarrTagServerId,
-                    sonarrTagId: source.sonarrTagId,
-                    sonarrTagLabel: source.sonarrTagLabel,
-                    resolvedTitle: source.resolvedTitle,
-                  })) || [],
-                combineMode:
-                  (config.combineMode as MultiSourceCombineMode) ||
-                  'list_order',
-                isActive: config.isActive,
-                sortOrderHome: config.sortOrderHome,
-                sortOrderLibrary: config.sortOrderLibrary,
-                isLibraryPromoted: config.isLibraryPromoted,
-                timeRestriction: config.timeRestriction,
-                customPoster: config.customPoster,
-                autoPoster: config.autoPoster,
-                autoPosterTemplate: config.autoPosterTemplate,
-                // Wallpaper, summary, and theme settings
-                customWallpaper: config.customWallpaper,
-                customSummary: config.customSummary,
-                customTheme: config.customTheme,
-                enableCustomWallpaper: config.enableCustomWallpaper,
-                enableCustomSummary: config.enableCustomSummary,
-                enableCustomTheme: config.enableCustomTheme,
-                // Missing items / auto-download settings
-                downloadMode: config.downloadMode,
-                searchMissingMovies: config.searchMissingMovies,
-                searchMissingTV: config.searchMissingTV,
-                autoApproveMovies: config.autoApproveMovies,
-                autoApproveTV: config.autoApproveTV,
-                maxSeasonsToRequest: config.maxSeasonsToRequest,
-                seasonsPerShowLimit: config.seasonsPerShowLimit,
-                seasonGrabOrder: config.seasonGrabOrder,
-                maxPositionToProcess: config.maxPositionToProcess,
-                minimumYear: config.minimumYear,
-                minimumImdbRating: config.minimumImdbRating,
-                minimumRottenTomatoesRating: config.minimumRottenTomatoesRating,
-                minimumRottenTomatoesAudienceRating:
-                  config.minimumRottenTomatoesAudienceRating,
-                filterSettings: config.filterSettings,
-                directDownloadRadarrServerId:
-                  config.directDownloadRadarrServerId,
-                directDownloadRadarrProfileId:
-                  config.directDownloadRadarrProfileId,
-                directDownloadRadarrRootFolder:
-                  config.directDownloadRadarrRootFolder,
-                directDownloadSonarrServerId:
-                  config.directDownloadSonarrServerId,
-                directDownloadSonarrProfileId:
-                  config.directDownloadSonarrProfileId,
-                directDownloadSonarrRootFolder:
-                  config.directDownloadSonarrRootFolder,
-                // Smart collection settings (unwatched filter feature)
-                showUnwatchedOnly: config.showUnwatchedOnly,
-                smartCollectionSort: config.smartCollectionSort,
-                // Placeholder creation settings
-                createPlaceholdersForMissing:
-                  config.createPlaceholdersForMissing,
-                placeholderDaysAhead: config.placeholderDaysAhead,
-                placeholderReleasedDays: config.placeholderReleasedDays,
-                includeAllReleasedItems: config.includeAllReleasedItems,
-                placeholderMinimumYear: config.placeholderMinimumYear,
-                placeholderMinimumImdbRating:
-                  config.placeholderMinimumImdbRating,
-                placeholderMinimumRottenTomatoesRating:
-                  config.placeholderMinimumRottenTomatoesRating,
-                placeholderMinimumRottenTomatoesAudienceRating:
-                  config.placeholderMinimumRottenTomatoesAudienceRating,
-                placeholderFilterSettings: config.placeholderFilterSettings,
-                applyOverlaysDuringSync: config.applyOverlaysDuringSync,
-              };
+              const multiSourceConfig = buildMultiSourceSyncConfig(config);
 
               result = await orchestrator.processMultiSourceCollection(
                 multiSourceConfig,
