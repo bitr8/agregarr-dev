@@ -6,6 +6,12 @@ import logger from '@server/logger';
 import { AxiosError } from 'axios';
 import { randomUUID } from 'crypto';
 
+// Bits that decide Overseerr/Jellyseerr auto-approval (both check generic OR type-specific bits, MediaRequest.ts); Agregarr must own all of them. REQUEST_4K stays external-owned.
+const APPROVAL_DECIDING_BITS = 32 | 128 | 256 | 512;
+
+/** GET 404 on an external user's permissions — the externalOverseerrId is stale. */
+class StaleExternalOverseerrUserError extends Error {}
+
 /**
  * Extract error details from axios errors or regular errors for logging
  */
@@ -216,12 +222,11 @@ export class ServiceUserManager {
             });
 
             // Set appropriate permissions
-            const overseerrPermissions = this.mapToOverseerrPermissions(
-              config.permissions
-            );
-            await overseerrAPI.updateUserPermissions(
+            await this.pushOverseerrPermissions(
+              overseerrAPI,
               newExternalUser.id,
-              overseerrPermissions
+              config.permissions,
+              newExternalUser.permissions
             );
             await overseerrAPI.disableUserNotifications(newExternalUser.id);
 
@@ -286,12 +291,10 @@ export class ServiceUserManager {
         if (hasPermissionChanges && serviceUser.externalOverseerrId) {
           try {
             const overseerrAPI = this.getOverseerrAPI();
-            const overseerrPermissions = this.mapToOverseerrPermissions(
-              config.permissions
-            );
-            await overseerrAPI.updateUserPermissions(
+            await this.pushOverseerrPermissions(
+              overseerrAPI,
               serviceUser.externalOverseerrId,
-              overseerrPermissions
+              config.permissions
             );
             await overseerrAPI.disableUserNotifications(
               serviceUser.externalOverseerrId
@@ -302,7 +305,6 @@ export class ServiceUserManager {
               {
                 label: 'Service User Manager',
                 externalUserId: serviceUser.externalOverseerrId,
-                newPermissions: overseerrPermissions,
               }
             );
           } catch (error) {
@@ -434,14 +436,43 @@ export class ServiceUserManager {
     let externalUser = await this.findExistingUserByEmail(config.email);
 
     if (externalUser) {
-      // User exists, update permissions
-      const overseerrPermissions = this.mapToOverseerrPermissions(
-        config.permissions
-      );
-      await overseerrAPI.updateUserPermissions(
-        externalUser.id,
-        overseerrPermissions
-      );
+      // User exists — fetch current permissions fresh, don't trust the batch-list snapshot
+      try {
+        await this.pushOverseerrPermissions(
+          overseerrAPI,
+          externalUser.id,
+          config.permissions
+        );
+      } catch (error) {
+        if (!(error instanceof StaleExternalOverseerrUserError)) {
+          throw error;
+        }
+
+        // The batch-list match is gone from Overseerr — recreate and push against the new id, same as the primary recreate path.
+        logger.warn(
+          `External Overseerr user ${externalUser.id} not found, recreating: ${config.username}`,
+          {
+            label: 'Service User Manager',
+            externalUserId: externalUser.id,
+          }
+        );
+
+        const password = this.generateSecurePassword();
+        externalUser = await overseerrAPI.createUser({
+          username: config.username,
+          email: config.email,
+          password: password,
+          displayName: config.displayName,
+        });
+
+        await this.pushOverseerrPermissions(
+          overseerrAPI,
+          externalUser.id,
+          config.permissions,
+          externalUser.permissions
+        );
+      }
+
       await overseerrAPI.disableUserNotifications(externalUser.id);
 
       logger.debug(
@@ -449,7 +480,6 @@ export class ServiceUserManager {
         {
           label: 'Service User Manager',
           externalUserId: externalUser.id,
-          permissions: overseerrPermissions,
         }
       );
     } else {
@@ -464,19 +494,17 @@ export class ServiceUserManager {
         });
 
         // Set appropriate permissions
-        const overseerrPermissions = this.mapToOverseerrPermissions(
-          config.permissions
-        );
-        await overseerrAPI.updateUserPermissions(
+        await this.pushOverseerrPermissions(
+          overseerrAPI,
           externalUser.id,
-          overseerrPermissions
+          config.permissions,
+          externalUser.permissions
         );
         await overseerrAPI.disableUserNotifications(externalUser.id);
 
         logger.debug(`Created external Overseerr user: ${config.username}`, {
           label: 'Service User Manager',
           externalUserId: externalUser.id,
-          permissions: overseerrPermissions,
         });
       } catch (error) {
         const errorDetails = getErrorDetails(error);
@@ -526,6 +554,7 @@ export class ServiceUserManager {
     if (!user.externalOverseerrId) {
       // User doesn't have external ID, check if user exists in external Overseerr
       let externalUser = await this.findExistingUserByEmail(config.email);
+      let justCreated = false;
 
       if (externalUser) {
         // Found existing external user, link it
@@ -549,6 +578,7 @@ export class ServiceUserManager {
             password: password,
             displayName: config.displayName,
           });
+          justCreated = true;
 
           // Update internal user with external ID
           user.externalOverseerrId = externalUser.id;
@@ -583,15 +613,17 @@ export class ServiceUserManager {
 
       // Set appropriate permissions for the external user (new or existing)
       try {
-        const overseerrPermissions = this.mapToOverseerrPermissions(
-          config.permissions
-        );
-        await overseerrAPI.updateUserPermissions(
+        await this.pushOverseerrPermissions(
+          overseerrAPI,
           externalUser.id,
-          overseerrPermissions
+          config.permissions,
+          justCreated ? externalUser.permissions : undefined
         );
         await overseerrAPI.disableUserNotifications(externalUser.id);
       } catch (error) {
+        // externalOverseerrId is already linked/saved above — rethrow so the caller skips this
+        // item this sync rather than proceeding under undetermined permissions. The next sync's
+        // "else" branch below self-heals (it recreates on any push failure, including this one).
         logger.error(
           `Failed to set permissions for external user: ${config.username}`,
           {
@@ -600,16 +632,15 @@ export class ServiceUserManager {
             error: error instanceof Error ? error.message : String(error),
           }
         );
+        throw error;
       }
     } else {
       // User exists externally, ensure permissions are correct
       try {
-        const overseerrPermissions = this.mapToOverseerrPermissions(
-          config.permissions
-        );
-        await overseerrAPI.updateUserPermissions(
+        await this.pushOverseerrPermissions(
+          overseerrAPI,
           user.externalOverseerrId,
-          overseerrPermissions
+          config.permissions
         );
         await overseerrAPI.disableUserNotifications(user.externalOverseerrId);
       } catch (error) {
@@ -660,12 +691,11 @@ export class ServiceUserManager {
         await this.userRepository.save(user);
 
         // Set appropriate permissions for the external user
-        const overseerrPermissions = this.mapToOverseerrPermissions(
-          config.permissions
-        );
-        await overseerrAPI.updateUserPermissions(
+        await this.pushOverseerrPermissions(
+          overseerrAPI,
           externalUser.id,
-          overseerrPermissions
+          config.permissions,
+          externalUser.permissions
         );
         await overseerrAPI.disableUserNotifications(externalUser.id);
       }
@@ -709,6 +739,60 @@ export class ServiceUserManager {
     const hasAutoApprove = (internalPermissions & 896) > 0; // Check for auto-approve permissions (128+256+512)
 
     return hasAutoApprove ? 160 : 32;
+  }
+
+  /** Overseerr replaces the whole permissions field on write, so merge onto the account's current value instead of pushing the bare mapped one. */
+  private async pushOverseerrPermissions(
+    overseerrAPI: OverseerrAPI,
+    externalUserId: number,
+    internalPermissions: number,
+    freshlyCreatedPermissions?: number
+  ): Promise<void> {
+    const current = Number.isInteger(freshlyCreatedPermissions)
+      ? (freshlyCreatedPermissions as number)
+      : await this.fetchCurrentExternalPermissions(
+          overseerrAPI,
+          externalUserId
+        );
+
+    const desired = this.mapToOverseerrPermissions(internalPermissions);
+    const merged = (current & ~APPROVAL_DECIDING_BITS) | desired;
+
+    logger.debug('Pushing Overseerr permissions', {
+      label: 'Service User Manager',
+      externalUserId,
+      current,
+      desired,
+      merged,
+    });
+
+    await overseerrAPI.updateUserPermissions(externalUserId, merged);
+  }
+
+  /** Fetches the external user's live permissions; throws (typed on 404) rather than ever letting a caller push undetermined permissions. */
+  private async fetchCurrentExternalPermissions(
+    overseerrAPI: OverseerrAPI,
+    externalUserId: number
+  ): Promise<number> {
+    let permissions: number;
+    try {
+      permissions = (await overseerrAPI.getUser(externalUserId)).permissions;
+    } catch (error) {
+      if (error instanceof AxiosError && error.response?.status === 404) {
+        throw new StaleExternalOverseerrUserError(
+          `External Overseerr user ${externalUserId} not found`
+        );
+      }
+      throw error;
+    }
+
+    if (!Number.isInteger(permissions)) {
+      throw new Error(
+        `External Overseerr user ${externalUserId} returned non-integer permissions`
+      );
+    }
+
+    return permissions;
   }
 
   /**
