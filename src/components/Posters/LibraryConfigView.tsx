@@ -6,12 +6,13 @@ import {
   ArrowUturnLeftIcon,
   ExclamationTriangleIcon,
   PlayIcon,
+  TrashIcon,
 } from '@heroicons/react/24/solid';
 import axios from 'axios';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import LibraryDetailConfigView from './LibraryDetailConfigView';
 import LibraryProgressCard, { type LibraryStatus } from './LibraryProgressCard';
 import PosterResetModal from './PosterResetModal';
@@ -29,6 +30,12 @@ const messages = defineMessages({
   overlaySyncError: 'Failed to start overlay sync',
   failedToLoad: 'Failed to load libraries',
   noOverlays: 'No overlays configured',
+  orphanedSectionTitle: 'Orphaned Configurations',
+  orphanedLibraryLabel: 'Removed from Plex',
+  configRemoved: 'Removed configuration for {libraryName}',
+  removeConfigError: 'Failed to remove configuration',
+  removeConfigLabel: 'Remove',
+  removeConfigConfirm: 'Delete configuration?',
 });
 
 interface PlexLibrary {
@@ -190,6 +197,9 @@ const LibraryConfigView: React.FC = () => {
     Set<string>
   >(new Set());
   const confirmTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const [removingLibraries, setRemovingLibraries] = useState<Set<string>>(
+    new Set()
+  );
 
   // Poll for running library overlays with full progress status
   const { data: runningLibrariesData, mutate: mutateRunningLibraries } =
@@ -258,31 +268,32 @@ const LibraryConfigView: React.FC = () => {
   };
 
   const handleLibrarySync = async (libraryId: string, libraryName: string) => {
+    const confirmKey = `sync:${libraryId}`;
     // First click - show confirmation
-    if (!confirmClickedLibraries.has(libraryId)) {
-      setConfirmClickedLibraries((prev) => new Set(prev).add(libraryId));
+    if (!confirmClickedLibraries.has(confirmKey)) {
+      setConfirmClickedLibraries((prev) => new Set(prev).add(confirmKey));
       // Reset after 3 seconds
       const timeout = setTimeout(() => {
         setConfirmClickedLibraries((prev) => {
           const next = new Set(prev);
-          next.delete(libraryId);
+          next.delete(confirmKey);
           return next;
         });
-        confirmTimeoutsRef.current.delete(libraryId);
+        confirmTimeoutsRef.current.delete(confirmKey);
       }, 3000);
-      confirmTimeoutsRef.current.set(libraryId, timeout);
+      confirmTimeoutsRef.current.set(confirmKey, timeout);
       return;
     }
 
     // Second click - execute sync
-    const timeout = confirmTimeoutsRef.current.get(libraryId);
+    const timeout = confirmTimeoutsRef.current.get(confirmKey);
     if (timeout) {
       clearTimeout(timeout);
-      confirmTimeoutsRef.current.delete(libraryId);
+      confirmTimeoutsRef.current.delete(confirmKey);
     }
     setConfirmClickedLibraries((prev) => {
       const next = new Set(prev);
-      next.delete(libraryId);
+      next.delete(confirmKey);
       return next;
     });
 
@@ -312,6 +323,70 @@ const LibraryConfigView: React.FC = () => {
           autoDismiss: true,
         });
       }
+    }
+  };
+
+  const handleRemoveOrphanedConfig = async (
+    libraryId: string,
+    libraryName: string
+  ) => {
+    const confirmKey = `remove:${libraryId}`;
+    // First click - show confirmation
+    if (!confirmClickedLibraries.has(confirmKey)) {
+      setConfirmClickedLibraries((prev) => new Set(prev).add(confirmKey));
+      // Reset after 3 seconds
+      const timeout = setTimeout(() => {
+        setConfirmClickedLibraries((prev) => {
+          const next = new Set(prev);
+          next.delete(confirmKey);
+          return next;
+        });
+        confirmTimeoutsRef.current.delete(confirmKey);
+      }, 3000);
+      confirmTimeoutsRef.current.set(confirmKey, timeout);
+      return;
+    }
+
+    // Second click - execute delete
+    const timeout = confirmTimeoutsRef.current.get(confirmKey);
+    if (timeout) {
+      clearTimeout(timeout);
+      confirmTimeoutsRef.current.delete(confirmKey);
+    }
+    setConfirmClickedLibraries((prev) => {
+      const next = new Set(prev);
+      next.delete(confirmKey);
+      return next;
+    });
+
+    setRemovingLibraries((prev) => new Set(prev).add(libraryId));
+    try {
+      await axios.delete(`/api/v1/overlay-library-configs/${libraryId}`);
+      addToast(intl.formatMessage(messages.configRemoved, { libraryName }), {
+        appearance: 'success',
+        autoDismiss: true,
+      });
+      await mutate('/api/v1/overlay-library-configs');
+    } catch (error) {
+      // 404 means the config is already gone - same end state as a successful delete
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        addToast(intl.formatMessage(messages.configRemoved, { libraryName }), {
+          appearance: 'success',
+          autoDismiss: true,
+        });
+        await mutate('/api/v1/overlay-library-configs');
+      } else {
+        addToast(intl.formatMessage(messages.removeConfigError), {
+          appearance: 'error',
+          autoDismiss: true,
+        });
+      }
+    } finally {
+      setRemovingLibraries((prev) => {
+        const next = new Set(prev);
+        next.delete(libraryId);
+        return next;
+      });
     }
   };
 
@@ -366,6 +441,11 @@ const LibraryConfigView: React.FC = () => {
     );
   }
 
+  // Below libraries.length===0 guard so orphan cards can't render off an empty Plex response
+  const orphanedConfigs = (configsData?.configs ?? []).filter(
+    (c) => !libraries.some((l) => l.key === c.libraryId)
+  );
+
   const getLibraryConfig = (libraryId: string): LibraryConfig | undefined => {
     return configsData?.configs.find((c) => c.libraryId === libraryId);
   };
@@ -392,6 +472,68 @@ const LibraryConfigView: React.FC = () => {
         </div>
       )}
 
+      {/* Orphaned Configurations - library deleted from Plex */}
+      {orphanedConfigs.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-stone-400">
+            {intl.formatMessage(messages.orphanedSectionTitle)}
+          </h3>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {orphanedConfigs.map((config) => {
+              const isConfirmClicked = confirmClickedLibraries.has(
+                `remove:${config.libraryId}`
+              );
+              const isRemoving = removingLibraries.has(config.libraryId);
+
+              return (
+                <div
+                  key={config.libraryId}
+                  className="rounded-lg bg-stone-800 opacity-60"
+                >
+                  <div className="p-4">
+                    <h4 className="truncate text-sm font-medium text-white">
+                      {config.libraryName}
+                    </h4>
+                    <p className="mt-1 text-xs text-stone-400">
+                      {intl.formatMessage(messages.orphanedLibraryLabel)}
+                    </p>
+
+                    <div className="mt-3">
+                      <Button
+                        buttonType={isConfirmClicked ? 'danger' : 'ghost'}
+                        buttonSize="sm"
+                        className="w-full"
+                        disabled={isRemoving}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveOrphanedConfig(
+                            config.libraryId,
+                            config.libraryName
+                          );
+                        }}
+                      >
+                        {isRemoving ? (
+                          <Spinner className="h-4 w-4" />
+                        ) : isConfirmClicked ? (
+                          <ExclamationTriangleIcon className="h-4 w-4" />
+                        ) : (
+                          <TrashIcon className="h-4 w-4" />
+                        )}
+                        <span>
+                          {isConfirmClicked
+                            ? intl.formatMessage(messages.removeConfigConfirm)
+                            : intl.formatMessage(messages.removeConfigLabel)}
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {libraries.map((library) => {
           const config = getLibraryConfig(library.key);
@@ -400,7 +542,9 @@ const LibraryConfigView: React.FC = () => {
           const hasOverlays =
             config && config.enabledOverlays.some((o) => o.enabled);
           const isSyncing = syncingLibraries.has(library.key);
-          const isConfirmClicked = confirmClickedLibraries.has(library.key);
+          const isConfirmClicked = confirmClickedLibraries.has(
+            `sync:${library.key}`
+          );
 
           return (
             <div
