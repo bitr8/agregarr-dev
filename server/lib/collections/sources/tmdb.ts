@@ -1465,7 +1465,10 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
 
     // 3. Fetch TMDB movie details and extract franchise info
     const language = await getTmdbLanguage(config.libraryId);
-    const franchiseMap = await this.discoverFranchises(tmdbIds, language);
+    const { franchiseMap, failedCount } = await this.discoverFranchises(
+      tmdbIds,
+      language
+    );
 
     logger.info(`Discovered ${franchiseMap.size} unique franchises`, {
       label: 'TMDB Franchise',
@@ -1481,6 +1484,48 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       }
     );
 
+    // 5. Placeholder cleanup: one call for the whole config (MultiSourceOrchestrator
+    // shape), not once per franchise - every franchise shares one configId, so the
+    // membership set must cover every valid franchise's movies or a later franchise's
+    // pass would treat an earlier franchise's placeholders as orphaned. This check
+    // (and its warn) sits ABOVE the "no valid franchises" early return below, so a
+    // fully-failed discovery still gets reported even when zero franchises survive
+    // filtering - orphan cleanup being skipped is not the same as no deletions ever
+    // happening (placeholder creation for cleanly-discovered franchises still runs).
+    if (failedCount > 0) {
+      // discoverFranchises absorbs per-movie/per-collection TMDB failures, so any
+      // union built from franchiseMap may be missing movies from franchises we never
+      // discovered. Skip orphan cleanup rather than delete placeholders against an
+      // incomplete membership set - a bounded, reversible leak beats an irreversible
+      // delete.
+      logger.warn(
+        `Skipping franchise orphan cleanup this sync: ${failedCount} TMDB lookup(s) failed during discovery, franchise membership may be incomplete`,
+        { label: 'TMDB Franchise', configId: config.id, failedCount }
+      );
+    } else if (validFranchises.size > 0) {
+      const allFranchiseTmdbIds = new Set<number>();
+      for (const franchiseData of validFranchises.values()) {
+        for (const movie of franchiseData.movies) {
+          // Placeholders are keyed by the numeric id they had at creation; coerce so
+          // a string-typed id from upstream still matches instead of getting dropped.
+          const numericTmdbId = Number(movie.tmdbId);
+          if (Number.isFinite(numericTmdbId) && numericTmdbId > 0) {
+            allFranchiseTmdbIds.add(numericTmdbId);
+          }
+        }
+      }
+
+      const { handlePlaceholderCleanup } = await import(
+        '@server/lib/placeholders/services/PlaceholderCleanup'
+      );
+      await handlePlaceholderCleanup(
+        config,
+        plexClient,
+        libraryCache,
+        allFranchiseTmdbIds
+      );
+    }
+
     if (validFranchises.size === 0) {
       logger.info('No franchises with 2+ movies found', {
         label: 'TMDB Franchise',
@@ -1488,7 +1533,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       return { created: 0, updated: 0 };
     }
 
-    // 5. Create Plex collection for each franchise
+    // 6. Create Plex collection for each franchise
     let created = 0;
     let updated = 0;
 
@@ -1602,12 +1647,16 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
   private async discoverFranchises(
     tmdbIds: number[],
     language = 'en'
-  ): Promise<Map<number, TmdbFranchiseSourceData>> {
+  ): Promise<{
+    franchiseMap: Map<number, TmdbFranchiseSourceData>;
+    failedCount: number;
+  }> {
     const franchiseMap = new Map<number, TmdbFranchiseSourceData>();
     const processedTmdbIds = new Set<number>(); // Track which movies we've already handled
     let cacheHits = 0;
     let movieApiCalls = 0;
     let collectionApiCalls = 0;
+    let failedCount = 0;
 
     for (const tmdbId of tmdbIds) {
       // Skip if we've already processed this movie (from a franchise collection fetch)
@@ -1655,14 +1704,26 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           });
           collectionApiCalls++;
 
+          // A null/missing/empty parts response is indistinguishable from a dropped
+          // API call - count it as a failed discovery rather than recording a
+          // spurious empty franchise, so the placeholder-cleanup union below (gated
+          // on failedCount) doesn't treat it as authoritative.
+          if (!collectionData.parts || collectionData.parts.length === 0) {
+            failedCount++;
+            logger.warn(
+              `TMDB collection ${franchiseId} returned no parts data`,
+              { label: 'TMDB Franchise', franchiseId }
+            );
+            continue;
+          }
+
           // Extract movies from collection and sort by release date
           // (TMDB parts order is not guaranteed to be release-date order)
-          const movies =
-            collectionData.parts?.map((part) => ({
-              tmdbId: part.id,
-              title: part.title || 'Unknown',
-              releaseDate: part.release_date,
-            })) || [];
+          const movies = collectionData.parts.map((part) => ({
+            tmdbId: part.id,
+            title: part.title || 'Unknown',
+            releaseDate: part.release_date,
+          }));
 
           movies.sort((a, b) => {
             const dateA = a.releaseDate || '';
@@ -1695,6 +1756,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           );
         }
       } catch (error) {
+        failedCount++;
         logger.warn(`Error processing TMDB movie ID ${tmdbId}`, {
           label: 'TMDB Franchise',
           error: error instanceof Error ? error.message : String(error),
@@ -1712,10 +1774,11 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
         processedMovies: processedTmdbIds.size,
         skippedMovies: tmdbIds.length - processedTmdbIds.size,
         cacheHits,
+        failedCount,
       }
     );
 
-    return franchiseMap;
+    return { franchiseMap, failedCount };
   }
 
   /**
@@ -1840,13 +1903,13 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     // Tag existing items in Radarr/Sonarr (if enabled)
     await this.tagExistingItemsInArr(plexItems, config);
 
-    // Handle placeholder cleanup and process missing items
-    const placeholderItems = await this.handlePlaceholdersAndMissingItems(
-      plexItems,
+    // Placeholder cleanup already ran once for the whole config in
+    // processFranchiseCollections - only create placeholders for this franchise's
+    // missing items here.
+    const placeholderItems = await this.processMissingItems(
       missingItems,
       config,
       plexClient,
-      libraryCache,
       missingItems.length > 0
         ? () => this.handleAutoRequests(missingItems, config)
         : undefined
