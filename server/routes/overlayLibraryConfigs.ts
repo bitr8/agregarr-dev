@@ -2,13 +2,21 @@ import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import overlayApplication from '@server/lib/overlayApplication';
-import { overlayLibraryService } from '@server/lib/overlays/OverlayLibraryService';
+import {
+  overlayLibraryService,
+  type OverlayItemOutcome,
+} from '@server/lib/overlays/OverlayLibraryService';
+import { serializeOverlayOutcomeCsv } from '@server/lib/overlays/overlayOutcomeCsv';
+import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 
 const router = Router();
+
+const parseOutcomeLibraryIds = (value: unknown): string[] | undefined =>
+  typeof value === 'string' ? value.split(',').filter(Boolean) : undefined;
 
 /**
  * Helper function to filter out orphaned overlay references
@@ -144,17 +152,40 @@ router.post('/:libraryId', async (req, res, next) => {
       });
     }
 
+    for (const field of ['fullSyncTargets', 'quickSyncTargets'] as const) {
+      if (field in req.body && !Array.isArray(req.body[field])) {
+        return res.status(400).json({
+          error: `${field} must be an array`,
+        });
+      }
+    }
+
     const configRepository = getRepository(OverlayLibraryConfig);
 
     let config = await configRepository.findOne({
       where: { libraryId },
     });
 
+    const fullSyncTargets = normalizeOverlaySyncTargets(
+      'fullSyncTargets' in req.body
+        ? req.body.fullSyncTargets
+        : config?.fullSyncTargets,
+      mediaType
+    );
+    const quickSyncTargets = normalizeOverlaySyncTargets(
+      'quickSyncTargets' in req.body
+        ? req.body.quickSyncTargets
+        : config?.quickSyncTargets,
+      mediaType
+    );
+
     if (config) {
       // Update existing — use 'field' in body checks for partial updates
       config.libraryName = libraryName;
       config.mediaType = mediaType;
       config.enabledOverlays = enabledOverlays;
+      config.fullSyncTargets = fullSyncTargets;
+      config.quickSyncTargets = quickSyncTargets;
       config.tmdbLanguage = tmdbLanguage || undefined;
       if ('enableEpisodeScanning' in req.body) {
         config.enableEpisodeScanning = !!req.body.enableEpisodeScanning;
@@ -176,6 +207,8 @@ router.post('/:libraryId', async (req, res, next) => {
         libraryName,
         mediaType,
         enabledOverlays,
+        fullSyncTargets,
+        quickSyncTargets,
         tmdbLanguage: tmdbLanguage || undefined,
         enableEpisodeScanning: !!req.body.enableEpisodeScanning,
         enableMaintainerrSeasonOverlays:
@@ -401,6 +434,55 @@ router.post('/:libraryId/apply-items', async (req, res, next) => {
       message: 'Failed to start overlay application',
     });
   }
+});
+
+// GET /api/v1/overlay-library-configs/status/outcomes/export - Download the current/last sync log
+router.get('/status/outcomes/export', (req, res) => {
+  const libraryIds = parseOutcomeLibraryIds(req.query.libraryIds);
+  const libraries = overlayLibraryService.getItemOutcomeDetails(
+    undefined,
+    libraryIds
+  );
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="agregarr-overlay-sync-${timestamp}.csv"`
+  );
+  return res.status(200).send(`\uFEFF${serializeOverlayOutcomeCsv(libraries)}`);
+});
+
+// GET /api/v1/overlay-library-configs/status/outcomes - Get per-item sync results on demand
+router.get('/status/outcomes', (req, res) => {
+  const outcome = req.query.outcome;
+  const allowedOutcomes: OverlayItemOutcome[] = [
+    'success',
+    'error',
+    'skipped',
+    'filtered',
+  ];
+
+  if (
+    typeof outcome !== 'string' ||
+    !allowedOutcomes.includes(outcome as OverlayItemOutcome)
+  ) {
+    return res.status(400).json({
+      error: `outcome must be one of: ${allowedOutcomes.join(', ')}`,
+    });
+  }
+
+  const libraryIds = parseOutcomeLibraryIds(req.query.libraryIds);
+  const libraries = overlayLibraryService.getItemOutcomeDetails(
+    outcome as OverlayItemOutcome,
+    libraryIds
+  );
+
+  return res.status(200).json({
+    outcome,
+    total: libraries.reduce((sum, library) => sum + library.items.length, 0),
+    libraries,
+  });
 });
 
 // GET /api/v1/overlay-library-configs/:libraryId/status - Get overlay application status for library

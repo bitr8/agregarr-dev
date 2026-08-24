@@ -368,7 +368,7 @@ class MetadataTrackingService {
       });
     }
 
-    // Record the item kind ('movie' | 'show' | 'season') when the caller knows
+    // Record the item kind ('movie' | 'show' | 'season' | 'episode') when the caller knows
     // it. Only set when provided so callers that don't supply it (e.g. the
     // poster-reset path) never wipe an existing value.
     if (itemType !== undefined) {
@@ -419,6 +419,17 @@ class MetadataTrackingService {
     return await repo.find({
       where: { libraryKey, itemType: 'season' },
     });
+  }
+
+  /** Child artwork tracked for a library, used by the user-facing reset job. */
+  async getOverlaidChildMetadata(
+    libraryKey: string
+  ): Promise<MediaItemMetadata[]> {
+    const repo = getRepository(MediaItemMetadata);
+    const rows = await repo.find({ where: { libraryKey } });
+    return rows.filter(
+      (row) => row.itemType === 'season' || row.itemType === 'episode'
+    );
   }
 
   /**

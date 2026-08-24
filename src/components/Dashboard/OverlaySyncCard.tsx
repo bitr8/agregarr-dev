@@ -1,15 +1,15 @@
 import Button from '@app/components/Common/Button';
+import OverlayLibraryProgressList from '@app/components/Posters/OverlayLibraryProgressList';
+import OverlayOutcomeStats from '@app/components/Posters/OverlayOutcomeStats';
+import type { OverlayTargetProgressMap } from '@app/components/Posters/OverlayTargetProgress';
 import { formatTime, formatTimeAgo } from '@app/utils/timeFormatters';
 import {
-  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ExclamationTriangleIcon,
-  ForwardIcon,
-  FunnelIcon,
   PlayIcon,
   StopIcon,
 } from '@heroicons/react/24/outline';
+import type { OverlayArtworkTarget } from '@server/lib/overlays/overlayTargets';
 import axios from 'axios';
 import type React from 'react';
 import { useMemo, useState } from 'react';
@@ -26,6 +26,8 @@ interface LibraryStatus {
   totalItems: number;
   currentItem: number;
   currentTitle: string;
+  currentTarget?: OverlayArtworkTarget | null;
+  targetProgress?: OverlayTargetProgressMap;
   filteredCount: number;
   successCount: number;
   errorCount: number;
@@ -419,131 +421,18 @@ const OverlaySyncCard: React.FC = () => {
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <CheckIcon className="h-4 w-4 text-green-400" />
-            <span className="text-xs text-gray-400">Success</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-green-400">
-            {totalSuccess}
-          </p>
-        </div>
+      <OverlayLibraryProgressList libraries={allLibs} />
 
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <ExclamationTriangleIcon className="h-4 w-4 text-red-400" />
-            <span className="text-xs text-gray-400">Errors</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-red-400">
-            {totalErrors}
-          </p>
-        </div>
-
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <ForwardIcon className="h-4 w-4 text-amber-400" />
-            <span className="text-xs text-gray-400">Unchanged</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-amber-400">
-            {totalSkipped}
-          </p>
-        </div>
-
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <FunnelIcon className="h-4 w-4 text-blue-400" />
-            <span className="text-xs text-gray-400">Filtered</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-blue-400">
-            {totalFiltered}
-          </p>
-        </div>
-      </div>
-
-      {/* Per-Library Breakdown */}
-      {allLibs.length > 1 && (
-        <div className="mb-4">
-          <p className="mb-2 text-xs font-medium text-gray-300">Libraries</p>
-          <div className="space-y-1">
-            {allLibs.map((lib) => (
-              <div
-                key={lib.libraryId}
-                className="flex items-center gap-2 text-xs"
-              >
-                {lib.state === 'completed' ? (
-                  <CheckIcon className="h-3.5 w-3.5 text-green-400" />
-                ) : lib.state === 'failed' ? (
-                  <ExclamationTriangleIcon className="h-3.5 w-3.5 text-red-400" />
-                ) : lib.state === 'running' ? (
-                  <div className="h-3.5 w-3.5 animate-pulse rounded-full bg-orange-400" />
-                ) : (
-                  <ForwardIcon className="h-3.5 w-3.5 text-gray-500" />
-                )}
-                <span className="min-w-0 flex-1 truncate text-gray-300">
-                  {lib.libraryName}
-                </span>
-                {lib.errorCount > 0 && (
-                  <span className="shrink-0 text-red-400">
-                    {lib.errorCount} err
-                  </span>
-                )}
-                <span className="shrink-0 text-gray-500">
-                  {lib.successCount +
-                    lib.errorCount +
-                    lib.skippedCount +
-                    lib.filteredCount}
-                  /{lib.totalItems}
-                </span>
-                <span className="shrink-0 text-gray-500">
-                  {formatTime(lib.runningFor)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Error Details */}
-      {totalErrors > 0 && (
-        <div className="mb-4">
-          <button
-            onClick={() => setErrorsOpen(!errorsOpen)}
-            className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
-          >
-            {errorsOpen ? (
-              <ChevronDownIcon className="h-3 w-3" />
-            ) : (
-              <ChevronRightIcon className="h-3 w-3" />
-            )}
-            {totalErrors} error{totalErrors !== 1 && 's'}
-          </button>
-          {errorsOpen && (
-            <div className="mt-1 space-y-2 pl-4">
-              {allLibs
-                .filter((l) => l.itemErrors && l.itemErrors.length > 0)
-                .map((lib) => (
-                  <div key={`${lib.libraryId}-errors`}>
-                    <p className="text-xs font-medium text-gray-300">
-                      {lib.libraryName}
-                    </p>
-                    <div className="mt-0.5 space-y-0.5">
-                      {lib.itemErrors?.map((e) => (
-                        <p key={e.ratingKey} className="text-xs text-gray-500">
-                          {e.title}{' '}
-                          <span className="text-gray-600">
-                            &mdash; {e.error}
-                          </span>
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
+      <OverlayOutcomeStats
+        counts={{
+          success: totalSuccess,
+          error: totalErrors,
+          skipped: totalSkipped,
+          filtered: totalFiltered,
+        }}
+        libraryIds={allLibs.map((library) => library.libraryId)}
+        isRunning={isActive}
+      />
 
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-gray-500">

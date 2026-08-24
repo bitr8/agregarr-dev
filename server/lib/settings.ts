@@ -739,6 +739,7 @@ export interface OverlaySettings {
   initialSetupComplete: boolean;
   watchProviderRegion?: string;
   overlayConcurrency?: number;
+  jpegQuality?: number;
 }
 
 export type JobId =

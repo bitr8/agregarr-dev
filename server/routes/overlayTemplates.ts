@@ -9,6 +9,12 @@ import type {
 } from '@server/entity/OverlayTemplate';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import { extractStreamingProvider } from '@server/lib/overlays/OverlayContextBuilder';
+import { createOverlayPreviewArtwork } from '@server/lib/overlays/overlayPreviewArtwork';
+import {
+  getPrimaryOverlayTarget,
+  targetsArtwork,
+  type OverlayArtworkTarget,
+} from '@server/lib/overlays/overlayTargets';
 import { overlayTemplateRenderer } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { presetTemplateService } from '@server/lib/overlays/PresetTemplates';
 import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
@@ -735,12 +741,17 @@ router.get('/:id/preview', async (req, res, next) => {
       });
     }
 
+    const previewTarget = getPrimaryOverlayTarget(template.getTags());
+
     // Get list of preview posters
     const postersDir = path.join(process.cwd(), 'public', 'preview-posters');
     const posterFiles = await fsPromises.readdir(postersDir);
     const jpgFiles = posterFiles.filter(
       (f) =>
-        f.endsWith('.jpg') && (f.startsWith('movie_') || f.startsWith('tv_'))
+        f.endsWith('.jpg') &&
+        (previewTarget === 'main'
+          ? f.startsWith('movie_') || f.startsWith('tv_')
+          : f.startsWith('tv_'))
     );
 
     if (jpgFiles.length === 0) {
@@ -754,7 +765,11 @@ router.get('/:id/preview', async (req, res, next) => {
     const posterPath = path.join(postersDir, randomPoster);
 
     // Load the poster image
-    const posterBuffer = await fsPromises.readFile(posterPath);
+    let posterBuffer = await fsPromises.readFile(posterPath);
+    posterBuffer = await createOverlayPreviewArtwork(
+      posterBuffer,
+      previewTarget
+    );
 
     // Extract TMDB ID and media type from filename (e.g., "movie_100402.jpg")
     const match = randomPoster.match(/^(movie|tv)_(\d+)\.jpg$/);
@@ -788,7 +803,7 @@ router.get('/:id/preview', async (req, res, next) => {
     );
 
     // Return the rendered image
-    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'no-cache'); // Don't cache so previews update immediately
     return res.send(renderedBuffer);
   } catch (error) {
@@ -803,9 +818,14 @@ router.get('/:id/preview', async (req, res, next) => {
 // POST /api/v1/overlay-templates/combined-preview - Generate preview with multiple overlays
 router.post('/combined-preview', async (req, res, next) => {
   try {
-    const { templateIds, contextId } = req.body as {
+    const {
+      templateIds,
+      contextId,
+      target = 'main',
+    } = req.body as {
       templateIds: number[];
       contextId?: string;
+      target?: OverlayArtworkTarget;
     };
 
     if (
@@ -816,6 +836,9 @@ router.post('/combined-preview', async (req, res, next) => {
       return res.status(400).json({
         error: 'templateIds array is required',
       });
+    }
+    if (!['main', 'season', 'episode'].includes(target)) {
+      return res.status(400).json({ error: 'Invalid artwork target' });
     }
 
     // Use contextId to scope deduplication (default to 'global' for backward compatibility)
@@ -853,14 +876,20 @@ router.post('/combined-preview', async (req, res, next) => {
     // Sort templates by the order they appear in templateIds (preserves layer order)
     const orderedTemplates = templateIds
       .map((id) => templates.find((t) => t.id === id))
-      .filter((t): t is OverlayTemplate => t !== undefined);
+      .filter(
+        (t): t is OverlayTemplate =>
+          t !== undefined && targetsArtwork(t.getTags(), target)
+      );
 
     // Get list of preview posters
     const postersDir = path.join(process.cwd(), 'public', 'preview-posters');
     const posterFiles = await fsPromises.readdir(postersDir);
     const jpgFiles = posterFiles.filter(
       (f) =>
-        f.endsWith('.jpg') && (f.startsWith('movie_') || f.startsWith('tv_'))
+        f.endsWith('.jpg') &&
+        (target === 'main'
+          ? f.startsWith('movie_') || f.startsWith('tv_')
+          : f.startsWith('tv_'))
     );
 
     if (jpgFiles.length === 0) {
@@ -875,6 +904,7 @@ router.post('/combined-preview', async (req, res, next) => {
 
     // Load the poster image
     let posterBuffer = await fsPromises.readFile(posterPath);
+    posterBuffer = await createOverlayPreviewArtwork(posterBuffer, target);
 
     // Check again after I/O operation
     if (!isLatestRequest()) {
@@ -964,7 +994,7 @@ router.post('/combined-preview', async (req, res, next) => {
     }
 
     // Return the combined image
-    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'no-cache'); // Don't cache combined previews
     return res.send(posterBuffer);
   } catch (error) {

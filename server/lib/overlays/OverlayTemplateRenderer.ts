@@ -15,6 +15,11 @@ import logger from '@server/logger';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import {
+  DEFAULT_OVERLAY_JPEG_QUALITY,
+  normalizeOverlayJpegQuality,
+} from './overlayOutputQuality';
+import { AGREGARR_OVERLAY_MARKER } from './posterOwnershipMetadata';
 import { getMergedMappings } from './UserMappingsService';
 
 /**
@@ -725,7 +730,8 @@ class OverlayTemplateRendererService {
    */
   async compositeOverlays(
     posterBuffer: Buffer,
-    overlays: sharp.OverlayOptions[]
+    overlays: sharp.OverlayOptions[],
+    jpegQuality = DEFAULT_OVERLAY_JPEG_QUALITY
   ): Promise<Buffer> {
     let composite = sharp(posterBuffer);
 
@@ -733,10 +739,21 @@ class OverlayTemplateRendererService {
       composite = composite.composite(overlays);
     }
 
-    // Convert to WebP with high quality for optimal file size
-    // WebP provides 25-35% better compression than JPEG at same quality
-    // (Plex has file size limits around 10-11MB)
-    return await composite.webp({ quality: 92 }).toBuffer();
+    // Posterizarr writes its marker as a JPEG comment, not EXIF, and Sharp does
+    // not carry JPEG comments through re-encoding. Add our own explicit overlay
+    // marker as EXIF near the beginning of the JPEG, inside Posterizarr's 64-KiB
+    // metadata scan. withExifMerge also retains any real source EXIF tags.
+    return await composite
+      .withExifMerge({
+        IFD0: { ImageDescription: AGREGARR_OVERLAY_MARKER },
+      })
+      .jpeg({
+        quality: normalizeOverlayJpegQuality(jpegQuality),
+        // Preserve full colour detail around small text and badge edges. Sharp's
+        // JPEG default is 4:2:0, which visibly softens coloured overlays.
+        chromaSubsampling: '4:4:4',
+      })
+      .toBuffer();
   }
 
   /**
@@ -745,7 +762,8 @@ class OverlayTemplateRendererService {
   async renderOverlay(
     posterBuffer: Buffer,
     templateData: OverlayTemplateData,
-    context: OverlayRenderContext
+    context: OverlayRenderContext,
+    jpegQuality = DEFAULT_OVERLAY_JPEG_QUALITY
   ): Promise<Buffer> {
     const { width, height } = await this.getPosterDimensions(posterBuffer);
     const overlays = await this.renderOverlayElements(
@@ -760,7 +778,7 @@ class OverlayTemplateRendererService {
       return posterBuffer;
     }
 
-    return await this.compositeOverlays(posterBuffer, overlays);
+    return await this.compositeOverlays(posterBuffer, overlays, jpegQuality);
   }
 
   /**

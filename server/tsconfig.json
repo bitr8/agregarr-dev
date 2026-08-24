@@ -10,5 +10,6 @@
       "@server/*": ["*"]
     }
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts"],
+  "exclude": ["**/*.test.ts", "**/*.spec.ts", "migrationTests/**"]
 }

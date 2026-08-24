@@ -31,6 +31,13 @@ import type {
   ApplicationCondition,
   OverlayTemplateType,
 } from '@server/entity/OverlayTemplate';
+import {
+  getDefaultOverlaySyncTargets,
+  getOverlayTargets,
+  isOverlayCompatibleWithLibrary,
+  normalizeOverlaySyncTargets,
+  type OverlayArtworkTarget,
+} from '@server/lib/overlays/overlayTargets';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import useSWR, { mutate } from 'swr';
@@ -140,6 +147,25 @@ const ConditionDisplay: React.FC<{ condition: string }> = ({ condition }) => {
 
 const messages = defineMessages({
   configureOverlays: 'Configure Overlays',
+  libraryType: 'Library type',
+  movieLibrary: 'Movies',
+  showLibrary: 'TV shows',
+  detectedFromPlex: 'Detected from Plex',
+  syncScope: 'Sync scope',
+  syncScopeDescription:
+    'Choose which artwork each overlay job processes for this library. A selected target also needs an enabled overlay template for that artwork.',
+  missingFullSyncTemplates:
+    'Full sync will skip {targets} because no enabled template targets that artwork.',
+  fullSync: 'Full sync',
+  quickSync: 'Quick sync',
+  artwork: 'Artwork',
+  moviePosters: 'Movie posters',
+  showPosters: 'Show posters',
+  seasonPosters: 'Season posters',
+  episodeCards: 'Episode cards',
+  mainTarget: 'Main',
+  seasonTarget: 'Season',
+  episodeTarget: 'Episode',
   save: 'Save Configuration',
   cancel: 'Cancel',
   saveFailed: 'Failed to save configuration',
@@ -161,6 +187,7 @@ interface Template {
   type: OverlayTemplateType;
   isDefault: boolean;
   applicationCondition?: ApplicationCondition;
+  tags?: string[];
 }
 
 interface EnabledOverlay {
@@ -180,6 +207,8 @@ interface LibraryConfig {
   libraryName: string;
   mediaType: 'movie' | 'show';
   enabledOverlays: EnabledOverlay[];
+  fullSyncTargets?: OverlayArtworkTarget[];
+  quickSyncTargets?: OverlayArtworkTarget[];
   tmdbLanguage?: string;
   enableEpisodeScanning?: boolean;
   enableMaintainerrSeasonOverlays?: boolean;
@@ -230,6 +259,15 @@ const SortableTemplateItem: React.FC<SortableTemplateItemProps> = ({
   };
 
   const conditionText = formatCondition(template.applicationCondition);
+  const artworkTargets = getOverlayTargets(template.tags);
+  const getArtworkTargetLabel = (target: OverlayArtworkTarget): string =>
+    intl.formatMessage(
+      target === 'main'
+        ? messages.mainTarget
+        : target === 'season'
+        ? messages.seasonTarget
+        : messages.episodeTarget
+    );
 
   return (
     <div
@@ -273,6 +311,14 @@ const SortableTemplateItem: React.FC<SortableTemplateItemProps> = ({
             )}
           </button>
           <div className="text-sm font-medium text-white">{template.name}</div>
+          {artworkTargets.map((target) => (
+            <span
+              key={target}
+              className="rounded bg-stone-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-400"
+            >
+              {getArtworkTargetLabel(target)}
+            </span>
+          ))}
         </div>
         {/* Expandable details */}
         {isExpanded && (
@@ -325,8 +371,19 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
   libraryType,
 }) => {
   const intl = useIntl();
+  // libraryType comes from the live Plex libraries response. Keep it as the
+  // source of truth instead of allowing an older saved config to drift.
+  const detectedLibraryType = libraryType;
+  const availableSyncTargets =
+    getDefaultOverlaySyncTargets(detectedLibraryType);
   const [saving, setSaving] = useState(false);
   const [enabledOverlays, setEnabledOverlays] = useState<EnabledOverlay[]>([]);
+  const [fullSyncTargets, setFullSyncTargets] = useState<
+    OverlayArtworkTarget[]
+  >(() => getDefaultOverlaySyncTargets(detectedLibraryType));
+  const [quickSyncTargets, setQuickSyncTargets] = useState<
+    OverlayArtworkTarget[]
+  >(() => getDefaultOverlaySyncTargets(detectedLibraryType));
   const [tmdbLanguage, setTmdbLanguage] = useState<string | undefined>(
     undefined
   );
@@ -388,6 +445,18 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
     if (configData?.enabledOverlays) {
       setEnabledOverlays(configData.enabledOverlays);
     }
+    setFullSyncTargets(
+      normalizeOverlaySyncTargets(
+        configData?.fullSyncTargets,
+        detectedLibraryType
+      )
+    );
+    setQuickSyncTargets(
+      normalizeOverlaySyncTargets(
+        configData?.quickSyncTargets,
+        detectedLibraryType
+      )
+    );
     if (configData?.enableEpisodeScanning !== undefined) {
       setEnableEpisodeScanning(configData.enableEpisodeScanning);
     }
@@ -405,7 +474,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
     if (configData?.tmdbLanguage !== undefined) {
       setTmdbLanguage(configData.tmdbLanguage);
     }
-  }, [configData]);
+  }, [configData, detectedLibraryType]);
 
   // Fetch combined preview when enabled overlays change
   const fetchPreview = useCallback(async () => {
@@ -438,6 +507,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
           body: JSON.stringify({
             templateIds: enabledIds,
             contextId: 'modal-config', // Scope deduplication to this modal
+            target: 'main',
           }),
           signal: abortController.signal,
         }
@@ -506,7 +576,9 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
     };
   }, [previewUrl]);
 
-  const templates = templatesData?.templates || [];
+  const templates = (templatesData?.templates || []).filter((template) =>
+    isOverlayCompatibleWithLibrary(template.tags, detectedLibraryType)
+  );
 
   // Sort templates by layer order from enabledOverlays (descending - higher layers at top)
   const sortedTemplates = [...templates].sort((a, b) => {
@@ -522,6 +594,26 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
       (o) => o.templateId === templateId && o.enabled
     );
   };
+
+  const getSyncTargetLabel = (target: OverlayArtworkTarget): string =>
+    target === 'main'
+      ? intl.formatMessage(
+          detectedLibraryType === 'movie'
+            ? messages.moviePosters
+            : messages.showPosters
+        )
+      : intl.formatMessage(
+          target === 'season' ? messages.seasonPosters : messages.episodeCards
+        );
+
+  const enabledTemplateTargets = new Set<OverlayArtworkTarget>(
+    sortedTemplates
+      .filter((template) => isEnabled(template.id))
+      .flatMap((template) => getOverlayTargets(template.tags))
+  );
+  const missingFullSyncTemplateTargets = fullSyncTargets.filter(
+    (target) => !enabledTemplateTargets.has(target)
+  );
 
   const handleToggle = (templateId: number) => {
     setEnabledOverlays((prev) => {
@@ -545,6 +637,22 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
         ];
       }
     });
+  };
+
+  const toggleSyncTarget = (
+    mode: 'full' | 'quick',
+    target: OverlayArtworkTarget
+  ) => {
+    const update = (current: OverlayArtworkTarget[]) =>
+      current.includes(target)
+        ? current.filter((candidate) => candidate !== target)
+        : [...current, target];
+
+    if (mode === 'full') {
+      setFullSyncTargets(update);
+    } else {
+      setQuickSyncTargets(update);
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -591,8 +699,10 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             libraryName,
-            mediaType: configData?.mediaType || libraryType,
+            mediaType: detectedLibraryType,
             enabledOverlays,
+            fullSyncTargets,
+            quickSyncTargets,
             tmdbLanguage: tmdbLanguage || undefined,
             enableEpisodeScanning,
             enableMaintainerrSeasonOverlays,
@@ -691,6 +801,23 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
 
             {/* Overlay Selection - Drag & Drop Scrollable List */}
             <div className="min-w-0 flex-1 overflow-y-auto pr-2">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-medium text-stone-300">
+                    {intl.formatMessage(messages.libraryType)}
+                  </div>
+                  <div className="text-[11px] text-stone-500">
+                    {intl.formatMessage(messages.detectedFromPlex)}
+                  </div>
+                </div>
+                <span className="rounded-full bg-stone-700 px-2.5 py-1 text-xs font-medium text-stone-200">
+                  {intl.formatMessage(
+                    detectedLibraryType === 'show'
+                      ? messages.showLibrary
+                      : messages.movieLibrary
+                  )}
+                </span>
+              </div>
               <div className="mb-3 text-xs text-stone-400">
                 {intl.formatMessage(messages.dragToReorder)}
               </div>
@@ -726,8 +853,65 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
             </div>
           </div>
 
+          <div className="mt-4 border-t border-stone-700 pt-4">
+            <h3 className="text-sm font-semibold text-white">
+              {intl.formatMessage(messages.syncScope)}
+            </h3>
+            <p className="mt-1 text-xs text-stone-400">
+              {intl.formatMessage(messages.syncScopeDescription)}
+            </p>
+            <div className="mt-3 overflow-hidden rounded-md border border-stone-700">
+              <div className="grid grid-cols-[minmax(0,1fr)_100px_100px] bg-stone-800 px-3 py-2 text-xs font-medium text-stone-300">
+                <span>{intl.formatMessage(messages.artwork)}</span>
+                <span className="text-center">
+                  {intl.formatMessage(messages.fullSync)}
+                </span>
+                <span className="text-center">
+                  {intl.formatMessage(messages.quickSync)}
+                </span>
+              </div>
+              {availableSyncTargets.map((target) => {
+                const label = getSyncTargetLabel(target);
+
+                return (
+                  <div
+                    key={target}
+                    className="grid grid-cols-[minmax(0,1fr)_100px_100px] items-center border-t border-stone-700 px-3 py-2 text-sm text-stone-200"
+                  >
+                    <span>{label}</span>
+                    <label className="flex cursor-pointer justify-center">
+                      <input
+                        type="checkbox"
+                        checked={fullSyncTargets.includes(target)}
+                        onChange={() => toggleSyncTarget('full', target)}
+                        className="h-4 w-4 rounded border-stone-600 text-orange-500 focus:ring-orange-500"
+                      />
+                    </label>
+                    <label className="flex cursor-pointer justify-center">
+                      <input
+                        type="checkbox"
+                        checked={quickSyncTargets.includes(target)}
+                        onChange={() => toggleSyncTarget('quick', target)}
+                        className="h-4 w-4 rounded border-stone-600 text-orange-500 focus:ring-orange-500"
+                      />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+            {missingFullSyncTemplateTargets.length > 0 && (
+              <div className="bg-amber-950/40 mt-3 rounded-md border border-amber-700 px-3 py-2 text-xs text-amber-200">
+                {intl.formatMessage(messages.missingFullSyncTemplates, {
+                  targets: missingFullSyncTemplateTargets
+                    .map(getSyncTargetLabel)
+                    .join(', '),
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Episode Scanning Toggle - Only for show libraries */}
-          {libraryType === 'show' && (
+          {detectedLibraryType === 'show' && (
             <div className="mt-4 border-t border-stone-700 pt-4">
               <div className="flex items-center gap-3">
                 <label className="relative inline-flex cursor-pointer items-center">
@@ -754,7 +938,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
           )}
 
           {/* Show Poster Countdown Mode - Only for show libraries */}
-          {libraryType === 'show' && (
+          {detectedLibraryType === 'show' && (
             <div className="mt-4 border-t border-stone-700 pt-4">
               <div className="flex items-center gap-4">
                 <label
@@ -801,7 +985,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
           )}
 
           {/* Maintainerr Season Countdown Toggle - Only for show libraries */}
-          {libraryType === 'show' && (
+          {detectedLibraryType === 'show' && (
             <div className="mt-4 border-t border-stone-700 pt-4">
               <div className="flex items-center gap-3">
                 <label

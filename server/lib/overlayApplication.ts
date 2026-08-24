@@ -1,5 +1,6 @@
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
+import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
 import logger from '@server/logger';
 
 /**
@@ -187,7 +188,9 @@ class OverlayApplication {
       const activeConfigs = configs.filter(
         (config) =>
           config.enabledOverlays &&
-          config.enabledOverlays.some((o) => o.enabled)
+          config.enabledOverlays.some((o) => o.enabled) &&
+          normalizeOverlaySyncTargets(config.fullSyncTargets, config.mediaType)
+            .length > 0
       );
 
       // A library whose config was deleted, or whose overlays were all switched

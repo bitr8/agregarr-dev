@@ -14,6 +14,15 @@ interface MissingItemMatch {
   missingItem: CollectionMissingItems;
 }
 
+export interface ItemQuickSyncResult {
+  libraryId: string;
+  title: string;
+  itemsMatched: number;
+  collectionsUpdated: number;
+  itemsAdded: number;
+  placeholdersDeleted: number;
+}
+
 /**
  * Collections Quick Sync Job
  * Efficiently adds recently downloaded items to collections without full sync
@@ -318,6 +327,112 @@ class CollectionsQuickSync {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      this.running = false;
+      this.cancelled = false;
+      this.currentStage = '';
+    }
+  }
+
+  /**
+   * Process one known Plex item without scanning every configured library.
+   *
+   * Posterizarr calls this after its Arr trigger has uploaded artwork. The
+   * targeted path deliberately does not advance lastCollectionsQuickSyncAt:
+   * doing so would make the next scheduled scan miss unrelated items that were
+   * added while this one-item job was running.
+   */
+  public async runForItem(ratingKey: string): Promise<ItemQuickSyncResult> {
+    this.lastCompletedSummary = null;
+
+    if (this.running) {
+      throw new Error('Collections Quick Sync is already running');
+    }
+
+    const collectionsSync = (await import('@server/lib/collectionsSync'))
+      .default;
+    if (collectionsSync.status.running || collectionsSync.status.pending) {
+      throw new Error('Full Collections Sync is already running');
+    }
+
+    this.running = true;
+    this.cancelled = false;
+    this.currentStage = '';
+
+    try {
+      this.setStage(`Loading Plex item ${ratingKey}...`);
+      const plexClient = await this.getPlexClient();
+      const metadata = await plexClient.getMetadata(ratingKey, {
+        includeChildren: true,
+      });
+
+      if (metadata.type !== 'movie' && metadata.type !== 'show') {
+        throw new Error(
+          `Plex item ${ratingKey} is a ${metadata.type}; only movies and shows can be trigger-synced`
+        );
+      }
+
+      const libraryId = metadata.librarySectionID?.toString();
+      if (!libraryId) {
+        throw new Error(
+          `Plex item ${ratingKey} did not include a library section ID`
+        );
+      }
+
+      const item = {
+        ...metadata,
+        guid: metadata.guid || '',
+        Media: metadata.Media || [],
+      } as PlexLibraryItem;
+
+      this.setStage(`Checking placeholders for: ${metadata.title}...`);
+      const cleanupResult = await this.cleanupPlaceholdersForRecentItems(
+        [item],
+        libraryId,
+        plexClient
+      );
+
+      if (cleanupResult.cleanedEntries.length > 0) {
+        const { removeGhostEntries } = await import(
+          '@server/lib/placeholders/services/PlaceholderCleanup'
+        );
+        await removeGhostEntries(
+          plexClient,
+          libraryId,
+          cleanupResult.cleanedEntries
+        );
+      }
+
+      this.setStage(`Updating collections for: ${metadata.title}...`);
+      const collectionResult = await this.processRecentItems(
+        [item],
+        libraryId,
+        plexClient
+      );
+
+      const result: ItemQuickSyncResult = {
+        libraryId,
+        title: metadata.title,
+        itemsMatched: collectionResult.matched,
+        collectionsUpdated: collectionResult.collectionsUpdated,
+        itemsAdded: collectionResult.itemsAdded,
+        placeholdersDeleted: cleanupResult.deletedCount,
+      };
+
+      this.lastCompletedSummary = {
+        itemsMatched: result.itemsMatched,
+        collectionsUpdated: result.collectionsUpdated,
+        itemsAdded: result.itemsAdded,
+        placeholdersDeleted: result.placeholdersDeleted,
+      };
+
+      logger.info('Targeted Collections Quick Sync completed', {
+        label: 'Collections Quick Sync',
+        ratingKey,
+        ...result,
+      });
+
+      return result;
     } finally {
       this.running = false;
       this.cancelled = false;

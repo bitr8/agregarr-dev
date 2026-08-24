@@ -53,6 +53,12 @@ const messages = defineMessages({
   // Tags
   tags: 'Tags',
   tagsPlaceholder: 'Add tags...',
+  artworkTargets: 'Artwork Targets',
+  mainPoster: 'Main poster',
+  seasonPoster: 'Season poster',
+  episodeCard: 'Episode card',
+  artworkTargetsHelp:
+    'Season and episode artwork can run from full sync, quick sync, or Posterizarr Sonarr triggers. Episode cards usually use 1920 x 1080.',
 });
 
 export type OverlayEditorMode = 'create' | 'edit';
@@ -84,6 +90,10 @@ const DEFAULT_OVERLAY_DATA: OverlayTemplateData = {
 };
 
 const DEFAULT_TAGS: string[] = [];
+type ArtworkTarget = 'main' | 'season' | 'episode';
+const ARTWORK_TARGETS: ArtworkTarget[] = ['main', 'season', 'episode'];
+const isTargetTag = (tag: string) =>
+  /^target:(main|season|episode)$/i.test(tag.trim());
 
 interface PreviewPostersResponse {
   posters: PreviewPosterInfo[];
@@ -169,6 +179,36 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
   // Tags state
   const [tags, setTags] = useState<string[]>(initialTags);
   const [tagInput, setTagInput] = useState('');
+  const selectedArtworkTargets: ArtworkTarget[] = tags
+    .filter(isTargetTag)
+    .map((tag) => tag.trim().toLowerCase().slice(7) as ArtworkTarget);
+  const effectiveArtworkTargets =
+    selectedArtworkTargets.length > 0
+      ? selectedArtworkTargets
+      : (['main'] as ArtworkTarget[]);
+
+  const toggleArtworkTarget = (target: ArtworkTarget) => {
+    const nextTargets = effectiveArtworkTargets.includes(target)
+      ? effectiveArtworkTargets.filter((candidate) => candidate !== target)
+      : [...effectiveArtworkTargets, target];
+    if (nextTargets.length === 0) return;
+
+    setTags([
+      ...tags.filter((tag) => !isTargetTag(tag)),
+      ...nextTargets.map((candidate) => `target:${candidate}`),
+    ]);
+
+    if (
+      target === 'episode' &&
+      !effectiveArtworkTargets.includes('episode') &&
+      mode === 'create' &&
+      overlayData.width === 1000 &&
+      overlayData.height === 1500 &&
+      overlayData.elements.length === 0
+    ) {
+      addToHistory({ ...overlayData, width: 1920, height: 1080 });
+    }
+  };
 
   // Poster preview state
   const [currentPosterIndex, setCurrentPosterIndex] = useState(0);
@@ -445,6 +485,42 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                         />
                       </div>
 
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-stone-300">
+                          {intl.formatMessage(messages.artworkTargets)}
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {ARTWORK_TARGETS.map((value) => {
+                            const selected =
+                              effectiveArtworkTargets.includes(value);
+                            const label = intl.formatMessage(
+                              value === 'main'
+                                ? messages.mainPoster
+                                : value === 'season'
+                                ? messages.seasonPoster
+                                : messages.episodeCard
+                            );
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => toggleArtworkTarget(value)}
+                                className={`rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+                                  selected
+                                    ? 'border-orange-500 bg-orange-600/20 text-orange-300'
+                                    : 'border-stone-600 bg-stone-800 text-stone-400 hover:border-stone-500'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-1.5 text-xs text-stone-500">
+                          {intl.formatMessage(messages.artworkTargetsHelp)}
+                        </p>
+                      </div>
+
                       {/* Canvas Dimensions */}
                       <div>
                         <label className="mb-2 block text-sm font-medium text-stone-300">
@@ -485,25 +561,27 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                           {intl.formatMessage(messages.tags)}
                         </label>
                         {/* Tag chips */}
-                        {tags.length > 0 && (
+                        {tags.some((tag) => !isTargetTag(tag)) && (
                           <div className="mb-2 flex flex-wrap gap-1">
-                            {tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="inline-flex items-center rounded-full bg-orange-600/20 px-2 py-0.5 text-xs text-orange-400"
-                              >
-                                {tag}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setTags(tags.filter((t) => t !== tag))
-                                  }
-                                  className="ml-1 text-orange-400 hover:text-orange-300"
+                            {tags
+                              .filter((tag) => !isTargetTag(tag))
+                              .map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="inline-flex items-center rounded-full bg-orange-600/20 px-2 py-0.5 text-xs text-orange-400"
                                 >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
+                                  {tag}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setTags(tags.filter((t) => t !== tag))
+                                    }
+                                    className="ml-1 text-orange-400 hover:text-orange-300"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
                           </div>
                         )}
                         {/* Tag input */}
