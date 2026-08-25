@@ -132,6 +132,8 @@ export function createSampleOverlayContext(
     title?: string;
     year?: number;
     imdbRating?: number;
+    tmdbRating?: number;
+    tmdbVoteCount?: number;
     rtCriticsScore?: number;
     rtAudienceScore?: number;
     studio?: string;
@@ -144,6 +146,8 @@ export function createSampleOverlayContext(
     title: tmdbOverrides?.title || 'Sample Movie',
     year: tmdbOverrides?.year || 2024,
     imdbRating: tmdbOverrides?.imdbRating || 8.5,
+    tmdbRating: tmdbOverrides?.tmdbRating ?? 8.4,
+    tmdbVoteCount: tmdbOverrides?.tmdbVoteCount ?? 1250,
     rtCriticsScore: tmdbOverrides?.rtCriticsScore || 92,
     rtAudienceScore: tmdbOverrides?.rtAudienceScore || 88,
     studio: tmdbOverrides?.studio || 'Warner Bros.',

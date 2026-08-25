@@ -95,4 +95,33 @@ describe('overlay artwork targets', () => {
       ],
     });
   });
+
+  it('ships target-aware TMDB rating presets', () => {
+    const main = PRESET_TEMPLATES.find(
+      (preset) => preset.name === 'TMDB Rating'
+    );
+    const season = PRESET_TEMPLATES.find(
+      (preset) => preset.name === 'TMDB Rating - Season Poster'
+    );
+    const episode = PRESET_TEMPLATES.find(
+      (preset) => preset.name === 'TMDB Rating - Episode Card'
+    );
+
+    expect(main?.tags).not.toContain('target:season');
+    expect(main?.templateData).toMatchObject({ width: 1000, height: 1500 });
+    expect(season?.tags).toContain('target:season');
+    expect(season?.templateData).toMatchObject({ width: 1000, height: 1500 });
+    expect(episode?.tags).toContain('target:episode');
+    expect(episode?.templateData).toMatchObject({
+      width: 1920,
+      height: 1080,
+    });
+    expect(episode?.applicationCondition).toEqual({
+      sections: [
+        {
+          rules: [{ field: 'tmdbRating', operator: 'gte', value: 0 }],
+        },
+      ],
+    });
+  });
 });

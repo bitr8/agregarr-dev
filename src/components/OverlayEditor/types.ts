@@ -195,8 +195,10 @@ export interface ConditionRule {
  * Matches server/lib/overlays/OverlayTemplateRenderer.ts OverlayRenderContext
  */
 export interface OverlayRenderContext {
-  // Ratings (from IMDb API / RT API / Plex)
+  // Ratings (from IMDb API / TMDB / RT API / Plex)
   imdbRating?: number;
+  tmdbRating?: number;
+  tmdbVoteCount?: number;
   imdbTop250Rank?: number; // IMDb Top 250 ranking (1-250 for movies, 1-250 for TV)
   isImdbTop250?: boolean; // True if item is in IMDb Top 250 list
   rtCriticsScore?: number;
@@ -378,6 +380,8 @@ export function isSingleValueField(field: string): boolean {
 export const AVAILABLE_VARIABLES = {
   ratings: [
     { field: 'imdbRating', label: 'IMDb Rating', example: '8.7' },
+    { field: 'tmdbRating', label: 'TMDB Rating', example: '8.4' },
+    { field: 'tmdbVoteCount', label: 'TMDB Vote Count', example: '1250' },
     { field: 'imdbTop250Rank', label: 'IMDb Top 250 Rank', example: '42' },
     { field: 'isImdbTop250', label: 'Is IMDb Top 250', example: 'true' },
     { field: 'rtCriticsScore', label: 'RT Critics Score', example: '88' },
@@ -717,6 +721,8 @@ export const CONDITION_FIELD_CATEGORIES = {
   ],
   Ratings: [
     { field: 'imdbRating', label: 'IMDb Rating', example: '8.7' },
+    { field: 'tmdbRating', label: 'TMDB Rating', example: '8.4' },
+    { field: 'tmdbVoteCount', label: 'TMDB Vote Count', example: '1250' },
     { field: 'imdbTop250Rank', label: 'IMDb Top 250 Rank', example: '42' },
     { field: 'isImdbTop250', label: 'Is IMDb Top 250', example: 'true' },
     { field: 'rtCriticsScore', label: 'RT Critics Score', example: '88' },
@@ -899,6 +905,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     title: 'The Matrix',
     year: 1999,
     imdbRating: 8.7,
+    tmdbRating: 8.7,
+    tmdbVoteCount: 28674,
     imdbTop250Rank: 19,
     isImdbTop250: true,
     rtCriticsScore: 88,
@@ -963,6 +971,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     title: 'Breaking Bad',
     year: 2008,
     imdbRating: 9.5,
+    tmdbRating: 8.9,
+    tmdbVoteCount: 16842,
     imdbTop250Rank: 2,
     isImdbTop250: true,
     rtCriticsScore: 96,

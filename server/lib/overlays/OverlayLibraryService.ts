@@ -75,6 +75,13 @@ import {
 } from './seasonCleanupPolicy';
 import { restoreSeasonBasePoster } from './seasonPosterRestore';
 import { calculateSeasonImdbRatings } from './seasonRatingPolicy';
+import {
+  extractTmdbId,
+  getTmdbEpisodeRatingContext,
+  getTmdbSeasonRatingContext,
+  toTmdbRatingContext,
+  usesTmdbRatingFields,
+} from './tmdbRatingPolicy';
 
 /**
  * Resolve the base poster source for an item.
@@ -907,6 +914,163 @@ class OverlayLibraryService {
   }
 
   /**
+   * Resolve exact TMDB ratings for season and episode artwork. TMDB's season
+   * details response includes every episode, so requests are deduplicated by
+   * show/season and never fan out into one API call per episode.
+   */
+  public async fetchTmdbChildRatingContexts(
+    plexApi: PlexAPI,
+    items: readonly OverlayItemInput[],
+    knownMetadata: ReadonlyMap<string, PlexMetadata> = new Map()
+  ): Promise<{
+    contexts: Map<string, Partial<OverlayRenderContext>>;
+    failedRatingKeys: Set<string>;
+  }> {
+    const childItems = items.filter(
+      (item) => item.target === 'season' || item.target === 'episode'
+    );
+    const contexts = new Map<string, Partial<OverlayRenderContext>>();
+    const failedRatingKeys = new Set<string>();
+
+    // Every child receives an explicit empty rating first. This prevents a
+    // parent show's TMDB score from leaking into unrated/mismatched artwork.
+    for (const item of childItems) {
+      contexts.set(item.ratingKey, toTmdbRatingContext());
+    }
+    if (childItems.length === 0) return { contexts, failedRatingKeys };
+
+    const metadata = new Map(knownMetadata);
+    const requiredMetadataKeys = [
+      ...new Set(
+        childItems.flatMap((item) => [
+          item.ratingKey,
+          ...(item.contextFallbackRatingKey
+            ? [item.contextFallbackRatingKey]
+            : []),
+        ])
+      ),
+    ];
+    const missingMetadataKeys = requiredMetadataKeys.filter(
+      (ratingKey) => !metadata.has(ratingKey)
+    );
+    if (missingMetadataKeys.length > 0) {
+      const fetched = await plexApi.getMetadataBatch(missingMetadataKeys);
+      for (const [ratingKey, value] of fetched) {
+        metadata.set(ratingKey, value);
+      }
+    }
+
+    type SeasonRequest = {
+      tvId: number;
+      seasonNumber: number;
+      items: {
+        item: OverlayItemInput;
+        episodeNumber?: number;
+      }[];
+    };
+    const requests = new Map<string, SeasonRequest>();
+
+    for (const item of childItems) {
+      const childMetadata = metadata.get(item.ratingKey);
+      const parentMetadata = item.contextFallbackRatingKey
+        ? metadata.get(item.contextFallbackRatingKey)
+        : undefined;
+      const tvId = extractTmdbId(parentMetadata?.Guid);
+      const configuredSeasonNumber = item.contextOverrides?.seasonNumber;
+      const seasonNumber =
+        typeof configuredSeasonNumber === 'number'
+          ? configuredSeasonNumber
+          : item.target === 'season'
+          ? childMetadata?.index
+          : childMetadata?.parentIndex;
+      const configuredEpisodeNumber = item.contextOverrides?.episodeNumber;
+      const episodeNumber =
+        item.target === 'episode'
+          ? typeof configuredEpisodeNumber === 'number'
+            ? configuredEpisodeNumber
+            : childMetadata?.index
+          : undefined;
+
+      if (
+        tvId === undefined ||
+        seasonNumber === undefined ||
+        !Number.isInteger(seasonNumber) ||
+        seasonNumber < 0 ||
+        (item.target === 'episode' &&
+          (episodeNumber === undefined ||
+            !Number.isInteger(episodeNumber) ||
+            episodeNumber < 0))
+      ) {
+        logger.debug('TMDB child rating identity is incomplete', {
+          label: 'OverlayLibrary',
+          ratingKey: item.ratingKey,
+          target: item.target,
+          tvId,
+          seasonNumber,
+          episodeNumber,
+        });
+        continue;
+      }
+
+      const requestKey = `${tvId}:${seasonNumber}`;
+      const request = requests.get(requestKey) ?? {
+        tvId,
+        seasonNumber,
+        items: [],
+      };
+      request.items.push({ item, episodeNumber });
+      requests.set(requestKey, request);
+    }
+
+    const tmdbClient = new TheMovieDb();
+    await Promise.all(
+      [...requests.values()].map(async (request) => {
+        try {
+          const season = await tmdbClient.getTvSeason({
+            tvId: request.tvId,
+            seasonNumber: request.seasonNumber,
+          });
+
+          for (const member of request.items) {
+            contexts.set(
+              member.item.ratingKey,
+              member.item.target === 'season'
+                ? getTmdbSeasonRatingContext(season)
+                : getTmdbEpisodeRatingContext(
+                    season,
+                    member.episodeNumber as number
+                  )
+            );
+          }
+        } catch (error) {
+          for (const member of request.items) {
+            failedRatingKeys.add(member.item.ratingKey);
+          }
+          logger.warn('Failed to fetch TMDB child ratings', {
+            label: 'OverlayLibrary',
+            tvId: request.tvId,
+            seasonNumber: request.seasonNumber,
+            affectedItems: request.items.length,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })
+    );
+
+    logger.info('Resolved TMDB child ratings', {
+      label: 'OverlayLibrary',
+      requestedItems: childItems.length,
+      seasonRequests: requests.size,
+      ratedItems: [...contexts.values()].filter(
+        (context) => context.tmdbRating !== undefined
+      ).length,
+      failedItems: failedRatingKeys.size,
+    });
+
+    return { contexts, failedRatingKeys };
+  }
+
+  /**
    * Pre-fetch TMDB release date info for all items in the library.
    * Uses concurrency-limited parallel fetching since TMDB has no batch API.
    * Results are cached with adaptive TTL based on content age.
@@ -1686,6 +1850,10 @@ class OverlayLibraryService {
         templateDataArray,
         applicationConditions
       );
+      const mainRequiredContextFields = extractUsedContextFields(
+        mainTemplates.map((template) => template.getTemplateData()),
+        mainTemplates.map((template) => template.getApplicationCondition())
+      );
       const seasonTemplates = sortedTemplates.filter((template) =>
         targetsArtwork(template.getTags(), 'season')
       );
@@ -1695,6 +1863,19 @@ class OverlayLibraryService {
       );
       const needsSeasonImdbRatings =
         syncSeasons && seasonRequiredContextFields.has('imdbRating');
+      const episodeTemplates = sortedTemplates.filter((template) =>
+        targetsArtwork(template.getTags(), 'episode')
+      );
+      const episodeRequiredContextFields = extractUsedContextFields(
+        episodeTemplates.map((template) => template.getTemplateData()),
+        episodeTemplates.map((template) => template.getApplicationCondition())
+      );
+      const needsEpisodeImdbRatings =
+        syncEpisodes && episodeRequiredContextFields.has('imdbRating');
+      const needsMainImdbRatings =
+        mainRequiredContextFields.has('imdbRating') ||
+        mainRequiredContextFields.has('isImdbTop250') ||
+        mainRequiredContextFields.has('imdbTop250Rank');
       // Store per-library to avoid concurrent library processing overwriting each other's fields
       this.requiredContextFieldsByLibrary.set(libraryId, requiredContextFields);
 
@@ -1832,10 +2013,16 @@ class OverlayLibraryService {
       // PHASE 1: Batch pre-fetch data for performance optimization
       // Only prefetch if templates actually use these fields
       // ========================================================================
-      if (needsImdbRatings || needsSeasonImdbRatings || syncEpisodes) {
+      if (
+        needsMainImdbRatings ||
+        needsSeasonImdbRatings ||
+        needsEpisodeImdbRatings
+      ) {
         await this.prefetchImdbRatings([
-          ...(needsImdbRatings ? mainItems : []),
-          ...(needsSeasonImdbRatings || syncEpisodes ? episodes : []),
+          ...(needsMainImdbRatings ? mainItems : []),
+          ...(needsSeasonImdbRatings || needsEpisodeImdbRatings
+            ? episodes
+            : []),
         ]);
 
         if (needsSeasonImdbRatings) {
@@ -2514,11 +2701,56 @@ class OverlayLibraryService {
         templateDataArray,
         applicationConditions
       );
+      const childTemplates = batchTemplates.filter((template) =>
+        normalizedItems.some(
+          (item) =>
+            (item.target === 'season' || item.target === 'episode') &&
+            targetsArtwork(template.getTags(), item.target)
+        )
+      );
+      const childRequiredContextFields = extractUsedContextFields(
+        childTemplates.map((template) => template.getTemplateData()),
+        childTemplates.map((template) => template.getApplicationCondition())
+      );
+      const episodeImdbTemplateIds = new Set(
+        batchTemplates
+          .filter(
+            (template) =>
+              targetsArtwork(template.getTags(), 'episode') &&
+              extractUsedContextFields(
+                [template.getTemplateData()],
+                [template.getApplicationCondition()]
+              ).has('imdbRating')
+          )
+          .map((template) => template.id)
+      );
       const previousRequiredContextFields =
         this.requiredContextFieldsByLibrary.get(libraryId);
       this.requiredContextFieldsByLibrary.set(libraryId, requiredContextFields);
 
       try {
+        let tmdbChildRatingFailures = new Set<string>();
+        if (usesTmdbRatingFields(childRequiredContextFields)) {
+          const tmdbRatings = await this.fetchTmdbChildRatingContexts(
+            plexApi,
+            normalizedItems,
+            batchMeta
+          );
+          tmdbChildRatingFailures = tmdbRatings.failedRatingKeys;
+          normalizedItems = normalizedItems.map((item) => {
+            const tmdbContext = tmdbRatings.contexts.get(item.ratingKey);
+            return tmdbContext
+              ? {
+                  ...item,
+                  contextOverrides: {
+                    ...item.contextOverrides,
+                    ...tmdbContext,
+                  },
+                }
+              : item;
+          });
+        }
+
         const unresolvedSeasonRatingKeys = normalizedItems
           .filter(
             (item) =>
@@ -2553,7 +2785,6 @@ class OverlayLibraryService {
         }
 
         const needsImdbRatings =
-          batchTargets.has('episode') ||
           requiredContextFields.has('imdbRating') ||
           requiredContextFields.has('isImdbTop250') ||
           requiredContextFields.has('imdbTop250Rank');
@@ -2634,6 +2865,16 @@ class OverlayLibraryService {
             contextOverrides,
           } = overlayItem;
           try {
+            if (tmdbChildRatingFailures.has(ratingKey)) {
+              errorCount++;
+              reportOutcome(
+                'error',
+                outcomeItem,
+                'TMDB season rating lookup failed; artwork was left unchanged'
+              );
+              continue;
+            }
+
             // Use batch-prefetched metadata, falling back to individual fetch on miss
             const itemMetadata =
               batchMeta.get(ratingKey) ??
@@ -2706,18 +2947,23 @@ class OverlayLibraryService {
                 ? fallbackContexts.get(contextFallbackRatingKey)
                 : undefined;
               const episodeRating =
-                target === 'episode'
+                target === 'episode' && episodeImdbTemplateIds.size > 0
                   ? getEpisodeRatingEligibility(
                       item.Guid,
                       this.preloadedImdbRatings
                     )
                   : undefined;
-              const templatesToApply =
-                target === 'episode' && !episodeRating?.eligible
-                  ? []
-                  : itemTemplates;
+              const missingEpisodeImdbRating =
+                target === 'episode' &&
+                episodeImdbTemplateIds.size > 0 &&
+                !episodeRating?.eligible;
+              const templatesToApply = missingEpisodeImdbRating
+                ? itemTemplates.filter(
+                    (template) => !episodeImdbTemplateIds.has(template.id)
+                  )
+                : itemTemplates;
               const restoreMissingEpisodeRating =
-                target === 'episode' && !episodeRating?.eligible;
+                missingEpisodeImdbRating && templatesToApply.length === 0;
               const contextFallbacks =
                 target === 'episode'
                   ? {
@@ -2728,14 +2974,14 @@ class OverlayLibraryService {
                     }
                   : inheritedContext;
 
-              if (target === 'episode' && !episodeRating?.eligible) {
+              if (missingEpisodeImdbRating) {
                 // Prevent buildRenderContext from attempting an individual
                 // lookup and tripping its critical-failure guard. Batch miss,
-                // null, and missing GUID all intentionally restore the clean
-                // card according to the episode eligibility policy.
+                // null, and missing GUID remove only IMDb-dependent templates;
+                // TMDB and technical episode overlays remain eligible.
                 item.Guid = undefined;
                 logger.debug(
-                  'Episode has no usable IMDb rating; applying clean base card',
+                  'Episode has no usable IMDb rating; skipping IMDb templates',
                   {
                     label: 'OverlayLibrary',
                     ratingKey,
@@ -3679,6 +3925,16 @@ class OverlayLibraryService {
           activeSeasons.map((season) => season.ratingKey)
         ))
       : undefined;
+    const seasonTmdbRatings = usesTmdbRatingFields(seasonRequiredContextFields)
+      ? await this.fetchTmdbChildRatingContexts(
+          plexApi,
+          buildOverlaySyncItems(
+            activeSeasons as unknown as PlexLibraryItem[],
+            'season'
+          ),
+          batchMetadata
+        )
+      : undefined;
 
     this.updateProgress(libraryId, (p) => {
       p.totalItems += activeSeasons.length;
@@ -3719,6 +3975,22 @@ class OverlayLibraryService {
       });
 
       try {
+        if (seasonTmdbRatings?.failedRatingKeys.has(meta.ratingKey)) {
+          this.updateProgress(libraryId, (p) => {
+            this.recordProgressOutcome(
+              p,
+              {
+                ratingKey: meta.ratingKey,
+                title: displayTitle,
+                target: 'season',
+              },
+              'error',
+              'TMDB season rating lookup failed; artwork was left unchanged'
+            );
+          });
+          continue;
+        }
+
         // Guid is deliberately absent. A season's Plex Guid holds a TMDB id from
         // TMDB's season namespace, which resolves to an unrelated show on the
         // endpoints this code calls. Every TMDB and Sonarr branch downstream is
@@ -3764,6 +4036,9 @@ class OverlayLibraryService {
             episodeNumber: undefined,
             ...(seasonImdbRatings
               ? { imdbRating: seasonImdbRatings.get(meta.ratingKey) }
+              : {}),
+            ...(seasonTmdbRatings
+              ? seasonTmdbRatings.contexts.get(meta.ratingKey)
               : {}),
           },
           // Seasons carry no Media, so there is no episode aggregation to apply.

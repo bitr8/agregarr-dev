@@ -345,8 +345,10 @@ function evaluateRule(
  * Metadata context for dynamic field replacement
  */
 export interface OverlayRenderContext {
-  // Ratings (from IMDb API / RT API / Plex)
+  // Ratings (from IMDb API / TMDB / RT API / Plex)
   imdbRating?: number;
+  tmdbRating?: number;
+  tmdbVoteCount?: number;
   imdbTop250Rank?: number; // IMDb Top 250 ranking (1-250 for movies, 1-250 for TV)
   isImdbTop250?: boolean; // True if item is in IMDb Top 250 list
   rtCriticsScore?: number;
@@ -1141,8 +1143,11 @@ class OverlayTemplateRendererService {
           );
         } else if (typeof variableValue === 'number') {
           // Format ratings/scores appropriately
-          if (segment.field === 'imdbRating') {
-            // IMDb ratings should show decimal (e.g., 8.7)
+          if (
+            segment.field === 'imdbRating' ||
+            segment.field === 'tmdbRating'
+          ) {
+            // IMDb/TMDB ratings use a 0-10 decimal scale (e.g., 8.7)
             formattedValue = variableValue.toFixed(1);
           } else if (
             segment.field.includes('Score') ||

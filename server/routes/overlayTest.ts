@@ -22,6 +22,7 @@ import {
   overlayTemplateRenderer,
 } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { deriveReleaseDateContext } from '@server/lib/overlays/releaseDateContext';
+import { usesTmdbRatingFields } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { extractUsedContextFields } from '@server/utils/metadataHashing';
@@ -269,6 +270,25 @@ overlayTestRouter.post('/', async (req, res) => {
     }
 
     let contextOverrides = specificItem.contextOverrides ?? {};
+    if (
+      (target === 'season' || target === 'episode') &&
+      usesTmdbRatingFields(requiredContextFields)
+    ) {
+      const tmdbRatings =
+        await overlayLibraryService.fetchTmdbChildRatingContexts(plexApi, [
+          specificItem,
+        ]);
+      if (tmdbRatings.failedRatingKeys.has(ratingKey)) {
+        throw new Error(
+          'TMDB season rating lookup failed; test artwork was left unchanged'
+        );
+      }
+      contextOverrides = {
+        ...contextOverrides,
+        ...tmdbRatings.contexts.get(ratingKey),
+      };
+    }
+
     if (target === 'season' && requiredContextFields.has('imdbRating')) {
       const seasonRatings = await overlayLibraryService.fetchSeasonImdbRatings(
         plexApi,
@@ -306,6 +326,15 @@ overlayTestRouter.post('/', async (req, res) => {
           ratingKey: item.ratingKey,
         }
       );
+    }
+
+    if (target === 'episode' && requiredContextFields.has('imdbRating')) {
+      contextOverrides = {
+        ...contextOverrides,
+        // A missing episode score must remain missing; never expose the
+        // parent show's IMDb rating in the test-specific-media path.
+        imdbRating: contextResult.context.imdbRating,
+      };
     }
 
     const baseContext: OverlayRenderContext = {

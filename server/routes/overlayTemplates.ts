@@ -18,6 +18,7 @@ import {
 import { overlayTemplateRenderer } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { presetTemplateService } from '@server/lib/overlays/PresetTemplates';
 import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
+import { toTmdbRatingContext } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -53,6 +54,8 @@ async function fetchPreviewPosterMetadata(
   imdbId?: string;
   studio?: string;
   imdbRating?: number;
+  tmdbRating?: number;
+  tmdbVoteCount?: number;
   rtCriticsScore?: number;
   rtAudienceScore?: number;
   streamingProvider?: string;
@@ -65,6 +68,8 @@ async function fetchPreviewPosterMetadata(
   let year: number | undefined;
   let imdbId: string | undefined;
   let studio: string | undefined;
+  let tmdbRating: number | undefined;
+  let tmdbVoteCount: number | undefined;
   let streamingProvider: string | undefined;
   let streamingProviderId: number | undefined;
 
@@ -77,6 +82,10 @@ async function fetchPreviewPosterMetadata(
         : undefined;
       imdbId = movieDetails.imdb_id || undefined;
       studio = movieDetails.production_companies?.[0]?.name;
+      ({ tmdbRating, tmdbVoteCount } = toTmdbRatingContext(
+        movieDetails.vote_average,
+        movieDetails.vote_count
+      ));
 
       const region = getSettings().overlays?.watchProviderRegion || 'US';
       const provider = extractStreamingProvider(
@@ -95,6 +104,10 @@ async function fetchPreviewPosterMetadata(
         : undefined;
       imdbId = showDetails.external_ids?.imdb_id || undefined;
       studio = showDetails.production_companies?.[0]?.name;
+      ({ tmdbRating, tmdbVoteCount } = toTmdbRatingContext(
+        showDetails.vote_average,
+        showDetails.vote_count
+      ));
 
       const region = getSettings().overlays?.watchProviderRegion || 'US';
       const provider = extractStreamingProvider(
@@ -153,6 +166,8 @@ async function fetchPreviewPosterMetadata(
     imdbId,
     studio,
     imdbRating,
+    tmdbRating,
+    tmdbVoteCount,
     rtCriticsScore,
     rtAudienceScore,
     streamingProvider,
@@ -172,6 +187,8 @@ interface PreviewPosterMetadata {
   title: string;
   year: number;
   imdbRating?: number;
+  tmdbRating?: number;
+  tmdbVoteCount?: number;
   rtCriticsScore?: number;
   rtAudienceScore?: number;
   director?: string;
@@ -325,6 +342,10 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
           ? new Date(movieDetails.release_date).getFullYear()
           : 0,
         imdbRating,
+        ...toTmdbRatingContext(
+          movieDetails.vote_average,
+          movieDetails.vote_count
+        ),
         rtCriticsScore,
         rtAudienceScore,
         director,
@@ -386,6 +407,7 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
           ? new Date(tvDetails.first_air_date).getFullYear()
           : 0,
         imdbRating,
+        ...toTmdbRatingContext(tvDetails.vote_average, tvDetails.vote_count),
         rtCriticsScore,
         rtAudienceScore,
         network,
@@ -786,6 +808,8 @@ router.get('/:id/preview', async (req, res, next) => {
         title: tmdbData.title,
         year: tmdbData.year,
         imdbRating: tmdbData.imdbRating,
+        tmdbRating: tmdbData.tmdbRating,
+        tmdbVoteCount: tmdbData.tmdbVoteCount,
         rtCriticsScore: tmdbData.rtCriticsScore,
         rtAudienceScore: tmdbData.rtAudienceScore,
         studio: tmdbData.studio,
@@ -942,6 +966,8 @@ router.post('/combined-preview', async (req, res, next) => {
         title: tmdbData.title,
         year: tmdbData.year,
         imdbRating: tmdbData.imdbRating,
+        tmdbRating: tmdbData.tmdbRating,
+        tmdbVoteCount: tmdbData.tmdbVoteCount,
         rtCriticsScore: tmdbData.rtCriticsScore,
         rtAudienceScore: tmdbData.rtAudienceScore,
         studio: tmdbData.studio,
