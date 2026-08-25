@@ -154,13 +154,43 @@ export class AutoRequestService {
       const previouslyDeclinedItems: string[] = [];
       const tooManySeasons: string[] = [];
 
+      // Fetch Seerr server lists once to determine is4k for each request
+      const seerrClient = this.getOverseerrAPI();
+      let seerrRadarr: { id: number; is4k: boolean; isDefault: boolean }[] = [];
+      let seerrSonarr: { id: number; is4k: boolean; isDefault: boolean }[] = [];
+      try {
+        [seerrRadarr, seerrSonarr] = await Promise.all([
+          seerrClient.getRadarrServers(),
+          seerrClient.getSonarrServers(),
+        ]);
+      } catch {
+        logger.warn(
+          'Could not fetch Seerr server lists — is4k will default to false',
+          { label: 'Auto Request Service' }
+        );
+      }
+
       for (const item of filterResult.filteredItems) {
         try {
+          // Determine arr server and whether this is a 4K request
+          const arrServerId =
+            item.mediaType === 'movie'
+              ? config.overseerrRadarrServerId
+              : config.overseerrSonarrServerId;
+          const seerrServers =
+            item.mediaType === 'movie' ? seerrRadarr : seerrSonarr;
+          const is4k =
+            (arrServerId != null
+              ? seerrServers.find((s) => s.id === arrServerId)
+              : seerrServers.find((s) => s.isDefault)
+            )?.is4k ?? false;
+
           // Check if request already exists using cached requests
           const existingRequest = this.checkExistingRequestFromCache(
             item.tmdbId,
             item.mediaType,
-            allRequestsResults
+            allRequestsResults,
+            is4k
           );
           if (existingRequest) {
             alreadyRequestedCount++;
@@ -209,7 +239,8 @@ export class AutoRequestService {
                 item.tmdbId,
                 item.mediaType,
                 agregarrUserIds,
-                allRequestsResults
+                allRequestsResults,
+                is4k
               )
             ) {
               previouslyDeclinedItems.push(item.title);
@@ -269,19 +300,16 @@ export class AutoRequestService {
           }
           const userIdToUse = serviceUserToUse.externalOverseerrId;
 
-          // Determine server/profile/root folder/tags based on media type and config overrides
-          let serverId: number | undefined;
+          // Determine profile/root folder/tags based on media type and config overrides
           let profileId: number | undefined;
           let rootFolder: string | undefined;
           let tags: string[] | undefined;
 
           if (item.mediaType === 'movie') {
-            serverId = config.overseerrRadarrServerId;
             profileId = config.overseerrRadarrProfileId;
             rootFolder = config.overseerrRadarrRootFolder;
             tags = config.overseerrRadarrTags?.map((id) => String(id));
           } else if (item.mediaType === 'tv') {
-            serverId = config.overseerrSonarrServerId;
             profileId = config.overseerrSonarrProfileId;
             rootFolder = config.overseerrSonarrRootFolder;
             tags = config.overseerrSonarrTags?.map((id) => String(id));
@@ -291,9 +319,9 @@ export class AutoRequestService {
             mediaId: item.tmdbId,
             mediaType: item.mediaType,
             seasons,
-            is4k: false,
+            is4k,
             userId: userIdToUse,
-            serverId,
+            serverId: arrServerId,
             profileId,
             rootFolder,
             tags,
@@ -464,61 +492,22 @@ export class AutoRequestService {
   }
 
   /**
-   * Check if a request already exists for the given media (DEPRECATED - use cached version)
-   */
-  private async checkExistingRequest(
-    tmdbId: number,
-    mediaType: 'movie' | 'tv'
-  ): Promise<boolean> {
-    try {
-      // OPTIMIZATION: Use cached requests if available
-      if (syncCacheService.getIsInitialized()) {
-        const cachedRequests = syncCacheService.getOverseerrRequests();
-        return this.checkExistingRequestFromCache(
-          tmdbId,
-          mediaType,
-          cachedRequests
-        );
-      }
-
-      // Fallback to fresh API call
-      const overseerrAPI = this.getOverseerrAPI();
-      const requests = await overseerrAPI.getRequests({ take: 1000 });
-
-      const existingRequest = requests.results.find(
-        (request) =>
-          request.media.tmdbId === tmdbId &&
-          request.type === mediaType &&
-          request.status !== 3 // 3 = DECLINED status in Overseerr
-      );
-
-      return !!existingRequest;
-    } catch (error) {
-      logger.warn(`Failed to check existing request for TMDB ID ${tmdbId}`, {
-        label: 'Auto Request Service',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return false;
-    }
-  }
-
-  /**
    * Check if a request already exists for the given media using cached requests
    * OPTIMIZED: No API calls, uses pre-fetched data
    */
   private checkExistingRequestFromCache(
     tmdbId: number,
     mediaType: 'movie' | 'tv',
-    cachedRequests: OverseerrMediaRequest[]
+    cachedRequests: OverseerrMediaRequest[],
+    is4k: boolean
   ): boolean {
-    const existingRequest = cachedRequests.find(
+    return cachedRequests.some(
       (request) =>
         request.media.tmdbId === tmdbId &&
         request.type === mediaType &&
-        request.status !== 3 // 3 = DECLINED status in Overseerr
+        !!request.is4k === is4k &&
+        request.status !== 3
     );
-
-    return !!existingRequest;
   }
 
   /**
@@ -530,14 +519,15 @@ export class AutoRequestService {
     tmdbId: number,
     mediaType: 'movie' | 'tv',
     agregarrUserIds: Set<number>,
-    cachedRequests: OverseerrMediaRequest[]
+    cachedRequests: OverseerrMediaRequest[],
+    is4k: boolean
   ): boolean {
     return cachedRequests.some(
       (request) =>
         request.media.tmdbId === tmdbId &&
         request.type === mediaType &&
-        request.status === 3 && // 3 = DECLINED status in Overseerr
-        !request.is4k &&
+        request.status === 3 &&
+        !!request.is4k === is4k &&
         request.requestedBy?.id != null &&
         agregarrUserIds.has(request.requestedBy.id)
     );
