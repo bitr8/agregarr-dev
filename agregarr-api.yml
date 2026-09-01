@@ -84,6 +84,102 @@ servers:
 
 components:
   schemas:
+    OverlayTargetProgress:
+      type: object
+      properties:
+        totalItems:
+          type: integer
+        currentItem:
+          type: integer
+        successCount:
+          type: integer
+        errorCount:
+          type: integer
+        skippedCount:
+          type: integer
+        filteredCount:
+          type: integer
+    OverlayItemOutcome:
+      type: object
+      required: [title, ratingKey, target, outcome, processedAt]
+      properties:
+        title:
+          type: string
+        ratingKey:
+          type: string
+        target:
+          type: string
+          enum: [main, season, episode]
+        outcome:
+          type: string
+          enum: [success, error, skipped, filtered]
+        processedAt:
+          type: number
+          description: Unix timestamp in milliseconds when the item completed.
+        message:
+          type: string
+        filePath:
+          type: string
+    OverlayLibraryOutcomeDetails:
+      type: object
+      required: [libraryId, libraryName, items]
+      properties:
+        libraryId:
+          type: string
+        libraryName:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverlayItemOutcome'
+    OverlayLibraryProgress:
+      type: object
+      properties:
+        libraryId:
+          type: string
+        libraryName:
+          type: string
+        running:
+          type: boolean
+        state:
+          type: string
+          enum: [running, cancelling, completed, cancelled, failed]
+        startTime:
+          type: number
+        runningFor:
+          type: number
+        totalItems:
+          type: integer
+        currentItem:
+          type: integer
+        currentTitle:
+          type: string
+        currentTarget:
+          type: string
+          nullable: true
+          enum: [main, season, episode]
+        targetProgress:
+          type: object
+          properties:
+            main:
+              $ref: '#/components/schemas/OverlayTargetProgress'
+            season:
+              $ref: '#/components/schemas/OverlayTargetProgress'
+            episode:
+              $ref: '#/components/schemas/OverlayTargetProgress'
+        filteredCount:
+          type: integer
+        successCount:
+          type: integer
+        errorCount:
+          type: integer
+        skippedCount:
+          type: integer
+        progressPercent:
+          type: integer
+        estimatedSecondsRemaining:
+          type: number
+          nullable: true
     User:
       type: object
       properties:
@@ -4001,6 +4097,20 @@ components:
                     type: number
                     description: 'For rating badges - minimum rating to display'
                     example: 7.0
+        fullSyncTargets:
+          type: array
+          description: 'Artwork types processed by manual and scheduled full overlay syncs'
+          items:
+            type: string
+            enum: ['main', 'season', 'episode']
+          example: ['main', 'season', 'episode']
+        quickSyncTargets:
+          type: array
+          description: 'Artwork types processed by incremental overlay quick syncs'
+          items:
+            type: string
+            enum: ['main', 'season', 'episode']
+          example: ['main', 'season', 'episode']
         tmdbLanguage:
           type: string
           nullable: true
@@ -7417,6 +7527,87 @@ paths:
                   pending:
                     type: boolean
                     description: True when sync is queued but waiting for another job to complete
+  /collections/sync/outcomes:
+    get:
+      summary: Get collection sync outcomes
+      description: Returns detailed collection results for one category from the current or last completed sync.
+      tags:
+        - collections
+      parameters:
+        - name: outcome
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [success, error, skipped, created]
+      responses:
+        '200':
+          description: Collection outcomes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outcome, total, outcomes]
+                properties:
+                  outcome:
+                    type: string
+                    enum: [success, error, skipped, created]
+                  total:
+                    type: integer
+                  outcomes:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - configId
+                        - name
+                        - sourceType
+                        - outcome
+                        - created
+                        - updated
+                        - durationMs
+                        - processedAt
+                      properties:
+                        configId:
+                          type: string
+                        name:
+                          type: string
+                        sourceType:
+                          type: string
+                        outcome:
+                          type: string
+                          enum: [success, error, skipped]
+                        created:
+                          type: integer
+                        updated:
+                          type: integer
+                        errorMessage:
+                          type: string
+                        durationMs:
+                          type: integer
+                        processedAt:
+                          type: integer
+                          format: int64
+        '400':
+          description: Invalid outcome query
+        '403':
+          description: Authentication required
+  /collections/sync/outcomes/export:
+    get:
+      summary: Download the collection sync log
+      description: Downloads a CSV snapshot of all outcomes from the current or last completed collection sync.
+      tags:
+        - collections
+      responses:
+        '200':
+          description: CSV collection sync log
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Authentication required
   /collections/sync/cancel:
     post:
       summary: Cancel a running collection sync
@@ -15519,6 +15710,18 @@ paths:
                           minimumRating:
                             type: number
                             description: For rating badges - minimum rating to display
+                fullSyncTargets:
+                  type: array
+                  description: Artwork types processed by full overlay syncs
+                  items:
+                    type: string
+                    enum: ['main', 'season', 'episode']
+                quickSyncTargets:
+                  type: array
+                  description: Artwork types processed by overlay quick syncs
+                  items:
+                    type: string
+                    enum: ['main', 'season', 'episode']
                 tmdbLanguage:
                   type: string
                   nullable: true
@@ -15618,10 +15821,63 @@ paths:
         '500':
           description: Failed to start overlay application
 
+  /posterizarr/trigger:
+    post:
+      summary: Queue collection and overlay processing for a Posterizarr item
+      description: Resolves the Plex library from the rating key, incrementally adds the item to known collections, then applies target-scoped overlays. Sonarr callbacks may include season and episode numbers; Agregarr resolves their Plex child keys. Duplicate callbacks for the same root and child coordinates are coalesced.
+      tags:
+        - overlays
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ratingKey:
+                  type: string
+                  example: '12345'
+                title:
+                  type: string
+                  example: 'The Lego Movie'
+                mediaType:
+                  type: string
+                  enum: [movie, show]
+                seasonNumber:
+                  type: integer
+                  minimum: 0
+                  description: Sonarr season number; valid only for show triggers
+                  example: 2
+                episodeNumber:
+                  type: integer
+                  minimum: 1
+                  description: Sonarr episode number; requires seasonNumber
+                  example: 5
+              required:
+                - ratingKey
+      responses:
+        '202':
+          description: Trigger accepted or coalesced with existing work
+        '400':
+          description: Invalid trigger payload
+        '403':
+          description: Authentication required
+
+  /posterizarr/status:
+    get:
+      summary: Get Posterizarr item-trigger queue status
+      tags:
+        - overlays
+      responses:
+        '200':
+          description: Current queue and last completed result
+        '403':
+          description: Authentication required
+
   /overlay-library-configs/{libraryId}/apply-items:
     post:
-      summary: Apply overlays to a specific library item
-      description: Applies configured overlay templates to a single poster item in a library (runs asynchronously).
+      summary: Apply overlays to specific Plex media
+      description: Infers the artwork target from the Plex rating key and applies configured overlays to one movie, show, season, or episode (runs asynchronously).
       tags:
         - overlays
       parameters:
@@ -15772,17 +16028,77 @@ paths:
                   runningLibraries:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        libraryId:
-                          type: string
-                          example: '1'
-                        libraryName:
-                          type: string
-                          example: 'Movies'
-                        startTime:
-                          type: number
-                          example: 1640000000000
+                      $ref: '#/components/schemas/OverlayLibraryProgress'
+                  lastCompleted:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OverlayLibraryProgress'
+
+  /overlay-library-configs/status/outcomes:
+    get:
+      summary: Get per-item overlay sync outcomes
+      description: Returns item details for one outcome category from the current or last completed overlay sync.
+      tags:
+        - overlays
+      parameters:
+        - name: outcome
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [success, error, skipped, filtered]
+        - name: libraryIds
+          in: query
+          required: false
+          description: Optional comma-separated Plex library IDs.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Outcome details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outcome, total, libraries]
+                properties:
+                  outcome:
+                    type: string
+                    enum: [success, error, skipped, filtered]
+                  total:
+                    type: integer
+                  libraries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OverlayLibraryOutcomeDetails'
+        '400':
+          description: Invalid outcome query
+        '403':
+          description: Authentication required
+
+  /overlay-library-configs/status/outcomes/export:
+    get:
+      summary: Download the overlay sync item log
+      description: Downloads a CSV snapshot of all item outcomes from the current or last completed overlay sync.
+      tags:
+        - overlays
+      parameters:
+        - name: libraryIds
+          in: query
+          required: false
+          description: Optional comma-separated Plex library IDs.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV overlay sync log
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Authentication required
 
   /overlay-settings:
     get:
@@ -15807,6 +16123,12 @@ paths:
                     type: boolean
                     description: Whether initial setup wizard has been completed
                     example: false
+                  jpegQuality:
+                    type: integer
+                    minimum: 1
+                    maximum: 100
+                    description: JPEG output quality for all overlaid artwork
+                    example: 95
         '401':
           description: Authentication required
     put:
@@ -15828,6 +16150,12 @@ paths:
                   enum: [tmdb, plex, local]
                   description: Default poster source for overlays
                   example: 'tmdb'
+                jpegQuality:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  description: JPEG output quality for all overlaid artwork
+                  example: 95
       responses:
         '200':
           description: Settings updated successfully
@@ -15841,6 +16169,10 @@ paths:
                     enum: [tmdb, plex, local]
                   initialSetupComplete:
                     type: boolean
+                  jpegQuality:
+                    type: integer
+                    minimum: 1
+                    maximum: 100
         '400':
           description: Invalid poster source
         '401':
@@ -16338,7 +16670,7 @@ paths:
   /plex/search:
     get:
       summary: Search Plex libraries
-      description: Search across all Plex libraries for movies and TV shows.
+      description: Search across all Plex libraries for movies, TV shows, seasons, and episodes.
       tags:
         - overlays
       parameters:
@@ -16382,8 +16714,16 @@ paths:
                           example: 2010
                         type:
                           type: string
-                          enum: [movie, show]
+                          enum: [movie, show, season, episode]
                           example: 'movie'
+                        parentTitle:
+                          type: string
+                        grandparentTitle:
+                          type: string
+                        index:
+                          type: integer
+                        parentIndex:
+                          type: integer
                         thumb:
                           type: string
                           example: '/library/metadata/12345/thumb/1234567890'
@@ -16529,7 +16869,7 @@ paths:
                   poster:
                     type: string
                     format: byte
-                    description: Base64-encoded WebP image of the poster with overlays applied
+                    description: Base64-encoded JPEG image of the artwork with overlays applied
                   item:
                     type: object
                     properties:
@@ -16544,7 +16884,7 @@ paths:
                         example: 2010
                       type:
                         type: string
-                        enum: [movie, show]
+                        enum: [movie, show, season, episode]
                         example: 'movie'
                       libraryId:
                         type: string
@@ -16552,6 +16892,18 @@ paths:
                       libraryName:
                         type: string
                         example: 'Movies'
+                  output:
+                    type: object
+                    required: [width, height, jpegQuality, bytes]
+                    properties:
+                      width:
+                        type: integer
+                      height:
+                        type: integer
+                      jpegQuality:
+                        type: integer
+                      bytes:
+                        type: integer
                   templates:
                     type: array
                     description: All enabled templates for the library with match results
@@ -16608,25 +16960,10 @@ paths:
                                           type: boolean
                   context:
                     type: object
-                    description: Context variables grouped by source
-                    properties:
-                      plex:
-                        type: object
-                        description: Plex metadata
-                      tmdb:
-                        type: object
-                        description: TMDB metadata
-                      ratings:
-                        type: object
-                        description: IMDb and Rotten Tomatoes ratings
-                      monitoring:
-                        type: object
-                        description: Radarr/Sonarr monitoring status
-                      computed:
-                        type: object
-                        description: Computed fields
+                    description: Flat map of the context variables used to evaluate and render overlays
+                    additionalProperties: true
         '400':
-          description: Invalid request (missing ratingKey, no library config, item is episode/season)
+          description: Invalid request, missing library configuration, or no template targeting this artwork type
         '401':
           description: Authentication required
         '404':

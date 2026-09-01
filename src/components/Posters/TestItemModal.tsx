@@ -22,7 +22,7 @@ const messages = defineMessages({
   search: 'Search',
   cancel: 'Cancel',
   testOverlay: 'Test Overlay',
-  renderedPoster: 'Rendered Poster',
+  renderedPoster: 'Rendered Artwork',
   library: 'Library: {name}',
   templateResults: 'Template Results',
   noConditions: 'No conditions (always applies)',
@@ -31,12 +31,34 @@ const messages = defineMessages({
   contextVariables: 'Context Variables ({count})',
   undefined: 'undefined',
   noPoster: 'No Poster',
-  refreshPoster: 'Refresh Poster',
-  refreshPosterSuccess: 'Poster refresh started for {title}',
-  refreshPosterError: 'Failed to start poster refresh',
+  refreshPoster: 'Apply Overlay to Plex',
+  refreshPosterSuccess: 'Overlay application started for {title}',
+  refreshPosterError: 'Failed to start overlay application',
   refreshPosterConflict:
     'A sync is already running. Please wait and try again.',
 });
+
+const getMediaTypeLabel = (item: PlexSearchResult): string => {
+  if (item.type === 'show') return 'TV show';
+  if (item.type === 'season') {
+    return item.index !== undefined ? `Season ${item.index}` : 'Season';
+  }
+  if (item.type === 'episode') {
+    return item.parentIndex !== undefined && item.index !== undefined
+      ? `S${String(item.parentIndex).padStart(2, '0')}E${String(
+          item.index
+        ).padStart(2, '0')}`
+      : 'Episode';
+  }
+  return 'Movie';
+};
+
+const getMediaParentTitle = (item: PlexSearchResult): string | undefined =>
+  item.type === 'episode'
+    ? item.grandparentTitle
+    : item.type === 'season'
+    ? item.parentTitle
+    : undefined;
 
 interface TestItemModalProps {
   isOpen: boolean;
@@ -69,6 +91,7 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
     }
 
     setIsSearching(true);
+    setSelectedItem(null);
     try {
       const { data } = await axios.get<{
         results: PlexSearchResult[];
@@ -223,7 +246,9 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
     >
       <Modal
         title={
-          stage === 'search' ? 'Test Item - Search' : 'Test Item - Results'
+          stage === 'search'
+            ? 'Test Specific Media - Search'
+            : 'Test Specific Media - Results'
         }
         customMaxWidth="sm:max-w-6xl"
         onCancel={stage === 'results' ? handleBack : handleClose}
@@ -238,7 +263,7 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search for a movie or TV show..."
+                placeholder="Search for a movie, show, season, or episode..."
                 className="flex-1 rounded-md border border-stone-600 bg-stone-700 px-4 py-2 text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
               />
               <Button
@@ -271,7 +296,13 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                           : 'hover:bg-stone-700/50'
                       }`}
                     >
-                      <div className="relative mb-2 aspect-[2/3] overflow-hidden rounded-md">
+                      <div
+                        className={`relative mb-2 overflow-hidden rounded-md ${
+                          item.type === 'episode'
+                            ? 'aspect-video'
+                            : 'aspect-[2/3]'
+                        }`}
+                      >
                         {item.thumb ? (
                           <img
                             src={item.thumb}
@@ -302,8 +333,19 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                         <p className="truncate text-sm font-medium text-white">
                           {item.title}
                         </p>
+                        {getMediaParentTitle(item) && (
+                          <p className="truncate text-xs text-stone-300">
+                            {getMediaParentTitle(item)}
+                          </p>
+                        )}
                         <p className="text-xs text-stone-400">
-                          {item.year} • {item.libraryName}
+                          {[
+                            getMediaTypeLabel(item),
+                            item.year,
+                            item.libraryName,
+                          ]
+                            .filter(Boolean)
+                            .join(' / ')}
                         </p>
                       </div>
                     </button>
@@ -343,7 +385,7 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                 <>
                   <div className="flex max-h-[75vh] items-center justify-center overflow-hidden rounded-lg bg-stone-900">
                     <img
-                      src={`data:image/webp;base64,${testResults.poster}`}
+                      src={`data:image/jpeg;base64,${testResults.poster}`}
                       alt={testResults.item.title}
                       className="h-auto max-h-[75vh] w-auto max-w-full object-contain"
                     />
@@ -359,6 +401,19 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                       {intl.formatMessage(messages.library, {
                         name: testResults.item.libraryName,
                       })}
+                    </p>
+                    <p className="capitalize">
+                      {testResults.item.type === 'show'
+                        ? 'TV show poster'
+                        : testResults.item.type === 'episode'
+                        ? 'Episode artwork'
+                        : `${testResults.item.type} poster`}
+                    </p>
+                    <p>
+                      Output: {testResults.output.width} ×{' '}
+                      {testResults.output.height}px / JPEG{' '}
+                      {testResults.output.jpegQuality}% /{' '}
+                      {(testResults.output.bytes / 1024).toFixed(0)} KB
                     </p>
                   </div>
                   <Button

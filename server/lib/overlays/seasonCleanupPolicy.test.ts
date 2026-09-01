@@ -1,7 +1,10 @@
 import type { PlexMetadata } from '@server/api/plexapi';
 import { describe, expect, it } from 'vitest';
 
-import { classifySeasonCleanupAction } from './seasonCleanupPolicy';
+import {
+  classifySeasonCleanupAction,
+  shouldRestoreDepartedSeasonOverlays,
+} from './seasonCleanupPolicy';
 
 /**
  * The real BCS season used throughout the Maintainerr season-overlay work:
@@ -89,5 +92,40 @@ describe('classifySeasonCleanupAction', () => {
         '3'
       ).action
     ).toBe('restore');
+  });
+});
+
+describe('shouldRestoreDepartedSeasonOverlays', () => {
+  it('never restores the clean base over a poster owned by full season sync', () => {
+    expect(
+      shouldRestoreDepartedSeasonOverlays(true, {
+        enabled: true,
+        resolutionComplete: true,
+      })
+    ).toBe(false);
+    expect(shouldRestoreDepartedSeasonOverlays(true, { enabled: false })).toBe(
+      false
+    );
+  });
+
+  it('requires complete Maintainerr resolution when there is no full season sync', () => {
+    expect(
+      shouldRestoreDepartedSeasonOverlays(false, {
+        enabled: true,
+        resolutionComplete: false,
+      })
+    ).toBe(false);
+    expect(
+      shouldRestoreDepartedSeasonOverlays(false, {
+        enabled: true,
+        resolutionComplete: true,
+      })
+    ).toBe(true);
+  });
+
+  it('restores all tracked countdowns when Maintainerr is disabled', () => {
+    expect(shouldRestoreDepartedSeasonOverlays(false, { enabled: false })).toBe(
+      true
+    );
   });
 });

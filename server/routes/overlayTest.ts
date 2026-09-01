@@ -1,5 +1,5 @@
 import type { MaintainerrCollection } from '@server/api/maintainerr';
-import PlexAPI from '@server/api/plexapi';
+import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
@@ -9,14 +9,23 @@ import {
   checkMonitoringStatus,
   fetchReleaseDateInfo,
 } from '@server/lib/overlays/OverlayContextBuilder';
+import { overlayLibraryService } from '@server/lib/overlays/OverlayLibraryService';
+import { normalizeOverlayJpegQuality } from '@server/lib/overlays/overlayOutputQuality';
+import { buildSpecificOverlayItem } from '@server/lib/overlays/overlaySyncItems';
+import {
+  targetsArtwork,
+  type OverlayArtworkTarget,
+} from '@server/lib/overlays/overlayTargets';
 import type { OverlayRenderContext } from '@server/lib/overlays/OverlayTemplateRenderer';
 import {
   evaluateConditionDetailed,
   overlayTemplateRenderer,
 } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { deriveReleaseDateContext } from '@server/lib/overlays/releaseDateContext';
+import { usesTmdbRatingFields } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { extractUsedContextFields } from '@server/utils/metadataHashing';
 import { Router } from 'express';
 import type sharp from 'sharp';
 
@@ -59,13 +68,12 @@ overlayTestRouter.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Item not found in Plex' });
     }
 
-    // Skip episodes and seasons
-    if (item.type === 'episode' || item.type === 'season') {
-      return res.status(400).json({
-        error:
-          'Overlays only apply to movies and shows, not episodes or seasons',
-      });
-    }
+    const target: OverlayArtworkTarget =
+      item.type === 'season'
+        ? 'season'
+        : item.type === 'episode'
+        ? 'episode'
+        : 'main';
 
     // Get library information
     const libraryId = (
@@ -117,11 +125,13 @@ overlayTestRouter.post('/', async (req, res) => {
       .filter((o) => o.enabled)
       .map((o) => o.templateId);
 
-    const templates = await templateRepository.findByIds(enabledTemplateIds);
+    const templates = (
+      await templateRepository.findByIds(enabledTemplateIds)
+    ).filter((template) => targetsArtwork(template.getTags(), target));
 
     if (templates.length === 0) {
       return res.status(400).json({
-        error: `No templates found for library "${libraryName}"`,
+        error: `No enabled templates target ${target} artwork in library "${libraryName}"`,
       });
     }
 
@@ -142,7 +152,7 @@ overlayTestRouter.post('/', async (req, res) => {
 
     // Extract TMDB ID from item GUIDs
     let tmdbId: number | undefined;
-    if (item.Guid && Array.isArray(item.Guid)) {
+    if (target === 'main' && item.Guid && Array.isArray(item.Guid)) {
       const tmdbGuid = item.Guid.find((g) => g.id?.includes('tmdb://'));
       if (tmdbGuid) {
         const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
@@ -152,11 +162,27 @@ overlayTestRouter.post('/', async (req, res) => {
       }
     }
 
-    // Check if this is a placeholder
+    const specificItem = buildSpecificOverlayItem(
+      item as unknown as PlexLibraryItem
+    );
+    const renderItem = {
+      ...item,
+      // Child TMDB GUIDs use season/episode namespaces and must not be sent to
+      // show endpoints. Episode IMDb GUIDs remain valid for its own rating.
+      Guid:
+        target === 'episode'
+          ? item.Guid?.filter((guid) => guid.id?.startsWith('imdb://'))
+          : target === 'season'
+          ? undefined
+          : item.Guid,
+    } as unknown as PlexLibraryItem;
+
+    // Check if this is a placeholder. Child artwork is always real Plex media;
+    // the placeholder heuristic is only meaningful for root movie/show items.
     const { placeholderContextService } = await import(
       '@server/lib/placeholders/services/PlaceholderContextService'
     );
-    const plexMetadata = item as {
+    const plexMetadata = renderItem as {
       type: string;
       guid?: string;
       editionTitle?: string;
@@ -169,14 +195,19 @@ overlayTestRouter.post('/', async (req, res) => {
     };
 
     const isPlaceholder =
-      await placeholderContextService.isPlaceholderItemAsync(
-        plexMetadata,
-        plexApi['plexClient'] as {
-          query: (path: string) => Promise<{
-            MediaContainer?: { Directory?: unknown[]; Metadata?: unknown[] };
-          }>;
-        }
-      );
+      target === 'main'
+        ? await placeholderContextService.isPlaceholderItemAsync(
+            plexMetadata,
+            plexApi['plexClient'] as {
+              query: (path: string) => Promise<{
+                MediaContainer?: {
+                  Directory?: unknown[];
+                  Metadata?: unknown[];
+                };
+              }>;
+            }
+          )
+        : false;
 
     logger.debug('Placeholder detection result', {
       label: 'OverlayTest',
@@ -207,14 +238,79 @@ overlayTestRouter.post('/', async (req, res) => {
       }
     }
 
-    // Build base context
+    const requiredContextFields = extractUsedContextFields(
+      sortedTemplates.map((template) => template.getTemplateData()),
+      sortedTemplates.map((template) => template.getApplicationCondition())
+    );
+
+    let fallbackContext: Partial<OverlayRenderContext> = {};
+    if (specificItem.contextFallbackRatingKey) {
+      try {
+        const fallbackMetadata = await plexApi.getMetadata(
+          specificItem.contextFallbackRatingKey
+        );
+        const fallbackResult = await buildRenderContext(
+          fallbackMetadata as unknown as PlexLibraryItem,
+          'show',
+          false,
+          undefined,
+          undefined,
+          requiredContextFields,
+          seasonFallbackFor(config)
+        );
+        fallbackContext = fallbackResult.context;
+      } catch (error) {
+        logger.warn('Failed to build parent-show context for overlay test', {
+          label: 'OverlayTest',
+          ratingKey,
+          parentRatingKey: specificItem.contextFallbackRatingKey,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    let contextOverrides = specificItem.contextOverrides ?? {};
+    if (
+      (target === 'season' || target === 'episode') &&
+      usesTmdbRatingFields(requiredContextFields)
+    ) {
+      const tmdbRatings =
+        await overlayLibraryService.fetchTmdbChildRatingContexts(plexApi, [
+          specificItem,
+        ]);
+      if (tmdbRatings.failedRatingKeys.has(ratingKey)) {
+        throw new Error(
+          'TMDB season rating lookup failed; test artwork was left unchanged'
+        );
+      }
+      contextOverrides = {
+        ...contextOverrides,
+        ...tmdbRatings.contexts.get(ratingKey),
+      };
+    }
+
+    if (target === 'season' && requiredContextFields.has('imdbRating')) {
+      const seasonRatings = await overlayLibraryService.fetchSeasonImdbRatings(
+        plexApi,
+        [ratingKey]
+      );
+      contextOverrides = {
+        ...contextOverrides,
+        // Explicit undefined prevents the parent show's rating from leaking
+        // into a season that has no IMDb-rated episodes.
+        imdbRating: seasonRatings.get(ratingKey),
+      };
+    }
+
+    // Build the selected item's context using the same target-aware metadata
+    // and parent fallback policy as a real sync.
     const contextResult = await buildRenderContext(
-      item,
+      renderItem,
       actualMediaType,
       isPlaceholder,
       maintainerrCollections,
       undefined,
-      undefined,
+      requiredContextFields,
       // Same derivation as a real library run, so a test never shows a
       // season-derived countdown the library itself would withhold.
       seasonFallbackFor(config)
@@ -232,7 +328,20 @@ overlayTestRouter.post('/', async (req, res) => {
       );
     }
 
-    const baseContext = contextResult.context;
+    if (target === 'episode' && requiredContextFields.has('imdbRating')) {
+      contextOverrides = {
+        ...contextOverrides,
+        // A missing episode score must remain missing; never expose the
+        // parent show's IMDb rating in the test-specific-media path.
+        imdbRating: contextResult.context.imdbRating,
+      };
+    }
+
+    const baseContext: OverlayRenderContext = {
+      ...fallbackContext,
+      ...contextResult.context,
+      ...contextOverrides,
+    };
 
     // Fetch release date information if TMDB ID available
     let releaseDateContext: Partial<OverlayRenderContext> = {};
@@ -346,7 +455,10 @@ overlayTestRouter.post('/', async (req, res) => {
     });
 
     // Get poster source preference (reuse settings from earlier)
-    const posterSource = settings.overlays?.defaultPosterSource || 'tmdb';
+    const posterSource =
+      target === 'main'
+        ? settings.overlays?.defaultPosterSource || 'tmdb'
+        : 'plex';
 
     // Fetch base poster
     const { plexBasePosterManager } = await import(
@@ -364,7 +476,7 @@ overlayTestRouter.post('/', async (req, res) => {
     try {
       basePosterResult = await plexBasePosterManager.getBasePosterForOverlay(
         plexApi,
-        item,
+        renderItem,
         libraryId,
         libraryName,
         config.mediaType,
@@ -411,9 +523,13 @@ overlayTestRouter.post('/', async (req, res) => {
       }
     }
 
+    const jpegQuality = normalizeOverlayJpegQuality(
+      settings.overlays?.jpegQuality
+    );
     posterBuffer = await overlayTemplateRenderer.compositeOverlays(
       posterBuffer,
-      allOverlays
+      allOverlays,
+      jpegQuality
     );
 
     // Return all context variables as a flat list (no grouping)
@@ -442,6 +558,12 @@ overlayTestRouter.post('/', async (req, res) => {
       },
       templates: templateResults,
       context: allContext,
+      output: {
+        width: posterWidth,
+        height: posterHeight,
+        jpegQuality,
+        bytes: posterBuffer.length,
+      },
     });
   } catch (error) {
     logger.error('Failed to test overlay', {

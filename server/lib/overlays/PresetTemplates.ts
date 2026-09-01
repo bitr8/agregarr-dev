@@ -9,7 +9,7 @@ import { getDefaultMappings } from './DefaultMappingsService';
 
 /**
  * Preset overlay templates that ship with Agregarr
- * Canvas size: 1000x1500 pixels (standard poster ratio)
+ * Canvas size: 1000x1500 for posters; 1920x1080 for episode cards.
  * */
 export const PRESET_TEMPLATES: {
   name: string;
@@ -81,6 +81,364 @@ export const PRESET_TEMPLATES: {
             iconPath: '/api/v1/posters/icons/system/plain-imdb.svg',
             opacity: 100,
             grayscale: false,
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'IMDb Rating - Season Poster',
+    description:
+      "Shows the average IMDb rating of each season's rated episodes",
+    type: 'rating',
+    tags: ['Ratings', 'Posterizarr', 'target:season'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [{ field: 'imdbRating', operator: 'gte', value: 0 }],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'season-imdb-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 0,
+          y: 155,
+          width: 162,
+          height: 155,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 50,
+            borderRadiusBottomLeft: 0,
+            borderRadiusBottomRight: 5,
+            borderRadiusTopLeft: 0,
+            borderRadiusTopRight: 5,
+            lockCorners: false,
+          },
+        },
+        {
+          id: 'season-imdb-rating',
+          layerOrder: 1,
+          type: 'variable',
+          x: 16,
+          y: 213,
+          width: 127,
+          height: 108,
+          properties: {
+            segments: [{ type: 'variable', field: 'imdbRating' }],
+            fontSize: 60,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            textAlign: 'center',
+          },
+        },
+        {
+          id: 'season-imdb-logo',
+          layerOrder: 2,
+          type: 'svg',
+          x: 16,
+          y: 136,
+          width: 130,
+          height: 130,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/plain-imdb.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'IMDb Rating - Episode Card',
+    description:
+      'Shows an episode-specific IMDb rating; episodes without one keep a clean title card',
+    type: 'rating',
+    tags: ['Ratings', 'Posterizarr', 'target:episode'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [{ field: 'imdbRating', operator: 'gte', value: 0 }],
+        },
+      ],
+    },
+    templateData: {
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'episode-imdb-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 0,
+          y: 60,
+          width: 330,
+          height: 140,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 55,
+            borderRadiusBottomLeft: 0,
+            borderRadiusBottomRight: 12,
+            borderRadiusTopLeft: 0,
+            borderRadiusTopRight: 12,
+            lockCorners: false,
+          },
+        },
+        {
+          id: 'episode-imdb-logo',
+          layerOrder: 1,
+          type: 'svg',
+          x: 28,
+          y: 72,
+          width: 116,
+          height: 116,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/plain-imdb.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+        {
+          id: 'episode-imdb-rating',
+          layerOrder: 2,
+          type: 'variable',
+          x: 150,
+          y: 78,
+          width: 155,
+          height: 104,
+          properties: {
+            segments: [{ type: 'variable', field: 'imdbRating' }],
+            fontSize: 68,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            textAlign: 'center',
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'TMDB Rating',
+    description: 'Shows the item-specific TMDB rating in the top-left corner',
+    type: 'rating',
+    tags: ['Ratings'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [{ field: 'tmdbRating', operator: 'gte', value: 0 }],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'tmdb-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 0,
+          y: 155,
+          width: 190,
+          height: 155,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 50,
+            borderRadiusBottomLeft: 0,
+            borderRadiusBottomRight: 5,
+            borderRadiusTopLeft: 0,
+            borderRadiusTopRight: 5,
+            lockCorners: false,
+          },
+        },
+        {
+          id: 'tmdb-logo',
+          layerOrder: 1,
+          type: 'svg',
+          x: 16,
+          y: 169,
+          width: 158,
+          height: 55,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/tmdb.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+        {
+          id: 'tmdb-rating',
+          layerOrder: 2,
+          type: 'variable',
+          x: 22,
+          y: 220,
+          width: 146,
+          height: 75,
+          properties: {
+            segments: [{ type: 'variable', field: 'tmdbRating' }],
+            fontSize: 58,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            textAlign: 'center',
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'TMDB Rating - Season Poster',
+    description: "Shows each season's own TMDB rating when available",
+    type: 'rating',
+    tags: ['Ratings', 'Posterizarr', 'target:season'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [{ field: 'tmdbRating', operator: 'gte', value: 0 }],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'season-tmdb-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 0,
+          y: 155,
+          width: 190,
+          height: 155,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 50,
+            borderRadiusBottomLeft: 0,
+            borderRadiusBottomRight: 5,
+            borderRadiusTopLeft: 0,
+            borderRadiusTopRight: 5,
+            lockCorners: false,
+          },
+        },
+        {
+          id: 'season-tmdb-logo',
+          layerOrder: 1,
+          type: 'svg',
+          x: 16,
+          y: 169,
+          width: 158,
+          height: 55,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/tmdb.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+        {
+          id: 'season-tmdb-rating',
+          layerOrder: 2,
+          type: 'variable',
+          x: 22,
+          y: 220,
+          width: 146,
+          height: 75,
+          properties: {
+            segments: [{ type: 'variable', field: 'tmdbRating' }],
+            fontSize: 58,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            textAlign: 'center',
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'TMDB Rating - Episode Card',
+    description:
+      'Shows an episode-specific TMDB rating; unrated episodes keep a clean title card',
+    type: 'rating',
+    tags: ['Ratings', 'Posterizarr', 'target:episode'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [{ field: 'tmdbRating', operator: 'gte', value: 0 }],
+        },
+      ],
+    },
+    templateData: {
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'episode-tmdb-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 0,
+          y: 60,
+          width: 380,
+          height: 140,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 55,
+            borderRadiusBottomLeft: 0,
+            borderRadiusBottomRight: 12,
+            borderRadiusTopLeft: 0,
+            borderRadiusTopRight: 12,
+            lockCorners: false,
+          },
+        },
+        {
+          id: 'episode-tmdb-logo',
+          layerOrder: 1,
+          type: 'svg',
+          x: 26,
+          y: 101,
+          width: 160,
+          height: 58,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/tmdb.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+        {
+          id: 'episode-tmdb-rating',
+          layerOrder: 2,
+          type: 'variable',
+          x: 205,
+          y: 78,
+          width: 150,
+          height: 104,
+          properties: {
+            segments: [{ type: 'variable', field: 'tmdbRating' }],
+            fontSize: 68,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            textAlign: 'center',
           },
         },
       ],

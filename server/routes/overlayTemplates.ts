@@ -9,9 +9,16 @@ import type {
 } from '@server/entity/OverlayTemplate';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import { extractStreamingProvider } from '@server/lib/overlays/OverlayContextBuilder';
+import { createOverlayPreviewArtwork } from '@server/lib/overlays/overlayPreviewArtwork';
+import {
+  getPrimaryOverlayTarget,
+  targetsArtwork,
+  type OverlayArtworkTarget,
+} from '@server/lib/overlays/overlayTargets';
 import { overlayTemplateRenderer } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { presetTemplateService } from '@server/lib/overlays/PresetTemplates';
 import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
+import { toTmdbRatingContext } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -47,6 +54,8 @@ async function fetchPreviewPosterMetadata(
   imdbId?: string;
   studio?: string;
   imdbRating?: number;
+  tmdbRating?: number;
+  tmdbVoteCount?: number;
   rtCriticsScore?: number;
   rtAudienceScore?: number;
   streamingProvider?: string;
@@ -59,6 +68,8 @@ async function fetchPreviewPosterMetadata(
   let year: number | undefined;
   let imdbId: string | undefined;
   let studio: string | undefined;
+  let tmdbRating: number | undefined;
+  let tmdbVoteCount: number | undefined;
   let streamingProvider: string | undefined;
   let streamingProviderId: number | undefined;
 
@@ -71,6 +82,10 @@ async function fetchPreviewPosterMetadata(
         : undefined;
       imdbId = movieDetails.imdb_id || undefined;
       studio = movieDetails.production_companies?.[0]?.name;
+      ({ tmdbRating, tmdbVoteCount } = toTmdbRatingContext(
+        movieDetails.vote_average,
+        movieDetails.vote_count
+      ));
 
       const region = getSettings().overlays?.watchProviderRegion || 'US';
       const provider = extractStreamingProvider(
@@ -89,6 +104,10 @@ async function fetchPreviewPosterMetadata(
         : undefined;
       imdbId = showDetails.external_ids?.imdb_id || undefined;
       studio = showDetails.production_companies?.[0]?.name;
+      ({ tmdbRating, tmdbVoteCount } = toTmdbRatingContext(
+        showDetails.vote_average,
+        showDetails.vote_count
+      ));
 
       const region = getSettings().overlays?.watchProviderRegion || 'US';
       const provider = extractStreamingProvider(
@@ -147,6 +166,8 @@ async function fetchPreviewPosterMetadata(
     imdbId,
     studio,
     imdbRating,
+    tmdbRating,
+    tmdbVoteCount,
     rtCriticsScore,
     rtAudienceScore,
     streamingProvider,
@@ -166,6 +187,8 @@ interface PreviewPosterMetadata {
   title: string;
   year: number;
   imdbRating?: number;
+  tmdbRating?: number;
+  tmdbVoteCount?: number;
   rtCriticsScore?: number;
   rtAudienceScore?: number;
   director?: string;
@@ -320,6 +343,10 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
           ? new Date(movieDetails.release_date).getFullYear()
           : 0,
         imdbRating,
+        ...toTmdbRatingContext(
+          movieDetails.vote_average,
+          movieDetails.vote_count
+        ),
         rtCriticsScore,
         rtAudienceScore,
         director,
@@ -382,6 +409,7 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
           ? new Date(tvDetails.first_air_date).getFullYear()
           : 0,
         imdbRating,
+        ...toTmdbRatingContext(tvDetails.vote_average, tvDetails.vote_count),
         rtCriticsScore,
         rtAudienceScore,
         network,
@@ -738,12 +766,17 @@ router.get('/:id/preview', async (req, res, next) => {
       });
     }
 
+    const previewTarget = getPrimaryOverlayTarget(template.getTags());
+
     // Get list of preview posters
     const postersDir = path.join(process.cwd(), 'public', 'preview-posters');
     const posterFiles = await fsPromises.readdir(postersDir);
     const jpgFiles = posterFiles.filter(
       (f) =>
-        f.endsWith('.jpg') && (f.startsWith('movie_') || f.startsWith('tv_'))
+        f.endsWith('.jpg') &&
+        (previewTarget === 'main'
+          ? f.startsWith('movie_') || f.startsWith('tv_')
+          : f.startsWith('tv_'))
     );
 
     if (jpgFiles.length === 0) {
@@ -757,7 +790,11 @@ router.get('/:id/preview', async (req, res, next) => {
     const posterPath = path.join(postersDir, randomPoster);
 
     // Load the poster image
-    const posterBuffer = await fsPromises.readFile(posterPath);
+    let posterBuffer = await fsPromises.readFile(posterPath);
+    posterBuffer = await createOverlayPreviewArtwork(
+      posterBuffer,
+      previewTarget
+    );
 
     // Extract TMDB ID and media type from filename (e.g., "movie_100402.jpg")
     const match = randomPoster.match(/^(movie|tv)_(\d+)\.jpg$/);
@@ -774,6 +811,8 @@ router.get('/:id/preview', async (req, res, next) => {
         title: tmdbData.title,
         year: tmdbData.year,
         imdbRating: tmdbData.imdbRating,
+        tmdbRating: tmdbData.tmdbRating,
+        tmdbVoteCount: tmdbData.tmdbVoteCount,
         rtCriticsScore: tmdbData.rtCriticsScore,
         rtAudienceScore: tmdbData.rtAudienceScore,
         studio: tmdbData.studio,
@@ -791,7 +830,7 @@ router.get('/:id/preview', async (req, res, next) => {
     );
 
     // Return the rendered image
-    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'no-cache'); // Don't cache so previews update immediately
     return res.send(renderedBuffer);
   } catch (error) {
@@ -806,9 +845,14 @@ router.get('/:id/preview', async (req, res, next) => {
 // POST /api/v1/overlay-templates/combined-preview - Generate preview with multiple overlays
 router.post('/combined-preview', async (req, res, next) => {
   try {
-    const { templateIds, contextId } = req.body as {
+    const {
+      templateIds,
+      contextId,
+      target = 'main',
+    } = req.body as {
       templateIds: number[];
       contextId?: string;
+      target?: OverlayArtworkTarget;
     };
 
     if (
@@ -819,6 +863,9 @@ router.post('/combined-preview', async (req, res, next) => {
       return res.status(400).json({
         error: 'templateIds array is required',
       });
+    }
+    if (!['main', 'season', 'episode'].includes(target)) {
+      return res.status(400).json({ error: 'Invalid artwork target' });
     }
 
     // Use contextId to scope deduplication (default to 'global' for backward compatibility)
@@ -856,14 +903,20 @@ router.post('/combined-preview', async (req, res, next) => {
     // Sort templates by the order they appear in templateIds (preserves layer order)
     const orderedTemplates = templateIds
       .map((id) => templates.find((t) => t.id === id))
-      .filter((t): t is OverlayTemplate => t !== undefined);
+      .filter(
+        (t): t is OverlayTemplate =>
+          t !== undefined && targetsArtwork(t.getTags(), target)
+      );
 
     // Get list of preview posters
     const postersDir = path.join(process.cwd(), 'public', 'preview-posters');
     const posterFiles = await fsPromises.readdir(postersDir);
     const jpgFiles = posterFiles.filter(
       (f) =>
-        f.endsWith('.jpg') && (f.startsWith('movie_') || f.startsWith('tv_'))
+        f.endsWith('.jpg') &&
+        (target === 'main'
+          ? f.startsWith('movie_') || f.startsWith('tv_')
+          : f.startsWith('tv_'))
     );
 
     if (jpgFiles.length === 0) {
@@ -878,6 +931,7 @@ router.post('/combined-preview', async (req, res, next) => {
 
     // Load the poster image
     let posterBuffer = await fsPromises.readFile(posterPath);
+    posterBuffer = await createOverlayPreviewArtwork(posterBuffer, target);
 
     // Check again after I/O operation
     if (!isLatestRequest()) {
@@ -915,6 +969,8 @@ router.post('/combined-preview', async (req, res, next) => {
         title: tmdbData.title,
         year: tmdbData.year,
         imdbRating: tmdbData.imdbRating,
+        tmdbRating: tmdbData.tmdbRating,
+        tmdbVoteCount: tmdbData.tmdbVoteCount,
         rtCriticsScore: tmdbData.rtCriticsScore,
         rtAudienceScore: tmdbData.rtAudienceScore,
         studio: tmdbData.studio,
@@ -967,7 +1023,7 @@ router.post('/combined-preview', async (req, res, next) => {
     }
 
     // Return the combined image
-    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'no-cache'); // Don't cache combined previews
     return res.send(posterBuffer);
   } catch (error) {

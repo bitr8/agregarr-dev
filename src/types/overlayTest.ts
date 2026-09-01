@@ -4,7 +4,11 @@ export interface PlexSearchResult {
   ratingKey: string;
   title: string;
   year?: number;
-  type: 'movie' | 'show';
+  type: 'movie' | 'show' | 'season' | 'episode';
+  parentTitle?: string;
+  grandparentTitle?: string;
+  index?: number;
+  parentIndex?: number;
   thumb?: string;
   libraryId: string;
   libraryName: string;
@@ -38,16 +42,22 @@ export interface TemplateResult {
 }
 
 export interface OverlayTestResult {
-  poster: string; // Base64-encoded WebP image
+  poster: string; // Base64-encoded JPEG image
   item: {
     ratingKey: string;
     title: string;
     year?: number;
-    type: 'movie' | 'show';
+    type: 'movie' | 'show' | 'season' | 'episode';
     libraryId: string;
     libraryName: string;
   };
   templates: TemplateResult[];
   context: Record<string, unknown>; // Flat list of all context variables
+  output: {
+    width: number;
+    height: number;
+    jpegQuality: number;
+    bytes: number;
+  };
   errors?: string[];
 }

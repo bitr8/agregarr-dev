@@ -1,12 +1,8 @@
 import type PlexAPI from '@server/api/plexapi';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-
-interface PlexPosterMetadata {
-  selected?: string | number | boolean;
-  thumb?: string;
-  key?: string;
-}
+import type { PlexPosterMetadata } from './posterSelection';
+import { selectPreferredPosterReference } from './posterSelection';
 
 /**
  * PlexPosterManager - Handles Plex poster management operations
@@ -257,6 +253,32 @@ class PlexPosterManager {
       }
     } catch (error) {
       logger.error(`Error getting current poster for ${ratingKey}`, {
+        label: 'Plex API',
+        error: error instanceof Error ? error.message : String(error),
+        ratingKey,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Resolve the best base-poster reference for overlay downloads. Plex can
+   * return a generic library-item thumb even when an uploaded Posterizarr
+   * poster is selected, so consult the poster list directly.
+   */
+  public async getPreferredBasePosterUrl(
+    ratingKey: string
+  ): Promise<string | null> {
+    try {
+      const response = await this.plexApi['plexClient'].query(
+        `/library/metadata/${ratingKey}/posters`
+      );
+      const posters = (response?.MediaContainer?.Metadata ||
+        []) as PlexPosterMetadata[];
+
+      return selectPreferredPosterReference(posters);
+    } catch (error) {
+      logger.warn(`Error resolving preferred base poster for ${ratingKey}`, {
         label: 'Plex API',
         error: error instanceof Error ? error.message : String(error),
         ratingKey,

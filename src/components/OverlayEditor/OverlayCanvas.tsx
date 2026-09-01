@@ -14,7 +14,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Layer, Rect, Stage, Transformer } from 'react-konva';
+import {
+  Image as KonvaImage,
+  Layer,
+  Rect,
+  Stage,
+  Transformer,
+} from 'react-konva';
 import { MappedIconElement } from './MappedIconElement';
 import { RasterElement } from './RasterElement';
 import { SVGElement } from './SVGElement';
@@ -42,6 +48,34 @@ interface OverlayCanvasProps {
   backgroundImageUrl?: string;
   previewOverlays?: OverlayTemplateData[]; // Other overlays to preview alongside current
 }
+
+const getCoverCrop = (
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number
+) => {
+  const sourceRatio = sourceWidth / sourceHeight;
+  const targetRatio = targetWidth / targetHeight;
+
+  if (sourceRatio > targetRatio) {
+    const width = sourceHeight * targetRatio;
+    return {
+      x: (sourceWidth - width) / 2,
+      y: 0,
+      width,
+      height: sourceHeight,
+    };
+  }
+
+  const height = sourceWidth / targetRatio;
+  return {
+    x: 0,
+    y: (sourceHeight - height) / 2,
+    width: sourceWidth,
+    height,
+  };
+};
 
 export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
   function OverlayCanvas(
@@ -145,6 +179,14 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
 
     const displayWidth = overlayData.width * scale;
     const displayHeight = overlayData.height * scale;
+    const backgroundCrop = backgroundImage
+      ? getCoverCrop(
+          backgroundImage.width,
+          backgroundImage.height,
+          overlayData.width,
+          overlayData.height
+        )
+      : undefined;
 
     // Sort elements by layer order for rendering
     const sortedElements = [...elements].sort(
@@ -305,16 +347,13 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
             <Layer>
               {/* Background - preview poster or checkerboard */}
               {backgroundImage ? (
-                <Rect
+                <KonvaImage
+                  image={backgroundImage}
                   x={0}
                   y={0}
                   width={overlayData.width}
                   height={overlayData.height}
-                  fillPatternImage={backgroundImage}
-                  fillPatternScaleX={overlayData.width / backgroundImage.width}
-                  fillPatternScaleY={
-                    overlayData.height / backgroundImage.height
-                  }
+                  crop={backgroundCrop}
                   listening={false}
                 />
               ) : (

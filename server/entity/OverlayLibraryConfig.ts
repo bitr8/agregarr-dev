@@ -1,3 +1,4 @@
+import type { OverlayArtworkTarget } from '@server/lib/overlays/overlayTargets';
 import {
   Column,
   CreateDateColumn,
@@ -38,6 +39,12 @@ export class OverlayLibraryConfig {
 
   @Column({ type: 'simple-json' })
   public enabledOverlays: EnabledOverlay[];
+
+  @Column({ type: 'simple-json', default: '["main"]' })
+  public fullSyncTargets: OverlayArtworkTarget[];
+
+  @Column({ type: 'simple-json', default: '["main"]' })
+  public quickSyncTargets: OverlayArtworkTarget[];
 
   @Column({ type: 'varchar', nullable: true })
   public tmdbLanguage?: string; // ISO language code for TMDB poster metadata (e.g., 'en', 'fr', 'pt-BR')

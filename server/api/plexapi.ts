@@ -1,3 +1,4 @@
+import { fetchPlexMetadataBatches } from '@server/api/plexMetadataBatch';
 import type { PlexMetadataSafeResult } from '@server/api/plexMetadataClassify';
 import {
   classifyPlexMetadataResponse,
@@ -30,6 +31,8 @@ export interface PlexLibraryItem {
   parentRatingKey?: string;
   grandparentRatingKey?: string;
   title: string;
+  parentTitle?: string;
+  grandparentTitle?: string;
   guid: string;
   parentGuid?: string;
   grandparentGuid?: string;
@@ -75,12 +78,14 @@ interface PlexLibrariesResponse {
 export interface PlexMetadata {
   ratingKey: string;
   parentRatingKey?: string;
+  grandparentRatingKey?: string;
   guid: string;
   type: 'movie' | 'show' | 'season' | 'episode';
   title: string;
   thumb?: string;
   parentThumb?: string;
   parentTitle?: string;
+  grandparentTitle?: string;
   librarySectionID?: number;
   editionTitle?: string;
   Guid: {
@@ -96,6 +101,7 @@ export interface PlexMetadata {
   parentIndex?: number;
   leafCount: number;
   viewedLeafCount: number;
+  userRating?: number;
   addedAt: number;
   updatedAt: number;
   lastViewedAt?: number;
@@ -633,35 +639,35 @@ class PlexAPI {
   public async getMetadataBatch(
     ratingKeys: string[]
   ): Promise<Map<string, PlexMetadata>> {
-    const result = new Map<string, PlexMetadata>();
-    if (ratingKeys.length === 0) return result;
-
-    // Chunk to avoid URL length limits (ratingKeys are ~5 digits + comma each)
-    const CHUNK_SIZE = 200;
-    for (let i = 0; i < ratingKeys.length; i += CHUNK_SIZE) {
-      const chunk = ratingKeys.slice(i, i + CHUNK_SIZE);
-      try {
+    return fetchPlexMetadataBatches(
+      ratingKeys,
+      async (chunk) => {
         const response = await this.plexClient.query<PlexMetadataResponse>(
           `/library/metadata/${chunk.join(',')}`
         );
-
-        for (const item of response.MediaContainer.Metadata) {
-          result.set(item.ratingKey, item);
-        }
-      } catch (error) {
-        logger.error(
-          'Batch metadata fetch failed, items will fall back to individual fetch',
-          {
+        return response.MediaContainer.Metadata ?? [];
+      },
+      {
+        onRetry: (chunk, error, attempt) =>
+          logger.warn('Plex metadata batch failed transiently; retrying', {
             label: 'Plex API',
             chunkSize: chunk.length,
             totalRequested: ratingKeys.length,
+            attempt,
             error,
-          }
-        );
+          }),
+        onFailure: (chunk, error) =>
+          logger.error(
+            'Plex metadata batch failed after retry and split; unresolved items will use individual fetches',
+            {
+              label: 'Plex API',
+              unresolvedItems: chunk.length,
+              totalRequested: ratingKeys.length,
+              error,
+            }
+          ),
       }
-    }
-
-    return result;
+    );
   }
 
   public async getChildrenMetadata(key: string): Promise<PlexMetadata[]> {
@@ -798,17 +804,33 @@ class PlexAPI {
     },
     mediaType: 'movie' | 'show'
   ): Promise<PlexLibraryItem[]> {
+    return this.getRecentlyAddedByType(
+      id,
+      options,
+      mediaType === 'show' ? 2 : 1
+    );
+  }
+
+  /**
+   * Fetch recently added items for an exact Plex metadata type.
+   * 1=movie, 2=show, 3=season, 4=episode.
+   */
+  public async getRecentlyAddedByType(
+    id: string,
+    options: { addedAt: number },
+    type: 1 | 2 | 3 | 4
+  ): Promise<PlexLibraryItem[]> {
     const response = await this.plexClient.query<PlexLibraryResponse>({
-      uri: `/library/sections/${id}/all?type=${
-        mediaType === 'show' ? '2' : '1'
-      }&sort=addedAt%3Adesc&addedAt>>=${Math.floor(options.addedAt / 1000)}`,
+      uri: `/library/sections/${id}/all?type=${type}&includeGuids=1&sort=addedAt%3Adesc&addedAt>>=${Math.floor(
+        options.addedAt / 1000
+      )}`,
       extraHeaders: {
         'X-Plex-Container-Start': `0`,
         'X-Plex-Container-Size': `500`,
       },
     });
 
-    return response.MediaContainer.Metadata;
+    return response.MediaContainer.Metadata ?? [];
   }
 
   public async getAllCollections(): Promise<PlexCollection[]> {
@@ -3216,6 +3238,16 @@ class PlexAPI {
    */
   public async getCurrentPosterUrl(ratingKey: string): Promise<string | null> {
     return this.posterManager.getCurrentPosterUrl(ratingKey);
+  }
+
+  /**
+   * Resolve the preferred Plex base-poster reference, favoring selected
+   * uploaded posters such as those applied by Posterizarr.
+   */
+  public async getPreferredBasePosterUrl(
+    ratingKey: string
+  ): Promise<string | null> {
+    return this.posterManager.getPreferredBasePosterUrl(ratingKey);
   }
 
   /**

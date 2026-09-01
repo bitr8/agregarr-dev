@@ -1,25 +1,11 @@
+import CollectionOutcomeStats from '@app/components/Collections/CollectionOutcomeStats';
 import Button from '@app/components/Common/Button';
-import Tooltip from '@app/components/Common/Tooltip';
 import type {
-  CollectionOutcome,
   SyncPhase,
   SyncProgressResponse,
 } from '@app/utils/collections/syncProgressTypes';
-import {
-  formatDurationMs,
-  formatTime,
-  formatTimeAgo,
-} from '@app/utils/timeFormatters';
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ExclamationTriangleIcon,
-  ForwardIcon,
-  PlayIcon,
-  PlusIcon,
-  StopIcon,
-} from '@heroicons/react/24/outline';
+import { formatTime, formatTimeAgo } from '@app/utils/timeFormatters';
+import { PlayIcon, StopIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import type React from 'react';
 import { useState } from 'react';
@@ -52,17 +38,6 @@ const getProgressBarColor = (phase: SyncPhase): string => {
       return 'bg-red-500';
     default:
       return 'bg-orange-500';
-  }
-};
-
-const getOutcomeIcon = (outcome: 'success' | 'error' | 'skipped') => {
-  switch (outcome) {
-    case 'success':
-      return <CheckIcon className="h-3.5 w-3.5 text-green-400" />;
-    case 'error':
-      return <ExclamationTriangleIcon className="h-3.5 w-3.5 text-red-400" />;
-    case 'skipped':
-      return <ForwardIcon className="h-3.5 w-3.5 text-amber-400" />;
   }
 };
 
@@ -137,59 +112,9 @@ const PhaseStepper: React.FC<{ phase: SyncPhase }> = ({ phase }) => {
   );
 };
 
-const ErrorStatCell: React.FC<{
-  errorCount: number;
-  recentOutcomes: CollectionOutcome[];
-}> = ({ errorCount, recentOutcomes }) => {
-  const errorOutcomes = recentOutcomes.filter((o) => o.outcome === 'error');
-
-  const cell = (
-    <div
-      className={`rounded-md bg-stone-900 p-3 ${
-        errorCount > 0 ? 'cursor-help' : ''
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <ExclamationTriangleIcon className="h-4 w-4 text-red-400" />
-        <span className="text-xs text-gray-400">Errors</span>
-      </div>
-      <p className="mt-1 text-lg font-semibold text-red-400">{errorCount}</p>
-    </div>
-  );
-
-  if (errorCount === 0 || errorOutcomes.length === 0) return cell;
-
-  return (
-    <Tooltip
-      content={
-        <div className="max-w-xs space-y-1.5">
-          {errorOutcomes.map((o) => (
-            <div key={`${o.configId}-${o.durationMs}`}>
-              <span className="font-medium">{o.name}</span>
-              {o.errorMessage && (
-                <span className="block text-xs text-gray-400">
-                  {o.errorMessage}
-                </span>
-              )}
-            </div>
-          ))}
-          {errorCount > errorOutcomes.length && (
-            <span className="block text-xs italic text-gray-500">
-              +{errorCount - errorOutcomes.length} older errors
-            </span>
-          )}
-        </div>
-      }
-    >
-      {cell}
-    </Tooltip>
-  );
-};
-
 const CollectionSyncCard: React.FC = () => {
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
-  const [errorsOpen, setErrorsOpen] = useState(false);
   const { addToast } = useToasts();
 
   const { data, mutate } = useSWR<SyncProgressResponse>(
@@ -258,11 +183,6 @@ const CollectionSyncCard: React.FC = () => {
   };
 
   if (!status) {
-    const last = data?.lastCompleted;
-    const errorOutcomes = last?.recentOutcomes.filter(
-      (o) => o.outcome === 'error'
-    );
-
     return (
       <div
         className={`rounded-lg border-2 ${
@@ -302,63 +222,12 @@ const CollectionSyncCard: React.FC = () => {
             </Button>
           )}
         </div>
-        {last && !pending && (
-          <div className="mt-3 space-y-2">
-            <p className="text-xs text-gray-400">
-              Last: {last.successCount} synced
-              {last.errorCount > 0 && (
-                <span className="text-red-400">
-                  , {last.errorCount} errored
-                </span>
-              )}
-              {last.completedAt && (
-                <span> &mdash; {formatTimeAgo(last.completedAt)}</span>
-              )}
-            </p>
-            {errorOutcomes && errorOutcomes.length > 0 && (
-              <div>
-                <button
-                  onClick={() => setErrorsOpen(!errorsOpen)}
-                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
-                >
-                  {errorsOpen ? (
-                    <ChevronDownIcon className="h-3 w-3" />
-                  ) : (
-                    <ChevronRightIcon className="h-3 w-3" />
-                  )}
-                  {errorOutcomes.length} error
-                  {errorOutcomes.length !== 1 && 's'}
-                </button>
-                {errorsOpen && (
-                  <div className="mt-1 space-y-1 pl-4">
-                    {errorOutcomes.map((o) => (
-                      <div
-                        key={`${o.configId}-err`}
-                        className="text-xs text-gray-400"
-                      >
-                        <span className="font-medium text-gray-300">
-                          {o.name}
-                        </span>
-                        {o.errorMessage && (
-                          <span className="ml-1 text-gray-500">
-                            &mdash; {o.errorMessage}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   }
 
   const active = isActivePhase(status.phase);
   const showDeterminate = status.phase === 'processing';
-  const displayedOutcomes = status.recentOutcomes.slice(0, 5);
 
   return (
     <div
@@ -452,69 +321,15 @@ const CollectionSyncCard: React.FC = () => {
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <CheckIcon className="h-4 w-4 text-green-400" />
-            <span className="text-xs text-gray-400">Synced</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-green-400">
-            {status.successCount}
-          </p>
-        </div>
-
-        <ErrorStatCell
-          errorCount={status.errorCount}
-          recentOutcomes={status.recentOutcomes}
-        />
-
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <ForwardIcon className="h-4 w-4 text-amber-400" />
-            <span className="text-xs text-gray-400">Skipped</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-amber-400">
-            {status.skippedCount}
-          </p>
-        </div>
-
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <PlusIcon className="h-4 w-4 text-blue-400" />
-            <span className="text-xs text-gray-400">Created</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-blue-400">
-            {status.createdCount}
-          </p>
-        </div>
-      </div>
-
-      {/* Recent Outcomes */}
-      {displayedOutcomes.length > 0 && (
-        <div className="mb-4">
-          <p className="mb-2 text-xs font-medium text-gray-300">Recent</p>
-          <div className="space-y-1">
-            {displayedOutcomes.map((outcome) => (
-              <div
-                key={`${outcome.configId}-${outcome.durationMs}`}
-                className="flex items-center gap-2 text-xs"
-              >
-                {getOutcomeIcon(outcome.outcome)}
-                <span className="min-w-0 flex-1 truncate text-gray-300">
-                  {outcome.name}
-                </span>
-                <span className="shrink-0 rounded bg-stone-700 px-1.5 py-0.5 text-[10px] text-gray-400">
-                  {outcome.sourceType}
-                </span>
-                <span className="shrink-0 text-gray-500">
-                  {formatDurationMs(outcome.durationMs)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <CollectionOutcomeStats
+        counts={{
+          success: status.successCount,
+          error: status.errorCount,
+          skipped: status.skippedCount,
+          created: status.createdCount,
+        }}
+        isRunning={active}
+      />
 
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-gray-500">

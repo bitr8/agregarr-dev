@@ -1,12 +1,10 @@
 import Button from '@app/components/Common/Button';
+import OverlayOutcomeStats from '@app/components/Posters/OverlayOutcomeStats';
+import type { OverlayTargetProgressMap } from '@app/components/Posters/OverlayTargetProgress';
+import OverlayTargetProgress from '@app/components/Posters/OverlayTargetProgress';
 import { formatTime } from '@app/utils/timeFormatters';
-import {
-  CheckIcon,
-  ExclamationTriangleIcon,
-  ForwardIcon,
-  FunnelIcon,
-  StopIcon,
-} from '@heroicons/react/24/outline';
+import { StopIcon } from '@heroicons/react/24/outline';
+import type { OverlayArtworkTarget } from '@server/lib/overlays/overlayTargets';
 import type React from 'react';
 import { useMemo } from 'react';
 
@@ -27,6 +25,8 @@ export interface LibraryStatus {
   totalItems: number;
   currentItem: number;
   currentTitle: string;
+  currentTarget?: OverlayArtworkTarget | null;
+  targetProgress?: OverlayTargetProgressMap;
   filteredCount: number;
   successCount: number;
   errorCount: number;
@@ -163,48 +163,21 @@ const LibraryProgressCard: React.FC<LibraryProgressCardProps> = ({
         </div>
       )}
 
-      {/* Stats Row */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <CheckIcon className="h-4 w-4 text-green-400" />
-            <span className="text-xs text-gray-400">Success</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-green-400">
-            {status.successCount}
-          </p>
-        </div>
+      <OverlayTargetProgress
+        progress={status.targetProgress}
+        currentTarget={status.currentTarget}
+      />
 
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <ExclamationTriangleIcon className="h-4 w-4 text-red-400" />
-            <span className="text-xs text-gray-400">Errors</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-red-400">
-            {status.errorCount}
-          </p>
-        </div>
-
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <ForwardIcon className="h-4 w-4 text-amber-400" />
-            <span className="text-xs text-gray-400">Unchanged</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-amber-400">
-            {status.skippedCount}
-          </p>
-        </div>
-
-        <div className="rounded-md bg-stone-900 p-3">
-          <div className="flex items-center gap-2">
-            <FunnelIcon className="h-4 w-4 text-blue-400" />
-            <span className="text-xs text-gray-400">Filtered</span>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-blue-400">
-            {status.filteredCount}
-          </p>
-        </div>
-      </div>
+      <OverlayOutcomeStats
+        counts={{
+          success: status.successCount,
+          error: status.errorCount,
+          skipped: status.skippedCount,
+          filtered: status.filteredCount,
+        }}
+        libraryIds={[status.libraryId]}
+        isRunning={status.running}
+      />
 
       {/* Footer Info */}
       <div className="flex items-center justify-between text-xs text-gray-500">

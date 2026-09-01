@@ -14,6 +14,10 @@ import type {
   OverlayTemplateData,
   OverlayTemplateType,
 } from '@server/entity/OverlayTemplate';
+import {
+  getPrimaryOverlayTarget,
+  OVERLAY_ARTWORK_DIMENSIONS,
+} from '@server/lib/overlays/overlayTargets';
 import { useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
@@ -167,6 +171,12 @@ interface OverlayTemplateGridProps {
   selectedTag?: string | null;
   gridSize?: 'xs' | 'small' | 'medium' | 'large';
 }
+
+const getTemplatePreviewAspectRatio = (template: OverlayTemplate): string => {
+  const target = getPrimaryOverlayTarget(template.tags);
+  const { width, height } = OVERLAY_ARTWORK_DIMENSIONS[target];
+  return `${width} / ${height}`;
+};
 
 const OverlayTemplateGrid: React.FC<OverlayTemplateGridProps> = ({
   templates,
@@ -380,7 +390,10 @@ const OverlayTemplateGrid: React.FC<OverlayTemplateGridProps> = ({
             className="hover:bg-stone-750 group relative overflow-hidden rounded-lg bg-stone-800 transition-colors duration-200"
           >
             {/* Template Preview - Server-rendered */}
-            <div className="relative aspect-[2/3] overflow-hidden bg-stone-900">
+            <div
+              className="relative overflow-hidden bg-stone-900"
+              style={{ aspectRatio: getTemplatePreviewAspectRatio(template) }}
+            >
               <img
                 src={`/api/v1/overlay-templates/${template.id}/preview`}
                 alt={`${template.name} preview`}

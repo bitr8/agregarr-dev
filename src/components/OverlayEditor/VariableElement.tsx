@@ -197,8 +197,11 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
               text += formatDate(value, segment.format || 'MMM DD');
             } else if (typeof value === 'number') {
               // Format numbers appropriately
-              if (segment.field === 'imdbRating') {
-                // IMDb ratings should show decimal (e.g., 8.7)
+              if (
+                segment.field === 'imdbRating' ||
+                segment.field === 'tmdbRating'
+              ) {
+                // IMDb/TMDB ratings use a 0-10 decimal scale (e.g., 8.7)
                 text += value.toFixed(1);
               } else if (
                 segment.field.includes('Score') ||

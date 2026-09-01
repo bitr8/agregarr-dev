@@ -63,7 +63,11 @@ interface PlexSearchResult {
   ratingKey: string;
   title: string;
   year?: number;
-  type: 'movie' | 'show';
+  type: 'movie' | 'show' | 'season' | 'episode';
+  parentTitle?: string;
+  grandparentTitle?: string;
+  index?: number;
+  parentIndex?: number;
   thumb?: string;
   libraryId: string;
   libraryName: string;
@@ -126,12 +130,16 @@ searchRouter.get('/search', async (req, res) => {
       }
     }
 
-    // Filter to only movies and shows, and extract library information
+    // Keep every artwork type supported by the overlay system.
     const filteredResults: PlexSearchResult[] = [];
 
     for (const item of rawResults) {
-      // Only include movies and shows (exclude episodes, seasons, artists, etc.)
-      if (item.type !== 'movie' && item.type !== 'show') {
+      if (
+        item.type !== 'movie' &&
+        item.type !== 'show' &&
+        item.type !== 'season' &&
+        item.type !== 'episode'
+      ) {
         continue;
       }
 
@@ -171,7 +179,11 @@ searchRouter.get('/search', async (req, res) => {
         ratingKey: item.ratingKey,
         title: item.title,
         year: item.year,
-        type: item.type as 'movie' | 'show',
+        type: item.type,
+        parentTitle: item.parentTitle,
+        grandparentTitle: item.grandparentTitle,
+        index: item.index,
+        parentIndex: item.parentIndex,
         thumb: proxyThumbUrl,
         libraryId,
         libraryName,

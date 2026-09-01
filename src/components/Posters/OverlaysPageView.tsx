@@ -40,14 +40,14 @@ const messages = defineMessages({
   overlayTemplatesDescription:
     'Design reusable overlay templates for ratings, metadata, and more',
   librariesDescription: 'Configure which overlays are applied to each library',
-  overlaySettings: 'Posters Source',
+  overlaySettings: 'Overlay Settings',
   fullOverlaysSync: 'Full Overlays Sync',
   fullOverlaysSyncConfirm: 'Confirm Full Sync?',
   fullOverlaySyncStarted: 'Full overlay sync started',
   overlaySyncQueued:
     'Per-library syncs are running. Full sync will start when they complete.',
   overlaySyncError: 'Failed to start overlay sync',
-  testItem: 'Test Item',
+  testItem: 'Test Specific Media',
   allTags: 'All',
   showActiveOnly: 'Show Active only',
   showAll: 'Show All',
@@ -164,8 +164,9 @@ const OverlaysPageView: React.FC = () => {
 
   // Fetch overlay settings
   const { data: overlaySettings, mutate: mutateSettings } = useSWR<{
-    defaultPosterSource: 'tmdb' | 'plex';
+    defaultPosterSource: 'tmdb' | 'plex' | 'local';
     initialSetupComplete: boolean;
+    jpegQuality: number;
   }>('/api/v1/overlay-settings');
 
   // Fetch library configs to determine which templates are active somewhere
@@ -550,6 +551,14 @@ const OverlaysPageView: React.FC = () => {
           <div className="flex items-center space-x-2">
             <Button
               buttonType="ghost"
+              onClick={() => setIsTestModalOpen(true)}
+              className="flex items-center space-x-2"
+            >
+              <BeakerIcon className="h-4 w-4" />
+              <span>{intl.formatMessage(messages.testItem)}</span>
+            </Button>
+            <Button
+              buttonType="ghost"
               onClick={() => setIsSetupModalOpen(true)}
               className="flex items-center space-x-2"
             >
@@ -646,6 +655,7 @@ const OverlaysPageView: React.FC = () => {
         onComplete={handleSetupComplete}
         isInitialSetup={!overlaySettings?.initialSetupComplete}
         currentPosterSource={overlaySettings?.defaultPosterSource}
+        currentJpegQuality={overlaySettings?.jpegQuality}
       />
 
       <TestItemModal

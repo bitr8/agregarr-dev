@@ -712,6 +712,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                       className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
                     >
                       <option value="imdbRating">IMDb Rating</option>
+                      <option value="tmdbRating">TMDB Rating</option>
                       <option value="rtCriticRating">RT Critic Score</option>
                       <option value="rtAudienceRating">
                         RT Audience Score

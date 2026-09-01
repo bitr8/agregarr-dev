@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
+import { getRecognizedPosterOwnershipMarker } from './posterOwnershipMetadata';
 
 /**
  * Restore a season's original (pre-overlay) base poster to Plex, THROWING on
@@ -71,16 +72,29 @@ export async function restoreSeasonBasePoster(
   }
 
   // Normalise to the format/size Plex expects for an uploaded poster.
-  const posterBuffer = await sharp(basePoster)
-    .resize(1000, 1500, { fit: 'cover', position: 'center' })
-    .webp({ quality: 90 })
-    .toBuffer();
+  const sourceOwnershipMarker = getRecognizedPosterOwnershipMarker(basePoster);
+  let posterPipeline = sharp(basePoster).resize(1000, 1500, {
+    fit: 'cover',
+    position: 'center',
+  });
+
+  // Sharp drops Posterizarr's JPEG comment. Translate a recognized source
+  // marker into early JPEG EXIF, but do not mark an unowned base poster.
+  posterPipeline = sourceOwnershipMarker
+    ? posterPipeline.withExifMerge({
+        IFD0: {
+          ImageDescription: `${sourceOwnershipMarker}; preserved by Agregarr`,
+        },
+      })
+    : posterPipeline.keepExif();
+
+  const posterBuffer = await posterPipeline.jpeg({ quality: 90 }).toBuffer();
 
   // randomUUID (not Date.now()) so two restores of the same season can never
   // collide on the temp path and unlink each other's in-flight upload.
   const tempFilePath = path.join(
     os.tmpdir(),
-    `season-restore-${ratingKey}-${randomUUID()}.webp`
+    `season-restore-${ratingKey}-${randomUUID()}.jpg`
   );
 
   await fs.writeFile(tempFilePath, posterBuffer);

@@ -8,6 +8,10 @@ import {
   PlayIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
+import {
+  normalizeOverlaySyncTargets,
+  type OverlayArtworkTarget,
+} from '@server/lib/overlays/overlayTargets';
 import axios from 'axios';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
@@ -50,6 +54,8 @@ interface LibraryConfig {
   libraryName: string;
   mediaType: 'movie' | 'show';
   enabledOverlays: EnabledOverlay[];
+  fullSyncTargets?: OverlayArtworkTarget[];
+  quickSyncTargets?: OverlayArtworkTarget[];
 }
 
 interface EnabledOverlay {
@@ -105,6 +111,7 @@ const LibraryPreviewLarge: React.FC<{
           body: JSON.stringify({
             templateIds: enabledIds,
             contextId: `library-${libraryId}`, // Each library gets its own context
+            target: 'main',
           }),
           signal: abortController.signal,
         }
@@ -541,6 +548,10 @@ const LibraryConfigView: React.FC = () => {
             config?.enabledOverlays.filter((o) => o.enabled).length || 0;
           const hasOverlays =
             config && config.enabledOverlays.some((o) => o.enabled);
+          const canFullSync =
+            hasOverlays &&
+            normalizeOverlaySyncTargets(config?.fullSyncTargets, library.type)
+              .length > 0;
           const isSyncing = syncingLibraries.has(library.key);
           const isConfirmClicked = confirmClickedLibraries.has(
             `sync:${library.key}`
@@ -610,7 +621,7 @@ const LibraryConfigView: React.FC = () => {
                     >
                       {intl.formatMessage(messages.configure)}
                     </Button>
-                    {hasOverlays && (
+                    {canFullSync && (
                       <Button
                         buttonType={isConfirmClicked ? 'warning' : 'ghost'}
                         buttonSize="sm"
