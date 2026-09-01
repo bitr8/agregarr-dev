@@ -15302,6 +15302,9 @@ paths:
                   audioFormat:
                     type: string
                     example: 'Dolby Atmos'
+                  audioProfile:
+                    type: string
+                    example: 'truehd_atmos'
                   videoCodec:
                     type: string
                     example: 'HEVC'

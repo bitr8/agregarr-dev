@@ -357,6 +357,7 @@ export const SINGLE_VALUE_FIELDS = [
   'productionCountry',
   'resolution',
   'audioCodec',
+  'audioProfile',
   'audioLanguageCode',
   'streamingProvider',
   'streamingProviderId',

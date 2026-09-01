@@ -1,3 +1,4 @@
+import { AUDIO_PROFILE_RANK } from '@server/utils/mediaCapabilities';
 import { describe, expect, it } from 'vitest';
 
 import { getDefaultMappings } from './DefaultMappingsService';
@@ -28,5 +29,12 @@ describe('audioCodec default mappings', () => {
   it('has no duplicate values', () => {
     const values = mappings.map((m) => m.value);
     expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+describe('audioProfile default mappings', () => {
+  it('covers every rank token with a shipped icon', () => {
+    const values = getDefaultMappings('audioProfile').map((m) => m.value);
+    expect(values).toEqual([...AUDIO_PROFILE_RANK]);
   });
 });

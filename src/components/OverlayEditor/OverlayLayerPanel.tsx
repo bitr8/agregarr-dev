@@ -1776,6 +1776,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
         label: 'Audio',
         fields: [
           { field: 'audioCodec', label: 'Audio Codec' },
+          { field: 'audioProfile', label: 'Audio Profile' },
           // TODO: Add default icon mappings for channel layout
           // { field: 'audioChannelLayout', label: 'Channel Layout' },
         ],

@@ -196,6 +196,7 @@ describe('detectAudioProfile', () => {
     ['x token in profile', { codec: 'dca', profile: 'ma + x' }, 'dtsx'],
     ['plain dts', { codec: 'dca', profile: 'dts' }, 'dca'],
     ['dca-ma media codec', { codec: 'dca-ma', profile: 'ma' }, 'ma'],
+    ['dca-ma without profile', { codec: 'dca-ma' }, 'ma'],
     ['bare truehd', { codec: 'truehd' }, 'truehd'],
     ['bare eac3', { codec: 'eac3' }, 'plus'],
     ['ac3', { codec: 'ac3' }, 'digital'],

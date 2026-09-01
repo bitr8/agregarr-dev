@@ -168,6 +168,10 @@ export function createSampleOverlayContext(
     // leaves this undefined for shows. Previewing it as false would let a
     // condition match here and never match live.
     context.isEstimatedReleaseDate = undefined;
+    // Stream-derived; the show path never sets it (episode aggregation only
+    // fills audioCodec), so previewing one would promise a badge live shows
+    // never get.
+    context.audioProfile = undefined;
   }
 
   return context;

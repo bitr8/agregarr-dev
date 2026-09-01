@@ -1,4 +1,5 @@
 import type { IconMapping } from '@server/entity/OverlayTemplate';
+import { AUDIO_PROFILE_RANK } from '@server/utils/mediaCapabilities';
 import fs from 'fs';
 import path from 'path';
 
@@ -404,7 +405,8 @@ function buildResolutionMappings(): IconMapping[] {
   }));
 }
 
-// Plex Media-level codec names that differ from the icon filenames
+// audioCodec values that differ from the icon filenames (Plex Media-level
+// names, plus the editor's legacy 'dts' sample value)
 const AUDIO_CODEC_ALIASES: Record<string, string> = {
   ac3: 'digital',
   eac3: 'plus',
@@ -428,6 +430,19 @@ function buildAudioCodecMappings(): IconMapping[] {
       iconPath: `${MAPPED_ICONS_BASE}/audio-codec/${icon}.png`,
     }));
   return [...identity, ...aliases];
+}
+
+/**
+ * Build audio profile mappings — only tokens detectAudioProfile can emit
+ */
+function buildAudioProfileMappings(): IconMapping[] {
+  const icons = getAvailableAudioCodecs();
+  return AUDIO_PROFILE_RANK.filter((token) => icons.includes(token)).map(
+    (token) => ({
+      value: token,
+      iconPath: `${MAPPED_ICONS_BASE}/audio-codec/${token}.png`,
+    })
+  );
 }
 
 /**
@@ -515,7 +530,7 @@ const DEFAULT_MAPPINGS: Record<string, IconMapping[]> = {
   audioCodec: buildAudioCodecMappings(),
 
   // Audio profile tokens (detectAudioProfile) — same icon set
-  audioProfile: buildAudioCodecMappings(),
+  audioProfile: buildAudioProfileMappings(),
 };
 
 /**

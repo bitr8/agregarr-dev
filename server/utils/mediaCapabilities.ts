@@ -97,7 +97,13 @@ function noteUnknownProfile(codec: string, profile: string): void {
   });
 }
 
-function classifyAudioStream(stream: PlexStream): string | undefined {
+type AudioProfileToken = (typeof AUDIO_PROFILE_RANK)[number];
+
+const PASSTHROUGH_CODECS = ['flac', 'pcm', 'aac', 'opus', 'mp3'] as const;
+
+function classifyAudioStream(
+  stream: PlexStream
+): AudioProfileToken | undefined {
   const codec = stream.codec?.toLowerCase() ?? '';
   const profile = stream.profile?.toLowerCase() ?? '';
 
@@ -121,25 +127,26 @@ function classifyAudioStream(stream: PlexStream): string | undefined {
     if (profile === 'es') return 'dtses';
     if (profile === 'hra' || profile === 'hr') return 'hra';
     if (profile && profile !== 'dts') noteUnknownProfile(codec, profile);
-    return 'dca';
+    // The dca-ma media codec identifies DTS-HD MA even without a profile
+    return codec === 'dca-ma' ? 'ma' : 'dca';
   }
-  if (['flac', 'pcm', 'aac', 'opus', 'mp3'].includes(codec)) {
-    return codec;
+  const passthrough = PASSTHROUGH_CODECS.find((c) => c === codec);
+  if (passthrough) {
+    return passthrough;
   }
+  if (codec) noteUnknownProfile(codec, profile);
   return undefined;
 }
 
 export function detectAudioProfile(streams: PlexStream[]): string | undefined {
-  let best: string | undefined;
+  let best: AudioProfileToken | undefined;
   let bestRank: number = AUDIO_PROFILE_RANK.length;
   for (const stream of streams) {
     if (stream.streamType !== 2) continue;
     const token = classifyAudioStream(stream);
     if (!token) continue;
-    const rank = AUDIO_PROFILE_RANK.indexOf(
-      token as (typeof AUDIO_PROFILE_RANK)[number]
-    );
-    if (rank !== -1 && rank < bestRank) {
+    const rank = AUDIO_PROFILE_RANK.indexOf(token);
+    if (rank < bestRank) {
       bestRank = rank;
       best = token;
     }

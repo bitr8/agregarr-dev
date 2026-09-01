@@ -6,7 +6,6 @@ import type {
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import logger from '@server/logger';
 import { getDefaultMappings } from './DefaultMappingsService';
-import { getMergedMappings } from './UserMappingsService';
 
 /**
  * Preset overlay templates that ship with Agregarr
@@ -3205,7 +3204,7 @@ export const PRESET_TEMPLATES: {
   {
     name: 'Audio Codec',
     description:
-      'Shows the best audio format badge (Atmos, DTS-HD MA, DD+, etc.) detected from Plex stream data',
+      'Shows the best audio format badge (Atmos, DTS-HD MA, DD+, etc.) detected from Plex stream data. Movie libraries only.',
     type: 'technical',
     tags: ['Technical'],
     applicationCondition: {
@@ -3229,8 +3228,9 @@ export const PRESET_TEMPLATES: {
           height: 120,
           properties: {
             field: 'audioProfile',
-            // Merged (user-else-default) at seed time so overrides are honoured
-            mappings: getMergedMappings('audioProfile'),
+            // Empty on purpose: the renderer falls back to merged mappings
+            // per value, honouring user edits live and keeping the hash stable
+            mappings: [],
             layout: 'horizontal',
             iconSize: 120,
             spacingX: 0,
