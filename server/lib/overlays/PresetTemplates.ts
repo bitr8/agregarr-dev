@@ -6,6 +6,7 @@ import type {
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import logger from '@server/logger';
 import { getDefaultMappings } from './DefaultMappingsService';
+import { getMergedMappings } from './UserMappingsService';
 
 /**
  * Preset overlay templates that ship with Agregarr
@@ -3187,6 +3188,49 @@ export const PRESET_TEMPLATES: {
           properties: {
             field: 'streamingProviderId',
             mappings: getDefaultMappings('streamingProviderId'),
+            layout: 'horizontal',
+            iconSize: 120,
+            spacingX: 0,
+            spacingY: 0,
+            maxIcons: 1,
+            grayscale: false,
+            opacity: 100,
+          },
+        },
+      ],
+    },
+  },
+
+  // Audio Codec
+  {
+    name: 'Audio Codec',
+    description:
+      'Shows the best audio format badge (Atmos, DTS-HD MA, DD+, etc.) detected from Plex stream data',
+    type: 'technical',
+    tags: ['Technical'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [{ field: 'audioProfile', operator: 'exists', value: true }],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'audio-codec-icon',
+          layerOrder: 0,
+          type: 'mapped-icon',
+          x: 0,
+          y: 650,
+          width: 120,
+          height: 120,
+          properties: {
+            field: 'audioProfile',
+            // Merged (user-else-default) at seed time so overrides are honoured
+            mappings: getMergedMappings('audioProfile'),
             layout: 'horizontal',
             iconSize: 120,
             spacingX: 0,
