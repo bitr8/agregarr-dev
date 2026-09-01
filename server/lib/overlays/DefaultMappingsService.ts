@@ -404,15 +404,30 @@ function buildResolutionMappings(): IconMapping[] {
   }));
 }
 
+// Plex Media-level codec names that differ from the icon filenames
+const AUDIO_CODEC_ALIASES: Record<string, string> = {
+  ac3: 'digital',
+  eac3: 'plus',
+  'dca-ma': 'ma',
+  dts: 'dca',
+};
+
 /**
  * Build audio codec mappings
  */
 function buildAudioCodecMappings(): IconMapping[] {
   const codecs = getAvailableAudioCodecs();
-  return codecs.map((codec) => ({
+  const identity = codecs.map((codec) => ({
     value: codec,
     iconPath: `${MAPPED_ICONS_BASE}/audio-codec/${codec}.png`,
   }));
+  const aliases = Object.entries(AUDIO_CODEC_ALIASES)
+    .filter(([, icon]) => codecs.includes(icon))
+    .map(([value, icon]) => ({
+      value,
+      iconPath: `${MAPPED_ICONS_BASE}/audio-codec/${icon}.png`,
+    }));
+  return [...identity, ...aliases];
 }
 
 /**
