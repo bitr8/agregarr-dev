@@ -513,6 +513,9 @@ const DEFAULT_MAPPINGS: Record<string, IconMapping[]> = {
 
   // Audio codec mappings
   audioCodec: buildAudioCodecMappings(),
+
+  // Audio profile tokens (detectAudioProfile) — same icon set
+  audioProfile: buildAudioCodecMappings(),
 };
 
 /**

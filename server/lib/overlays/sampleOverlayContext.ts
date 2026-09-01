@@ -43,8 +43,9 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
 
   // Audio specs
   audioCodec: 'truehd',
+  audioProfile: 'truehd_atmos',
   audioChannels: 8,
-  audioChannelLayout: 'atmos',
+  audioChannelLayout: '7.1',
   audioFormat: 'English (Dolby TrueHD Atmos 7.1)',
 
   // Audio language

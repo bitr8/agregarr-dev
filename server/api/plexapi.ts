@@ -129,6 +129,8 @@ export interface PlexStream {
   channels?: number;
   audioChannelLayout?: string;
   displayTitle?: string;
+  extendedDisplayTitle?: string;
+  profile?: string;
   language?: string;
   languageCode?: string;
 

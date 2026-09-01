@@ -173,6 +173,7 @@ interface PreviewPosterMetadata {
   network?: string;
   resolution: string;
   audioFormat: string;
+  audioProfile?: string;
   videoCodec: string;
   status: string;
   daysUntilRelease?: number;
@@ -325,6 +326,7 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         studio,
         resolution: '4K', // Simulated technical info
         audioFormat: 'Dolby Atmos',
+        audioProfile: 'truehd_atmos',
         videoCodec: 'HEVC',
         status: 'Available',
         releaseDate: movieDetails.release_date,
@@ -385,6 +387,7 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         network,
         resolution: '1080p', // Simulated technical info
         audioFormat: '5.1',
+        audioProfile: 'plus',
         videoCodec: 'H.264',
         status:
           tvDetails.status === 'Ended' || tvDetails.status === 'Canceled'

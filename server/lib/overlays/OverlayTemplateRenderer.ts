@@ -387,8 +387,9 @@ export interface OverlayRenderContext {
 
   // Audio specs
   audioCodec?: string; // 'truehd', 'dts', 'aac'
+  audioProfile?: string; // Best-track token: 'truehd_atmos', 'plus_atmos', 'dtsx', 'ma', ...
   audioChannels?: number; // 2, 6, 8
-  audioChannelLayout?: string; // '5.1', '7.1', 'atmos'
+  audioChannelLayout?: string; // '5.1', '7.1', 'stereo' (never 'atmos')
   audioFormat?: string; // Full display title (e.g., 'English (Dolby TrueHD Atmos 7.1)')
 
   // Audio language info

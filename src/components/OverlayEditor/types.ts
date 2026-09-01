@@ -236,8 +236,9 @@ export interface OverlayRenderContext {
 
   // Audio specs
   audioCodec?: string; // 'truehd', 'dts', 'aac'
+  audioProfile?: string; // Best-track token: 'truehd_atmos', 'plus_atmos', 'dtsx', 'ma', ...
   audioChannels?: number; // 2, 6, 8
-  audioChannelLayout?: string; // '5.1', '7.1', 'atmos'
+  audioChannelLayout?: string; // '5.1', '7.1', 'stereo' (never 'atmos')
   audioFormat?: string; // Full display title (e.g., 'English (Dolby TrueHD Atmos 7.1)')
 
   // Audio language info
@@ -441,6 +442,11 @@ export const AVAILABLE_VARIABLES = {
       example: 'Dolby TrueHD Atmos 7.1',
     },
     { field: 'audioCodec', label: 'Audio Codec', example: 'truehd' },
+    {
+      field: 'audioProfile',
+      label: 'Audio Profile',
+      example: 'truehd_atmos',
+    },
     { field: 'audioChannels', label: 'Audio Channels', example: '8' },
     { field: 'audioChannelLayout', label: 'Channel Layout', example: '7.1' },
   ],
@@ -668,6 +674,11 @@ export const CONDITION_FIELD_CATEGORIES = {
       example: 'Dolby TrueHD Atmos 7.1',
     },
     { field: 'audioCodec', label: 'Audio Codec', example: 'truehd' },
+    {
+      field: 'audioProfile',
+      label: 'Audio Profile',
+      example: 'truehd_atmos',
+    },
     { field: 'audioChannels', label: 'Audio Channels', example: '8' },
     { field: 'audioChannelLayout', label: 'Channel Layout', example: '7.1' },
     {
@@ -924,6 +935,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     colorTrc: 'smpte2084',
     audioFormat: 'English (Dolby TrueHD Atmos 7.1)',
     audioCodec: 'truehd',
+    audioProfile: 'truehd_atmos',
     audioChannels: 8,
     audioChannelLayout: '7.1',
     audioLanguage: 'English',
@@ -992,6 +1004,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     bitDepth: 8,
     audioFormat: 'English (DTS-HD MA 5.1)',
     audioCodec: 'dts',
+    audioProfile: 'ma',
     audioChannels: 6,
     audioChannelLayout: '5.1',
     audioLanguage: 'English',

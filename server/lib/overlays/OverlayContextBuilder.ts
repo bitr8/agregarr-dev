@@ -18,6 +18,7 @@ import {
   isAirDateUpcoming,
   toServerCalendarDate,
 } from '@server/utils/dateHelpers';
+import { detectAudioProfile } from '@server/utils/mediaCapabilities';
 import { getAdaptiveTtl, getNullRatingTtl } from './adaptiveTtl';
 import { hasStreamingProviderIcon } from './DefaultMappingsService';
 import type { SeasonFallback } from './maintainerrCountdown';
@@ -987,6 +988,12 @@ export async function buildRenderContext(
       if (audioStreams.length > 0) {
         // Primary audio stream (first one)
         const primaryAudio = audioStreams[0];
+
+        // Best audio format across ALL tracks (premium tracks are often not first)
+        const audioProfile = detectAudioProfile(audioStreams);
+        if (audioProfile) {
+          context.audioProfile = audioProfile;
+        }
 
         // Detailed audio format from displayTitle
         if (primaryAudio.displayTitle) {
