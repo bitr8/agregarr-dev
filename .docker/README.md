@@ -66,6 +66,7 @@ Two problem areas drove most of the changes: sync performance at scale (40+ coll
 - **Health checks** — scheduled diagnostics in **Settings > About** covering service connections, Cloudflare solver availability, libraries deleted from Plex, stale collection keys, broken template references, writable appdata, timezone, and job freshness. Transient failures get a grace window; any check can be muted.
 - **Cloudflare solvers** — run more than one (FlareSolverr, Byparr) with priority order and per-domain backoff, so one failing instance doesn't block the rest.
 - **Episode media scanning** — quality badges built from the actual episode files (majority vote), not Plex's show-level guess.
+- **Audio codec badges** — an opt-in overlay preset reads the audio streams Plex scanned and badges movies with the best track (Atmos, DTS-HD MA, DTS:X, DD+). No file naming conventions involved.
 - **Maintainerr deletion countdowns on seasons** — Maintainerr renders its own overlays, but if Agregarr manages yours you keep its rendering off. This draws the countdown with your own templates instead, stashing the original poster first and restoring it when the season leaves the collection.
 - **Season poster grids, Coming Soon date fixes, FlixPatrol Top 10, streaming provider overlays**, and more.
 
