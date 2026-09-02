@@ -22,6 +22,7 @@ import {
   getAdaptiveTtl,
   getNullRatingTtl,
 } from './adaptiveTtl';
+import { shouldSkipEmptyRenderUpload } from './emptyRenderUploadPolicy';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -2397,6 +2398,14 @@ class OverlayLibraryService {
         },
       });
 
+      // Whether the CURRENT Plex poster is the one we last uploaded. Used
+      // after the render loop below to tell "nothing to remove" (skip the
+      // upload) from "overlays need to come off" (fall through to the
+      // existing removal-by-reupload path) when a run renders zero overlay
+      // elements. Defaults to false (favor skipping) if the check below
+      // throws before it runs.
+      let currentPosterIsOurs = false;
+
       // OPTIMIZATION: Check if overlay inputs changed BEFORE downloading poster
       // This prevents expensive poster downloads when nothing has changed
       try {
@@ -2416,6 +2425,7 @@ class OverlayLibraryService {
           metadata?.ourOverlayPosterUrl,
           currentPosterUrl
         );
+        currentPosterIsOurs = !plexPosterMissing;
 
         // Debug logging for poster URL comparison
         logger.debug('Poster URL comparison', {
@@ -2562,10 +2572,34 @@ class OverlayLibraryService {
             context
           );
 
-        if (templateOverlays) {
+        if (templateOverlays?.length) {
           allOverlays.push(...templateOverlays);
           templatesApplied++;
         }
+      }
+
+      if (
+        shouldSkipEmptyRenderUpload(allOverlays.length, currentPosterIsOurs)
+      ) {
+        // No overlay elements rendered, and the current Plex poster isn't one
+        // we uploaded - nothing to draw and nothing of ours to remove.
+        // Compositing now would only produce a lossy re-encode of a poster we
+        // never touched. Record the hash so this render state stops being
+        // flagged as "changed" and stop here.
+        await metadataService.recordOverlayInputHash(
+          item.ratingKey,
+          libraryId,
+          overlayInputHash
+        );
+
+        logger.info('No overlay elements rendered - skipping upload', {
+          label: 'OverlayLibrary',
+          itemTitle: item.title,
+          ratingKey: item.ratingKey,
+          matchingTemplates: matchingTemplates.length,
+        });
+
+        return { skipped: true };
       }
 
       // Single composite + WebP encode for all templates

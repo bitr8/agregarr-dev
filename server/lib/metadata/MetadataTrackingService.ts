@@ -398,6 +398,35 @@ class MetadataTrackingService {
     });
   }
 
+  /**
+   * Update only the overlay input hash. Used when a render produced no
+   * overlay elements and nothing was uploaded, so the item stops being
+   * flagged as changed without claiming a poster upload or timestamp that
+   * never happened.
+   */
+  async recordOverlayInputHash(
+    itemRatingKey: string,
+    libraryKey: string,
+    inputHash: string
+  ): Promise<void> {
+    const repo = getRepository(MediaItemMetadata);
+
+    let metadata = await repo.findOne({
+      where: { plexItemRatingKey: itemRatingKey },
+    });
+
+    if (!metadata) {
+      metadata = new MediaItemMetadata({
+        plexItemRatingKey: itemRatingKey,
+        libraryKey: libraryKey,
+      });
+    }
+
+    metadata.lastOverlayInputHash = inputHash;
+
+    await repo.save(metadata);
+  }
+
   async getItemMetadata(
     itemRatingKey: string
   ): Promise<MediaItemMetadata | null> {
