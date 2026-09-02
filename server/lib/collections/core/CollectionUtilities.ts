@@ -1270,6 +1270,29 @@ export function filterItemsByPosition<T extends { originalPosition: number }>(
 }
 
 /**
+ * Cap matched + missing preview items to a shared maxItems budget.
+ * Matched items are sliced to maxItems; missing items get whatever budget
+ * remains, so the combined preview total never exceeds maxItems.
+ */
+export function capPreviewItemsToMaxItems<TItem, TMissing>(
+  items: TItem[],
+  missingItems: TMissing[],
+  maxItems?: number
+): { items: TItem[]; missingItems: TMissing[] } {
+  if (!maxItems || maxItems <= 0) {
+    return { items, missingItems };
+  }
+
+  const limitedItems = items.slice(0, maxItems);
+  const limitedMissingItems = missingItems.slice(
+    0,
+    Math.max(0, maxItems - limitedItems.length)
+  );
+
+  return { items: limitedItems, missingItems: limitedMissingItems };
+}
+
+/**
  * Apply collection mutual exclusion - remove items that exist in excluded collections
  * This is a utility function used by both BaseCollectionSync and MultiSourceOrchestrator
  */

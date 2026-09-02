@@ -1,7 +1,10 @@
 import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
-import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
+import {
+  capPreviewItemsToMaxItems,
+  type LibraryItemsCache,
+} from '@server/lib/collections/core/CollectionUtilities';
 import type {
   CollectionItem,
   ItemProducingSource,
@@ -1245,6 +1248,15 @@ async function processPreviewAsync(
       previewConfig
     );
 
+    // matched + missing are filtered independently (count vs position) and can
+    // together exceed maxItems - couple them here, same as the multi-source path
+    const { items: cappedItems, missingItems: cappedMissingItems } =
+      capPreviewItemsToMaxItems(
+        filteredResult.items,
+        filteredResult.missingItems || [],
+        previewConfig.maxItems
+      );
+
     // Enrich items with poster URLs and merge in original order
     // Missing items have originalPosition, matched items need position inferred
     const TmdbAPI = (await import('@server/api/themoviedb')).default;
@@ -1252,12 +1264,12 @@ async function processPreviewAsync(
 
     // Build position map from all items (missing items have explicit positions)
     const tmdbToPosition = new Map<number, number>();
-    (filteredResult.missingItems || []).forEach((item) => {
+    cappedMissingItems.forEach((item) => {
       tmdbToPosition.set(item.tmdbId, item.originalPosition);
     });
 
     // Extract tmdbId from metadata if not directly available
-    const itemsWithTmdbId = filteredResult.items.map((item) => {
+    const itemsWithTmdbId = cappedItems.map((item) => {
       const tmdbId = item.tmdbId || (item.metadata?.tmdbId as number) || 0;
       return { ...item, tmdbId };
     });
@@ -1399,8 +1411,7 @@ async function processPreviewAsync(
     };
 
     const totalItemsToProcess =
-      matchedItemsWithPosition.length +
-      (filteredResult.missingItems || []).length;
+      matchedItemsWithPosition.length + cappedMissingItems.length;
 
     updatePreviewStatus(sessionId, {
       currentStage: `Fetching posters (0/${totalItemsToProcess})...`,
@@ -1504,7 +1515,7 @@ async function processPreviewAsync(
     });
 
     // Fetch missing items
-    const missingItems = filteredResult.missingItems || [];
+    const missingItems = cappedMissingItems;
     const missingTmdbDataResults = await Promise.all(
       missingItems.map((item) =>
         // Skip TMDB fetch if tmdbId is 0 or missing (item couldn't be matched)
