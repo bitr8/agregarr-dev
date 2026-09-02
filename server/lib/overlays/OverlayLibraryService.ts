@@ -22,7 +22,6 @@ import {
   getAdaptiveTtl,
   getNullRatingTtl,
 } from './adaptiveTtl';
-import { shouldSkipEmptyRenderUpload } from './emptyRenderUploadPolicy';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -2402,9 +2401,12 @@ class OverlayLibraryService {
       // after the render loop below to tell "nothing to remove" (skip the
       // upload) from "overlays need to come off" (fall through to the
       // existing removal-by-reupload path) when a run renders zero overlay
-      // elements. Defaults to false (favor skipping) if the check below
-      // throws before it runs.
-      let currentPosterIsOurs = false;
+      // elements. Defaults to true (favor the pre-fix upload path, not a
+      // skip) if the check below throws before it runs - the catch below
+      // exists to fall through to the overlay flow on a transient failure,
+      // and a stale-overlay-left-in-place outcome must not become the
+      // default on that path.
+      let currentPosterIsOurs = true;
 
       // OPTIMIZATION: Check if overlay inputs changed BEFORE downloading poster
       // This prevents expensive poster downloads when nothing has changed
@@ -2578,20 +2580,17 @@ class OverlayLibraryService {
         }
       }
 
-      if (
-        shouldSkipEmptyRenderUpload(allOverlays.length, currentPosterIsOurs)
-      ) {
+      if (allOverlays.length === 0 && !currentPosterIsOurs) {
         // No overlay elements rendered, and the current Plex poster isn't one
         // we uploaded - nothing to draw and nothing of ours to remove.
         // Compositing now would only produce a lossy re-encode of a poster we
-        // never touched. Record the hash so this render state stops being
-        // flagged as "changed" and stop here.
-        await metadataService.recordOverlayInputHash(
-          item.ratingKey,
-          libraryId,
-          overlayInputHash
-        );
-
+        // never touched. No bookkeeping to write here: the ownership
+        // mismatch that got us into this branch is exactly what the "nothing
+        // changed" gate above re-checks every run (its !plexPosterMissing
+        // requirement), so no input-hash write could ever short-circuit it -
+        // this item re-renders and re-skips each run. Cheap relative to the
+        // upload it replaces; a negative cache is a separate change if it's
+        // ever worth it.
         logger.info('No overlay elements rendered - skipping upload', {
           label: 'OverlayLibrary',
           itemTitle: item.title,
