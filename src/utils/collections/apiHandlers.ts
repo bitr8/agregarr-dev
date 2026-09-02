@@ -5,6 +5,27 @@ import type {
 } from '@app/types/collections';
 import axios from 'axios';
 
+// Shared with CollectionSettings.tsx's saveCollectionConfigs whitelist
+export const buildSelectionFieldsPayload = (
+  config: Pick<
+    CollectionFormConfig,
+    'selectionMode' | 'excludeValues' | 'includeValues'
+  >
+): Pick<
+  CollectionFormConfig,
+  'selectionMode' | 'excludeValues' | 'includeValues'
+> => ({
+  ...(config.selectionMode !== undefined && {
+    selectionMode: config.selectionMode,
+  }),
+  ...(config.excludeValues !== undefined && {
+    excludeValues: config.excludeValues,
+  }),
+  ...(config.includeValues !== undefined && {
+    includeValues: config.includeValues,
+  }),
+});
+
 // Helper function to save individual configs using individual endpoints
 export const saveIndividualConfigs = async (
   configsToUpdate: (
@@ -313,15 +334,7 @@ export const saveIndividualConfigs = async (
           comingSoonSonarrRootFolder:
             collectionConfig.comingSoonSonarrRootFolder,
         }),
-        ...(collectionConfig.selectionMode !== undefined && {
-          selectionMode: collectionConfig.selectionMode,
-        }),
-        ...(collectionConfig.excludeValues !== undefined && {
-          excludeValues: collectionConfig.excludeValues,
-        }),
-        ...(collectionConfig.includeValues !== undefined && {
-          includeValues: collectionConfig.includeValues,
-        }),
+        ...buildSelectionFieldsPayload(collectionConfig),
         ...(collectionConfig.isMultiSource !== undefined && {
           isMultiSource: collectionConfig.isMultiSource,
         }),

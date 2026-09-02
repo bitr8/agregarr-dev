@@ -15,7 +15,10 @@ import type {
   Library,
 } from '@app/types/collections';
 import { CollectionType } from '@app/types/collections';
-import { saveIndividualConfigs } from '@app/utils/collections/apiHandlers';
+import {
+  buildSelectionFieldsPayload,
+  saveIndividualConfigs,
+} from '@app/utils/collections/apiHandlers';
 import { prepareLinkedConfigForEditing } from '@app/utils/collections/collectionUtils';
 import { discoverPlexHubs } from '@app/utils/collections/discoveryHandlers';
 import {
@@ -589,6 +592,7 @@ const CollectionSettings = ({
           ...(config.targetUserLabel !== undefined && {
             targetUserLabel: config.targetUserLabel,
           }),
+          ...buildSelectionFieldsPayload(config),
         };
         await axios.put(
           `/api/v1/collections/${config.id}/settings`,
