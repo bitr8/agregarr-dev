@@ -469,11 +469,18 @@ export function getAvailableContentRatingCountries(): string[] {
   }
 }
 
+const _cachedContentRatingMappings = new Map<string, IconMapping[]>();
+
 /**
- * Build content rating mappings for a specific country
- * Scans /public/assets/mapped-icons/content-ratings/{country}/ for icon files
+ * Build content rating mappings for a specific country.
+ * Scans /public/assets/mapped-icons/content-ratings/{country}/ for icon files.
+ * Result is cached per country for process lifetime (icons are static assets) —
+ * called from getMergedMappings() on the overlay render/hash hot path.
  */
 function buildContentRatingMappings(country: string): IconMapping[] {
+  const cached = _cachedContentRatingMappings.get(country);
+  if (cached) return cached;
+
   try {
     const dir = path.join(
       process.cwd(),
@@ -484,15 +491,18 @@ function buildContentRatingMappings(country: string): IconMapping[] {
       country
     );
     if (!fs.existsSync(dir)) {
+      _cachedContentRatingMappings.set(country, []);
       return [];
     }
     const files = fs.readdirSync(dir);
-    return files
+    const mappings = files
       .filter((f) => f.endsWith('.png') || f.endsWith('.svg'))
       .map((f) => ({
         value: f.replace(/\.(png|svg)$/, ''),
         iconPath: `${MAPPED_ICONS_BASE}/content-ratings/${country}/${f}`,
       }));
+    _cachedContentRatingMappings.set(country, mappings);
+    return mappings;
   } catch {
     return [];
   }

@@ -89,7 +89,7 @@ describe('calculateOverlayInputHash', () => {
     expect(a).toBe(b);
   });
 
-  it('ignores mappings for a field no template uses', () => {
+  it('hashes any mappedIconMappings it is given, even for an unused field', () => {
     const withUnrelated = calculateOverlayInputHash({
       ...baseConfig,
       mappedIconMappings: {
@@ -97,9 +97,11 @@ describe('calculateOverlayInputHash', () => {
       },
     });
 
-    // resolution isn't a field extractMappedIconFields would ever return for
-    // this template, so a caller following that contract never includes it —
-    // this only guards calculateOverlayInputHash's own behavior if it did.
+    // calculateOverlayInputHash does not filter by used fields — that's
+    // extractMappedIconFields's job at the call site. resolution isn't a
+    // field extractMappedIconFields would ever return for this template, so
+    // a caller following that contract never passes it; this only pins the
+    // function's own behavior if it did.
     expect(withUnrelated).not.toBe(calculateOverlayInputHash(baseConfig));
   });
 });

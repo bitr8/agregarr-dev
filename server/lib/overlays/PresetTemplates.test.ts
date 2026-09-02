@@ -58,8 +58,10 @@ describe('Audio Codec preset', () => {
     expect(element.type).toBe('mapped-icon');
     expect(element.properties.field).toBe('audioProfile');
     expect(element.properties.maxIcons).toBe(1);
-    // Empty snapshot on purpose: renderer falls back to merged mappings,
-    // honouring user edits live and keeping templateData hash-stable
+    // Empty snapshot on purpose: renderer falls back to merged mappings, so
+    // this preset honours user edits without a re-save. The hash also folds
+    // in those merged mappings (metadataHashing.ts), so an edit still
+    // triggers regeneration.
     expect(element.properties.mappings).toEqual([]);
   });
 });

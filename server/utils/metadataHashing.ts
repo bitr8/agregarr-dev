@@ -165,11 +165,14 @@ export function extractMappedIconFields(
   return fields;
 }
 
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function sortMappings(mappings: IconMapping[]): IconMapping[] {
-  return [...mappings].sort((a, b) =>
-    a.value === b.value
-      ? a.iconPath.localeCompare(b.iconPath)
-      : a.value.localeCompare(b.value)
+  return [...mappings].sort(
+    (a, b) =>
+      compareStrings(a.value, b.value) || compareStrings(a.iconPath, b.iconPath)
   );
 }
 
