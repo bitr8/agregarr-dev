@@ -11,10 +11,7 @@ export const buildSelectionFieldsPayload = (
     CollectionFormConfig,
     'selectionMode' | 'excludeValues' | 'includeValues'
   >
-): Pick<
-  CollectionFormConfig,
-  'selectionMode' | 'excludeValues' | 'includeValues'
-> => ({
+) => ({
   ...(config.selectionMode !== undefined && {
     selectionMode: config.selectionMode,
   }),
