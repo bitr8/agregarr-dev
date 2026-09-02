@@ -908,7 +908,8 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
               mediaType,
               subtype,
               value.key,
-              'trailer-placeholder'
+              'trailer-placeholder',
+              config.sortOrder
             );
             updated++;
             collectionRatingKey = existingCollection.ratingKey;
@@ -919,7 +920,8 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
               mediaType,
               subtype,
               value.key,
-              'trailer-placeholder'
+              'trailer-placeholder',
+              config.sortOrder
             );
             if (collectionRatingKey) {
               created++;
@@ -1495,13 +1497,17 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
                     collectionName,
                     config.libraryId,
                     mediaType,
-                    person.name
+                    person.name,
+                    undefined,
+                    config.sortOrder
                   )
                 : await plexClient.createDirectorCollection(
                     collectionName,
                     config.libraryId,
                     mediaType,
-                    person.name
+                    person.name,
+                    undefined,
+                    config.sortOrder
                   );
 
             if (collectionRatingKey) {

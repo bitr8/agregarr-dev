@@ -7,7 +7,11 @@ import type { PlexHubManagementResponse } from '@server/interfaces/api/plexInter
 import PlexHubManager from '@server/lib/collections/plex/PlexHubManager';
 import PlexPosterManager from '@server/lib/collections/plex/PlexPosterManager';
 import PlexSmartCollectionManager from '@server/lib/collections/plex/PlexSmartCollectionManager';
-import type { Library, PlexSettings } from '@server/lib/settings';
+import type {
+  CollectionSortOrder,
+  Library,
+  PlexSettings,
+} from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { registerLogSecrets } from '@server/utils/logRedaction';
@@ -3090,14 +3094,16 @@ class PlexAPI {
     libraryKey: string,
     mediaType: 'movie' | 'tv',
     directorName: string,
-    limit?: number
+    limit?: number,
+    sortOrder?: CollectionSortOrder
   ): Promise<string | null> {
     return this.smartCollectionManager.createDirectorCollection(
       title,
       libraryKey,
       mediaType,
       directorName,
-      limit
+      limit,
+      sortOrder
     );
   }
 
@@ -3109,14 +3115,16 @@ class PlexAPI {
     libraryKey: string,
     mediaType: 'movie' | 'tv',
     actorName: string,
-    limit?: number
+    limit?: number,
+    sortOrder?: CollectionSortOrder
   ): Promise<string | null> {
     return this.smartCollectionManager.createActorCollection(
       title,
       libraryKey,
       mediaType,
       actorName,
-      limit
+      limit,
+      sortOrder
     );
   }
 
@@ -3129,7 +3137,8 @@ class PlexAPI {
     mediaType: 'movie' | 'tv',
     attribute: string,
     value: string,
-    labelFilter: string
+    labelFilter: string,
+    sortOrder?: CollectionSortOrder
   ): Promise<string | null> {
     return this.smartCollectionManager.createAttributeCollection(
       title,
@@ -3137,7 +3146,8 @@ class PlexAPI {
       mediaType,
       attribute,
       value,
-      labelFilter
+      labelFilter,
+      sortOrder
     );
   }
 
@@ -3150,7 +3160,8 @@ class PlexAPI {
     mediaType: 'movie' | 'tv',
     attribute: string,
     value: string,
-    labelFilter: string
+    labelFilter: string,
+    sortOrder?: CollectionSortOrder
   ): Promise<void> {
     return this.smartCollectionManager.updateAttributeSmartCollectionUri(
       ratingKey,
@@ -3158,7 +3169,8 @@ class PlexAPI {
       mediaType,
       attribute,
       value,
-      labelFilter
+      labelFilter,
+      sortOrder
     );
   }
 

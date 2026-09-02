@@ -1,6 +1,32 @@
 import type PlexAPI from '@server/api/plexapi';
-import { getSettings } from '@server/lib/settings';
+import { getSettings, type CollectionSortOrder } from '@server/lib/settings';
 import logger from '@server/logger';
+
+/**
+ * Maps the UI's sort order to a Plex smart-filter `sort=` value.
+ * Returns undefined for orders Plex can't express server-side (random,
+ * reverse, IMDb rating) so callers omit the param and keep Plex's default.
+ */
+export function mapSortOrderToPlexSort(
+  sortOrder?: CollectionSortOrder
+): string | undefined {
+  switch (sortOrder) {
+    case 'date_added_desc':
+      return 'addedAt:desc';
+    case 'date_added_asc':
+      return 'addedAt:asc';
+    case 'release_date_desc':
+      return 'originallyAvailableAt:desc';
+    case 'release_date_asc':
+      return 'originallyAvailableAt:asc';
+    case 'alphabetical_asc':
+      return 'titleSort:asc';
+    case 'alphabetical_desc':
+      return 'titleSort:desc';
+    default:
+      return undefined;
+  }
+}
 
 /**
  * PlexSmartCollectionManager - Handles Plex smart collection operations
@@ -439,7 +465,8 @@ class PlexSmartCollectionManager {
     libraryKey: string,
     mediaType: 'movie' | 'tv',
     directorName: string,
-    limit?: number
+    limit?: number,
+    sortOrder?: CollectionSortOrder
   ): Promise<string | null> {
     try {
       logger.debug(
@@ -463,6 +490,11 @@ class PlexSmartCollectionManager {
 
       if (limit && limit > 0) {
         filterUri += `&limit=${limit}`;
+      }
+
+      const sortParam = mapSortOrderToPlexSort(sortOrder);
+      if (sortParam) {
+        filterUri += `&sort=${sortParam}`;
       }
 
       const uri = `server://${
@@ -541,7 +573,8 @@ class PlexSmartCollectionManager {
     libraryKey: string,
     mediaType: 'movie' | 'tv',
     actorName: string,
-    limit?: number
+    limit?: number,
+    sortOrder?: CollectionSortOrder
   ): Promise<string | null> {
     try {
       logger.debug(
@@ -565,6 +598,11 @@ class PlexSmartCollectionManager {
 
       if (limit && limit > 0) {
         filterUri += `&limit=${limit}`;
+      }
+
+      const sortParam = mapSortOrderToPlexSort(sortOrder);
+      if (sortParam) {
+        filterUri += `&sort=${sortParam}`;
       }
 
       const uri = `server://${
@@ -641,7 +679,8 @@ class PlexSmartCollectionManager {
     mediaType: 'movie' | 'tv',
     attribute: string,
     value: string,
-    labelFilter: string
+    labelFilter: string,
+    sortOrder?: CollectionSortOrder
   ): Promise<string | null> {
     try {
       logger.debug(
@@ -659,9 +698,14 @@ class PlexSmartCollectionManager {
       const type = mediaType === 'movie' ? 1 : 2;
 
       // value used as-is: content rating keys arrive pre-encoded from Plex
-      const filterUri = `/library/sections/${libraryKey}/all?type=${type}&${attribute}=${value}&label!=${encodeURIComponent(
+      let filterUri = `/library/sections/${libraryKey}/all?type=${type}&${attribute}=${value}&label!=${encodeURIComponent(
         labelFilter
       )}`;
+
+      const sortParam = mapSortOrderToPlexSort(sortOrder);
+      if (sortParam) {
+        filterUri += `&sort=${sortParam}`;
+      }
 
       const uri = `server://${
         getSettings().plex.machineId
@@ -741,7 +785,8 @@ class PlexSmartCollectionManager {
     mediaType: 'movie' | 'tv',
     attribute: string,
     value: string,
-    labelFilter: string
+    labelFilter: string,
+    sortOrder?: CollectionSortOrder
   ): Promise<void> {
     try {
       logger.debug(
@@ -759,9 +804,14 @@ class PlexSmartCollectionManager {
       const type = mediaType === 'movie' ? 1 : 2;
 
       // value used as-is: content rating keys arrive pre-encoded from Plex
-      const filterUri = `/library/sections/${libraryKey}/all?type=${type}&${attribute}=${value}&label!=${encodeURIComponent(
+      let filterUri = `/library/sections/${libraryKey}/all?type=${type}&${attribute}=${value}&label!=${encodeURIComponent(
         labelFilter
       )}`;
+
+      const sortParam = mapSortOrderToPlexSort(sortOrder);
+      if (sortParam) {
+        filterUri += `&sort=${sortParam}`;
+      }
 
       const uri = `server://${
         getSettings().plex.machineId
