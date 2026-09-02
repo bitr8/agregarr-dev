@@ -249,6 +249,9 @@ export const linkCollectionConfig = async (
             isMultiSource: masterConfig.isMultiSource,
             sources: masterConfig.sources,
             combineMode: masterConfig.combineMode,
+            selectionMode: masterConfig.selectionMode,
+            excludeValues: masterConfig.excludeValues,
+            includeValues: masterConfig.includeValues,
             // Set link status
             isLinked: true,
             isUnlinked: false, // Clear any unlinked flag (use false instead of undefined so it survives JSON.stringify)
