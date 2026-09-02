@@ -7,6 +7,7 @@ import type { SonarrSeries } from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
+import type { IconMapping } from '@server/entity/OverlayTemplate';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
@@ -2350,8 +2351,11 @@ class OverlayLibraryService {
       // Extract which context fields are actually used by MATCHING templates
       // CRITICAL: Hash uses matching template IDs + variable field values + condition field values
       // Template IDs capture which templates match, field values capture all data affecting rendering
-      const { calculateOverlayInputHash, extractUsedContextFields } =
-        await import('@server/utils/metadataHashing');
+      const {
+        calculateOverlayInputHash,
+        extractUsedContextFields,
+        extractMappedIconFields,
+      } = await import('@server/utils/metadataHashing');
 
       const templateDataArray = matchingTemplates.map((t) =>
         t.getTemplateData()
@@ -2364,11 +2368,29 @@ class OverlayLibraryService {
         applicationConditions
       );
 
+      // Fold effective (user-override-aware) icon mappings for fields matching
+      // mapped-icon elements read, so a mapping edit invalidates the hash even
+      // though the mapping itself lives outside templateData. getMergedMappings
+      // shares UserMappingsService's mtime-guarded cache with the renderer, so
+      // this reads the same snapshot the render below will use.
+      const mappedIconFields = extractMappedIconFields(templateDataArray);
+      let mappedIconMappings: Record<string, IconMapping[]> | undefined;
+      if (mappedIconFields.size > 0) {
+        const { getMergedMappings } = await import(
+          '@server/lib/overlays/UserMappingsService'
+        );
+        mappedIconMappings = {};
+        for (const field of mappedIconFields) {
+          mappedIconMappings[field] = getMergedMappings(field);
+        }
+      }
+
       const overlayInputHash = calculateOverlayInputHash({
         templateIds: matchingTemplates.map((t) => t.id).sort(),
         templateData: templateDataArray,
         usedFields: usedFields,
         context: context as Record<string, unknown>,
+        mappedIconMappings,
       });
 
       // Debug logging for hash comparison
