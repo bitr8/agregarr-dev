@@ -613,12 +613,8 @@ async function processMultiSourcePreview(
   });
 
   // Apply maxItems limit to combined items
-  const limitedItems =
-    maxItems > 0 ? uniqueItems.slice(0, maxItems) : uniqueItems;
-  const limitedMissingItems =
-    maxItems > 0
-      ? uniqueMissingItems.slice(0, Math.max(0, maxItems - limitedItems.length))
-      : uniqueMissingItems;
+  const { items: limitedItems, missingItems: limitedMissingItems } =
+    capPreviewItemsToMaxItems(uniqueItems, uniqueMissingItems, maxItems);
 
   // Now process the combined items for preview display (enrich with TMDB data)
   // This is the same logic as single-source preview

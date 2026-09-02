@@ -1273,6 +1273,7 @@ export function filterItemsByPosition<T extends { originalPosition: number }>(
  * Cap matched + missing preview items to a shared maxItems budget.
  * Matched items are sliced to maxItems; missing items get whatever budget
  * remains, so the combined preview total never exceeds maxItems.
+ * Mirrors Plex collection contents (matched-first), not the sync request set - a missing item within position budget can be hidden here while sync still requests it.
  */
 export function capPreviewItemsToMaxItems<TItem, TMissing>(
   items: TItem[],
