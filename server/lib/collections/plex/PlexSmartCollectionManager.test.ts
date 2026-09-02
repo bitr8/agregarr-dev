@@ -12,7 +12,9 @@ vi.mock('@server/lib/settings', () => ({
   getSettings: () => mockSettings,
 }));
 
-import PlexSmartCollectionManager from './PlexSmartCollectionManager';
+import PlexSmartCollectionManager, {
+  mapSortOrderToPlexSort,
+} from './PlexSmartCollectionManager';
 
 function createManager() {
   const mockPlexApi = {
@@ -133,6 +135,126 @@ describe('PlexSmartCollectionManager.createFilteredHub', () => {
     );
 
     expect(result).toBeNull();
+  });
+});
+
+describe('mapSortOrderToPlexSort', () => {
+  it.each([
+    ['date_added_desc', 'addedAt:desc'],
+    ['date_added_asc', 'addedAt:asc'],
+    ['release_date_desc', 'originallyAvailableAt:desc'],
+    ['release_date_asc', 'originallyAvailableAt:asc'],
+    ['alphabetical_asc', 'titleSort:asc'],
+    ['alphabetical_desc', 'titleSort:desc'],
+  ] as const)('maps %s to %s', (sortOrder, expected) => {
+    expect(mapSortOrderToPlexSort(sortOrder)).toBe(expected);
+  });
+
+  it.each([
+    'default',
+    'random',
+    'reverse',
+    'imdb_rating_desc',
+    'imdb_rating_asc',
+    undefined,
+  ] as const)('has no Plex equivalent for %s', (sortOrder) => {
+    expect(mapSortOrderToPlexSort(sortOrder)).toBeUndefined();
+  });
+});
+
+describe('PlexSmartCollectionManager.createAttributeCollection sort', () => {
+  it('honours the requested date-added sort', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createAttributeCollection(
+      'Action',
+      '4',
+      'movie',
+      'genre',
+      '101085',
+      'trailer-placeholder',
+      'date_added_desc'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(createUrl);
+    expect(decodedUri).toContain('sort=addedAt:desc');
+  });
+
+  it('omits sort param for an unmappable sortOrder', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createAttributeCollection(
+      'Action',
+      '4',
+      'movie',
+      'genre',
+      '101085',
+      'trailer-placeholder',
+      'random'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(createUrl);
+    expect(decodedUri).not.toContain('sort=');
+  });
+});
+
+describe('PlexSmartCollectionManager.updateAttributeSmartCollectionUri sort', () => {
+  it('honours the requested release-date sort', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.updateAttributeSmartCollectionUri(
+      '99999',
+      '4',
+      'movie',
+      'genre',
+      '101085',
+      'trailer-placeholder',
+      'release_date_asc'
+    );
+
+    const putUrl = mockPlexApi.safePutQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(putUrl);
+    expect(decodedUri).toContain('sort=originallyAvailableAt:asc');
+  });
+});
+
+describe('PlexSmartCollectionManager.createDirectorCollection sort', () => {
+  it('honours the requested alphabetical sort', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createDirectorCollection(
+      'Nolan Movies',
+      '4',
+      'movie',
+      'Christopher Nolan',
+      undefined,
+      'alphabetical_asc'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(createUrl);
+    expect(decodedUri).toContain('sort=titleSort:asc');
+  });
+});
+
+describe('PlexSmartCollectionManager.createActorCollection sort', () => {
+  it('honours the requested date-added sort', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createActorCollection(
+      'Actor Movies',
+      '4',
+      'movie',
+      'Some Actor',
+      undefined,
+      'date_added_asc'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const decodedUri = decodeURIComponent(createUrl);
+    expect(decodedUri).toContain('sort=addedAt:asc');
   });
 });
 
