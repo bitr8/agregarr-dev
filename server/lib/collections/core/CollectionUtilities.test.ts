@@ -27,6 +27,7 @@ vi.mock('@server/lib/settings', () => ({
 }));
 
 import {
+  capPreviewItemsToMaxItems,
   clearConfigRatingKey,
   hasAgregarrLabel,
   isMultiCollectionPattern,
@@ -179,5 +180,35 @@ describe('isMultiCollectionPattern', () => {
     expect(isMultiCollectionPattern({ type: 'plex', subtype: 'users' })).toBe(
       false
     );
+  });
+});
+
+describe('capPreviewItemsToMaxItems', () => {
+  // fork#95: single-source preview matched items (already sliced to maxItems
+  // by count) plus missing items (already sliced by position) were shown
+  // uncoupled, so a maxItems=10 collection with one missing item inside the
+  // first 10 positions displayed 11 items.
+  const matched = Array.from({ length: 10 }, (_, i) => ({
+    ratingKey: `rk-${i}`,
+  }));
+  const missing = [{ originalPosition: 5 }];
+
+  it('caps the combined total at maxItems', () => {
+    const result = capPreviewItemsToMaxItems(matched, missing, 10);
+    expect(
+      result.items.length + result.missingItems.length
+    ).toBeLessThanOrEqual(10);
+  });
+
+  it('gives missing items only the budget left after matched items', () => {
+    const result = capPreviewItemsToMaxItems(matched, missing, 10);
+    expect(result.items).toHaveLength(10);
+    expect(result.missingItems).toHaveLength(0);
+  });
+
+  it('does not cap when maxItems is unset', () => {
+    const result = capPreviewItemsToMaxItems(matched, missing, undefined);
+    expect(result.items).toHaveLength(10);
+    expect(result.missingItems).toHaveLength(1);
   });
 });
