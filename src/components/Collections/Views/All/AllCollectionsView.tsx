@@ -830,6 +830,10 @@ const AllCollectionsView: React.FC = () => {
                             (collection.originalConfig as CollectionFormConfig)
                               .showUnwatchedOnly
                           }
+                          filterUnwatched={
+                            (collection.originalConfig as CollectionFormConfig)
+                              .filterUnwatched
+                          }
                         />
                       )}
                     </div>

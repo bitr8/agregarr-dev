@@ -1306,7 +1306,8 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
             itemLabelName,
             mediaType,
             sortOption,
-            config.maxItems
+            config.maxItems,
+            config.filterUnwatched ?? true
           );
           updated = 1;
         } catch (error) {
@@ -1340,7 +1341,8 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
             mediaType,
             sortOption,
             smartLabel, // Add Agregarr management label
-            config.maxItems
+            config.maxItems,
+            config.filterUnwatched ?? true
           );
 
         if (!createdSmartCollectionRatingKey) {

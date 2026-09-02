@@ -427,6 +427,9 @@ export const saveIndividualConfigs = async (
         ...(collectionConfig.showUnwatchedOnly !== undefined && {
           showUnwatchedOnly: collectionConfig.showUnwatchedOnly,
         }),
+        ...(collectionConfig.filterUnwatched !== undefined && {
+          filterUnwatched: collectionConfig.filterUnwatched,
+        }),
         ...(collectionConfig.smartCollectionSort !== undefined && {
           smartCollectionSort: collectionConfig.smartCollectionSort,
         }),

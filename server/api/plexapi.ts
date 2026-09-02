@@ -2997,7 +2997,8 @@ class PlexAPI {
     mediaType: 'movie' | 'tv' = 'movie',
     sortOption?: string,
     agregarrLabel?: string,
-    maxItems?: number
+    maxItems?: number,
+    filterUnwatched = true
   ): Promise<string | null> {
     return this.smartCollectionManager.createLabelBasedSmartCollection(
       title,
@@ -3006,7 +3007,8 @@ class PlexAPI {
       mediaType,
       sortOption,
       agregarrLabel,
-      maxItems
+      maxItems,
+      filterUnwatched
     );
   }
 
@@ -3030,7 +3032,8 @@ class PlexAPI {
     labelName: string,
     mediaType: 'movie' | 'tv' = 'movie',
     sortOption?: string,
-    maxItems?: number
+    maxItems?: number,
+    filterUnwatched = true
   ): Promise<void> {
     return this.smartCollectionManager.updateLabelBasedSmartCollectionUri(
       smartCollectionRatingKey,
@@ -3038,7 +3041,8 @@ class PlexAPI {
       labelName,
       mediaType,
       sortOption,
-      maxItems
+      maxItems,
+      filterUnwatched
     );
   }
 

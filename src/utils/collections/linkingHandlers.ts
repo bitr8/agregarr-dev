@@ -222,6 +222,7 @@ export const linkCollectionConfig = async (
             hideIndividualItems: masterConfig.hideIndividualItems,
             applyOverlaysDuringSync: masterConfig.applyOverlaysDuringSync,
             showUnwatchedOnly: masterConfig.showUnwatchedOnly,
+            filterUnwatched: masterConfig.filterUnwatched,
             smartCollectionSort: masterConfig.smartCollectionSort,
             randomizeHomeOrder: masterConfig.randomizeHomeOrder,
             customWallpaper: masterConfig.customWallpaper,

@@ -974,6 +974,11 @@ components:
           description: 'Create a smart collection that shows only unwatched items from this collection'
           example: false
           nullable: true
+        filterUnwatched:
+          type: boolean
+          description: 'Within a smart collection, restrict to unwatched items (default true)'
+          example: true
+          nullable: true
         smartCollectionSort:
           type: object
           description: 'Sort option for smart collections'
@@ -1868,6 +1873,11 @@ components:
           description: 'Create a smart collection that shows only unwatched items from this collection'
           example: false
           nullable: true
+        filterUnwatched:
+          type: boolean
+          description: 'Within a smart collection, restrict to unwatched items (default true)'
+          example: true
+          nullable: true
         smartCollectionSort:
           type: object
           description: 'Sort option for smart collections'
@@ -2748,6 +2758,11 @@ components:
           type: boolean
           description: 'Create a smart collection that shows only unwatched items from this collection'
           example: false
+          nullable: true
+        filterUnwatched:
+          type: boolean
+          description: 'Within a smart collection, restrict to unwatched items (default true)'
+          example: true
           nullable: true
         smartCollectionSort:
           type: object

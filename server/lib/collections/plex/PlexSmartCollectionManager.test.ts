@@ -136,6 +136,120 @@ describe('PlexSmartCollectionManager.createFilteredHub', () => {
   });
 });
 
+describe('PlexSmartCollectionManager.createLabelBasedSmartCollection filterUnwatched', () => {
+  it('keeps unwatched=1 in the URI when filterUnwatched is omitted (existing-config default)', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createLabelBasedSmartCollection(
+      'Family Movies',
+      '1',
+      'agregarr-unwatched-cfg1',
+      'movie'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const uri = decodeURIComponent(createUrl);
+    expect(uri).toContain('unwatched=1');
+    expect(uri).toContain('and=1');
+    expect(uri).toContain('label=agregarr-unwatched-cfg1');
+  });
+
+  it('keeps show.unwatchedLeaves=1 in the URI for TV when filterUnwatched is omitted', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createLabelBasedSmartCollection(
+      'Family Shows',
+      '3',
+      'agregarr-unwatched-cfg1',
+      'tv'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const uri = decodeURIComponent(createUrl);
+    expect(uri).toContain('show.unwatchedLeaves=1');
+    expect(uri).toContain('and=1');
+  });
+
+  it('drops unwatched=1 and and=1 from the URI when filterUnwatched is false', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createLabelBasedSmartCollection(
+      'Family Movies',
+      '1',
+      'agregarr-unwatched-cfg1',
+      'movie',
+      undefined,
+      undefined,
+      undefined,
+      false
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const uri = decodeURIComponent(createUrl);
+    expect(uri).not.toContain('unwatched=1');
+    expect(uri).not.toContain('and=1');
+    expect(uri).toContain('label=agregarr-unwatched-cfg1');
+  });
+
+  it('drops show.unwatchedLeaves=1 for TV when filterUnwatched is false', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createLabelBasedSmartCollection(
+      'Family Shows',
+      '3',
+      'agregarr-unwatched-cfg1',
+      'tv',
+      undefined,
+      undefined,
+      undefined,
+      false
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    const uri = decodeURIComponent(createUrl);
+    expect(uri).not.toContain('show.unwatchedLeaves=1');
+    expect(uri).not.toContain('and=1');
+  });
+});
+
+describe('PlexSmartCollectionManager.updateLabelBasedSmartCollectionUri filterUnwatched', () => {
+  it('keeps unwatched=1 in the URI when filterUnwatched is omitted (existing-config default)', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.updateLabelBasedSmartCollectionUri(
+      '99999',
+      '1',
+      'agregarr-unwatched-cfg1',
+      'movie'
+    );
+
+    const putUrl = mockPlexApi.safePutQuery.mock.calls[0][0] as string;
+    const uri = decodeURIComponent(putUrl);
+    expect(uri).toContain('unwatched=1');
+    expect(uri).toContain('and=1');
+  });
+
+  it('drops unwatched=1 and and=1 from the URI when filterUnwatched is false', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.updateLabelBasedSmartCollectionUri(
+      '99999',
+      '1',
+      'agregarr-unwatched-cfg1',
+      'movie',
+      undefined,
+      undefined,
+      false
+    );
+
+    const putUrl = mockPlexApi.safePutQuery.mock.calls[0][0] as string;
+    const uri = decodeURIComponent(putUrl);
+    expect(uri).not.toContain('unwatched=1');
+    expect(uri).not.toContain('and=1');
+    expect(uri).toContain('label=agregarr-unwatched-cfg1');
+  });
+});
+
 describe('PlexSmartCollectionManager.updateFilteredHubUri', () => {
   it('uses type=4 in filter URI for recently_added_episodes', async () => {
     const { manager, mockPlexApi } = createManager();

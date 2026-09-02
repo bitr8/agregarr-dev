@@ -457,6 +457,7 @@ const CollectionSettings = ({
           hideIndividualItems: config.hideIndividualItems,
           applyOverlaysDuringSync: config.applyOverlaysDuringSync,
           showUnwatchedOnly: config.showUnwatchedOnly,
+          filterUnwatched: config.filterUnwatched,
           smartCollectionSort: config.smartCollectionSort,
           // Plex Library person collections
           personMinimumItems: config.personMinimumItems,

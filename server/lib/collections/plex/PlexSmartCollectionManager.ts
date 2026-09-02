@@ -25,6 +25,7 @@ class PlexSmartCollectionManager {
    * @param sortOption - Sort parameter (e.g., 'titleSort', 'year:desc')
    * @param agregarrLabel - Agregarr management label to add to the smart collection
    * @param maxItems - Maximum number of items to include in the smart collection
+   * @param filterUnwatched - Restrict to unwatched items (default true)
    * @returns The rating key of the created smart collection or null if failed
    */
   public async createLabelBasedSmartCollection(
@@ -34,7 +35,8 @@ class PlexSmartCollectionManager {
     mediaType: 'movie' | 'tv' = 'movie',
     sortOption?: string,
     agregarrLabel?: string,
-    maxItems?: number
+    maxItems?: number,
+    filterUnwatched = true
   ): Promise<string | null> {
     try {
       logger.debug(
@@ -54,27 +56,22 @@ class PlexSmartCollectionManager {
 
       // Build filter URI: label AND unwatched
       // TV shows use different filter parameters than movies
-      let filterUri: string;
-      if (mediaType === 'tv') {
-        // TV: Filter by label AND unwatched episodes
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&show.unwatchedLeaves=1&and=1&label=${encodeURIComponent(
-          labelName
-        )}`;
-      } else {
-        // Movie: Filter by label AND unwatched
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&unwatched=1&and=1&label=${encodeURIComponent(
-          labelName
-        )}`;
-      }
+      const unwatchedClause = filterUnwatched
+        ? mediaType === 'tv'
+          ? '&show.unwatchedLeaves=1&and=1'
+          : '&unwatched=1&and=1'
+        : '';
+      const filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}${unwatchedClause}&label=${encodeURIComponent(
+        labelName
+      )}`;
 
       // Add limit parameter if specified
-      if (maxItems && maxItems > 0) {
-        filterUri += `&limit=${maxItems}`;
-      }
+      const filterUriWithLimit =
+        maxItems && maxItems > 0 ? `${filterUri}&limit=${maxItems}` : filterUri;
 
       const uri = `server://${
         getSettings().plex.machineId
-      }/com.plexapp.plugins.library${filterUri}`;
+      }/com.plexapp.plugins.library${filterUriWithLimit}`;
 
       const createUrl = `/library/collections?type=${type}&title=${encodeURIComponent(
         title
@@ -188,6 +185,7 @@ class PlexSmartCollectionManager {
    * @param mediaType - 'movie' or 'tv'
    * @param sortOption - Sort parameter (e.g., 'year:desc', 'titleSort')
    * @param maxItems - Maximum number of items to include in the smart collection
+   * @param filterUnwatched - Restrict to unwatched items (default true)
    * @returns Promise<void>
    */
   public async updateLabelBasedSmartCollectionUri(
@@ -196,7 +194,8 @@ class PlexSmartCollectionManager {
     labelName: string,
     mediaType: 'movie' | 'tv' = 'movie',
     sortOption?: string,
-    maxItems?: number
+    maxItems?: number,
+    filterUnwatched = true
   ): Promise<void> {
     try {
       logger.debug(
@@ -216,27 +215,22 @@ class PlexSmartCollectionManager {
       const sortParam = sortOption || 'originallyAvailableAt:desc'; // Default to release date (newest first)
 
       // Build filter URI: label AND unwatched
-      let filterUri: string;
-      if (mediaType === 'tv') {
-        // TV: Filter by label AND unwatched episodes
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&show.unwatchedLeaves=1&and=1&label=${encodeURIComponent(
-          labelName
-        )}`;
-      } else {
-        // Movie: Filter by label AND unwatched
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&unwatched=1&and=1&label=${encodeURIComponent(
-          labelName
-        )}`;
-      }
+      const unwatchedClause = filterUnwatched
+        ? mediaType === 'tv'
+          ? '&show.unwatchedLeaves=1&and=1'
+          : '&unwatched=1&and=1'
+        : '';
+      const filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}${unwatchedClause}&label=${encodeURIComponent(
+        labelName
+      )}`;
 
       // Add limit parameter if specified
-      if (maxItems && maxItems > 0) {
-        filterUri += `&limit=${maxItems}`;
-      }
+      const filterUriWithLimit =
+        maxItems && maxItems > 0 ? `${filterUri}&limit=${maxItems}` : filterUri;
 
       const uri = `server://${
         getSettings().plex.machineId
-      }/com.plexapp.plugins.library${filterUri}`;
+      }/com.plexapp.plugins.library${filterUriWithLimit}`;
 
       // Update the smart collection URI using PUT request
       const updateUrl = `/library/collections/${smartCollectionRatingKey}/items?uri=${encodeURIComponent(

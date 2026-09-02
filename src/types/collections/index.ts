@@ -236,6 +236,7 @@ export interface CollectionFormConfig {
   readonly collectionRatingKey?: string; // Plex collection rating key for single-collection configs
   readonly collectionRatingKeys?: string[]; // Plex rating keys for multi-collection configs (e.g. seerr/users) — populated during sync
   readonly showUnwatchedOnly?: boolean; // Create smart collection that shows only unwatched items
+  readonly filterUnwatched?: boolean; // Within a smart collection, restrict to unwatched items (default true)
   readonly smartCollectionRatingKey?: string; // LEGACY: Old dual-collection system smart collection rating key (for migration only)
   readonly smartCollectionSort?: SmartCollectionSortOption; // Sort option for smart collections
   readonly isLinked?: boolean; // True if collection is actively linked to other collections
@@ -694,6 +695,7 @@ export interface CollectionConfigCreateRequest {
   readonly enableCustomTheme?: boolean; // Enable custom theme sync to Plex
   readonly sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto)
   readonly showUnwatchedOnly?: boolean; // If true, create a smart collection that filters to unwatched items only
+  readonly filterUnwatched?: boolean; // Within a smart collection, restrict to unwatched items (default true)
   readonly smartCollectionSort?: SmartCollectionSortOption; // Sort option for smart collections
   readonly selectionMode?: 'exclude' | 'include';
   readonly excludeValues?: string[];
@@ -827,6 +829,7 @@ export const toCollectionCreateRequest = (
     sortTitleOverride: config.sortTitleOverride,
     // Smart collection support
     showUnwatchedOnly: config.showUnwatchedOnly,
+    filterUnwatched: config.filterUnwatched,
     smartCollectionSort: config.smartCollectionSort,
     // Library Essentials selection fields
     selectionMode: config.selectionMode,
