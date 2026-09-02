@@ -94,7 +94,7 @@ const messages = defineMessages({
   timeRestrictions: 'Time Restrictions',
   createCollection: 'Create Collection',
   updateCollection: 'Update Collection',
-  showUnwatchedOnly: 'Smart Collection',
+  smartCollectionToggle: 'Smart Collection',
   showUnwatchedOnlyDescription: 'Create Smart Collection',
   filterUnwatched: 'Filter to Unwatched Items Only',
   smartCollectionSort: 'Smart Collection Sort Order',
@@ -219,8 +219,8 @@ const messages = defineMessages({
   limitCollectionItems:
     'Limit the Collection to this many items{smartCollectionNote}',
   limitCollectionItemsSmartNote: ' (applies to smart collection)',
-  smartCollectionDescription:
-    'When enabled, creates a smart collection for the user viewing the collection. The original collection will be pushed to the bottom in the Collections Tab.',
+  smartCollectionHelp:
+    'When enabled, creates a smart collection for the user viewing the collection.',
   smartCollectionSortNote:
     'Choose how items in the smart collection should be sorted. Due to Plex limitations, the original list order cannot be preserved when using smart collections.',
   placeholderCreation: 'Placeholder Creation',
@@ -3664,7 +3664,7 @@ const CollectionFormConfigForm = ({
                                 <div className="form-row">
                                   <label className="text-label">
                                     {intl.formatMessage(
-                                      messages.showUnwatchedOnly
+                                      messages.smartCollectionToggle
                                     )}
                                   </label>
                                   <div className="form-input-area">
@@ -3686,7 +3686,7 @@ const CollectionFormConfigForm = ({
                                     </div>
                                     <div className="mt-2 text-xs text-gray-400">
                                       {intl.formatMessage(
-                                        messages.smartCollectionDescription
+                                        messages.smartCollectionHelp
                                       )}
                                     </div>
                                     {/* Filter Unwatched + Sort Order - only shown when showUnwatchedOnly is enabled */}

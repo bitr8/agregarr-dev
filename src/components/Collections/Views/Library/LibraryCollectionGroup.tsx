@@ -392,6 +392,9 @@ const SortableItem = ({
                 showUnwatchedOnly={
                   (config as CollectionFormConfig).showUnwatchedOnly
                 }
+                filterUnwatched={
+                  (config as CollectionFormConfig).filterUnwatched
+                }
               />
             )}
           </div>
