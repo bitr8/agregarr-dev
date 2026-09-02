@@ -94,8 +94,9 @@ const messages = defineMessages({
   timeRestrictions: 'Time Restrictions',
   createCollection: 'Create Collection',
   updateCollection: 'Update Collection',
-  showUnwatchedOnly: 'Show Unwatched Items Only',
+  showUnwatchedOnly: 'Smart Collection',
   showUnwatchedOnlyDescription: 'Create Smart Collection',
+  filterUnwatched: 'Filter to Unwatched Items Only',
   smartCollectionSort: 'Smart Collection Sort Order',
   cancel: 'Cancel',
   preview: 'Preview:',
@@ -219,7 +220,7 @@ const messages = defineMessages({
     'Limit the Collection to this many items{smartCollectionNote}',
   limitCollectionItemsSmartNote: ' (applies to smart collection)',
   smartCollectionDescription:
-    'When enabled, creates a smart collection with the unwatched filter to show only unwatched items for the user viewing the collection. The original collection will be pushed to the bottom in the Collections Tab.',
+    'When enabled, creates a smart collection for the user viewing the collection. The original collection will be pushed to the bottom in the Collections Tab.',
   smartCollectionSortNote:
     'Choose how items in the smart collection should be sorted. Due to Plex limitations, the original list order cannot be preserved when using smart collections.',
   placeholderCreation: 'Placeholder Creation',
@@ -959,6 +960,7 @@ const CollectionFormConfigForm = ({
     isMultiSource: Yup.boolean(),
     // Smart collection validation
     showUnwatchedOnly: Yup.boolean(),
+    filterUnwatched: Yup.boolean(),
     smartCollectionSort: Yup.object()
       .shape({
         value: Yup.string(),
@@ -1900,6 +1902,8 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).hideIndividualItems ?? false,
           showUnwatchedOnly:
             (config as CollectionFormConfig).showUnwatchedOnly ?? false,
+          filterUnwatched:
+            (config as CollectionFormConfig).filterUnwatched ?? true,
           smartCollectionSort:
             (config as CollectionFormConfig).smartCollectionSort ??
             SMART_COLLECTION_SORT_OPTIONS[5], // Default to release date (newest first)
@@ -2439,6 +2443,7 @@ const CollectionFormConfigForm = ({
             useTmdbFranchisePoster: values.useTmdbFranchisePoster,
             hideIndividualItems: values.hideIndividualItems,
             showUnwatchedOnly: values.showUnwatchedOnly,
+            filterUnwatched: values.filterUnwatched,
             smartCollectionSort: values.smartCollectionSort,
             randomizeHomeOrder: values.randomizeHomeOrder,
             // Wallpaper, summary, and theme settings
@@ -3684,6 +3689,29 @@ const CollectionFormConfigForm = ({
                                         messages.smartCollectionDescription
                                       )}
                                     </div>
+                                    {/* Filter Unwatched + Sort Order - only shown when showUnwatchedOnly is enabled */}
+                                    {values.showUnwatchedOnly && (
+                                      <div className="form-row">
+                                        <div className="form-input-area">
+                                          <div className="flex items-center">
+                                            <Field
+                                              type="checkbox"
+                                              id="filterUnwatched"
+                                              name="filterUnwatched"
+                                              className="form-checkbox"
+                                            />
+                                            <label
+                                              htmlFor="filterUnwatched"
+                                              className="ml-2 text-sm text-gray-300"
+                                            >
+                                              {intl.formatMessage(
+                                                messages.filterUnwatched
+                                              )}
+                                            </label>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                     {/* Smart Collection Sort Order - only show when showUnwatchedOnly is enabled */}
                                     {values.showUnwatchedOnly && (
                                       <div className="form-row">

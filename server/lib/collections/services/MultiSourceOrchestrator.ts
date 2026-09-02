@@ -1706,7 +1706,8 @@ export class MultiSourceOrchestrator {
             labelName,
             mediaType,
             options.config.smartCollectionSort?.value,
-            options.config.maxItems
+            options.config.maxItems,
+            options.config.filterUnwatched ?? true
           );
 
           // Migrate config
@@ -1761,7 +1762,8 @@ export class MultiSourceOrchestrator {
             labelName,
             mediaType,
             options.config.smartCollectionSort?.value,
-            options.config.maxItems
+            options.config.maxItems,
+            options.config.filterUnwatched ?? true
           );
 
           // Update title if it changed (for DYNAMIC_CYCLE_TITLE)
@@ -1811,7 +1813,8 @@ export class MultiSourceOrchestrator {
             mediaType,
             options.config.smartCollectionSort?.value,
             customLabel,
-            options.config.maxItems
+            options.config.maxItems,
+            options.config.filterUnwatched ?? true
           );
 
         if (!newSmartCollectionRatingKey) {

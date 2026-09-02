@@ -140,6 +140,38 @@ describe('createOrUpdateCollectionStandardized: key survives a failed create', (
   });
 });
 
+describe('createOrUpdateCollectionStandardized: filterUnwatched threading', () => {
+  beforeEach(() => {
+    save.mockClear();
+  });
+
+  it('defaults filterUnwatched to true when the config omits it', async () => {
+    const cfg = config({ showUnwatchedOnly: true });
+    settings.plex.collectionConfigs = [cfg];
+    const plexClient = failAfterCreate('187609');
+
+    await expect(run(plexClient, cfg)).rejects.toThrow();
+
+    const createMock = plexClient.createLabelBasedSmartCollection as ReturnType<
+      typeof vi.fn
+    >;
+    expect(createMock.mock.calls[0][7]).toBe(true);
+  });
+
+  it('passes filterUnwatched: false through to the Plex client', async () => {
+    const cfg = config({ showUnwatchedOnly: true, filterUnwatched: false });
+    settings.plex.collectionConfigs = [cfg];
+    const plexClient = failAfterCreate('187610');
+
+    await expect(run(plexClient, cfg)).rejects.toThrow();
+
+    const createMock = plexClient.createLabelBasedSmartCollection as ReturnType<
+      typeof vi.fn
+    >;
+    expect(createMock.mock.calls[0][7]).toBe(false);
+  });
+});
+
 // Mirrors radarr.ts's own processConfiguration catch: wraps a real failure
 // into a CollectionSyncError plain object (not an Error instance) before it
 // reaches processCollections' outer catch, which is where fork#76b's

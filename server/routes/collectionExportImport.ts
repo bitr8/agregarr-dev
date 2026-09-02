@@ -67,6 +67,7 @@ const portableFields = [
   'minimumRottenTomatoesAudienceRating',
   'sortOrder',
   'showUnwatchedOnly',
+  'filterUnwatched',
   'smartCollectionSort',
   'plexLabel',
   'personMinimumItems',

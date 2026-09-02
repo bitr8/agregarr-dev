@@ -1356,7 +1356,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             labelName,
             mediaType,
             options.config.smartCollectionSort?.value,
-            options.config.maxItems
+            options.config.maxItems,
+            options.config.filterUnwatched ?? true
           );
 
           // Step 4: Migrate config - move smartCollectionRatingKey to collectionRatingKey
@@ -1407,7 +1408,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             labelName,
             mediaType,
             options.config.smartCollectionSort?.value,
-            options.config.maxItems
+            options.config.maxItems,
+            options.config.filterUnwatched ?? true
           );
           updated = 1;
         } else {
@@ -1435,7 +1437,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             mediaType,
             options.config.smartCollectionSort?.value,
             customLabel,
-            options.config.maxItems
+            options.config.maxItems,
+            options.config.filterUnwatched ?? true
           );
 
         if (!newSmartCollectionRatingKey) {
