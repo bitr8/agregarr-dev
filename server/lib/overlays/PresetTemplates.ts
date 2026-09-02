@@ -3229,7 +3229,9 @@ export const PRESET_TEMPLATES: {
           properties: {
             field: 'audioProfile',
             // Empty on purpose: the renderer falls back to merged mappings
-            // per value, honouring user edits live and keeping the hash stable
+            // per value, so this preset honours user edits without a re-save.
+            // The hash also folds in those merged mappings (metadataHashing.ts),
+            // so an edit still triggers regeneration.
             mappings: [],
             layout: 'horizontal',
             iconSize: 120,

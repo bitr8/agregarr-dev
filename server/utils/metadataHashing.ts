@@ -1,4 +1,5 @@
 import type {
+  IconMapping,
   OverlayMappedIconElementProps,
   OverlayTemplateData,
   OverlayTileElementProps,
@@ -140,6 +141,42 @@ export function extractUsedContextFields(
 }
 
 /**
+ * Extract the distinct context fields read by mapped-icon elements.
+ * Used to scope which fields' effective icon mappings must enter the
+ * overlay input hash (editing a mapping for a field no template uses
+ * must not invalidate anything).
+ */
+export function extractMappedIconFields(
+  templateDataArray: OverlayTemplateData[]
+): Set<string> {
+  const fields = new Set<string>();
+
+  for (const templateData of templateDataArray) {
+    for (const element of templateData.elements) {
+      if (element.type === 'mapped-icon') {
+        const props = element.properties as OverlayMappedIconElementProps;
+        if (props.field) {
+          fields.add(props.field);
+        }
+      }
+    }
+  }
+
+  return fields;
+}
+
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function sortMappings(mappings: IconMapping[]): IconMapping[] {
+  return [...mappings].sort(
+    (a, b) =>
+      compareStrings(a.value, b.value) || compareStrings(a.iconPath, b.iconPath)
+  );
+}
+
+/**
  * Calculate hash for auto-generated poster inputs
  * Includes item IDs so poster regenerates when collection contents change
  * Includes template data so poster regenerates when template is modified
@@ -196,12 +233,17 @@ export function calculateThemeInputHash(filename: string): string {
  * - Different templates match
  * - Template design changes (including icon/image path changes)
  * - Context values change
+ * - The effective icon mapping for a field a mapped-icon element reads changes
+ *   (mappedIconMappings, optional — pass the merged mappings for exactly the
+ *   fields matching mapped-icon elements use; omit when there are none so
+ *   callers with no mapped-icon templates hash identically to before)
  */
 export function calculateOverlayInputHash(config: {
   templateIds: number[];
   templateData: OverlayTemplateData[];
   usedFields: Set<string>;
   context: Record<string, unknown>;
+  mappedIconMappings?: Record<string, IconMapping[]>;
 }): string {
   // Extract only the context fields that are actually used
   const relevantContext: Record<string, unknown> = {};
@@ -209,9 +251,19 @@ export function calculateOverlayInputHash(config: {
     relevantContext[field] = config.context[field];
   }
 
-  return calculateInputHash({
+  const input: Record<string, unknown> = {
     templateIds: [...config.templateIds].sort(), // Ensure sorted for consistency
     templateData: config.templateData, // Include template design (positions, colors, icon paths)
     context: relevantContext, // Only include fields actually used by templates
-  });
+  };
+
+  if (config.mappedIconMappings) {
+    const sorted: Record<string, IconMapping[]> = {};
+    for (const field of Object.keys(config.mappedIconMappings)) {
+      sorted[field] = sortMappings(config.mappedIconMappings[field]);
+    }
+    input.mappedIconMappings = sorted;
+  }
+
+  return calculateInputHash(input);
 }
