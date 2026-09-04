@@ -14,6 +14,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import useSWR, { mutate } from 'swr';
+import { stackedY } from './elementPlacement';
 import { IconSelector } from './IconSelector';
 import type {
   ContentGridProps,
@@ -501,7 +502,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
 
       // Calculate center position based on poster dimensions
       const centerX = (posterData.width - 200) / 2;
-      const centerY = 200 + elements.length * 50; // Stack vertically
+      const centerY = stackedY(200, 50, elements.length, posterData.height, 50);
 
       switch (type) {
         case 'text':
@@ -536,7 +537,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
             layerOrder: maxLayerOrder + 1,
             type: 'raster',
             x: (posterData.width - 100) / 2,
-            y: 150 + elements.length * 80,
+            y: stackedY(150, 80, elements.length, posterData.height, 100),
             width: 100,
             height: 100,
             properties: {
@@ -550,7 +551,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
             layerOrder: maxLayerOrder + 1,
             type: 'svg',
             x: (posterData.width - 50) / 2,
-            y: 100 + elements.length * 70,
+            y: stackedY(100, 70, elements.length, posterData.height, 50),
             width: 50,
             height: 50,
             properties: {
