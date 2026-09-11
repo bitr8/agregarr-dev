@@ -202,7 +202,7 @@ const CollectionSettings = ({
   filterTab,
 }: CollectionSettingsProps) => {
   const intl = useIntl();
-  const { addToast } = useToasts();
+  const { addToast, removeToast } = useToasts();
   const router = useRouter();
   const { mutate: revalidate } = useSWR('/api/v1/settings/plex');
   const { data } = useSWR<PlexSettings>('/api/v1/settings/plex');
@@ -381,12 +381,164 @@ const CollectionSettings = ({
   const shouldShowPlaceholderAlert =
     !isFirstTimeUser && libraryIssues.length > 0;
 
+  /**
+   * A collection only lands in Plex's promoted section if its effective
+   * sortTitle starts with "!" - that's the entire mechanism the positional
+   * scheme relies on (see buildPromotedSortTitle). Whether a collection
+   * actually ends up there depends purely on that leading character, not on
+   * Agregarr's own isLibraryPromoted flag - so typing a Sort Title that
+   * disagrees with the current flag (a "!"-prefixed value while marked
+   * A-Z, or a non-"!" value while marked promoted) silently produces a
+   * mismatch: Agregarr's own UI keeps showing the old section, while Plex
+   * will show the new one on the next sync. Surface it right after save
+   * rather than let the user discover it only after syncing.
+   */
+  const checkForPromotionMismatch = (
+    updatedConfig: {
+      id: string;
+      name: string;
+      sortTitleOverride?: string;
+      isLibraryPromoted?: boolean;
+    },
+    endpointBase: 'collections' | 'preexisting' = 'collections'
+  ) => {
+    if (!updatedConfig.sortTitleOverride) return;
+
+    const titleStartsWithBang = updatedConfig.sortTitleOverride.startsWith('!');
+    const isPromoted = updatedConfig.isLibraryPromoted === true;
+
+    // Already aligned - promoted with "!", or A-Z without it - nothing to flag.
+    if (titleStartsWithBang === isPromoted) return;
+
+    // addToast's own assigned id arrives via callback, after the content
+    // below is constructed - captured into this variable so the button
+    // closures can reference it. By the time a human actually clicks
+    // either button the callback has long since fired, so this is safe
+    // despite looking like a use-before-assignment.
+    let liveToastId: string | undefined;
+
+    const action = isPromoted ? 'demote' : 'promote';
+    const targetSection = isPromoted ? 'A-Z' : 'Promoted';
+    const currentSection = isPromoted ? 'Promoted' : 'A-Z';
+
+    // When the typed text is a full "!005_ExactName" rank, replay that
+    // rank through the promote call so confirming lands the collection
+    // exactly where it was asked to go, instead of at the bottom. The
+    // server no longer acts on a typed rank for an A-Z collection on its
+    // own precisely so this prompt can happen first - so the rank has to
+    // survive the round trip here, or confirming would silently discard it.
+    // Mirrors parseTypedRepositionRank server-side, including its
+    // deliberate lack of a name-match requirement.
+    const typedRankMatch = /^!(\d+)_/.exec(
+      updatedConfig.sortTitleOverride.trim()
+    );
+    const typedRank = typedRankMatch
+      ? parseInt(typedRankMatch[1], 10)
+      : undefined;
+    const promoteBody =
+      !isPromoted && typedRank !== undefined && typedRank > 0
+        ? { targetRank: typedRank }
+        : undefined;
+
+    addToast(
+      <div>
+        <p className="mb-2">
+          &quot;{updatedConfig.name}&quot;&apos;s Sort Title{' '}
+          {isPromoted ? 'no longer matches' : 'now matches'} the promoted
+          section&apos;s sort title scheme (starts with &quot;!&quot;), so it
+          will display in the {targetSection} section in Plex on the next sync
+          even though it&apos;s still marked as {currentSection} here. Would you
+          like to also {action} it in Agregarr to {targetSection}, or keep it in{' '}
+          {currentSection}?
+        </p>
+        <div className="flex gap-2">
+          <Button
+            buttonType="primary"
+            buttonSize="sm"
+            onClick={async () => {
+              try {
+                await axios.patch(
+                  `/api/v1/${endpointBase}/${updatedConfig.id}/${action}`,
+                  promoteBody
+                );
+                revalidate();
+                revalidateAll();
+              } catch {
+                addToast('Failed to update promotion status', {
+                  autoDismiss: true,
+                  appearance: 'error',
+                });
+              }
+              if (liveToastId) removeToast(liveToastId);
+            }}
+          >
+            Yes, {action} it
+          </Button>
+          <Button
+            buttonType="default"
+            buttonSize="sm"
+            onClick={() => {
+              if (liveToastId) removeToast(liveToastId);
+            }}
+          >
+            Keep in {currentSection}
+          </Button>
+        </div>
+      </div>,
+      { autoDismiss: false, appearance: 'warning' },
+      (id) => {
+        liveToastId = id;
+      }
+    );
+  };
+
+  // Typing a rank that matches the reposition pattern (e.g.
+  // "!001_ExactName") on a still-demoted collection auto-promotes it as
+  // part of the same save, clearing sortTitleOverride back to '' - so
+  // checkForPromotionMismatch's very first check (bail if there's no
+  // sortTitleOverride) means it never has anything to say about this case,
+  // even though a real, meaningful state change just happened. This fires
+  // instead, specifically for that one case, so promoting a collection via
+  // typed reposition gives the same kind of feedback demoting/promoting via
+  // the toast or a direct button click already does.
+  const notifyImplicitPromotion = (
+    originalConfig: { isLibraryPromoted?: boolean },
+    updatedConfig: {
+      name: string;
+      isLibraryPromoted?: boolean;
+      sortOrderLibrary?: number;
+      sortTitleOverride?: string;
+    }
+  ) => {
+    const wasPromoted = originalConfig.isLibraryPromoted === true;
+    const isPromotedNow = updatedConfig.isLibraryPromoted === true;
+    if (wasPromoted || !isPromotedNow || updatedConfig.sortTitleOverride) {
+      return false;
+    }
+
+    // Matches checkForPromotionMismatch's toast shape (JSX content,
+    // autoDismiss: false) - that one is proven to render reliably
+    // throughout testing, this plain-string version was not, despite
+    // confirmed via alert() that addToast is genuinely reached with
+    // autoDismiss: false. JSX vs string content was the last structural
+    // difference between the two calls.
+    addToast(
+      <div>
+        &quot;{updatedConfig.name}&quot; was promoted to rank{' '}
+        {updatedConfig.sortOrderLibrary} in the Promoted section.
+      </div>,
+      { autoDismiss: false, appearance: 'success' }
+    );
+    return true;
+  };
+
   // Collection configuration handlers
   const saveCollectionConfigs = async (
     configs: CollectionFormConfig[],
     suppressNotification = false
   ) => {
     try {
+      let didShowSpecificToast = false;
       // Use individual PUT calls for each config
       for (const config of configs) {
         // Create submission payload excluding computed fields like isActive (same pattern as saveIndividualConfigs)
@@ -404,6 +556,12 @@ const CollectionSettings = ({
           dynamicTitlePrefix: config.dynamicTitlePrefix,
           visibilityConfig: config.visibilityConfig,
           maxItems: config.maxItems,
+          // Separator settings travel with every save. Left out of this
+          // whitelist they were silently dropped on edit - the toggle would
+          // not move in either direction, while creating a collection (a
+          // different path) applied it fine.
+          useSeparator: config.useSeparator,
+          separatorTitle: config.separatorTitle,
           mediaType: config.mediaType,
           libraryId: config.libraryId,
           libraryName: config.libraryName,
@@ -595,16 +753,29 @@ const CollectionSettings = ({
           }),
           ...buildSelectionFieldsPayload(config),
         };
-        await axios.put(
+        const putResponse = await axios.put(
           `/api/v1/collections/${config.id}/settings`,
           submissionConfig
         );
+        if (putResponse.data?.collectionConfig) {
+          checkForPromotionMismatch(putResponse.data.collectionConfig);
+          if (
+            notifyImplicitPromotion(config, putResponse.data.collectionConfig)
+          ) {
+            // Skip the generic "saved" toast below for this save - the
+            // implicit-promotion toast already said something more
+            // specific, and firing both back-to-back was very likely why
+            // the more specific one never got noticed (see the "no toast"
+            // investigation this was added for).
+            didShowSpecificToast = true;
+          }
+        }
       }
 
       onUpdateConfigs(configs);
       revalidate();
 
-      if (!suppressNotification) {
+      if (!suppressNotification && !didShowSpecificToast) {
         addToast(intl.formatMessage(messages.collectionConfigSaved), {
           autoDismiss: true,
           appearance: 'success',
@@ -1018,12 +1189,28 @@ const CollectionSettings = ({
           enableCustomTheme: preExistingConfig.enableCustomTheme,
         }),
       };
-      await axios.put(`/api/v1/preexisting/${config.id}/settings`, payload);
+      const putResponse = await axios.put(
+        `/api/v1/preexisting/${config.id}/settings`,
+        payload
+      );
+      let didShowSpecificToast = false;
+      if (putResponse.data?.preExistingCollectionConfig) {
+        checkForPromotionMismatch(
+          putResponse.data.preExistingCollectionConfig,
+          'preexisting'
+        );
+        didShowSpecificToast = notifyImplicitPromotion(
+          preExistingConfig,
+          putResponse.data.preExistingCollectionConfig
+        );
+      }
       await revalidatePreExisting();
-      addToast(intl.formatMessage(messages.preExistingConfigSaved), {
-        autoDismiss: true,
-        appearance: 'success',
-      });
+      if (!didShowSpecificToast) {
+        addToast(intl.formatMessage(messages.preExistingConfigSaved), {
+          autoDismiss: true,
+          appearance: 'success',
+        });
+      }
       setShowPreExistingForm(false);
       setEditingPreExistingConfig(null);
     } catch (error) {
@@ -2341,6 +2528,7 @@ const CollectionSettings = ({
       {showConfigForm && editingConfig && (
         <CollectionConfigForm
           config={editingConfig}
+          activeTab={activeTab}
           libraries={libraries}
           onSave={saveCollectionConfig}
           onCancel={() => {
@@ -2378,6 +2566,7 @@ const CollectionSettings = ({
       {showHubForm && editingHubConfig && (
         <CollectionConfigForm
           config={editingHubConfig}
+          activeTab={activeTab}
           onSave={saveHubConfig}
           onCancel={closeHubModal}
           libraries={libraries}
@@ -2412,6 +2601,7 @@ const CollectionSettings = ({
       {showPreExistingForm && editingPreExistingConfig && (
         <CollectionConfigForm
           config={editingPreExistingConfig}
+          activeTab={activeTab}
           onSave={savePreExistingConfig}
           onCancel={closePreExistingModal}
           libraries={libraries}

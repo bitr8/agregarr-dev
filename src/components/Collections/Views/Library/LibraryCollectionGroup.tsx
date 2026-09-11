@@ -22,6 +22,7 @@ import type {
   FormConfigType,
   Library,
 } from '@app/types/collections';
+import { agregarrOwnsSortTitle } from '@app/utils/collections/sortTitle';
 import {
   closestCenter,
   DndContext,
@@ -76,10 +77,59 @@ function isLibraryPromoted(
   return collection.isLibraryPromoted === true;
 }
 
-function hasSortTitleOverride(
+/**
+ * The title Plex actually displays/sorts by for an A-Z (non-promoted)
+ * collection: a manual Sort Title override if one is set, otherwise (for
+ * pre-existing collections) whatever titleSort Plex already had at
+ * discovery time, otherwise the collection's own name. Hub configs have
+ * neither field, so they always fall through to name.
+ */
+function getEffectiveDisplayTitle(
   collection: CollectionFormConfig | PlexHubConfig | PreExistingCollectionConfig
-): boolean {
-  return !!(collection as CollectionFormConfig).sortTitleOverride;
+): string {
+  // Ordered the way Plex itself orders them, so this list cannot disagree
+  // with what the user sees there:
+  //
+  // 1. An override set in Agregarr, which has not reached Plex yet but is
+  //    what the next sync will write.
+  // 2. Plex's own sortTitle. A value the user typed in Plex - "Cameras" on
+  //    a collection named "...Cameras" - is deliberate and is exactly what
+  //    Plex files it under, so sorting by the name instead would put it
+  //    somewhere the user never asked for. Discovery refreshes this on
+  //    every pass (see DiscoveryService), so it tracks Plex rather than
+  //    going stale at first discovery the way it used to; changing it in
+  //    Plex needs a re-discover to show up here, which is the intended
+  //    flow.
+  // 3. Otherwise the collection's own name.
+  const withOverrides = collection as {
+    sortTitleOverride?: string;
+    titleSort?: string;
+    name?: string;
+    everLibraryPromoted?: boolean;
+  };
+  const name = withOverrides.name || '';
+
+  if (withOverrides.sortTitleOverride) return withOverrides.sortTitleOverride;
+
+  // Plex's stored value only wins where Agregarr does not own the sort title,
+  // i.e. where a human set it there. Where Agregarr does own it, the value in
+  // Plex is whatever the last sync wrote and can already be out of date -
+  // demote a collection sorted as "ZZZ_Video Games" and it belongs under V
+  // immediately, not wherever the stale prefix would put it until the next
+  // sync catches up. Showing the computed value keeps this list matching what
+  // Agregarr is about to write.
+  if (
+    withOverrides.titleSort &&
+    !agregarrOwnsSortTitle(
+      withOverrides.titleSort,
+      name,
+      withOverrides.everLibraryPromoted
+    )
+  ) {
+    return withOverrides.titleSort;
+  }
+
+  return name;
 }
 
 function findPromotedDividerIndex(
@@ -152,7 +202,10 @@ interface SortableItemProps {
   onPromotePreExisting?: (config: PreExistingCollectionConfig) => Promise<void>;
   onDemotePreExisting?: (config: PreExistingCollectionConfig) => Promise<void>;
   activeTab: 'home' | 'recommended' | 'library' | 'inactive' | 'unmanaged';
-  onIndividualSync?: (collectionId: string) => Promise<void>;
+  onIndividualSync?: (
+    collectionId: string,
+    configType: FormConfigType
+  ) => Promise<void>;
   isSyncing?: boolean;
   isLast?: boolean;
 }
@@ -197,8 +250,7 @@ const SortableItem = ({
   const isDraggingDisabled =
     isGreyedInRecommended ||
     isExcludedFromOrdering ||
-    (activeTab === 'library' && !isLibraryPromoted(config)) ||
-    (activeTab === 'library' && hasSortTitleOverride(config));
+    (activeTab === 'library' && !isLibraryPromoted(config));
 
   const {
     attributes,
@@ -426,7 +478,13 @@ const SortableItem = ({
         <SyncStatus
           needsSync={config.needsSync}
           isActive={config.isActive}
-          onIndividualSync={isCollection ? onIndividualSync : undefined}
+          onIndividualSync={
+            isCollection || isPreExisting
+              ? async (collectionId: string) => {
+                  await onIndividualSync?.(collectionId, configType);
+                }
+              : undefined
+          }
           collectionId={config.id}
           isSyncing={isSyncing}
           lastSyncedAt={config.lastSyncedAt}
@@ -494,12 +552,7 @@ const SortableItem = ({
                         onPromoteCollection(config as CollectionFormConfig)
                       }
                       className="text-orange-400 hover:text-orange-300"
-                      title={
-                        hasSortTitleOverride(config)
-                          ? 'Sort position is manually set in collection settings'
-                          : 'Promote to top section with custom ordering'
-                      }
-                      disabled={hasSortTitleOverride(config)}
+                      title="Promote to top section with custom ordering"
                     >
                       <span className="text-xs">↑</span>
                     </Button>
@@ -514,12 +567,7 @@ const SortableItem = ({
                         )
                       }
                       className="text-orange-400 hover:text-orange-300"
-                      title={
-                        hasSortTitleOverride(config)
-                          ? 'Sort position is manually set in collection settings'
-                          : 'Promote to top section with custom ordering'
-                      }
-                      disabled={hasSortTitleOverride(config)}
+                      title="Promote to top section with custom ordering"
                     >
                       <span className="text-xs">↑</span>
                     </Button>
@@ -538,12 +586,7 @@ const SortableItem = ({
                         onDemoteCollection(config as CollectionFormConfig)
                       }
                       className="text-yellow-400 hover:text-yellow-300"
-                      title={
-                        hasSortTitleOverride(config)
-                          ? 'Sort position is manually set in collection settings'
-                          : 'Demote to alphabetical section'
-                      }
-                      disabled={hasSortTitleOverride(config)}
+                      title="Demote to alphabetical section"
                     >
                       <span className="text-xs">↓</span>
                     </Button>
@@ -558,12 +601,7 @@ const SortableItem = ({
                         )
                       }
                       className="text-yellow-400 hover:text-yellow-300"
-                      title={
-                        hasSortTitleOverride(config)
-                          ? 'Sort position is manually set in collection settings'
-                          : 'Demote to alphabetical section'
-                      }
-                      disabled={hasSortTitleOverride(config)}
+                      title="Demote to alphabetical section"
                     >
                       <span className="text-xs">↓</span>
                     </Button>
@@ -626,6 +664,7 @@ const LibraryCollectionGroup = ({
 
   // SWR revalidation hook for refreshing collection data after sync
   const { mutate: revalidateCollections } = useSWR('/api/v1/collections');
+  const { mutate: revalidatePreExisting } = useSWR('/api/v1/preexisting');
 
   // Monitor collections to detect when individual syncs complete (or fail)
   useEffect(() => {
@@ -659,16 +698,42 @@ const LibraryCollectionGroup = ({
   }, [collections, syncingIds, addToast]);
 
   // Handle individual collection sync
-  const handleIndividualSync = async (collectionId: string) => {
+  const handleIndividualSync = async (
+    collectionId: string,
+    configType: FormConfigType = 'collection'
+  ) => {
     setSyncingIds((prev) => new Map(prev).set(collectionId, Date.now()));
 
     try {
-      await axios.post(`/api/v1/collections/${collectionId}/sync`);
+      // Pre-existing collections have their own route: Agregarr does not
+      // manage their contents, so there is nothing to rebuild - only the
+      // rename, sort title and rank the sortTitle pass writes.
+      const endpoint =
+        configType === 'preExisting'
+          ? `/api/v1/preexisting/${collectionId}/sync`
+          : `/api/v1/collections/${collectionId}/sync`;
+      await axios.post(endpoint);
 
       addToast(intl.formatMessage(messages.collectionSyncStarted), {
         appearance: 'success',
         autoDismiss: true,
       });
+
+      // The pre-existing route does the work before it responds, so there is
+      // nothing to poll for - and nothing would ever clear the spinner if we
+      // tried. The watcher below resolves a sync by finding the row in
+      // `collections`, which holds Agregarr collections only, and it polls
+      // /api/v1/collections, which is not where a pre-existing row lives.
+      // Both of those leave the spinner turning until a page refresh.
+      if (configType === 'preExisting') {
+        await revalidatePreExisting();
+        setSyncingIds((prev) => {
+          const newMap = new Map(prev);
+          newMap.delete(collectionId);
+          return newMap;
+        });
+        return;
+      }
 
       // Start polling for status updates
       const pollInterval = setInterval(() => {
@@ -764,10 +829,23 @@ const LibraryCollectionGroup = ({
             // Both promoted - sort by sortOrderLibrary
             return a.sortOrder - b.sortOrder;
           } else {
-            // Both A-Z - sort alphabetically by name
-            const aName = a.config.name || '';
-            const bName = b.config.name || '';
-            return aName.localeCompare(bName);
+            // Both A-Z - sort by the effective title Plex actually
+            // displays: a manual Sort Title override if one is set,
+            // otherwise the name with the configured leading-article
+            // handling applied, matching what the sync writes to Plex.
+            // Sorting by raw name alone means a collection whose sortTitle
+            // was set to alphabetize it under a different letter (e.g. a
+            // config named "...Cameras" with sortTitle "Cameras", meant to
+            // land under C) shows in the wrong place here even though Plex
+            // itself gets it right.
+            // numeric: true to match Plex, which natural-sorts leading
+            // numbers by value rather than by character: Plex orders
+            // "3 Men", "28 Days", "30 Days" as 3 < 28 < 30, whereas a plain
+            // string compare would put "28 Days" first ("2" < "3") and this
+            // list would disagree with what Plex actually displays.
+            const aTitle = getEffectiveDisplayTitle(a.config);
+            const bTitle = getEffectiveDisplayTitle(b.config);
+            return aTitle.localeCompare(bTitle, undefined, { numeric: true });
           }
         }
 

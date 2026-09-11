@@ -54,6 +54,10 @@ import {
   getLibraryEssentialsLabel,
   isLibraryEssentialsPattern,
 } from '@app/utils/collections/collectionUtils';
+import {
+  agregarrOwnsSortTitle,
+  PROMOTED_SORT_TITLE_RANK_WIDTH,
+} from '@app/utils/collections/sortTitle';
 
 const messages = defineMessages({
   editCollection: 'Edit Collection Configuration',
@@ -77,10 +81,14 @@ const messages = defineMessages({
   customSummaryPlaceholder: 'Enter a custom description for this collection...',
   customSummaryHelp:
     'Custom description text for the collection. Will be synced to Plex.',
-  sortTitle: 'Sort Title Prefix',
+  sortTitle: 'Sort Title',
   sortTitlePlaceholder: 'e.g. !020_',
   sortTitleHelp:
-    'Prefix prepended to the collection name for sort ordering. Use prefixes like !010_ to control position relative to other tools.',
+    'Controls where this collection sorts in Plex. A padded prefix like !020_ places it at that position, and because Agregarr reads the number it keeps the collection in step - promote, demote and drag all still work. Anything Agregarr cannot read as a position is written through verbatim. Clear the field to return to its automatic position.',
+  sortTitleGroupHelp:
+    "This creates many collections at once, so whatever you type here becomes the shared base for all of them, with each one's own name added after it - a separator, if used, gets this value exactly as typed. The same rules apply as a single collection's Sort Title.",
+  sortTitleEditedInPlex:
+    'Edited in Plex as "{value}". Changes here will replace it on sync.',
   overlayConfigWarningTitle: 'No Overlay Templates Configured',
   overlayConfigWarningMessage:
     'You have enabled placeholder creation and overlay application, but no overlay templates are configured for {libraryNames}. Placeholders will be created without status overlays showing monitored status, release dates, etc.',
@@ -293,6 +301,119 @@ const messages = defineMessages({
   connectionError: 'Connection error',
 });
 
+// Minimal shape shared by Agregarr and pre-existing collection configs, enough
+// to reconstruct a promoted collection's sort title.
+type SortTitleConfigLike = {
+  name?: string;
+  titleSort?: string;
+  sortOrderLibrary?: number;
+  isLibraryPromoted?: boolean;
+  everLibraryPromoted?: boolean;
+};
+
+// One config -> many Plex collections that all share a single position
+// (Essentials, Directors/Actors, Auto Franchise, Overseerr users). A typed
+// Sort Title is stored verbatim and reused as the shared base for every
+// generated collection, with each one's own name appended, rather than as a
+// literal title for any single one - see resolveMultiCollectionSortTitle
+// server-side.
+function isMultiCollectionSortTitleField(
+  type?: string,
+  subtype?: string
+): boolean {
+  return (
+    (type === 'plex' &&
+      [
+        'genre',
+        'decade',
+        'resolution',
+        'contentRating',
+        'directors',
+        'actors',
+      ].includes(subtype ?? '')) ||
+    (type === 'tmdb' && subtype === 'auto_franchise') ||
+    (type === 'overseerr' && subtype === 'users')
+  );
+}
+
+/**
+ * The sort title Agregarr would assign this collection for its CURRENT
+ * position, independent of any manual override. Mirrors the server's
+ * positional encoding (buildPromotedSortTitle): a promoted collection's
+ * title is a fixed-width, zero-padded rank number built purely from its own
+ * sortOrderLibrary — no other collection's position is needed, unlike the
+ * old exclamation-count scheme this replaced. A-Z collections keep their
+ * natural name. Used to pre-fill the Sort Title field so the user sees the
+ * real value, and to tell an unchanged value apart from a real override on
+ * save.
+ */
+/**
+ * The sort title someone set in Plex, when it differs from what Agregarr
+ * would write. Surfaced as a note under the field rather than inside it -
+ * knowing Plex disagrees is useful, but it is not this setting's value.
+ * Reads the stored copy, which discovery refreshes, so seeing it costs
+ * nothing extra.
+ */
+function plexSetSortTitle(target: SortTitleConfigLike): string | undefined {
+  const stored = target.titleSort?.trim();
+  if (!stored) return undefined;
+  if (
+    agregarrOwnsSortTitle(stored, target.name || '', target.everLibraryPromoted)
+  ) {
+    return undefined;
+  }
+  // Compared against what Agregarr WOULD write if it took this over, not
+  // against computeAgregarrSortTitle - that mirrors Plex's value straight
+  // back whenever Agregarr does not own it, so the two were always equal and
+  // this note could never appear in the one case it exists for: an A-Z
+  // collection someone had set by hand in Plex.
+  const sortKey = target.name || '';
+  const rank = target.sortOrderLibrary;
+  const wouldWrite =
+    target.isLibraryPromoted === true && rank !== undefined && rank > 0
+      ? `!${String(Math.max(0, rank)).padStart(
+          PROMOTED_SORT_TITLE_RANK_WIDTH,
+          '0'
+        )}_${sortKey}`
+      : sortKey;
+
+  return stored === wouldWrite ? undefined : stored;
+}
+
+function computeAgregarrSortTitle(target: SortTitleConfigLike): string {
+  const name = target.name || '';
+  const sortOrderLibrary = target.sortOrderLibrary;
+  const sortKey = name;
+
+  // Shows the sort title the collection actually has, including one set by
+  // hand in Plex once discovery has seen it - the field would otherwise
+  // claim a value the collection does not sort by. Clearing still works,
+  // because a pending reset is handled above and short-circuits this: the
+  // field flips to the default immediately rather than redisplaying the
+  // value just cleared, which is what made this feel broken before there
+  // was any way to say "reset".
+  if (
+    target.isLibraryPromoted !== true ||
+    sortOrderLibrary === undefined ||
+    sortOrderLibrary <= 0
+  ) {
+    const plexTitleSort = target.titleSort?.trim();
+    if (
+      plexTitleSort &&
+      !agregarrOwnsSortTitle(plexTitleSort, name, target.everLibraryPromoted)
+    ) {
+      return plexTitleSort;
+    }
+    return sortKey;
+  }
+
+  const rank = String(Math.max(0, sortOrderLibrary)).padStart(
+    PROMOTED_SORT_TITLE_RANK_WIDTH,
+    '0'
+  );
+  return `!${rank}_${sortKey}`;
+}
+
 const CollectionFormConfigForm = ({
   config,
   onSave,
@@ -300,6 +421,7 @@ const CollectionFormConfigForm = ({
   onUnlink,
   onLink,
   libraries,
+  activeTab,
   allCollectionConfigs,
   allHubConfigs,
 }: CollectionConfigFormProps) => {
@@ -1008,6 +1130,39 @@ const CollectionFormConfigForm = ({
     config.collectionType === 'pre_existing' ||
     (config as CollectionFormConfig).configType === 'preExisting';
   const isCollection = !isHub && !isPreExisting; // Regular Agregarr collections
+
+  // Agregarr's default sort title for this collection's current position. Used
+  // to pre-fill the (editable) Sort Title field and to tell an untouched
+  // default apart from a real manual override on save. Applies to Agregarr and
+  // pre-existing collections (not default Plex hubs). Positional encoding
+  // needs only this collection's own sortOrderLibrary, so collection and
+  // pre-existing configs are computed identically — no peer list required.
+  const agregarrSortTitle =
+    isCollection || isPreExisting
+      ? computeAgregarrSortTitle(config as CollectionFormConfig)
+      : '';
+
+  // Reported under the field, never inside it - see plexSetSortTitle.
+  const plexEditedSortTitle =
+    isCollection || isPreExisting
+      ? plexSetSortTitle(config as CollectionFormConfig)
+      : undefined;
+
+  // Sort Title follows the same availability as drag-and-drop: shown in the
+  // Library, Home, and Recommended tabs, but hidden for Recommended items whose
+  // ordering is controlled in the Home tab (home-visible) — exactly where drag
+  // is locked. Callers that pass no activeTab (e.g. All Collections) hide it.
+  const sortTitleVisibilityConfig = (config as CollectionFormConfig)
+    .visibilityConfig;
+  const showSortTitleField =
+    (activeTab === 'library' ||
+      activeTab === 'home' ||
+      activeTab === 'recommended') &&
+    !(
+      activeTab === 'recommended' &&
+      (sortTitleVisibilityConfig?.usersHome ||
+        sortTitleVisibilityConfig?.serverOwnerHome)
+    );
 
   // Use unified linking approach - check if actively linked
   // If isUnlinked is true, treat as NOT linked (available for re-linking)
@@ -1862,8 +2017,14 @@ const CollectionFormConfigForm = ({
           customWallpaper:
             (config as CollectionFormConfig).customWallpaper || '',
           customSummary: (config as CollectionFormConfig).customSummary || '',
+          // Pre-fill with the stored override verbatim, else Agregarr's current
+          // computed sort title, so the field shows the real effective value
+          // rather than a blank box (most collections rely on the automatic
+          // position and never had text typed in). An untouched pre-fill is
+          // cleared again on save, below, so it never becomes an override.
           sortTitleOverride:
-            (config as CollectionFormConfig).sortTitleOverride || '',
+            (config as CollectionFormConfig).sortTitleOverride ||
+            agregarrSortTitle,
           customTheme: (config as CollectionFormConfig).customTheme || '',
           // Custom URL fields (default to empty strings to prevent uncontrolled->controlled warnings)
           traktCustomListUrl:
@@ -2449,7 +2610,19 @@ const CollectionFormConfigForm = ({
             // Wallpaper, summary, and theme settings
             customWallpaper: values.customWallpaper,
             customSummary: values.customSummary,
-            sortTitleOverride: values.sortTitleOverride?.trim() || '',
+            // Submitting the pre-filled default unchanged means "no override" -
+            // storing it would freeze the collection at its current position
+            // and silently disable the automatic ordering it still expects.
+            sortTitleOverride:
+              values.sortTitleOverride?.trim() === agregarrSortTitle.trim()
+                ? ''
+                : values.sortTitleOverride?.trim() || '',
+            // Emptying a field that had something in it is the documented way
+            // to hand the sort title back ("Clear the field to return to its
+            // automatic position"). An empty sortTitleOverride cannot say that
+            // on its own - a collection that never had one submits the same
+            // empty string - so the intent travels as its own flag, and only
+            // when the field genuinely went from filled to empty.
             customTheme: values.customTheme,
             enableCustomWallpaper: values.enableCustomWallpaper,
             enableCustomSummary: values.enableCustomSummary,
@@ -3892,30 +4065,56 @@ const CollectionFormConfigForm = ({
                                   </div>
 
                                   {/* Sort Title Override */}
-                                  <div className="form-row">
-                                    <label
-                                      htmlFor="sortTitleOverride"
-                                      className="text-label"
-                                    >
-                                      {intl.formatMessage(messages.sortTitle)}
-                                    </label>
-                                    <div className="form-input-area">
-                                      <Field
-                                        type="text"
-                                        id="sortTitleOverride"
-                                        name="sortTitleOverride"
-                                        placeholder={intl.formatMessage(
-                                          messages.sortTitlePlaceholder
-                                        )}
-                                        className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
-                                      />
-                                      <div className="label-tip mt-1">
-                                        {intl.formatMessage(
-                                          messages.sortTitleHelp
-                                        )}
+                                  {showSortTitleField &&
+                                    !(
+                                      values.type === 'plex' &&
+                                      values.subtype === 'separator'
+                                    ) && (
+                                      <div className="form-row">
+                                        <label
+                                          htmlFor="sortTitleOverride"
+                                          className="text-label"
+                                        >
+                                          {intl.formatMessage(
+                                            messages.sortTitle
+                                          )}
+                                        </label>
+                                        <div className="form-input-area">
+                                          <Field
+                                            type="text"
+                                            id="sortTitleOverride"
+                                            name="sortTitleOverride"
+                                            placeholder={
+                                              agregarrSortTitle ||
+                                              intl.formatMessage(
+                                                messages.sortTitlePlaceholder
+                                              )
+                                            }
+                                            className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
+                                          />
+                                          <div className="label-tip mt-1">
+                                            {isMultiCollectionSortTitleField(
+                                              values.type,
+                                              values.subtype
+                                            )
+                                              ? intl.formatMessage(
+                                                  messages.sortTitleGroupHelp
+                                                )
+                                              : intl.formatMessage(
+                                                  messages.sortTitleHelp
+                                                )}
+                                          </div>
+                                          {plexEditedSortTitle && (
+                                            <div className="label-tip mt-1 text-orange-300">
+                                              {intl.formatMessage(
+                                                messages.sortTitleEditedInPlex,
+                                                { value: plexEditedSortTitle }
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
-                                  </div>
+                                    )}
 
                                   {/* Enable Theme Checkbox */}
                                   <div className="mb-4">
@@ -5219,30 +5418,54 @@ const CollectionFormConfigForm = ({
                                 </div>
 
                                 {/* Sort Title Override */}
-                                <div className="form-row">
-                                  <label
-                                    htmlFor="sortTitleOverride"
-                                    className="text-label"
-                                  >
-                                    {intl.formatMessage(messages.sortTitle)}
-                                  </label>
-                                  <div className="form-input-area">
-                                    <Field
-                                      type="text"
-                                      id="sortTitleOverride"
-                                      name="sortTitleOverride"
-                                      placeholder={intl.formatMessage(
-                                        messages.sortTitlePlaceholder
-                                      )}
-                                      className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
-                                    />
-                                    <div className="label-tip mt-1">
-                                      {intl.formatMessage(
-                                        messages.sortTitleHelp
-                                      )}
+                                {showSortTitleField &&
+                                  !(
+                                    values.type === 'plex' &&
+                                    values.subtype === 'separator'
+                                  ) && (
+                                    <div className="form-row">
+                                      <label
+                                        htmlFor="sortTitleOverride"
+                                        className="text-label"
+                                      >
+                                        {intl.formatMessage(messages.sortTitle)}
+                                      </label>
+                                      <div className="form-input-area">
+                                        <Field
+                                          type="text"
+                                          id="sortTitleOverride"
+                                          name="sortTitleOverride"
+                                          placeholder={
+                                            agregarrSortTitle ||
+                                            intl.formatMessage(
+                                              messages.sortTitlePlaceholder
+                                            )
+                                          }
+                                          className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white placeholder-stone-400 focus:border-orange-500 focus:outline-none"
+                                        />
+                                        <div className="label-tip mt-1">
+                                          {isMultiCollectionSortTitleField(
+                                            values.type,
+                                            values.subtype
+                                          )
+                                            ? intl.formatMessage(
+                                                messages.sortTitleGroupHelp
+                                              )
+                                            : intl.formatMessage(
+                                                messages.sortTitleHelp
+                                              )}
+                                        </div>
+                                        {plexEditedSortTitle && (
+                                          <div className="label-tip mt-1 text-orange-300">
+                                            {intl.formatMessage(
+                                              messages.sortTitleEditedInPlex,
+                                              { value: plexEditedSortTitle }
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                </div>
+                                  )}
                               </div>
                             </div>
                           )}

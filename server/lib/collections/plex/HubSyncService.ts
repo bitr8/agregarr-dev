@@ -1,5 +1,9 @@
 import type PlexAPI from '@server/api/plexapi';
-import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
+import {
+  buildPromotedSortTitle,
+  buildSortTitleFromOverride,
+  extractErrorMessage,
+} from '@server/lib/collections/core/CollectionUtilities';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import type {
@@ -1652,8 +1656,15 @@ export class HubSyncService {
    * Sync pre-existing collection sortTitles based on isLibraryPromoted status
    * Only updates sortTitle when collections are in promoted state
    */
+  /**
+   * @param onlyConfigId restricts the pass to a single collection, for the
+   * individual sync route. The collision index below is still built from
+   * every config either way - a rename has to check the whole library for
+   * the name it is moving to, not just the one collection being synced.
+   */
   public async syncPreExistingCollectionSortTitles(
-    plexClient: PlexAPI
+    plexClient: PlexAPI,
+    onlyConfigId?: string
   ): Promise<void> {
     if (this.cancelled) return;
 
@@ -1664,6 +1675,7 @@ export class HubSyncService {
 
       for (const config of preExistingConfigs) {
         if (this.cancelled) return;
+        if (onlyConfigId && config.id !== onlyConfigId) continue;
 
         // Skip configs without rating keys
         if (!config.collectionRatingKey) {
@@ -1674,13 +1686,51 @@ export class HubSyncService {
           continue;
         }
 
-        // Sort title override: prefix + collection name
+        // A-Z only, same scoping as leading-article handling below -
+        // promoted collections are Agregarr's own positional ordering and
+        // are left alone here.
+        const isCurrentlyPromoted =
+          config.isLibraryPromoted && config.sortOrderLibrary > 0;
+
+        // Optionally rename the actual Plex collection to strip a trailing
+        // " Collection" suffix (e.g. TMDb collections named "The
+        // Accountant Collection") - a real title change, not just a
+        // sortTitle tweak, so it has to happen before the sortTitle logic
+        // below, which sorts off of whatever name is actually current.
+        //
+        // Deliberately NOT gated on a manual Sort Title override: the sort
+        // title is a hidden sorting key and the name is the front-facing
+        // label, so customizing one says nothing about the other. Gating
+        // on it meant a collection with any custom sort title silently
+        // opted out of a setting the user had explicitly turned on, with
+        // no feedback explaining why nothing happened.
+        const effectiveName = config.name;
+
+        // A manual Sort Title override always wins and applies to every
+        // collection, including the A-Z ones the computed logic below skips.
         if (config.sortTitleOverride) {
           try {
+            const overrideSortTitle = buildSortTitleFromOverride(
+              config.sortTitleOverride,
+              effectiveName
+            );
+            // An override is always Agregarr imposing a value, so this
+            // path always locks.
             await plexClient.updateCollectionSortTitle(
               config.collectionRatingKey,
-              `${config.sortTitleOverride}${config.name}`
+              overrideSortTitle,
+              config.titleSort ?? effectiveName
             );
+            // Same reason as the computed branch below: the stored copy is
+            // what the UI reads until discovery runs, so leaving it behind
+            // means the panel keeps reporting a sort title that was just
+            // replaced - "edited in Plex as ..." quoting a value no longer
+            // there.
+            if (config.titleSort !== overrideSortTitle) {
+              this.updatePreExistingConfigField(config.id, {
+                titleSort: overrideSortTitle,
+              });
+            }
           } catch (error) {
             logger.error(
               `Failed to update sortTitle override for pre-existing collection ${
@@ -1704,54 +1754,54 @@ export class HubSyncService {
           continue;
         }
 
+        const sortKeyName = effectiveName;
+
         let sortTitle: string;
         const updateConfig: Partial<PreExistingCollectionConfig> = {};
 
-        if (config.isLibraryPromoted && config.sortOrderLibrary > 0) {
-          // Promoted: Set exclamation marks
-          const sameLibraryPreExisting = preExistingConfigs.filter(
-            (c) =>
-              c.libraryId === config.libraryId &&
-              c.sortOrderLibrary !== undefined &&
-              c.isLibraryPromoted === true
+        if (isCurrentlyPromoted) {
+          // Promoted: positional sortTitle (see buildPromotedSortTitle)
+          sortTitle = buildPromotedSortTitle(
+            sortKeyName,
+            config.sortOrderLibrary
           );
-
-          const collectionConfigs = settings.plex.collectionConfigs || [];
-          const sameLibraryCollections = collectionConfigs.filter(
-            (c) =>
-              c.libraryId === config.libraryId &&
-              c.sortOrderLibrary !== undefined &&
-              c.isLibraryPromoted === true
-          );
-
-          const combinedSortOrders = [
-            ...sameLibraryPreExisting.map((c) => c.sortOrderLibrary),
-            ...sameLibraryCollections.map((c) => c.sortOrderLibrary),
-          ].filter((order): order is number => order !== undefined);
-
-          if (combinedSortOrders.length > 0) {
-            const maxSortOrder = Math.max(...combinedSortOrders);
-            const exclamationCount = maxSortOrder - config.sortOrderLibrary + 2;
-            const exclamationPrefix = '!'.repeat(exclamationCount);
-            sortTitle = `${exclamationPrefix}${config.name}`;
-          } else {
-            sortTitle = `!!${config.name}`;
-          }
         } else {
           // Demoted: Reset to natural title and mark as cleaned
-          sortTitle = config.name;
+          sortTitle = sortKeyName;
           // After reset, set everLibraryPromoted back to false
           updateConfig.everLibraryPromoted = false;
         }
 
         try {
+          // Pass what Plex currently has so an unchanged value is skipped
+          // rather than rewritten. Without it every pre-existing collection
+          // was written on every sync - mostly no-ops setting a sort title
+          // identical to the name - and each write also sets
+          // titleSort.locked, taking a collection Plex was managing happily
+          // out of its hands for no reason.
+          //
+          // Falling back to the name is the point rather than a nicety: Plex
+          // omits titleSort entirely when it matches the title, so most
+          // collections have none stored, and the skip is gated on the value
+          // being defined. Absent means "currently sorts by its name", which
+          // is exactly what needs comparing against.
           await plexClient.updateCollectionSortTitle(
             config.collectionRatingKey,
-            sortTitle
+            sortTitle,
+            config.titleSort ?? effectiveName
           );
 
-          // Update config if everLibraryPromoted needs to be reset
-          if (updateConfig.everLibraryPromoted !== undefined) {
+          // Keep the stored copy in step with what was just written.
+          // Discovery refreshes it on its own pass, but until that runs the
+          // UI reads this field - and would show the sort title the
+          // collection no longer has, which reads as the edit being
+          // rejected.
+          if (config.titleSort !== sortTitle) {
+            updateConfig.titleSort = sortTitle;
+          }
+
+          // Persist whatever changed.
+          if (Object.keys(updateConfig).length > 0) {
             this.updatePreExistingConfigField(config.id, updateConfig);
           }
 

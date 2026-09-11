@@ -10,11 +10,14 @@ import PlexAPI from '@server/api/plexapi';
 import TheMovieDb from '@server/api/themoviedb';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  buildPromotedSortTitle,
   extractTmdbIdFromGuids,
   extractTvdbIdFromGuids,
   getAdminUser,
   getCollectionMediaType,
+  getSortTitleOverride,
   hasAgregarrLabel,
+  resolveMultiCollectionBase,
   type LibraryItemsCache,
 } from '@server/lib/collections/core/CollectionUtilities';
 import type {
@@ -109,38 +112,55 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     config: CollectionConfig,
     baseTitle: string
   ): string {
+    // Read fresh from settings by id rather than trusting the `config`
+    // snapshot this method was handed - the same staleness risk the
+    // sub-collections' own sortTitle write was fixed for applies here too,
+    // since this runs partway through a potentially long sync.
     const settings = getSettings();
-    const sortOrderLibrary = config.sortOrderLibrary;
-    const isPromoted = config.isLibraryPromoted;
+    const matchingConfig = config.id
+      ? (settings.plex.collectionConfigs || []).find((c) => c.id === config.id)
+      : undefined;
 
-    if (sortOrderLibrary !== undefined && isPromoted) {
-      const allConfigs = settings.plex.collectionConfigs || [];
-      const promotedConfigs = allConfigs.filter(
-        (c) =>
-          c.libraryId === config.libraryId &&
-          c.sortOrderLibrary !== undefined &&
-          c.isLibraryPromoted === true
-      );
-
-      const maxSortOrder =
-        promotedConfigs.length > 0
-          ? Math.max(
-              ...promotedConfigs
-                .map((c) => c.sortOrderLibrary)
-                .filter((v): v is number => v !== undefined)
-            )
-          : 0;
-
-      const exclamationCount = maxSortOrder
-        ? maxSortOrder - sortOrderLibrary + 2
-        : 2;
-      // Add a digit after the prefix so it sorts before alpha titles but after plain '!'
-      const prefix = '!'.repeat(Math.max(1, exclamationCount));
-      return `${prefix}0${baseTitle}`;
+    const sortTitleOverride = matchingConfig
+      ? getSortTitleOverride(matchingConfig)
+      : undefined;
+    if (sortTitleOverride) {
+      // Stored verbatim (see resolveMultiCollectionSortTitle) - the
+      // separator's own sortTitle IS the override, exactly as typed, not
+      // combined with anything else. Sub-collections get this same value
+      // plus their own name appended (see updateCollectionMetadata) - the
+      // separator sorts immediately before all of them because its
+      // sortTitle is a strict string prefix of theirs.
+      return sortTitleOverride;
     }
 
-    // Non-promoted: use a digit so it stays ahead of alpha names in A-Z buckets
-    return `0${baseTitle}`;
+    const sortOrderLibrary =
+      matchingConfig?.sortOrderLibrary ?? config.sortOrderLibrary;
+    const isPromoted =
+      matchingConfig?.isLibraryPromoted ?? config.isLibraryPromoted;
+
+    if (sortOrderLibrary !== undefined && isPromoted) {
+      // Positional sortTitle (see buildPromotedSortTitle). The leading '!'
+      // on baseTitle matches Kometa's own separator convention exactly
+      // (defaults/templates.yml: sort_title: <<sort_prefix>><<collection_section>>_!<<title>>)
+      // - a second '!' embedded after the underscore, not a digit. '!' sorts
+      // before every digit and letter, so unlike a '0' marker it can never
+      // collide with a real collection name that happens to start with a
+      // digit itself.
+      return buildPromotedSortTitle(`!${baseTitle}`, sortOrderLibrary);
+    }
+
+    // Non-promoted: the group's own name, which its members build from too
+    // (see resolveMultiCollectionBase), so the separator is a strict string
+    // prefix of every one of them and sorts immediately ahead of the block.
+    //
+    // This used to return `!${baseTitle}` - the separator's own title with a
+    // '!' in front - which parked it at the top of the entire library rather
+    // than ahead of its group, under a name its members shared nothing with.
+    // A demoted group had no cohesion at all as a result.
+    return (
+      resolveMultiCollectionBase(undefined, matchingConfig?.name) ?? baseTitle
+    );
   }
 
   private async resolveSeparatorTemplateId(): Promise<number | null> {
@@ -603,9 +623,16 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
 
       // Align separator sort title with user ordering (matching prefix, underscore to float before group)
       try {
-        const sortTitle = config.sortTitleOverride
-          ? `${config.sortTitleOverride}${separatorTitle}`
-          : this.buildSeparatorSortTitle(config, separatorTitle);
+        // Always through the helper. A branch here used to concatenate the
+        // override and the separator's own name when an override existed,
+        // producing "AAuto Genre CollectionsGenre Collections" - the name
+        // doubled, and no underscore, so it did not sort with its group
+        // either. The helper returns the override verbatim, which is what
+        // makes the separator a strict string prefix of its members
+        // ("...Collections" before "...Collections_Music") and sorts it
+        // immediately ahead of them. It also re-reads from settings rather
+        // than trusting this possibly-stale config snapshot.
+        const sortTitle = this.buildSeparatorSortTitle(config, separatorTitle);
         await plexClient.updateCollectionSortTitle(
           separatorRatingKey,
           sortTitle

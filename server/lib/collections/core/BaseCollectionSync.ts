@@ -22,6 +22,8 @@ import logger from '@server/logger';
 import path from 'path';
 import {
   applyCollectionExclusions,
+  buildPromotedSortTitle,
+  buildSortTitleFromOverride,
   clearConfigRatingKey,
   createCollectionLabel,
   createSyncError,
@@ -32,6 +34,7 @@ import {
   hasAgregarrLabel,
   isMultiCollectionPattern,
   logCollectionProcessingResults,
+  resolveMultiCollectionBase,
   sanitizeCollectionName,
   updateConfigWithRatingKey,
   validateAndSanitizeItems,
@@ -2253,62 +2256,81 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     }
 
     // Update sort title if needed - for Agregarr-created collections
-    // Find the config to check everLibraryPromoted status
+    // Find the config to check everLibraryPromoted status. Matched by id,
+    // not collectionRatingKey: multi-collection generators (Essentials,
+    // Directors/Actors, Franchise) never store an individual generated
+    // collection's key on the shared parent config, so a ratingKey-based
+    // lookup could never resolve for them - the override check below would
+    // silently never fire. Matching by id also means sortOrderLibrary and
+    // isLibraryPromoted get read fresh from settings at write time rather
+    // than trusting whatever `options` snapshot the caller captured earlier
+    // in a long-running sync, which can be stale by the time this specific
+    // collection's turn comes up.
     const settings = getSettings();
     const allConfigs = settings.plex.collectionConfigs || [];
-    const matchingConfig = allConfigs.find((config) => {
-      const configLibraryId = Array.isArray(config.libraryId)
-        ? config.libraryId[0]
-        : config.libraryId;
-      return (
-        configLibraryId === options.libraryKey &&
-        config.collectionRatingKey === collectionRatingKey
-      );
-    });
+    const matchingConfig = options.config?.id
+      ? allConfigs.find((config) => config.id === options.config?.id)
+      : undefined;
 
-    // Sort title override: prefix + collection name
+    const effectiveSortOrderLibrary =
+      matchingConfig?.sortOrderLibrary ?? sortOrderLibrary;
+    const effectiveIsLibraryPromoted =
+      matchingConfig?.isLibraryPromoted ?? isLibraryPromoted;
+
+    // A manual Sort Title override always wins and applies to every
+    // collection, including the A-Z ones the computed logic below skips.
     const effectiveOverride =
       options.config?.sortTitleOverride || matchingConfig?.sortTitleOverride;
-    if (effectiveOverride) {
+
+    // Multi-collection configs put every collection they generate behind one
+    // shared prefix, so the name following that prefix is what actually orders
+    // them against each other - unlike a single collection, whose own rank
+    // already decides its position and whose name is never compared.
+    const sortKeyName = collectionName;
+
+    // A demoted multi-collection group falls back to its parent config's name
+    // as the shared base, so its members stay together under it instead of
+    // scattering to their own initials while the separator sits alone at the
+    // top of the library. Promoted groups need no fallback - the rank prefix
+    // they already share groups them.
+    const groupBase = isMultiCollectionPattern(matchingConfig)
+      ? resolveMultiCollectionBase(
+          effectiveOverride,
+          effectiveIsLibraryPromoted ? undefined : matchingConfig?.name
+        )
+      : effectiveOverride;
+
+    if (groupBase) {
       await plexClient.updateCollectionSortTitle(
         collectionRatingKey,
-        `${effectiveOverride}${collectionName}`,
+        buildSortTitleFromOverride(
+          groupBase,
+          sortKeyName,
+          isMultiCollectionPattern(matchingConfig)
+        ),
         options.existingTitleSort
       );
     } else if (
       // Only update sortTitle if everLibraryPromoted is not explicitly false
-      sortOrderLibrary !== undefined &&
-      matchingConfig?.everLibraryPromoted !== false
+      effectiveSortOrderLibrary !== undefined &&
+      (matchingConfig?.everLibraryPromoted !== false ||
+        effectiveIsLibraryPromoted)
     ) {
       let sortTitle: string;
       const updateConfig: Partial<CollectionConfig> = {};
 
-      if (isLibraryPromoted && sortOrderLibrary > 0) {
-        // Promoted: Set exclamation marks
-        const sameLibraryConfigs = allConfigs.filter((config) => {
-          const configLibraryId = Array.isArray(config.libraryId)
-            ? config.libraryId[0]
-            : config.libraryId;
-          return (
-            configLibraryId === options.libraryKey &&
-            config.sortOrderLibrary !== undefined &&
-            config.isLibraryPromoted === true
-          );
-        });
-
-        if (sameLibraryConfigs.length > 0) {
-          const sortOrders = sameLibraryConfigs
-            .map((c) => c.sortOrderLibrary)
-            .filter((order): order is number => order !== undefined);
-          const maxSortOrder = Math.max(...sortOrders);
-          const exclamationCount = maxSortOrder - sortOrderLibrary + 2;
-          const exclamationPrefix = '!'.repeat(exclamationCount);
-          sortTitle = `${exclamationPrefix}${collectionName}`;
-        } else {
-          sortTitle = `!!${collectionName}`;
-        }
+      if (effectiveIsLibraryPromoted && effectiveSortOrderLibrary > 0) {
+        // Promoted: positional sortTitle (see buildPromotedSortTitle).
+        // sortKeyName, not collectionName - a promoted multi-collection
+        // config shares one rank across everything it generates, so the
+        // same tiebreaker applies as in the override path above.
+        sortTitle = buildPromotedSortTitle(
+          sortKeyName,
+          effectiveSortOrderLibrary
+        );
       } else {
-        // Demoted: Reset to natural title and mark as cleaned
+        // A-Z: back to the natural title, clearing any rank prefix a
+        // previous promotion left behind.
         sortTitle = collectionName;
         // After reset, set everLibraryPromoted back to false
         updateConfig.everLibraryPromoted = false;
