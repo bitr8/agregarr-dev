@@ -560,7 +560,9 @@ export interface TautulliSourceData {
   users_watched?: string | number; // Unique viewer count (string for most_watched, number for most_popular)
   year?: number;
   tmdb_id?: number;
+  tvdb_id?: number;
   duration?: number;
+  total_duration?: number; // Seconds (Tracearr provider)
   last_played?: number;
 }
 

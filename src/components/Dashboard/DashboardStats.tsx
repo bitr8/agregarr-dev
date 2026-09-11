@@ -21,10 +21,10 @@ const messages = defineMessages({
   preExistingCollections: 'Pre-existing',
   totalServer: 'total',
   thisWeek: 'this week',
-  tautulliRequired: 'Tautulli Setup Required',
+  tautulliRequired: 'Statistics Provider Setup Required',
   tautulliDescriptionPlayStats:
-    'Configure Tautulli in your settings to view play statistics from your Plex server.',
-  configureTautulli: 'Configure Tautulli',
+    'Configure Tautulli or Tracearr in your settings to view play statistics from your Plex server.',
+  configureTautulli: 'Configure Statistics Provider',
   failedToLoadDashboardStats: 'Failed to load dashboard statistics',
 });
 
@@ -51,6 +51,7 @@ interface DashboardData {
   };
   tautulli?: {
     isConnected: boolean;
+    provider?: 'tautulli' | 'tracearr';
     error?: string;
     weeklyActivity?: {
       totalPlays: number;

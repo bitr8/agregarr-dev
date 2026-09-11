@@ -30,7 +30,9 @@ import type {
   MaintainerrSettings,
   MDBListSettings,
   MyAnimeListSettings,
+  StatisticsSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 import axios from 'axios';
@@ -62,6 +64,33 @@ const messages = defineMessages({
   toastTautulliSettingsSuccess: 'Tautulli settings saved successfully!',
   toastTautulliSettingsFailure:
     'Something went wrong while saving Tautulli settings.',
+  statisticsProviderSettings: 'Statistics Provider',
+  statisticsProviderDescription:
+    'Choose which service supplies watch statistics for "Tautulli Statistics" collections, the dashboard and per-item watch data. Configure the selected service below.',
+  statisticsProvider: 'Active Provider',
+  statisticsProviderNotConfigured:
+    'The selected provider is not configured yet. Enter its connection details below and save them.',
+  toastStatisticsSettingsSuccess: 'Statistics provider saved successfully!',
+  toastStatisticsSettingsFailure:
+    'Something went wrong while saving the statistics provider.',
+  tracearrSettings: 'Tracearr Settings',
+  tracearrSettingsDescription:
+    'Optionally configure the settings for your Tracearr server. Agregarr derives watch statistics from the Tracearr playback history. Generate a public API key (trr_pub_…) under Settings → API in Tracearr.',
+  tracearrHostname: 'Hostname or IP Address',
+  tracearrPort: 'Port',
+  tracearrUseSsl: 'Use SSL',
+  tracearrApiKey: 'API Key',
+  tracearrServer: 'Media Server',
+  tracearrServerAuto: 'All Plex servers monitored by Tracearr',
+  tracearrServerSaved: 'Saved server ({id})',
+  tracearrServerHint:
+    'Test the connection to load the servers Tracearr monitors. Pick the Plex server Agregarr manages if Tracearr tracks more than one.',
+  toastTracearrSettingsSuccess: 'Tracearr settings saved successfully!',
+  toastTracearrSettingsFailure:
+    'Something went wrong while saving Tracearr settings.',
+  testTracearrConnection: 'Test Connection',
+  tracearrConnectionSuccess: 'Connected to Tracearr {version} successfully!',
+  tracearrConnectionFailure: 'Failed to connect to Tracearr',
   traktSettings: 'Trakt Settings',
   traktBasicSetup: 'Basic Trakt Setup',
   traktBasicDescription:
@@ -273,6 +302,10 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
   const [mdblistTestSuccess, setMdblistTestSuccess] = useState(false);
   const [myanimelistTestSuccess, setMyanimelistTestSuccess] = useState(false);
   const [tautulliTestSuccess, setTautulliTestSuccess] = useState(false);
+  const [tracearrTestSuccess, setTracearrTestSuccess] = useState(false);
+  const [tracearrServers, setTracearrServers] = useState<
+    { id: string; name: string; type: string; online: boolean }[]
+  >([]);
   const [maintainerrTestSuccess, setMaintainerrTestSuccess] = useState(false);
   const [testingService, setTestingService] = useState<string | null>(null);
   const [isDisconnectingTrakt, setIsDisconnectingTrakt] = useState(false);
@@ -291,14 +324,26 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
   const [testedMyanimelistValues, setTestedMyanimelistValues] =
     useState<string>('');
   const [testedTautulliValues, setTestedTautulliValues] = useState<string>('');
+  const [testedTracearrValues, setTestedTracearrValues] = useState<string>('');
   const [testedMaintainerrValues, setTestedMaintainerrValues] =
     useState<string>('');
 
   // Check if we're in setup mode
   const isSetupMode = !!onComplete;
 
+  // Provider selection saves immediately; only the active provider's
+  // connection form is shown below.
+  const [isSavingStatisticsProvider, setIsSavingStatisticsProvider] =
+    useState(false);
+
   const { data: dataTautulli, mutate: revalidateTautulli } =
     useSWR<TautulliSettings>('/api/v1/settings/tautulli');
+  const { data: dataTracearr, mutate: revalidateTracearr } =
+    useSWR<TracearrSettings>('/api/v1/settings/tracearr');
+  const { data: dataStatistics, mutate: revalidateStatistics } =
+    useSWR<StatisticsSettings>('/api/v1/settings/statistics');
+  const activeStatisticsProvider: StatisticsSettings['provider'] =
+    dataStatistics?.provider ?? 'tautulli';
   const { data: dataTrakt, mutate: revalidateTrakt } = useSWR<TraktSettings>(
     '/api/v1/settings/trakt'
   );
@@ -345,6 +390,10 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
   }, [dataTautulli?.hostname, dataTautulli?.port, dataTautulli?.apiKey]);
 
   useEffect(() => {
+    setTracearrTestSuccess(false);
+  }, [dataTracearr?.hostname, dataTracearr?.port, dataTracearr?.apiKey]);
+
+  useEffect(() => {
     setMyanimelistTestSuccess(false);
   }, [dataMyanimelist?.apiKey]);
 
@@ -357,6 +406,35 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
     dataMaintainerr?.useSsl,
     dataMaintainerr?.urlBase,
   ]);
+
+  const activeStatisticsProviderConfigured =
+    activeStatisticsProvider === 'tracearr'
+      ? !!dataTracearr?.apiKey
+      : !!dataTautulli?.apiKey;
+
+  const changeStatisticsProvider = async (
+    provider: StatisticsSettings['provider']
+  ) => {
+    if (provider === activeStatisticsProvider) {
+      return;
+    }
+    setIsSavingStatisticsProvider(true);
+    try {
+      await axios.post('/api/v1/settings/statistics', { provider });
+      await revalidateStatistics();
+      addToast(intl.formatMessage(messages.toastStatisticsSettingsSuccess), {
+        appearance: 'success',
+        autoDismiss: true,
+      });
+    } catch (e) {
+      addToast(intl.formatMessage(messages.toastStatisticsSettingsFailure), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    } finally {
+      setIsSavingStatisticsProvider(false);
+    }
+  };
 
   const TautulliValidationSchema = Yup.object().shape(
     {
@@ -393,6 +471,44 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
       ['tautulliHostname', 'tautulliPort'],
       ['tautulliHostname', 'tautulliApiKey'],
       ['tautulliPort', 'tautulliApiKey'],
+    ]
+  );
+
+  const TracearrValidationSchema = Yup.object().shape(
+    {
+      tracearrHostname: Yup.string()
+        .nullable()
+        .matches(
+          /^(([a-z]|\d|_|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*)?([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])$/i,
+          intl.formatMessage(messages.validationHostnameRequired)
+        ),
+      tracearrPort: Yup.number()
+        .typeError(intl.formatMessage(messages.validationPortRequired))
+        .nullable(),
+      tracearrUrlBase: Yup.string()
+        .test(
+          'leading-slash',
+          intl.formatMessage(messages.validationUrlBaseLeadingSlash),
+          (value) => !value || value.startsWith('/')
+        )
+        .test(
+          'no-trailing-slash',
+          intl.formatMessage(messages.validationUrlBaseTrailingSlash),
+          (value) => !value || !value.endsWith('/')
+        ),
+      tracearrApiKey: Yup.string().nullable(),
+      tracearrServerId: Yup.string().nullable(),
+      tracearrExternalUrl: Yup.string()
+        .url(intl.formatMessage(messages.validationUrl))
+        .test(
+          'no-trailing-slash',
+          intl.formatMessage(messages.validationUrlTrailingSlash),
+          (value) => !value || !value.endsWith('/')
+        ),
+    },
+    [
+      ['tracearrHostname', 'tracearrApiKey'],
+      ['tracearrHostname', 'tracearrPort'],
     ]
   );
 
@@ -1310,304 +1426,699 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
         }}
       </Formik>
 
-      {/* Tautulli Settings */}
+      {/* Statistics Provider (Tautulli or Tracearr) */}
       <div className="section">
         <div className="mt-10 mb-6">
-          <h3 className="heading flex items-center">
-            <img src="/services/tautulli.svg" alt="" className="mr-2 h-7 w-7" />
-            {intl.formatMessage(messages.tautulliSettings)}
+          <h3 className="heading">
+            {intl.formatMessage(messages.statisticsProviderSettings)}
           </h3>
           <p className="description">
-            {intl.formatMessage(messages.tautulliSettingsDescription)}
+            {intl.formatMessage(messages.statisticsProviderDescription)}
           </p>
         </div>
+        <div className="form-row">
+          <label htmlFor="statisticsProvider" className="text-label">
+            {intl.formatMessage(messages.statisticsProvider)}
+          </label>
+          <div className="form-input-area">
+            <div className="form-input-field">
+              <select
+                id="statisticsProvider"
+                name="statisticsProvider"
+                value={activeStatisticsProvider}
+                disabled={isSavingStatisticsProvider || !dataStatistics}
+                onChange={(e) =>
+                  changeStatisticsProvider(
+                    e.target.value as StatisticsSettings['provider']
+                  )
+                }
+              >
+                <option value="tautulli">Tautulli</option>
+                <option value="tracearr">Tracearr</option>
+              </select>
+            </div>
+            {!activeStatisticsProviderConfigured && (
+              <p className="mt-2 text-sm text-yellow-500">
+                {intl.formatMessage(messages.statisticsProviderNotConfigured)}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
-      <Formik
-        initialValues={{
-          tautulliHostname: dataTautulli?.hostname,
-          tautulliPort: dataTautulli?.port ?? 8181,
-          tautulliUseSsl: dataTautulli?.useSsl ?? false,
-          tautulliUrlBase: dataTautulli?.urlBase,
-          tautulliApiKey: dataTautulli?.apiKey,
-          tautulliExternalUrl: dataTautulli?.externalUrl,
-        }}
-        validationSchema={TautulliValidationSchema}
-        enableReinitialize
-        onSubmit={async (values) => {
-          try {
-            await axios.post('/api/v1/settings/tautulli', {
-              hostname: values.tautulliHostname,
-              port: Number(values.tautulliPort),
-              apiKey: values.tautulliApiKey,
-              useSsl: values.tautulliUseSsl,
-              urlBase: values.tautulliUrlBase,
-              externalUrl: values.tautulliExternalUrl,
-            });
-            addToast(
-              intl.formatMessage(messages.toastTautulliSettingsSuccess),
-              {
-                appearance: 'success',
-                autoDismiss: true,
-              }
-            );
-          } catch (e) {
-            addToast(
-              intl.formatMessage(messages.toastTautulliSettingsFailure),
-              {
-                appearance: 'error',
-                autoDismiss: true,
-              }
-            );
-          } finally {
-            revalidateTautulli();
-          }
-        }}
-      >
-        {({
-          errors,
-          touched,
-          handleSubmit,
-          setFieldValue,
-          isSubmitting,
-          isValid,
-          values,
-        }) => {
-          const testTautulliConnection = async () => {
-            if (
-              !values.tautulliHostname ||
-              !values.tautulliPort ||
-              !values.tautulliApiKey
-            ) {
-              return;
-            }
-            setIsTesting(true);
-            setTestingService('tautulli');
-            try {
-              const response = await axios.post(
-                '/api/v1/settings/tautulli/test',
-                {
+
+      {activeStatisticsProvider === 'tautulli' && (
+        <>
+          {/* Tautulli Settings */}
+          <div className="section">
+            <div className="mt-10 mb-6">
+              <h3 className="heading flex items-center">
+                <img
+                  src="/services/tautulli.svg"
+                  alt=""
+                  className="mr-2 h-7 w-7"
+                />
+                {intl.formatMessage(messages.tautulliSettings)}
+              </h3>
+              <p className="description">
+                {intl.formatMessage(messages.tautulliSettingsDescription)}
+              </p>
+            </div>
+          </div>
+          <Formik
+            initialValues={{
+              tautulliHostname: dataTautulli?.hostname,
+              tautulliPort: dataTautulli?.port ?? 8181,
+              tautulliUseSsl: dataTautulli?.useSsl ?? false,
+              tautulliUrlBase: dataTautulli?.urlBase,
+              tautulliApiKey: dataTautulli?.apiKey,
+              tautulliExternalUrl: dataTautulli?.externalUrl,
+            }}
+            validationSchema={TautulliValidationSchema}
+            enableReinitialize
+            onSubmit={async (values) => {
+              try {
+                await axios.post('/api/v1/settings/tautulli', {
                   hostname: values.tautulliHostname,
                   port: Number(values.tautulliPort),
                   apiKey: values.tautulliApiKey,
                   useSsl: values.tautulliUseSsl,
                   urlBase: values.tautulliUrlBase,
-                }
-              );
-              if (response.data.success) {
-                setTautulliTestSuccess(true);
-                setTestedTautulliValues(
-                  `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`
-                );
-
-                // Show success message for connection
+                  externalUrl: values.tautulliExternalUrl,
+                });
                 addToast(
-                  intl.formatMessage(messages.tautulliConnectionSuccess),
+                  intl.formatMessage(messages.toastTautulliSettingsSuccess),
                   {
-                    autoDismiss: true,
                     appearance: 'success',
+                    autoDismiss: true,
                   }
                 );
-              } else {
-                setTautulliTestSuccess(false);
+              } catch (e) {
                 addToast(
-                  intl.formatMessage(messages.tautulliConnectionFailure),
+                  intl.formatMessage(messages.toastTautulliSettingsFailure),
                   {
+                    appearance: 'error',
+                    autoDismiss: true,
+                  }
+                );
+              } finally {
+                revalidateTautulli();
+              }
+            }}
+          >
+            {({
+              errors,
+              touched,
+              handleSubmit,
+              setFieldValue,
+              isSubmitting,
+              isValid,
+              values,
+            }) => {
+              const testTautulliConnection = async () => {
+                if (
+                  !values.tautulliHostname ||
+                  !values.tautulliPort ||
+                  !values.tautulliApiKey
+                ) {
+                  return;
+                }
+                setIsTesting(true);
+                setTestingService('tautulli');
+                try {
+                  const response = await axios.post(
+                    '/api/v1/settings/tautulli/test',
+                    {
+                      hostname: values.tautulliHostname,
+                      port: Number(values.tautulliPort),
+                      apiKey: values.tautulliApiKey,
+                      useSsl: values.tautulliUseSsl,
+                      urlBase: values.tautulliUrlBase,
+                    }
+                  );
+                  if (response.data.success) {
+                    setTautulliTestSuccess(true);
+                    setTestedTautulliValues(
+                      `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`
+                    );
+
+                    // Show success message for connection
+                    addToast(
+                      intl.formatMessage(messages.tautulliConnectionSuccess),
+                      {
+                        autoDismiss: true,
+                        appearance: 'success',
+                      }
+                    );
+                  } else {
+                    setTautulliTestSuccess(false);
+                    addToast(
+                      intl.formatMessage(messages.tautulliConnectionFailure),
+                      {
+                        autoDismiss: true,
+                        appearance: 'error',
+                      }
+                    );
+                  }
+                } catch (error) {
+                  setTautulliTestSuccess(false);
+
+                  // Use server's detailed error message if available
+                  let errorMessage =
+                    error.response?.data?.message ||
+                    intl.formatMessage(messages.tautulliConnectionFailure);
+
+                  // If no server message, provide client-side diagnostics
+                  if (!error.response?.data?.message) {
+                    if (error.code === 'ECONNREFUSED') {
+                      errorMessage +=
+                        ' - Connection refused. Check hostname and port.';
+                    } else if (error.code === 'ENOTFOUND') {
+                      errorMessage += ' - Host not found. Check hostname.';
+                    } else if (error.code === 'ETIMEDOUT') {
+                      errorMessage +=
+                        ' - Connection timeout. Check network connectivity.';
+                    } else if (error.message) {
+                      errorMessage += ` - ${error.message}`;
+                    }
+                  }
+
+                  addToast(errorMessage, {
                     autoDismiss: true,
                     appearance: 'error',
+                  });
+                } finally {
+                  setTestingService(null);
+                  setIsTesting(false);
+                }
+              };
+
+              return (
+                <form className="section" onSubmit={handleSubmit}>
+                  <div className="form-row">
+                    <label htmlFor="tautulliHostname" className="text-label">
+                      {intl.formatMessage(messages.tautulliHostname)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-stone-800 px-3 text-gray-100 sm:text-sm">
+                          {values.tautulliUseSsl ? 'https://' : 'http://'}
+                        </span>
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tautulliHostname"
+                          name="tautulliHostname"
+                          className="rounded-r-only flex-1"
+                        />
+                      </div>
+                      {errors.tautulliHostname && touched.tautulliHostname && (
+                        <div className="error">{errors.tautulliHostname}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tautulliPort" className="text-label">
+                      {intl.formatMessage(messages.tautulliPort)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="text"
+                        inputMode="numeric"
+                        id="tautulliPort"
+                        name="tautulliPort"
+                        className="short"
+                      />
+                      {errors.tautulliPort && touched.tautulliPort && (
+                        <div className="error">{errors.tautulliPort}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tautulliUseSsl" className="checkbox-label">
+                      {intl.formatMessage(messages.tautulliUseSsl)}
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="checkbox"
+                        id="tautulliUseSsl"
+                        name="tautulliUseSsl"
+                        onChange={() => {
+                          setFieldValue(
+                            'tautulliUseSsl',
+                            !values.tautulliUseSsl
+                          );
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tautulliUrlBase" className="text-label">
+                      {intl.formatMessage(messages.urlBase)}
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tautulliUrlBase"
+                          name="tautulliUrlBase"
+                          autoComplete="off"
+                          data-1pignore="true"
+                          data-lpignore="true"
+                          data-bwignore="true"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tautulliApiKey" className="text-label">
+                      {intl.formatMessage(messages.tautulliApiKey)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <SensitiveInput
+                          as="field"
+                          id="tautulliApiKey"
+                          name="tautulliApiKey"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tautulliExternalUrl" className="text-label">
+                      {intl.formatMessage(messages.externalUrl)}
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tautulliExternalUrl"
+                          name="tautulliExternalUrl"
+                          autoComplete="off"
+                          data-1pignore="true"
+                          data-lpignore="true"
+                          data-bwignore="true"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="actions">
+                    <div className="flex justify-end">
+                      <span className="ml-3 inline-flex rounded-md shadow-sm">
+                        <Button
+                          buttonType="default"
+                          type="button"
+                          onClick={testTautulliConnection}
+                          disabled={
+                            !values.tautulliHostname ||
+                            !values.tautulliPort ||
+                            !values.tautulliApiKey ||
+                            isTesting
+                          }
+                        >
+                          {isTesting
+                            ? intl.formatMessage(messages.testing)
+                            : intl.formatMessage(
+                                messages.testTautulliConnection
+                              )}
+                        </Button>
+                      </span>
+                      <span className="ml-3 inline-flex rounded-md shadow-sm">
+                        <Button
+                          buttonType="primary"
+                          type="submit"
+                          disabled={
+                            isSubmitting ||
+                            !isValid ||
+                            (isSetupMode &&
+                              !!values.tautulliApiKey &&
+                              (!tautulliTestSuccess ||
+                                testedTautulliValues !==
+                                  `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`))
+                          }
+                        >
+                          <ArrowDownOnSquareIcon />
+                          <span>
+                            {isSubmitting
+                              ? intl.formatMessage(messages.saving)
+                              : intl.formatMessage(messages.save)}
+                          </span>
+                        </Button>
+                      </span>
+                    </div>
+                  </div>
+                </form>
+              );
+            }}
+          </Formik>
+        </>
+      )}
+
+      {activeStatisticsProvider === 'tracearr' && (
+        <>
+          {/* Tracearr Settings */}
+          <div className="section">
+            <div className="mt-10 mb-6">
+              <h3 className="heading flex items-center">
+                <img
+                  src="/services/tracearr.svg"
+                  alt=""
+                  className="mr-2 h-7 w-7"
+                />
+                {intl.formatMessage(messages.tracearrSettings)}
+              </h3>
+              <p className="description">
+                {intl.formatMessage(messages.tracearrSettingsDescription)}
+              </p>
+            </div>
+          </div>
+          <Formik
+            initialValues={{
+              tracearrHostname: dataTracearr?.hostname,
+              tracearrPort: dataTracearr?.port ?? 3000,
+              tracearrUseSsl: dataTracearr?.useSsl ?? false,
+              tracearrUrlBase: dataTracearr?.urlBase,
+              tracearrApiKey: dataTracearr?.apiKey,
+              tracearrServerId: dataTracearr?.serverId ?? '',
+              tracearrExternalUrl: dataTracearr?.externalUrl,
+            }}
+            validationSchema={TracearrValidationSchema}
+            enableReinitialize
+            onSubmit={async (values) => {
+              try {
+                await axios.post('/api/v1/settings/tracearr', {
+                  hostname: values.tracearrHostname,
+                  port: Number(values.tracearrPort),
+                  apiKey: values.tracearrApiKey,
+                  useSsl: values.tracearrUseSsl,
+                  urlBase: values.tracearrUrlBase,
+                  serverId: values.tracearrServerId || undefined,
+                  externalUrl: values.tracearrExternalUrl,
+                });
+                addToast(
+                  intl.formatMessage(messages.toastTracearrSettingsSuccess),
+                  {
+                    appearance: 'success',
+                    autoDismiss: true,
                   }
                 );
+              } catch (e) {
+                addToast(
+                  intl.formatMessage(messages.toastTracearrSettingsFailure),
+                  {
+                    appearance: 'error',
+                    autoDismiss: true,
+                  }
+                );
+              } finally {
+                revalidateTracearr();
               }
-            } catch (error) {
-              setTautulliTestSuccess(false);
+            }}
+          >
+            {({
+              errors,
+              touched,
+              handleSubmit,
+              setFieldValue,
+              isSubmitting,
+              isValid,
+              values,
+            }) => {
+              const tracearrFingerprint = `${values.tracearrHostname}:${values.tracearrPort}:${values.tracearrApiKey}:${values.tracearrUseSsl}:${values.tracearrUrlBase}`;
 
-              // Use server's detailed error message if available
-              let errorMessage =
-                error.response?.data?.message ||
-                intl.formatMessage(messages.tautulliConnectionFailure);
-
-              // If no server message, provide client-side diagnostics
-              if (!error.response?.data?.message) {
-                if (error.code === 'ECONNREFUSED') {
-                  errorMessage +=
-                    ' - Connection refused. Check hostname and port.';
-                } else if (error.code === 'ENOTFOUND') {
-                  errorMessage += ' - Host not found. Check hostname.';
-                } else if (error.code === 'ETIMEDOUT') {
-                  errorMessage +=
-                    ' - Connection timeout. Check network connectivity.';
-                } else if (error.message) {
-                  errorMessage += ` - ${error.message}`;
+              const testTracearrConnection = async () => {
+                if (!values.tracearrHostname || !values.tracearrApiKey) {
+                  return;
                 }
-              }
+                setIsTesting(true);
+                setTestingService('tracearr');
+                try {
+                  const response = await axios.post(
+                    '/api/v1/settings/tracearr/test',
+                    {
+                      hostname: values.tracearrHostname,
+                      port: Number(values.tracearrPort),
+                      apiKey: values.tracearrApiKey,
+                      useSsl: values.tracearrUseSsl,
+                      urlBase: values.tracearrUrlBase,
+                    }
+                  );
+                  if (response.data.success) {
+                    setTracearrTestSuccess(true);
+                    setTestedTracearrValues(tracearrFingerprint);
+                    setTracearrServers(response.data.servers ?? []);
 
-              addToast(errorMessage, {
-                autoDismiss: true,
-                appearance: 'error',
-              });
-            } finally {
-              setTestingService(null);
-              setIsTesting(false);
-            }
-          };
+                    addToast(
+                      intl.formatMessage(messages.tracearrConnectionSuccess, {
+                        version: response.data.version ?? '',
+                      }),
+                      {
+                        autoDismiss: true,
+                        appearance: 'success',
+                      }
+                    );
+                  } else {
+                    setTracearrTestSuccess(false);
+                    addToast(
+                      intl.formatMessage(messages.tracearrConnectionFailure),
+                      {
+                        autoDismiss: true,
+                        appearance: 'error',
+                      }
+                    );
+                  }
+                } catch (error) {
+                  setTracearrTestSuccess(false);
+                  addToast(
+                    error.response?.data?.message ||
+                      intl.formatMessage(messages.tracearrConnectionFailure),
+                    {
+                      autoDismiss: true,
+                      appearance: 'error',
+                    }
+                  );
+                } finally {
+                  setTestingService(null);
+                  setIsTesting(false);
+                }
+              };
 
-          return (
-            <form className="section" onSubmit={handleSubmit}>
-              <div className="form-row">
-                <label htmlFor="tautulliHostname" className="text-label">
-                  {intl.formatMessage(messages.tautulliHostname)}
-                  <span className="label-required">*</span>
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-stone-800 px-3 text-gray-100 sm:text-sm">
-                      {values.tautulliUseSsl ? 'https://' : 'http://'}
-                    </span>
-                    <Field
-                      type="text"
-                      inputMode="url"
-                      id="tautulliHostname"
-                      name="tautulliHostname"
-                      className="rounded-r-only flex-1"
-                    />
+              const knownServer = tracearrServers.some(
+                (server) => server.id === values.tracearrServerId
+              );
+
+              return (
+                <form className="section" onSubmit={handleSubmit}>
+                  <div className="form-row">
+                    <label htmlFor="tracearrHostname" className="text-label">
+                      {intl.formatMessage(messages.tracearrHostname)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-stone-800 px-3 text-gray-100 sm:text-sm">
+                          {values.tracearrUseSsl ? 'https://' : 'http://'}
+                        </span>
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tracearrHostname"
+                          name="tracearrHostname"
+                          className="rounded-r-only flex-1"
+                        />
+                      </div>
+                      {errors.tracearrHostname && touched.tracearrHostname && (
+                        <div className="error">{errors.tracearrHostname}</div>
+                      )}
+                    </div>
                   </div>
-                  {errors.tautulliHostname && touched.tautulliHostname && (
-                    <div className="error">{errors.tautulliHostname}</div>
-                  )}
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliPort" className="text-label">
-                  {intl.formatMessage(messages.tautulliPort)}
-                  <span className="label-required">*</span>
-                </label>
-                <div className="form-input-area">
-                  <Field
-                    type="text"
-                    inputMode="numeric"
-                    id="tautulliPort"
-                    name="tautulliPort"
-                    className="short"
-                  />
-                  {errors.tautulliPort && touched.tautulliPort && (
-                    <div className="error">{errors.tautulliPort}</div>
-                  )}
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliUseSsl" className="checkbox-label">
-                  {intl.formatMessage(messages.tautulliUseSsl)}
-                </label>
-                <div className="form-input-area">
-                  <Field
-                    type="checkbox"
-                    id="tautulliUseSsl"
-                    name="tautulliUseSsl"
-                    onChange={() => {
-                      setFieldValue('tautulliUseSsl', !values.tautulliUseSsl);
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliUrlBase" className="text-label">
-                  {intl.formatMessage(messages.urlBase)}
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <Field
-                      type="text"
-                      inputMode="url"
-                      id="tautulliUrlBase"
-                      name="tautulliUrlBase"
-                      autoComplete="off"
-                      data-1pignore="true"
-                      data-lpignore="true"
-                      data-bwignore="true"
-                    />
+                  <div className="form-row">
+                    <label htmlFor="tracearrPort" className="text-label">
+                      {intl.formatMessage(messages.tracearrPort)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="text"
+                        inputMode="numeric"
+                        id="tracearrPort"
+                        name="tracearrPort"
+                        className="short"
+                      />
+                      {errors.tracearrPort && touched.tracearrPort && (
+                        <div className="error">{errors.tracearrPort}</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliApiKey" className="text-label">
-                  {intl.formatMessage(messages.tautulliApiKey)}
-                  <span className="label-required">*</span>
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <SensitiveInput
-                      as="field"
-                      id="tautulliApiKey"
-                      name="tautulliApiKey"
-                    />
+                  <div className="form-row">
+                    <label htmlFor="tracearrUseSsl" className="checkbox-label">
+                      {intl.formatMessage(messages.tracearrUseSsl)}
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="checkbox"
+                        id="tracearrUseSsl"
+                        name="tracearrUseSsl"
+                        onChange={() => {
+                          setFieldValue(
+                            'tracearrUseSsl',
+                            !values.tracearrUseSsl
+                          );
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliExternalUrl" className="text-label">
-                  {intl.formatMessage(messages.externalUrl)}
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <Field
-                      type="text"
-                      inputMode="url"
-                      id="tautulliExternalUrl"
-                      name="tautulliExternalUrl"
-                      autoComplete="off"
-                      data-1pignore="true"
-                      data-lpignore="true"
-                      data-bwignore="true"
-                    />
+                  <div className="form-row">
+                    <label htmlFor="tracearrUrlBase" className="text-label">
+                      {intl.formatMessage(messages.urlBase)}
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tracearrUrlBase"
+                          name="tracearrUrlBase"
+                          autoComplete="off"
+                          data-1pignore="true"
+                          data-lpignore="true"
+                          data-bwignore="true"
+                        />
+                      </div>
+                      {errors.tracearrUrlBase && touched.tracearrUrlBase && (
+                        <div className="error">{errors.tracearrUrlBase}</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="actions">
-                <div className="flex justify-end">
-                  <span className="ml-3 inline-flex rounded-md shadow-sm">
-                    <Button
-                      buttonType="default"
-                      type="button"
-                      onClick={testTautulliConnection}
-                      disabled={
-                        !values.tautulliHostname ||
-                        !values.tautulliPort ||
-                        !values.tautulliApiKey ||
-                        isTesting
-                      }
-                    >
-                      {isTesting
-                        ? intl.formatMessage(messages.testing)
-                        : intl.formatMessage(messages.testTautulliConnection)}
-                    </Button>
-                  </span>
-                  <span className="ml-3 inline-flex rounded-md shadow-sm">
-                    <Button
-                      buttonType="primary"
-                      type="submit"
-                      disabled={
-                        isSubmitting ||
-                        !isValid ||
-                        (isSetupMode &&
-                          !!values.tautulliApiKey &&
-                          (!tautulliTestSuccess ||
-                            testedTautulliValues !==
-                              `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`))
-                      }
-                    >
-                      <ArrowDownOnSquareIcon />
-                      <span>
-                        {isSubmitting
-                          ? intl.formatMessage(messages.saving)
-                          : intl.formatMessage(messages.save)}
+                  <div className="form-row">
+                    <label htmlFor="tracearrApiKey" className="text-label">
+                      {intl.formatMessage(messages.tracearrApiKey)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <SensitiveInput
+                          as="field"
+                          id="tracearrApiKey"
+                          name="tracearrApiKey"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tracearrServerId" className="text-label">
+                      {intl.formatMessage(messages.tracearrServer)}
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          as="select"
+                          id="tracearrServerId"
+                          name="tracearrServerId"
+                        >
+                          <option value="">
+                            {intl.formatMessage(messages.tracearrServerAuto)}
+                          </option>
+                          {values.tracearrServerId && !knownServer && (
+                            <option value={values.tracearrServerId}>
+                              {intl.formatMessage(
+                                messages.tracearrServerSaved,
+                                {
+                                  id: values.tracearrServerId,
+                                }
+                              )}
+                            </option>
+                          )}
+                          {tracearrServers.map((server) => (
+                            <option key={server.id} value={server.id}>
+                              {server.name} ({server.type})
+                            </option>
+                          ))}
+                        </Field>
+                      </div>
+                      <p className="mt-2 text-xs text-gray-400">
+                        {intl.formatMessage(messages.tracearrServerHint)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tracearrExternalUrl" className="text-label">
+                      {intl.formatMessage(messages.externalUrl)}
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tracearrExternalUrl"
+                          name="tracearrExternalUrl"
+                          autoComplete="off"
+                          data-1pignore="true"
+                          data-lpignore="true"
+                          data-bwignore="true"
+                        />
+                      </div>
+                      {errors.tracearrExternalUrl &&
+                        touched.tracearrExternalUrl && (
+                          <div className="error">
+                            {errors.tracearrExternalUrl}
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                  <div className="actions">
+                    <div className="flex justify-end">
+                      <span className="ml-3 inline-flex rounded-md shadow-sm">
+                        <Button
+                          buttonType="default"
+                          type="button"
+                          onClick={testTracearrConnection}
+                          disabled={
+                            !values.tracearrHostname ||
+                            !values.tracearrApiKey ||
+                            isTesting
+                          }
+                        >
+                          {isTesting && testingService === 'tracearr'
+                            ? intl.formatMessage(messages.testing)
+                            : intl.formatMessage(
+                                messages.testTracearrConnection
+                              )}
+                        </Button>
                       </span>
-                    </Button>
-                  </span>
-                </div>
-              </div>
-            </form>
-          );
-        }}
-      </Formik>
+                      <span className="ml-3 inline-flex rounded-md shadow-sm">
+                        <Button
+                          buttonType="primary"
+                          type="submit"
+                          disabled={
+                            isSubmitting ||
+                            !isValid ||
+                            (isSetupMode &&
+                              !!values.tracearrApiKey &&
+                              (!tracearrTestSuccess ||
+                                testedTracearrValues !== tracearrFingerprint))
+                          }
+                        >
+                          <ArrowDownOnSquareIcon />
+                          <span>
+                            {isSubmitting
+                              ? intl.formatMessage(messages.saving)
+                              : intl.formatMessage(messages.save)}
+                          </span>
+                        </Button>
+                      </span>
+                    </div>
+                  </div>
+                </form>
+              );
+            }}
+          </Formik>
+        </>
+      )}
 
       {/* MyAnimeList Settings */}
       <div className="section">

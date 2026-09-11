@@ -6,7 +6,9 @@ import type {
   PlexSettings,
   RadarrSettings,
   SonarrSettings,
+  StatisticsSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 
@@ -34,6 +36,8 @@ export function validateApiKeysForCollectionType(
     trakt?: TraktSettings;
     mdblist?: MDBListSettings;
     tautulli?: TautulliSettings;
+    tracearr?: TracearrSettings;
+    statistics?: StatisticsSettings;
     overseerr?: OverseerrSettings;
     myanimelist?: MyAnimeListSettings;
     radarr?: RadarrSettings[];
@@ -83,14 +87,19 @@ export function validateApiKeysForCollectionType(
       });
       break;
 
-    case 'tautulli':
+    case 'tautulli': {
+      // Statistics collections read from whichever provider is selected
+      const useTracearr = settings.statistics?.provider === 'tracearr';
       requirements.push({
-        service: 'Tautulli',
+        service: useTracearr ? 'Tracearr' : 'Tautulli',
         required: true,
-        configured: !!settings.tautulli?.apiKey,
+        configured: useTracearr
+          ? !!settings.tracearr?.apiKey
+          : !!settings.tautulli?.apiKey,
         settingsPath: '/settings/sources',
       });
       break;
+    }
 
     case 'overseerr':
       requirements.push({
@@ -214,6 +223,7 @@ export function getServiceDisplayName(serviceType: string): string {
     trakt: 'Trakt',
     mdblist: 'MDBList',
     tautulli: 'Tautulli',
+    tracearr: 'Tracearr',
     overseerr: 'Overseerr',
     tmdb: 'TMDB',
     imdb: 'IMDb',

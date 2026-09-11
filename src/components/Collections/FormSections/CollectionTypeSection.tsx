@@ -13,7 +13,9 @@ import type {
   PlexSettings,
   RadarrSettings,
   SonarrSettings,
+  StatisticsSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 import { Field, type FormikErrors, type FormikTouched } from 'formik';
@@ -170,6 +172,12 @@ const CollectionTypeSection = ({
   const { data: tautulliSettings } = useSWR<TautulliSettings>(
     '/api/v1/settings/tautulli'
   );
+  const { data: tracearrSettings } = useSWR<TracearrSettings>(
+    '/api/v1/settings/tracearr'
+  );
+  const { data: statisticsSettings } = useSWR<StatisticsSettings>(
+    '/api/v1/settings/statistics'
+  );
   const { data: overseerrSettings } = useSWR<OverseerrSettings>(
     '/api/v1/settings/overseerr'
   );
@@ -192,6 +200,8 @@ const CollectionTypeSection = ({
       trakt: traktSettings,
       mdblist: mdblistSettings,
       tautulli: tautulliSettings,
+      tracearr: tracearrSettings,
+      statistics: statisticsSettings,
       overseerr: overseerrSettings,
       myanimelist: myanimelistSettings,
       radarr: radarrSettings,
@@ -202,7 +212,7 @@ const CollectionTypeSection = ({
 
   const collectionTypes = [
     { value: 'overseerr', label: 'Seerr Requests' },
-    { value: 'tautulli', label: 'Tautulli Statistics' },
+    { value: 'tautulli', label: 'Watch Statistics (Tautulli / Tracearr)' },
     { value: 'trakt', label: 'Trakt Lists' },
     { value: 'plex', label: 'Plex Library' },
     { value: 'letterboxd', label: 'Letterboxd Lists' },
