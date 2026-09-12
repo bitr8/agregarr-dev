@@ -1,12 +1,49 @@
-import TautulliAPI from '@server/api/tautulli';
 import { getRepository } from '@server/datasource';
 import { JobRunHistory } from '@server/entity/JobRunHistory';
 import { getSettings } from '@server/lib/settings';
+import {
+  getStatisticsProvider,
+  getStatisticsProviderDisplayName,
+  getStatisticsProviderType,
+} from '@server/lib/statistics';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import type { Response } from 'express';
 import { Router } from 'express';
 
 const dashboardRoutes = Router();
+
+/**
+ * Rating keys of every collection Agregarr knows about (its own plus
+ * pre-existing ones it manages).
+ */
+function getConfiguredCollectionRatingKeys(): string[] {
+  const settings = getSettings();
+  const collectionRatingKeys: string[] = [];
+
+  for (const config of settings.plex.collectionConfigs ?? []) {
+    if (config.collectionRatingKey) {
+      collectionRatingKeys.push(config.collectionRatingKey);
+    }
+  }
+
+  for (const config of settings.plex.preExistingCollectionConfigs ?? []) {
+    if (config.collectionRatingKey) {
+      collectionRatingKeys.push(config.collectionRatingKey);
+    }
+  }
+
+  return collectionRatingKeys;
+}
+
+function providerNotConfigured(res: Response, what: string) {
+  const name = getStatisticsProviderDisplayName();
+  return res.status(400).json({
+    error: 'Statistics provider not configured',
+    message: `${name} settings are required to fetch ${what}`,
+    provider: getStatisticsProviderType(),
+  });
+}
 
 /**
  * GET /api/v1/dashboard/stats
@@ -15,54 +52,37 @@ const dashboardRoutes = Router();
 dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
   try {
     const settings = getSettings();
+    const provider = getStatisticsProvider();
 
-    let tautulliStats = null;
+    let statisticsStatus = null;
     let collectionStatsData = null;
     let weeklyStats = null;
 
-    // Get Tautulli stats if configured
-    if (settings.tautulli.hostname && settings.tautulli.apiKey) {
+    // Get watch stats if a statistics provider is configured
+    if (provider) {
       try {
-        const tautulli = new TautulliAPI(settings.tautulli);
-
-        // Get rating keys from our configured collections
-        const collectionRatingKeys: string[] = [];
-        const agregarrCollectionKeys: string[] = [];
-        const preExistingCollectionKeys: string[] = [];
-
-        // Include user-created Agregarr collections
-        if (settings.plex.collectionConfigs) {
-          for (const config of settings.plex.collectionConfigs) {
-            if (config.collectionRatingKey) {
-              collectionRatingKeys.push(config.collectionRatingKey);
-              agregarrCollectionKeys.push(config.collectionRatingKey);
-            }
-          }
-        }
-
-        // Include pre-existing collections
-        if (settings.plex.preExistingCollectionConfigs) {
-          for (const config of settings.plex.preExistingCollectionConfigs) {
-            if (config.collectionRatingKey) {
-              collectionRatingKeys.push(config.collectionRatingKey);
-              preExistingCollectionKeys.push(config.collectionRatingKey);
-            }
-          }
-        }
+        const collectionRatingKeys = getConfiguredCollectionRatingKeys();
 
         // Get collection stats and weekly activity stats
         const [collectionStats, weeklyMovies, weeklyTV] = await Promise.all([
-          tautulli
+          provider
             .getTopCollections(50, 'plays', 7, collectionRatingKeys)
             .catch((err) => {
-              logger.warn('Failed to get collection stats from Tautulli', {
-                label: 'Dashboard API',
-                error: err.message,
-              });
+              logger.warn(
+                `Failed to get collection stats from ${provider.displayName}`,
+                {
+                  label: 'Dashboard API',
+                  error: err.message,
+                }
+              );
               return [];
             }),
-          tautulli.getHomeStats(7, 'plays', 'top_movies', 10).catch(() => []),
-          tautulli.getHomeStats(7, 'plays', 'top_tv', 10).catch(() => []),
+          provider
+            .getContent('movie', 7, 'plays', 'most_watched', 10)
+            .catch(() => []),
+          provider
+            .getContent('tv', 7, 'plays', 'most_watched', 10)
+            .catch(() => []),
         ]);
 
         // Calculate weekly plays from server totals
@@ -125,17 +145,22 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
           collectionPlays: collectionTotalPlays,
         };
 
-        tautulliStats = {
+        statisticsStatus = {
           isConnected: true,
+          provider: provider.type,
           weeklyActivity: weeklyStats,
         };
       } catch (error) {
-        logger.error('Failed to fetch Tautulli stats for dashboard', {
-          label: 'Dashboard API',
-          error: error.message,
-        });
-        tautulliStats = {
+        logger.error(
+          `Failed to fetch ${provider.displayName} stats for dashboard`,
+          {
+            label: 'Dashboard API',
+            error: error.message,
+          }
+        );
+        statisticsStatus = {
           isConnected: false,
+          provider: provider.type,
           error: error.message,
         };
       }
@@ -166,7 +191,10 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
         stats: collectionStatsData,
       },
       activity: weeklyStats,
-      tautulli: tautulliStats,
+      // `tautulli` is the historical field name; it now describes whichever
+      // statistics provider is selected (see `provider`).
+      tautulli: statisticsStatus,
+      statisticsProvider: getStatisticsProviderType(),
       timestamp: new Date().toISOString(),
     };
 
@@ -186,44 +214,23 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
 
 /**
  * GET /api/v1/dashboard/collections
- * Get detailed collection statistics from Tautulli
+ * Get detailed collection statistics from the statistics provider
  */
 dashboardRoutes.get('/collections', isAuthenticated(), async (req, res) => {
   try {
     const settings = getSettings();
     const { limit = 10, statType = 'plays', days = 30 } = req.query;
 
-    if (!settings.tautulli.hostname || !settings.tautulli.apiKey) {
-      return res.status(400).json({
-        error: 'Tautulli not configured',
-        message:
-          'Tautulli settings are required to fetch collection statistics',
-      });
+    const provider = getStatisticsProvider();
+    if (!provider) {
+      return providerNotConfigured(res, 'collection statistics');
     }
 
-    // Get rating keys from our configured collections
-    const collectionRatingKeys: string[] = [];
-
-    // Extract rating keys from user-created Agregarr collections
-    if (settings.plex.collectionConfigs) {
-      for (const config of settings.plex.collectionConfigs) {
-        if (config.collectionRatingKey) {
-          collectionRatingKeys.push(config.collectionRatingKey);
-        }
-      }
-    }
-
-    // Extract rating keys from pre-existing collections
-    if (settings.plex.preExistingCollectionConfigs) {
-      for (const config of settings.plex.preExistingCollectionConfigs) {
-        if (config.collectionRatingKey) {
-          collectionRatingKeys.push(config.collectionRatingKey);
-        }
-      }
-    }
+    const collectionRatingKeys = getConfiguredCollectionRatingKeys();
 
     logger.info('Getting collection statistics', {
       label: 'Dashboard API',
+      provider: provider.type,
       agregarrCollections: settings.plex.collectionConfigs?.length || 0,
       preExistingCollections:
         settings.plex.preExistingCollectionConfigs?.length || 0,
@@ -241,13 +248,13 @@ dashboardRoutes.get('/collections', isAuthenticated(), async (req, res) => {
           limit: Number(limit),
           statType,
           days: Number(days),
+          provider: provider.type,
           timestamp: new Date().toISOString(),
         },
       });
     }
 
-    const tautulli = new TautulliAPI(settings.tautulli);
-    const collections = await tautulli.getTopCollections(
+    const collections = await provider.getTopCollections(
       Number(limit),
       statType as 'plays' | 'duration',
       Number(days),
@@ -260,6 +267,7 @@ dashboardRoutes.get('/collections', isAuthenticated(), async (req, res) => {
         limit: Number(limit),
         statType,
         days: Number(days),
+        provider: provider.type,
         timestamp: new Date().toISOString(),
       },
     });
@@ -285,20 +293,15 @@ dashboardRoutes.get(
   isAuthenticated(),
   async (req, res) => {
     try {
-      const settings = getSettings();
       const { ratingKey } = req.params;
       const { days = '1,7,30,0' } = req.query;
 
-      if (!settings.tautulli.hostname || !settings.tautulli.apiKey) {
-        return res.status(400).json({
-          error: 'Tautulli not configured',
-          message:
-            'Tautulli settings are required to fetch collection statistics',
-        });
+      const provider = getStatisticsProvider();
+      if (!provider) {
+        return providerNotConfigured(res, 'collection statistics');
       }
 
-      const tautulli = new TautulliAPI(settings.tautulli);
-      const collectionStats = await tautulli.getCollectionStats(
+      const collectionStats = await provider.getCollectionStats(
         ratingKey,
         String(days)
       );
@@ -308,6 +311,7 @@ dashboardRoutes.get(
         metadata: {
           ratingKey,
           queryDays: String(days),
+          provider: provider.type,
           timestamp: new Date().toISOString(),
         },
       });
@@ -332,23 +336,30 @@ dashboardRoutes.get(
  */
 dashboardRoutes.get('/activity', isAuthenticated(), async (req, res) => {
   try {
-    const settings = getSettings();
     const { days = 7, limit = 10 } = req.query;
 
-    if (!settings.tautulli.hostname || !settings.tautulli.apiKey) {
-      return res.status(400).json({
-        error: 'Tautulli not configured',
-        message: 'Tautulli settings are required to fetch activity statistics',
-      });
+    const provider = getStatisticsProvider();
+    if (!provider) {
+      return providerNotConfigured(res, 'activity statistics');
     }
-
-    const tautulli = new TautulliAPI(settings.tautulli);
 
     // Get various activity stats
     const [topMovies, topTV, info] = await Promise.all([
-      tautulli.getHomeStats(Number(days), 'plays', 'top_movies', Number(limit)),
-      tautulli.getHomeStats(Number(days), 'plays', 'top_tv', Number(limit)),
-      tautulli.getInfo().catch(() => null),
+      provider.getContent(
+        'movie',
+        Number(days),
+        'plays',
+        'most_watched',
+        Number(limit)
+      ),
+      provider.getContent(
+        'tv',
+        Number(days),
+        'plays',
+        'most_watched',
+        Number(limit)
+      ),
+      provider.getInfo().catch(() => null),
     ]);
 
     res.status(200).json({
@@ -356,10 +367,13 @@ dashboardRoutes.get('/activity', isAuthenticated(), async (req, res) => {
         topMovies,
         topTV,
       },
-      tautulliInfo: info,
+      providerInfo: info,
+      // Legacy field: populated only when Tautulli is the active provider
+      tautulliInfo: info?.provider === 'tautulli' ? info : null,
       metadata: {
         days: Number(days),
         limit: Number(limit),
+        provider: provider.type,
         timestamp: new Date().toISOString(),
       },
     });

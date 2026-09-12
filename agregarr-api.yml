@@ -4181,6 +4181,45 @@ components:
         externalUrl:
           type: string
           nullable: true
+    TracearrSettings:
+      type: object
+      properties:
+        hostname:
+          type: string
+          nullable: true
+          example: 'tracearr.example.com'
+        port:
+          type: number
+          nullable: true
+          example: 3000
+        useSsl:
+          type: boolean
+          nullable: true
+        urlBase:
+          type: string
+          nullable: true
+          example: '/tracearr'
+        apiKey:
+          type: string
+          nullable: true
+          description: Tracearr public API key (starts with trr_pub_)
+        externalUrl:
+          type: string
+          nullable: true
+        serverId:
+          type: string
+          nullable: true
+          description: Tracearr server UUID to scope statistics to; omit to use every Plex server Tracearr monitors
+    StatisticsSettings:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [tautulli, tracearr]
+          description: Which service supplies watch statistics
+          example: 'tautulli'
+      required:
+        - provider
     MaintainerrSettings:
       type: object
       properties:
@@ -9939,6 +9978,135 @@ paths:
           description: 'API key lacks required permissions'
         '404':
           description: 'Tautulli API not found at specified URL'
+        '500':
+          description: 'Connection test failed - Server error or network issue'
+  /settings/statistics:
+    get:
+      summary: Get statistics provider selection
+      description: Returns which service (Tautulli or Tracearr) supplies watch statistics.
+      tags:
+        - settings-integrations
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsSettings'
+    post:
+      summary: Update statistics provider selection
+      description: Selects Tautulli or Tracearr as the watch statistics provider.
+      tags:
+        - settings-integrations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatisticsSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsSettings'
+        '400':
+          description: 'Unknown provider'
+  /settings/tracearr:
+    get:
+      summary: Get Tracearr settings
+      description: Retrieves current Tracearr settings.
+      tags:
+        - settings-integrations
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TracearrSettings'
+    post:
+      summary: Update Tracearr settings
+      description: Updates Tracearr settings with the provided values.
+      tags:
+        - settings-integrations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TracearrSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TracearrSettings'
+  /settings/tracearr/test:
+    post:
+      summary: Test Tracearr connection
+      description: Tests connection to a Tracearr instance and lists the media servers it monitors.
+      tags:
+        - settings-integrations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: 'tracearr.example.com'
+                port:
+                  type: number
+                  example: 3000
+                apiKey:
+                  type: string
+                  example: 'trr_pub_your-key-here'
+                useSsl:
+                  type: boolean
+                  example: false
+                urlBase:
+                  type: string
+                  example: '/tracearr'
+              required:
+                - hostname
+                - apiKey
+      responses:
+        '200':
+          description: 'Connection test successful'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  version:
+                    type: string
+                    example: 'v2.2.3'
+                  servers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          example: 'plex'
+                        online:
+                          type: boolean
+        '401':
+          description: 'Invalid API key - Authentication failed'
+        '404':
+          description: 'Tracearr API not found at specified URL'
         '500':
           description: 'Connection test failed - Server error or network issue'
   /settings/maintainerr:
