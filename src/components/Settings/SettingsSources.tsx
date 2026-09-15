@@ -1785,7 +1785,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
             <div className="mt-10 mb-6">
               <h3 className="heading flex items-center">
                 <img
-                  src="/services/tracearr.svg"
+                  src="/services/tracearr.png"
                   alt=""
                   className="mr-2 h-7 w-7"
                 />
