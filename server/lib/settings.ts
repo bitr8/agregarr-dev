@@ -538,8 +538,8 @@ export interface TracearrSettings {
   /**
    * Tracearr server (UUID) whose playback history should be used. Tracearr
    * can monitor several media servers; rating keys are only meaningful for
-   * the Plex server Agregarr manages. When unset, every Plex-type server
-   * Tracearr reports is used.
+   * the Plex server Agregarr manages. When unset (or empty), the single Plex
+   * server Tracearr reports is used; several Plex servers is an error.
    */
   serverId?: string;
 }

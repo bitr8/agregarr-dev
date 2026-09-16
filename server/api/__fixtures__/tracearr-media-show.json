@@ -1,0 +1,43 @@
+{
+  "id": "9cec04ae-b067-479a-a6ec-21b87646ac6e",
+  "media_type": "show",
+  "title": "Silo",
+  "year": 2023,
+  "imdb_id": "tt14688458",
+  "tmdb_id": 125988,
+  "tvdb_id": 403245,
+  "genres": [
+    "Science fiction",
+    "Drama"
+  ],
+  "show_media_id": null,
+  "merged_ids": [],
+  "availability": [
+    {
+      "server_id": "6ea86a86-355d-4cd7-affc-7026a2a3a787",
+      "server_type": "emby",
+      "library_id": "25967",
+      "rating_key": "25969",
+      "added_at": "2023-09-28T15:29:17.000Z",
+      "removed_at": null,
+      "video_resolution": null,
+      "file_size": null,
+      "versions": [],
+      "replaces": null
+    },
+    {
+      "server_id": "d0465c72-88ea-41a6-83d9-d0c33404646d",
+      "server_type": "plex",
+      "library_id": "2",
+      "rating_key": "116",
+      "added_at": "2023-09-28T15:29:22.000Z",
+      "removed_at": null,
+      "video_resolution": null,
+      "file_size": null,
+      "versions": [],
+      "replaces": null
+    }
+  ],
+  "season_count": 3,
+  "episode_count": 30
+}

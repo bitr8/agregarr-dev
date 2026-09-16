@@ -81,10 +81,10 @@ const messages = defineMessages({
   tracearrUseSsl: 'Use SSL',
   tracearrApiKey: 'API Key',
   tracearrServer: 'Media Server',
-  tracearrServerAuto: 'All Plex servers monitored by Tracearr',
+  tracearrServerAuto: 'The only Plex server Tracearr monitors',
   tracearrServerSaved: 'Saved server ({id})',
   tracearrServerHint:
-    'Test the connection to load the servers Tracearr monitors. Pick the Plex server Agregarr manages if Tracearr tracks more than one.',
+    'Test the connection to load the servers Tracearr monitors. If Tracearr tracks more than one Plex server you must pick the one Agregarr manages, as statistics cannot be combined across servers.',
   toastTracearrSettingsSuccess: 'Tracearr settings saved successfully!',
   toastTracearrSettingsFailure:
     'Something went wrong while saving Tracearr settings.',
@@ -1816,7 +1816,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
                   apiKey: values.tracearrApiKey,
                   useSsl: values.tracearrUseSsl,
                   urlBase: values.tracearrUrlBase,
-                  serverId: values.tracearrServerId || undefined,
+                  serverId: values.tracearrServerId,
                   externalUrl: values.tracearrExternalUrl,
                 });
                 addToast(

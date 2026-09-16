@@ -1,4 +1,6 @@
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
@@ -247,6 +249,100 @@ describe('TracearrAPI', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
+  it('refuses to guess when Tracearr monitors several Plex servers', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: {
+        ...health.data,
+        servers: [
+          ...health.data.servers,
+          {
+            id: 'second-plex',
+            name: 'Plex 2',
+            type: 'plex',
+            online: true,
+            activeStreams: 0,
+          },
+        ],
+      },
+    });
+    const api = new TracearrAPI(settings);
+
+    await expect(api.getServerIds()).rejects.toThrow(/select the one/);
+    // Selecting one skips health entirely, so the same client works scoped
+    const scoped = new TracearrAPI({ ...settings, serverId: 'second-plex' });
+    await expect(scoped.getServerIds()).resolves.toEqual(['second-plex']);
+  });
+
+  it('fails instead of caching a truncated history pull', async () => {
+    mockGet.mockResolvedValueOnce(health).mockResolvedValue({
+      data: {
+        data: [row({ id: 'x' })],
+        meta: { nextCursor: 'more', pageSize: 100 },
+      },
+    });
+    const api = new TracearrAPI(settings);
+
+    await expect(api.getHistoryForDays(0)).rejects.toThrow(/more than 50000/);
+    // Nothing was cached, so the next call pulls again rather than serving
+    // the partial result
+    mockGet.mockClear();
+    await expect(api.getHistoryForDays(0)).rejects.toThrow();
+    expect(mockGet).toHaveBeenCalled();
+  });
+
+  it('retries a page after a 429, honouring Retry-After', async () => {
+    vi.useFakeTimers();
+    try {
+      mockGet
+        .mockResolvedValueOnce(health)
+        .mockRejectedValueOnce({
+          response: { status: 429, headers: { 'retry-after': '2' } },
+          message: 'Too Many Requests',
+        })
+        .mockResolvedValueOnce({
+          data: {
+            data: [row({ id: 'a' })],
+            meta: { nextCursor: null, pageSize: 100 },
+          },
+        });
+      const api = new TracearrAPI(settings);
+
+      const pending = api.getHistoryForDays(30);
+      await vi.advanceTimersByTimeAsync(2000);
+      const rows = await pending;
+
+      expect(rows.map((r) => r.id)).toEqual(['a']);
+      // health + failed page + retried page
+      expect(mockGet).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after repeated 429s', async () => {
+    vi.useFakeTimers();
+    try {
+      const limited = {
+        response: { status: 429, headers: {} },
+        message: 'Too Many Requests',
+      };
+      mockGet.mockResolvedValueOnce(health).mockRejectedValue(limited);
+      const api = new TracearrAPI(settings);
+
+      const pending = api.getHistoryForDays(30);
+      // Attach the handler before advancing so the rejection is observed
+      const outcome = pending.catch((e) => e);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const error = await outcome;
+
+      expect(error.message).toMatch(/Too Many Requests/);
+      // health + initial page + two retries
+      expect(mockGet).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('follows history cursors, scopes by server and ranks content', async () => {
     const page1 = {
       data: {
@@ -429,5 +525,134 @@ describe('TracearrAPI', () => {
     mockGet.mockRejectedValueOnce({ response: { status: 404 }, message: 'nf' });
     const api = new TracearrAPI(settings);
     await expect(api.getMedia('show:tmdb:1')).resolves.toBeNull();
+  });
+});
+
+/**
+ * Responses captured from Tracearr v2.2.3 (2026-09-16) so the client is
+ * tested against the real wire shape, not just the handwritten rows above.
+ * Viewer usernames and avatar URLs were replaced; everything else is verbatim.
+ */
+describe('captured Tracearr v2.2.3 responses', () => {
+  const settings = {
+    hostname: '192.168.4.3',
+    port: 9246,
+    useSsl: false,
+    apiKey: 'trr_pub_test',
+  };
+
+  const fixture = (name: string) => ({
+    data: JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, '__fixtures__', `tracearr-${name}.json`),
+        'utf-8'
+      )
+    ),
+  });
+
+  beforeEach(() => {
+    state.store.clear();
+    mockGet.mockReset();
+  });
+
+  it('handwritten rows use only fields the real history rows carry', () => {
+    const [movie, episode] = fixture('history').data.data;
+    for (const key of Object.keys(row({}))) {
+      expect(movie).toHaveProperty(key);
+      expect(episode).toHaveProperty(key);
+    }
+    for (const key of Object.keys(row({}).user)) {
+      expect(movie.user).toHaveProperty(key);
+    }
+  });
+
+  it('ranks movies and shows from a real history page', async () => {
+    // The captured page has a real nextCursor, so the client follows it and
+    // is answered with an empty final page
+    mockGet
+      .mockResolvedValueOnce(fixture('health'))
+      .mockResolvedValueOnce(fixture('history'))
+      .mockResolvedValueOnce({
+        data: { data: [], meta: { nextCursor: null, pageSize: 100 } },
+      });
+    const api = new TracearrAPI(settings);
+
+    const movies = await api.getContent('movie', 30, 'plays', 'most_watched');
+    expect(movies).toHaveLength(1);
+    expect(movies[0]).toMatchObject({
+      ratingKey: '29897',
+      title: 'The End of Oak Street',
+      mediaType: 'movie',
+      year: 2026,
+      tmdbId: 1101383,
+      tvdbId: 358926,
+      imdbId: 'tt27165187',
+      totalPlays: 1,
+      totalDuration: 5574,
+      lastPlayed: Math.floor(Date.parse('2026-09-15T13:06:48.990Z') / 1000),
+    });
+    expect(movies[0].serverUserIds).toEqual(
+      new Set(['c95ed99a-412f-4430-8565-56ef7979ef89'])
+    );
+
+    const shows = await api.getContent('tv', 30, 'plays', 'most_watched');
+    expect(shows).toHaveLength(1);
+    // Episodes roll up to the show's (grandparent) rating key and carry no
+    // show-level provider ids
+    expect(shows[0]).toMatchObject({
+      ratingKey: '116',
+      title: 'Silo',
+      mediaType: 'show',
+      totalPlays: 1,
+    });
+    expect(shows[0].tmdbId).toBeUndefined();
+
+    // Only the Plex server is scoped, and the second page was requested
+    // with the captured cursor
+    expect(mockGet).toHaveBeenCalledTimes(3);
+    expect(mockGet).toHaveBeenLastCalledWith(
+      '/api/v2/public/history',
+      expect.objectContaining({
+        params: expect.objectContaining({
+          server_id: PLEX_SERVER,
+          pageSize: 100,
+          cursor: fixture('history').data.meta.nextCursor,
+        }),
+      })
+    );
+  });
+
+  it('maps a real users page to Plex account ids', async () => {
+    mockGet.mockResolvedValueOnce(fixture('users'));
+    const api = new TracearrAPI(settings);
+
+    const map = await api.getPlexUserIdMap();
+    expect(map.get('f933968c-1dad-4c23-b919-dc1e6227e3c5')).toBe(307611349);
+    // The Emby-only identity has no Plex account and is skipped
+    expect(map.size).toBe(1);
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/v2/public/users',
+      expect.objectContaining({
+        params: expect.objectContaining({ include_removed: true }),
+      })
+    );
+  });
+
+  it('reads a real media record', async () => {
+    mockGet.mockResolvedValueOnce(fixture('media-show'));
+    const api = new TracearrAPI(settings);
+
+    const media = await api.getMedia('show:tvdb:403245');
+    expect(media).toMatchObject({
+      id: '9cec04ae-b067-479a-a6ec-21b87646ac6e',
+      media_type: 'show',
+      title: 'Silo',
+      tmdb_id: 125988,
+      tvdb_id: 403245,
+      imdb_id: 'tt14688458',
+    });
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/v2/public/media/show%3Atvdb%3A403245'
+    );
   });
 });

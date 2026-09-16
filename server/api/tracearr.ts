@@ -1,7 +1,7 @@
 import cacheManager from '@server/lib/cache';
 import type { TracearrSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import type { AxiosInstance } from 'axios';
+import type { AxiosInstance, AxiosResponse } from 'axios';
 import axios from 'axios';
 
 /**
@@ -29,6 +29,9 @@ const PAGE_SIZE = 100;
 const MAX_HISTORY_PAGES = 500;
 /** Repeated dashboard/preview calls within this window reuse one pull. */
 const HISTORY_CACHE_TTL_SECONDS = 300;
+/** Retries on HTTP 429 per request, and the base backoff when no Retry-After is sent. */
+const RATE_LIMIT_RETRIES = 2;
+const RATE_LIMIT_BACKOFF_MS = 1000;
 
 /**
  * In-flight history pulls keyed by cache key. Tracearr serialises concurrent
@@ -304,7 +307,8 @@ class TracearrAPI {
 
   /**
    * Tracearr server ids whose history should be queried. Uses the explicitly
-   * selected server when configured, otherwise every Plex-type server.
+   * selected server when configured, otherwise the single Plex server Tracearr
+   * monitors. Fails when there are several, since rating keys are server-local.
    */
   public async getServerIds(): Promise<string[]> {
     if (this.settings.serverId) {
@@ -326,9 +330,11 @@ class TracearrAPI {
         );
       }
       if (plexServers.length > 1) {
-        logger.warn(
-          'Tracearr monitors several Plex servers; history from all of them will be combined. Select one in the Tracearr settings to scope statistics.',
-          { label: LABEL, servers: plexServers.map((s) => s.name) }
+        // Rating keys are server-local, so plays from two Plex servers with
+        // the same key would be merged into one item. Refuse rather than guess.
+        const names = plexServers.map((s) => s.name).join(', ');
+        throw new Error(
+          `Tracearr monitors several Plex servers (${names}) - select the one Agregarr manages in the Tracearr settings`
         );
       }
       const ids = plexServers.map((s) => s.id);
@@ -353,22 +359,57 @@ class TracearrAPI {
     let page = 0;
 
     do {
-      const response = await this.axios.get<CursorPage<T>>(endpoint, {
-        params: { ...params, pageSize: PAGE_SIZE, cursor },
+      const response = await this.getWithRetry<CursorPage<T>>(endpoint, {
+        ...params,
+        pageSize: PAGE_SIZE,
+        cursor,
       });
       rows.push(...response.data.data);
       cursor = response.data.meta?.nextCursor ?? undefined;
       page += 1;
       if (page >= maxPages && cursor) {
-        logger.warn(`Stopped paging ${endpoint} after ${maxPages} pages`, {
-          label: LABEL,
-          rows: rows.length,
-        });
-        break;
+        // A truncated result would be cached and served as if complete, so
+        // fail instead and let the caller surface the error.
+        throw new Error(
+          `${endpoint} returned more than ${
+            maxPages * PAGE_SIZE
+          } rows; narrow the query`
+        );
       }
     } while (cursor);
 
     return rows;
+  }
+
+  /**
+   * GET with a bounded retry on 429. Tracearr's public API has a per-token
+   * rate limit and a long history pull is many sequential pages, so honour
+   * Retry-After (seconds) when it is sent and back off briefly otherwise.
+   */
+  private async getWithRetry<T>(
+    endpoint: string,
+    params: Record<string, string | number | boolean | undefined>
+  ): Promise<AxiosResponse<T>> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.axios.get<T>(endpoint, { params });
+      } catch (e) {
+        if (e.response?.status !== 429 || attempt >= RATE_LIMIT_RETRIES) {
+          throw e;
+        }
+        const retryAfter = Number(e.response.headers?.['retry-after']);
+        const delayMs =
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter * 1000
+            : RATE_LIMIT_BACKOFF_MS * (attempt + 1);
+        logger.warn(`Rate limited by Tracearr on ${endpoint}; retrying`, {
+          label: LABEL,
+          attempt: attempt + 1,
+          delayMs,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
   }
 
   /**
