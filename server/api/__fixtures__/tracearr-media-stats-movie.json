@@ -1,0 +1,75 @@
+{
+  "media_id": "a00dbb88-e580-4f97-8025-b01be037639c",
+  "media_type": "movie",
+  "windows": {
+    "all_time": {
+      "combined": {
+        "plays": 2,
+        "watch_time_ms": 11269980,
+        "unique_users": 2
+      },
+      "per_server": [
+        {
+          "server_id": "6ea86a86-355d-4cd7-affc-7026a2a3a787",
+          "server_name": "Luke's Media",
+          "plays": 1,
+          "watch_time_ms": 5695557,
+          "unique_users": 1
+        },
+        {
+          "server_id": "d0465c72-88ea-41a6-83d9-d0c33404646d",
+          "server_name": "Luke's Media",
+          "plays": 1,
+          "watch_time_ms": 5574423,
+          "unique_users": 1
+        }
+      ]
+    },
+    "last_30": {
+      "combined": {
+        "plays": 2,
+        "watch_time_ms": 11269980,
+        "unique_users": 2
+      },
+      "per_server": [
+        {
+          "server_id": "6ea86a86-355d-4cd7-affc-7026a2a3a787",
+          "server_name": "Luke's Media",
+          "plays": 1,
+          "watch_time_ms": 5695557,
+          "unique_users": 1
+        },
+        {
+          "server_id": "d0465c72-88ea-41a6-83d9-d0c33404646d",
+          "server_name": "Luke's Media",
+          "plays": 1,
+          "watch_time_ms": 5574423,
+          "unique_users": 1
+        }
+      ]
+    },
+    "last_7": {
+      "combined": {
+        "plays": 2,
+        "watch_time_ms": 11269980,
+        "unique_users": 2
+      },
+      "per_server": [
+        {
+          "server_id": "6ea86a86-355d-4cd7-affc-7026a2a3a787",
+          "server_name": "Luke's Media",
+          "plays": 1,
+          "watch_time_ms": 5695557,
+          "unique_users": 1
+        },
+        {
+          "server_id": "d0465c72-88ea-41a6-83d9-d0c33404646d",
+          "server_name": "Luke's Media",
+          "plays": 1,
+          "watch_time_ms": 5574423,
+          "unique_users": 1
+        }
+      ]
+    }
+  }
+}

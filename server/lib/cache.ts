@@ -21,6 +21,7 @@ export type AvailableCacheIds =
   | 'tmdb-list'
   | 'mdblist-list'
   | 'tautulli-list'
+  | 'tracearr' // Tracearr history/user pulls shared across dashboard + previews
   | 'overseerr-list'
   | 'networks-list'
   | 'originals-list'
@@ -142,6 +143,10 @@ class CacheManager {
     'tautulli-list': new Cache('tautulli-list', 'Tautulli Stats', {
       stdTtl: 86400 * 7, // 7 day cache
       checkPeriod: 60 * 60,
+    }),
+    tracearr: new Cache('tracearr', 'Tracearr', {
+      stdTtl: 300, // 5 minute cache - history changes constantly
+      checkPeriod: 120,
     }),
     'overseerr-list': new Cache('overseerr-list', 'Overseerr Requests', {
       stdTtl: 86400 * 7, // 7 day cache

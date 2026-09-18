@@ -528,6 +528,33 @@ export interface TautulliSettings {
   externalUrl?: string;
 }
 
+export interface TracearrSettings {
+  hostname?: string;
+  port?: number;
+  useSsl?: boolean;
+  urlBase?: string;
+  apiKey?: string;
+  externalUrl?: string;
+  /**
+   * Tracearr server (UUID) whose playback history should be used. Tracearr
+   * can monitor several media servers; rating keys are only meaningful for
+   * the Plex server Agregarr manages. When unset (or empty), the single Plex
+   * server Tracearr reports is used; several Plex servers is an error.
+   */
+  serverId?: string;
+}
+
+export type StatisticsProviderType = 'tautulli' | 'tracearr';
+
+/**
+ * Which watch-statistics backend feeds statistics collections, the dashboard
+ * and per-media watch data. Both services can be configured; only the
+ * selected one is queried.
+ */
+export interface StatisticsSettings {
+  provider: StatisticsProviderType;
+}
+
 export interface MaintainerrSettings {
   hostname?: string;
   port?: number;
@@ -764,6 +791,8 @@ interface AllSettings {
   main: MainSettings;
   plex: PlexSettings;
   tautulli: TautulliSettings;
+  tracearr: TracearrSettings;
+  statistics: StatisticsSettings;
   maintainerr: MaintainerrSettings;
   overseerr: OverseerrSettings;
   myanimelist: MyAnimeListSettings;
@@ -818,6 +847,10 @@ class Settings {
         preExistingCollectionConfigs: [],
       },
       tautulli: {},
+      tracearr: {},
+      statistics: {
+        provider: 'tautulli',
+      },
       maintainerr: {},
       overseerr: {},
       myanimelist: {},
@@ -1096,6 +1129,22 @@ class Settings {
 
   set tautulli(data: TautulliSettings) {
     this.data.tautulli = data;
+  }
+
+  get tracearr(): TracearrSettings {
+    return this.data.tracearr;
+  }
+
+  set tracearr(data: TracearrSettings) {
+    this.data.tracearr = data;
+  }
+
+  get statistics(): StatisticsSettings {
+    return this.data.statistics;
+  }
+
+  set statistics(data: StatisticsSettings) {
+    this.data.statistics = data;
   }
 
   get maintainerr(): MaintainerrSettings {
