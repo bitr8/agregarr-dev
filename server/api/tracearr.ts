@@ -15,6 +15,8 @@ import axios from 'axios';
  *   GET /api/v2/public/history    - cursor-paginated plays with media identity
  *   GET /api/v2/public/users      - identities with per-server account ids
  *   GET /api/v2/public/media/:ref - canonical media lookup by provider id
+ *   GET /api/v2/public/media/:ref/stats    - per-window, per-server play counts
+ *   GET /api/v2/public/media/:ref/watchers - per server-user plays for a window
  *
  * Tracearr has no "top N" endpoint, so popularity is derived here from the
  * play log: one history row is one play (a resume chain), and rows carry the
@@ -118,6 +120,52 @@ export interface TracearrMedia {
   tmdb_id: number | null;
   tvdb_id: number | null;
   show_media_id: string | null;
+}
+
+export type TracearrStatsWindow = 'all_time' | 'last_30' | 'last_7';
+
+export interface TracearrWindowStats {
+  plays: number;
+  watch_time_ms: number;
+  unique_users: number;
+}
+
+/** GET /media/:ref/stats */
+export interface TracearrMediaStats {
+  media_id: string;
+  media_type: string;
+  windows: Record<
+    TracearrStatsWindow,
+    {
+      combined: TracearrWindowStats;
+      per_server: (TracearrWindowStats & {
+        server_id: string;
+        server_name: string;
+      })[];
+    }
+  >;
+}
+
+export interface TracearrMediaWatcher {
+  user: {
+    server_user_id: string;
+    user_id: string;
+    username: string | null;
+    identity_name: string | null;
+  };
+  plays: number;
+  watch_time_ms: number;
+  completion_pct: number | null;
+  last_watched_day: string | null;
+  distinct_episodes_watched: number | null;
+}
+
+/** GET /media/:ref/watchers */
+export interface TracearrMediaWatchers {
+  media_id: string;
+  media_type: string;
+  window: TracearrStatsWindow;
+  watchers: TracearrMediaWatcher[];
 }
 
 interface CursorPage<T> {
@@ -569,6 +617,62 @@ class TracearrAPI {
         ref,
       });
       throw new Error(`[Tracearr] Failed to fetch media: ${e.message}`);
+    }
+  }
+
+  /**
+   * Play counts for one title over Tracearr's fixed windows, broken down per
+   * server. Null when the ref is unknown to Tracearr.
+   */
+  public async getMediaStats(ref: string): Promise<TracearrMediaStats | null> {
+    return this.getMediaResource<TracearrMediaStats>(ref, 'stats', {});
+  }
+
+  /**
+   * Per server-user play rollup for one title on one server. Null when the
+   * ref is unknown to Tracearr.
+   */
+  public async getMediaWatchers(
+    ref: string,
+    serverId: string,
+    window: TracearrStatsWindow = 'all_time'
+  ): Promise<TracearrMediaWatchers | null> {
+    return this.getMediaResource<TracearrMediaWatchers>(ref, 'watchers', {
+      window,
+      server_id: serverId,
+    });
+  }
+
+  private async getMediaResource<T>(
+    ref: string,
+    resource: 'stats' | 'watchers',
+    params: Record<string, string | undefined>
+  ): Promise<T | null> {
+    const key = this.cacheKey(`media-${resource}`, { ref, ...params });
+    const cached = this.cache.get<T>(key);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const response = await this.axios.get<T>(
+        `/api/v2/public/media/${encodeURIComponent(ref)}/${resource}`,
+        { params }
+      );
+      this.cache.set(key, response.data, HISTORY_CACHE_TTL_SECONDS);
+      return response.data;
+    } catch (e) {
+      if (e.response?.status === 404) {
+        return null;
+      }
+      logger.error(`Failed to fetch media ${resource} from Tracearr`, {
+        label: LABEL,
+        errorMessage: e.message,
+        ref,
+      });
+      throw new Error(
+        `[Tracearr] Failed to fetch media ${resource}: ${e.message}`
+      );
     }
   }
 

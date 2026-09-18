@@ -1,5 +1,8 @@
 import type PlexAPI from '@server/api/plexapi';
-import type { TracearrHistoryRow } from '@server/api/tracearr';
+import type {
+  TracearrHistoryRow,
+  TracearrStatsWindow,
+} from '@server/api/tracearr';
 import TracearrAPI, { groupHistoryRowsByItem } from '@server/api/tracearr';
 import cacheManager from '@server/lib/cache';
 import type { TracearrSettings } from '@server/lib/settings';
@@ -54,6 +57,18 @@ async function getCollectionMembership(
     cache.set(key, result, COLLECTION_CACHE_TTL_SECONDS);
   }
   return result;
+}
+
+/**
+ * Tracearr media ref for a title, preferring tmdb, then tvdb, then imdb.
+ * Null when the title has no provider ids.
+ */
+function mediaRef(query: MediaWatchDataQuery): string | null {
+  const kind = query.mediaType === 'movie' ? 'movie' : 'show';
+  if (query.tmdbId) return `${kind}:tmdb:${query.tmdbId}`;
+  if (query.tvdbId) return `${kind}:tvdb:${query.tvdbId}`;
+  if (query.imdbId) return `${kind}:imdb:${query.imdbId}`;
+  return null;
 }
 
 function rowsWithinDays(
@@ -174,45 +189,60 @@ export class TracearrStatisticsProvider implements StatisticsProvider {
     }));
   }
 
+  /**
+   * Per-title watch data from Tracearr's media stats and watchers routes,
+   * scoped to the Plex server Agregarr manages. Titles Tracearr cannot match
+   * to a provider id fall back to counting plays by rating key (movies only;
+   * episode plays cannot be filtered by show rating key).
+   */
   public async getMediaWatchData(
     query: MediaWatchDataQuery
   ): Promise<MediaWatchData> {
-    let rows: TracearrHistoryRow[] = [];
+    const ref = mediaRef(query);
+    if (ref) {
+      const [serverId] = await this.api.getServerIds();
+      const [stats, watchers] = await Promise.all([
+        this.api.getMediaStats(ref),
+        this.api.getMediaWatchers(ref, serverId, 'all_time'),
+      ]);
 
-    if (query.mediaType === 'movie') {
-      rows = await this.api.getHistory({
-        mediaType: 'movie',
-        ratingKey: query.ratingKey,
-      });
-    } else {
-      // Episode plays cannot be filtered by show rating key directly; resolve
-      // the show's canonical Tracearr media record via a provider id, pull its
-      // plays, then keep the ones that belong to this Plex show item.
-      const ref = query.tmdbId
-        ? `show:tmdb:${query.tmdbId}`
-        : query.tvdbId
-        ? `show:tvdb:${query.tvdbId}`
-        : query.imdbId
-        ? `show:imdb:${query.imdbId}`
-        : null;
+      if (stats) {
+        const playsOn = (window: TracearrStatsWindow) =>
+          stats.windows[window]?.per_server.find(
+            (server) => server.server_id === serverId
+          )?.plays ?? 0;
 
-      const media = ref ? await this.api.getMedia(ref) : null;
-      if (!media) {
-        logger.debug('Show not known to Tracearr; no watch data', {
-          label: LABEL,
-          ratingKey: query.ratingKey,
-          ref,
-        });
-      } else {
-        const showRows = await this.api.getHistory({
-          mediaType: 'episode',
-          mediaId: media.id,
-        });
-        rows = showRows.filter(
-          (row) => row.grandparent_rating_key === query.ratingKey
-        );
+        const users = new Set<number>();
+        if (watchers?.watchers.length) {
+          const plexUserIds = await this.api.getPlexUserIdMap();
+          for (const watcher of watchers.watchers) {
+            const plexId = plexUserIds.get(watcher.user.server_user_id);
+            if (plexId !== undefined) users.add(plexId);
+          }
+        }
+
+        return {
+          playCount: playsOn('all_time'),
+          playCount7Days: playsOn('last_7'),
+          playCount30Days: playsOn('last_30'),
+          plexUserIds: Array.from(users),
+        };
       }
+
+      logger.debug('Title not known to Tracearr by provider id', {
+        label: LABEL,
+        ratingKey: query.ratingKey,
+        ref,
+      });
     }
+
+    const rows =
+      query.mediaType === 'movie'
+        ? await this.api.getHistory({
+            mediaType: 'movie',
+            ratingKey: query.ratingKey,
+          })
+        : [];
 
     const plexUserIds = rows.length ? await this.api.getPlexUserIdMap() : null;
     const users = new Set<number>();

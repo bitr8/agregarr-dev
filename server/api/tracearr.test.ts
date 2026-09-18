@@ -638,6 +638,61 @@ describe('captured Tracearr v2.2.3 responses', () => {
     );
   });
 
+  it('reads real per-server media stats and caches them', async () => {
+    mockGet.mockResolvedValueOnce(fixture('media-stats-movie'));
+    const api = new TracearrAPI(settings);
+
+    const stats = await api.getMediaStats('movie:tmdb:1101383');
+    expect(stats?.media_type).toBe('movie');
+    expect(Object.keys(stats?.windows ?? {})).toEqual([
+      'all_time',
+      'last_30',
+      'last_7',
+    ]);
+    // Same film played once on Plex and once on Emby
+    expect(stats?.windows.all_time.combined.plays).toBe(2);
+    expect(
+      stats?.windows.all_time.per_server.map((s) => [s.server_id, s.plays])
+    ).toEqual([
+      [EMBY_SERVER, 1],
+      [PLEX_SERVER, 1],
+    ]);
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/v2/public/media/movie%3Atmdb%3A1101383/stats',
+      { params: {} }
+    );
+
+    await api.getMediaStats('movie:tmdb:1101383');
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads real watchers scoped to a server', async () => {
+    mockGet.mockResolvedValueOnce(fixture('media-watchers-show'));
+    const api = new TracearrAPI(settings);
+
+    const watchers = await api.getMediaWatchers(
+      'show:tvdb:403245',
+      PLEX_SERVER
+    );
+    expect(watchers?.window).toBe('all_time');
+    expect(
+      watchers?.watchers.map((w) => [w.user.server_user_id, w.plays])
+    ).toEqual([
+      ['c95ed99a-412f-4430-8565-56ef7979ef89', 23],
+      ['0225e254-1c0d-4728-9a1c-512f5af332e9', 17],
+    ]);
+    expect(mockGet).toHaveBeenCalledWith(
+      '/api/v2/public/media/show%3Atvdb%3A403245/watchers',
+      { params: { window: 'all_time', server_id: PLEX_SERVER } }
+    );
+  });
+
+  it('returns null stats for an unknown ref', async () => {
+    mockGet.mockRejectedValueOnce({ response: { status: 404 }, message: 'nf' });
+    const api = new TracearrAPI(settings);
+    await expect(api.getMediaStats('movie:tmdb:1')).resolves.toBeNull();
+  });
+
   it('reads a real media record', async () => {
     mockGet.mockResolvedValueOnce(fixture('media-show'));
     const api = new TracearrAPI(settings);
