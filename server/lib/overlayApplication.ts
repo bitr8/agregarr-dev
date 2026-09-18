@@ -1,5 +1,7 @@
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
+import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
+import posterizarrTriggerJob from '@server/lib/posterizarrTrigger';
 import logger from '@server/logger';
 
 /**
@@ -64,6 +66,17 @@ class OverlayApplication {
       logger.warn('Overlay application is already running', {
         label: 'Overlay Application',
       });
+      return;
+    }
+
+    // This check and the pending claim below are deliberately synchronous.
+    // Posterizarr enqueue performs the inverse check, so only one side can win
+    // before either path reaches its first await.
+    if (posterizarrTriggerJob.busy) {
+      logger.warn(
+        'Posterizarr item triggers are running or queued, skipping this Overlay Application; retry manually or wait for the next scheduled run',
+        { label: 'Overlay Application' }
+      );
       return;
     }
 
@@ -187,7 +200,9 @@ class OverlayApplication {
       const activeConfigs = configs.filter(
         (config) =>
           config.enabledOverlays &&
-          config.enabledOverlays.some((o) => o.enabled)
+          config.enabledOverlays.some((o) => o.enabled) &&
+          normalizeOverlaySyncTargets(config.fullSyncTargets, config.mediaType)
+            .length > 0
       );
 
       // A library whose config was deleted, or whose overlays were all switched
@@ -246,6 +261,7 @@ class OverlayApplication {
         return;
       }
 
+      overlayLibraryService.beginOutcomeRun();
       this.totalLibraries = targets.length;
       logger.info('Found libraries with overlays configured', {
         label: 'Overlay Application',

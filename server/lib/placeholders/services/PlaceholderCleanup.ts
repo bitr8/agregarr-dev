@@ -954,8 +954,14 @@ export async function removeGhostEntries(
     !(await plexClient.getAutoEmptyTrashEnabled())
   ) {
     logger.warn(
-      'Emptying Plex trash for the whole library after scoped ghost scans — any items independently in trash will be purged. Enable "Allow media deletion" in Plex to let Agregarr delete ghost entries directly instead.',
-      { label: 'PlaceholderCleanup', libraryId }
+      'Emptying Plex trash for the whole library after scoped ghost scans — any items independently in trash will be purged. Some ghost entries needed a scoped scan instead of a direct delete; turn off "Auto Empty Trash" in Settings > Plex to skip this purge.',
+      {
+        label: 'PlaceholderCleanup',
+        libraryId,
+        directlyDeleted,
+        scansTriggered,
+        missedDirectories: missedDirectories.size,
+      }
     );
     // Brief delay so the scans can mark missing files before purging.
     await new Promise((resolve) => setTimeout(resolve, 3000));

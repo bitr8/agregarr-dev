@@ -1,5 +1,6 @@
 import type { CollectionSource } from '@server/lib/collections/core/types';
 import logger from '@server/logger';
+import { scrubSecrets } from '@server/utils/logRedaction';
 
 export type SyncPhase =
   | 'setup'
@@ -18,7 +19,10 @@ export interface CollectionOutcome {
   updated: number;
   errorMessage?: string;
   durationMs: number;
+  processedAt: number;
 }
+
+export type CollectionOutcomeFilter = CollectionOutcome['outcome'] | 'created';
 
 interface CollectionSyncProgressData {
   phase: SyncPhase;
@@ -43,6 +47,7 @@ interface CollectionSyncProgressData {
   createdCount: number;
   updatedCount: number;
   recentOutcomes: CollectionOutcome[];
+  outcomes: CollectionOutcome[];
 
   _recentCollectionTimes: number[];
 }
@@ -104,6 +109,7 @@ function createEmptyData(
     createdCount: 0,
     updatedCount: 0,
     recentOutcomes: [],
+    outcomes: [],
     _recentCollectionTimes: [],
   };
 }
@@ -174,7 +180,7 @@ function toStatus(data: CollectionSyncProgressData): CollectionSyncStatus {
   };
 }
 
-class CollectionSyncProgress {
+export class CollectionSyncProgress {
   private current: CollectionSyncProgressData | null = null;
   private lastCompleted: CollectionSyncProgressData | null = null;
 
@@ -251,10 +257,14 @@ class CollectionSyncProgress {
       created,
       updated,
       durationMs,
+      processedAt: now,
     };
-    if (errorMessage) entry.errorMessage = errorMessage;
+    if (errorMessage) {
+      entry.errorMessage = scrubSecrets(errorMessage).slice(0, 500);
+    }
 
     this.current.recentOutcomes.unshift(entry);
+    this.current.outcomes.unshift(entry);
     if (this.current.recentOutcomes.length > MAX_RECENT_OUTCOMES) {
       this.current.recentOutcomes.length = MAX_RECENT_OUTCOMES;
     }
@@ -314,6 +324,7 @@ class CollectionSyncProgress {
     this.lastCompleted = {
       ...this.current,
       recentOutcomes: [...this.current.recentOutcomes],
+      outcomes: [...this.current.outcomes],
       _recentCollectionTimes: [...this.current._recentCollectionTimes],
     };
 
@@ -336,6 +347,19 @@ class CollectionSyncProgress {
   getLastCompleted(): CollectionSyncStatus | null {
     if (!this.lastCompleted) return null;
     return toStatus(this.lastCompleted);
+  }
+
+  getOutcomes(filter?: CollectionOutcomeFilter): CollectionOutcome[] {
+    const data = this.current ?? this.lastCompleted;
+    if (!data) return [];
+
+    return data.outcomes
+      .filter((outcome) =>
+        filter === 'created'
+          ? outcome.created > 0
+          : !filter || outcome.outcome === filter
+      )
+      .map((outcome) => ({ ...outcome }));
   }
 
   private cleanupExpired(): void {

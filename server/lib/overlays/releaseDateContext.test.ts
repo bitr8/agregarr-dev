@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deriveReleaseDateContext } from './releaseDateContext';
+import {
+  deriveReleaseDateContext,
+  latestAiredSeasonDate,
+} from './releaseDateContext';
 
 describe('deriveReleaseDateContext', () => {
   const originalTz = process.env.TZ;
@@ -94,6 +97,21 @@ describe('deriveReleaseDateContext', () => {
     expect(ctx.daysAgoNextSeason).toBeUndefined();
     expect(ctx.nextEpisodeAirDate).toBeUndefined();
   });
+
+  it('derives daysAgoNextSeason from lastSeasonAirDate when nextSeasonAirDate is unset', () => {
+    const ctx = deriveReleaseDateContext({ lastSeasonAirDate: '2026-07-01' });
+    expect(ctx.daysAgoNextSeason).toBe(10);
+    expect(ctx.daysUntilNextSeason).toBeUndefined();
+  });
+
+  it('keeps daysUntilNextSeason (upcoming) and daysAgoNextSeason (from lastSeasonAirDate) populated together', () => {
+    const ctx = deriveReleaseDateContext({
+      nextSeasonAirDate: '2026-08-01',
+      lastSeasonAirDate: '2026-07-01',
+    });
+    expect(ctx.daysUntilNextSeason).toBe(21);
+    expect(ctx.daysAgoNextSeason).toBe(10);
+  });
 });
 
 describe('deriveReleaseDateContext timezone boundary (TZ=Australia/Sydney)', () => {
@@ -171,5 +189,44 @@ describe('deriveReleaseDateContext timezone boundary (TZ=Australia/Sydney)', () 
   it('omits the estimated flag when there is no release date to qualify', () => {
     const ctx = deriveReleaseDateContext({ isEstimated: true });
     expect(ctx.isEstimatedReleaseDate).toBeUndefined();
+  });
+});
+
+describe('latestAiredSeasonDate', () => {
+  const originalTz = process.env.TZ;
+
+  beforeEach(() => {
+    process.env.TZ = 'UTC';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-11T12:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  it('returns the most recently aired season, ignoring specials and future seasons', () => {
+    const seasons = [
+      { season_number: 0, air_date: '2026-07-05' }, // special, ignored
+      { season_number: 4, air_date: '2025-06-06' }, // aired, older
+      { season_number: 5, air_date: '2026-07-01' }, // aired, latest
+      { season_number: 6, air_date: '2026-08-01' }, // future, ignored
+    ];
+    expect(latestAiredSeasonDate(seasons)).toBe('2026-07-01');
+  });
+
+  it('ignores seasons with a missing air_date', () => {
+    const seasons = [
+      { season_number: 1, air_date: '' },
+      { season_number: 2, air_date: '2026-06-01' },
+    ];
+    expect(latestAiredSeasonDate(seasons)).toBe('2026-06-01');
+  });
+
+  it('returns undefined for an empty or undefined seasons list', () => {
+    expect(latestAiredSeasonDate([])).toBeUndefined();
+    expect(latestAiredSeasonDate(undefined)).toBeUndefined();
   });
 });

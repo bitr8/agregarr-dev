@@ -241,6 +241,26 @@ const FLIXPATROL_COUNTRIES = [
   'zimbabwe',
 ] as const;
 
+// Shared by the ExternalAPI instance and the CloudflareSolver asset fetch
+const FLIXPATROL_BROWSER_HEADERS: Record<string, string> = {
+  Accept:
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Cache-Control': 'no-cache',
+  Pragma: 'no-cache',
+  'Sec-Ch-Ua':
+    '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Ch-Ua-Platform': '"macOS"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+};
+
 /**
  * FlixPatrol API client for fetching streaming top 10 lists
  *
@@ -256,22 +276,7 @@ class FlixPatrolAPI extends ExternalAPI {
         headers: {
           // Override the default JSON headers that trigger bot detection
           'Content-Type': undefined, // Remove the application/json content-type
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-          'Sec-Ch-Ua':
-            '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': '"macOS"',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Sec-Fetch-User': '?1',
-          'Upgrade-Insecure-Requests': '1',
+          ...FLIXPATROL_BROWSER_HEADERS,
         },
         nodeCache: cacheManager.getCache('flixpatrol').data,
       }
@@ -1604,37 +1609,31 @@ class FlixPatrolAPI extends ExternalAPI {
 
     try {
       // First get the current CSS version from the HTML page
-      const htmlResponse = await this.axios.get('/top10/streaming/', {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        },
-        timeout: 10000,
-      });
+      const html = await this.fetchFlixPatrolPage(
+        'https://flixpatrol.com/top10/streaming/'
+      );
 
       // Extract the CSS version from the HTML
-      const cssVersionMatch = htmlResponse.data.match(
-        /all\.min\.css\?v=([^"']*)/
-      );
+      const cssVersionMatch = html.match(/all\.min\.css\?v=([^"']*)/);
       const cssVersion = cssVersionMatch ? cssVersionMatch[1] : 'a72ef60e';
 
       // Fetch the versioned CSS file to get the current sprite URL
-      const cssResponse = await this.axios.get(
-        `/static/dist/all.min.css?v=${cssVersion}`,
+      const { CloudflareSolver } = await import(
+        '@server/lib/collections/utils/CloudflareSolver'
+      );
+      const cssResponse = await CloudflareSolver.fetchAsset(
+        `https://flixpatrol.com/static/dist/all.min.css?v=${cssVersion}`,
         {
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-          },
+          headers: FLIXPATROL_BROWSER_HEADERS,
           timeout: 10000,
         }
       );
 
       const cssContent = cssResponse.data;
 
-      // Look for the bg-platform rule with the sprite URL
+      // Sprite url(...) may be unquoted on some CSS builds
       const bgPlatformMatch = cssContent.match(
-        /\.bg-platform\s*\{[^}]*background-image:\s*var\([^,]*,\s*url\('([^']+)'\)/
+        /\.bg-platform\s*\{[^}]*background-image:\s*var\([^,]*,\s*url\(\s*['"]?([^'")\s]+)['"]?\s*\)/
       );
 
       if (bgPlatformMatch) {

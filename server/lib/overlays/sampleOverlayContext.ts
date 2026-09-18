@@ -133,6 +133,8 @@ export function createSampleOverlayContext(
     title?: string;
     year?: number;
     imdbRating?: number;
+    tmdbRating?: number;
+    tmdbVoteCount?: number;
     rtCriticsScore?: number;
     rtAudienceScore?: number;
     studio?: string;
@@ -145,6 +147,8 @@ export function createSampleOverlayContext(
     title: tmdbOverrides?.title || 'Sample Movie',
     year: tmdbOverrides?.year || 2024,
     imdbRating: tmdbOverrides?.imdbRating || 8.5,
+    tmdbRating: tmdbOverrides?.tmdbRating ?? 8.4,
+    tmdbVoteCount: tmdbOverrides?.tmdbVoteCount ?? 1250,
     rtCriticsScore: tmdbOverrides?.rtCriticsScore || 92,
     rtAudienceScore: tmdbOverrides?.rtAudienceScore || 88,
     studio: tmdbOverrides?.studio || 'Warner Bros.',
@@ -161,6 +165,10 @@ export function createSampleOverlayContext(
 
   if (mediaType === 'show') {
     Object.assign(context, EPISODE_AGGREGATION_FIELDS);
+    // Computed per call (not in the static object above) so the preview's
+    // "3 days ago" stays true to "now" rather than drifting with server uptime.
+    context.lastEpisodeAddedDate = new Date(Date.now() - 3 * 86400000);
+    context.daysSinceLastEpisodeAdded = 3;
     context.totalSeasons = 5;
     context.seasonsAvailable = 3;
     context.seasonsLeavingCount = 2;

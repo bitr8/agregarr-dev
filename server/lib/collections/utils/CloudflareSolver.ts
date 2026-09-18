@@ -1,6 +1,7 @@
 import type { CloudflareSolverInstance } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import type { AxiosResponse } from 'axios';
 import axios from 'axios';
 import { chromium, type BrowserContext } from 'playwright';
 
@@ -11,6 +12,10 @@ import { chromium, type BrowserContext } from 'playwright';
  * sidecars (FlareSolverr/Byparr), trying entries in priority order. Otherwise
  * falls back to built-in Playwright headless browser.
  */
+interface FlareSolverrErrorResponse {
+  response?: { status?: number; data?: { message?: string } };
+}
+
 function isChallengeTitle(title: string): boolean {
   return (
     title.includes('Just a moment') ||
@@ -38,6 +43,13 @@ export class CloudflareSolver {
   private static solveFailures: Map<
     string,
     { count: number; backoffUntil: number }
+  > = new Map();
+
+  // Cookie/UA captured from a solved page, reused for plain-axios asset fetches.
+  private static readonly SESSION_TTL = 30 * 60 * 1000; // 30 minutes
+  private static domainSessions: Map<
+    string,
+    { cookieHeader: string; userAgent: string; fetchedAt: number }
   > = new Map();
 
   // Backoff is per solver instance (URL) + domain, so one dead instance
@@ -327,11 +339,23 @@ export class CloudflareSolver {
     });
 
     const endpoint = solverrUrl.replace(/\/+$/, '') + '/v1';
-    const response = await axios.post(
-      endpoint,
-      { cmd: 'request.get', url, maxTimeout: 60000 },
-      { timeout: 70000 }
-    );
+    let response;
+    try {
+      response = await axios.post(
+        endpoint,
+        { cmd: 'request.get', url, maxTimeout: 60000 },
+        { timeout: 70000 }
+      );
+    } catch (error) {
+      const fsResponse = (error as FlareSolverrErrorResponse).response;
+      const fsMessage = fsResponse?.data?.message;
+      const fallback = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        fsMessage
+          ? `FlareSolverr ${fsResponse?.status}: ${fsMessage}`
+          : fallback
+      );
+    }
 
     if (response.data?.status !== 'ok' || !response.data?.solution?.response) {
       throw new Error(
@@ -356,6 +380,18 @@ export class CloudflareSolver {
       );
     }
 
+    const cookies = response.data.solution.cookies as
+      | { name: string; value: string }[]
+      | undefined;
+    const userAgent = response.data.solution.userAgent as string | undefined;
+    if (cookies?.length && userAgent) {
+      this.domainSessions.set(domain, {
+        cookieHeader: cookies.map((c) => `${c.name}=${c.value}`).join('; '),
+        userAgent,
+        fetchedAt: Date.now(),
+      });
+    }
+
     logger.info('Successfully fetched page via FlareSolverr', {
       label: 'Cloudflare Solver',
       domain,
@@ -363,6 +399,85 @@ export class CloudflareSolver {
     });
 
     return html;
+  }
+
+  private static getSession(domain: string) {
+    const session = this.domainSessions.get(domain);
+    if (session && Date.now() - session.fetchedAt < this.SESSION_TTL) {
+      return session;
+    }
+    return null;
+  }
+
+  private static sessionHeaders(
+    domain: string
+  ): Record<string, string> | undefined {
+    const session = this.getSession(domain);
+    return session
+      ? { Cookie: session.cookieHeader, 'User-Agent': session.userAgent }
+      : undefined;
+  }
+
+  // Forces a fresh solve: fetchPage alone would just serve the 5-minute htmlCache.
+  private static async refreshSession(domain: string): Promise<void> {
+    const root = `https://${domain}/`;
+    this.htmlCache.delete(root);
+    await this.fetchPage(root);
+  }
+
+  /**
+   * Fetch a non-HTML asset (CSS, image) that sits behind the same Cloudflare challenge as the page.
+   */
+  static async fetchAsset(
+    url: string,
+    opts: {
+      responseType?: 'arraybuffer' | 'text';
+      headers?: Record<string, string>;
+      timeout?: number;
+    } = {}
+  ): Promise<AxiosResponse> {
+    const domain = new URL(url).hostname;
+
+    if (!this.getSolvers().length) {
+      return axios.get(url, opts);
+    }
+
+    if (!this.getSession(domain)) {
+      // Cache-honouring on purpose: a cookieless solver must not solve per call
+      const failed = await this.fetchPage(`https://${domain}/`).then(
+        () => undefined,
+        (e) => (e instanceof Error ? e.message : String(e))
+      );
+      if (!this.getSession(domain)) {
+        logger.warn(
+          failed
+            ? `Solver session fetch failed: ${failed}`
+            : 'Solver returned no session cookies',
+          { label: 'Cloudflare Solver', domain }
+        );
+      }
+    }
+
+    const usedSession = this.getSession(domain);
+    try {
+      return await axios.get(url, {
+        ...opts,
+        headers: { ...opts.headers, ...this.sessionHeaders(domain) },
+      });
+    } catch (error) {
+      if (
+        !usedSession ||
+        (error as { response?: { status?: number } })?.response?.status !== 403
+      ) {
+        throw error;
+      }
+      this.domainSessions.delete(domain);
+      await this.refreshSession(domain);
+      return axios.get(url, {
+        ...opts,
+        headers: { ...opts.headers, ...this.sessionHeaders(domain) },
+      });
+    }
   }
 
   /**

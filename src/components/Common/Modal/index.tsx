@@ -211,7 +211,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
             </div>
           )}
           {(onCancel || onOk || onSecondary || onTertiary) && (
-            <div className="relative mt-5 flex flex-row-reverse items-center justify-center sm:mt-4 sm:justify-between">
+            <div className="sticky -bottom-4 -mx-4 -mb-4 mt-1 flex flex-row-reverse items-center justify-center bg-stone-800 px-4 py-4 sm:mt-0 sm:justify-between">
               <div className="flex flex-row-reverse">
                 {typeof onOk === 'function' && (
                   <Button

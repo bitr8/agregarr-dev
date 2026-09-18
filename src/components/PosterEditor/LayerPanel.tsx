@@ -1,3 +1,4 @@
+import ColorInput from '@app/components/Common/ColorInput';
 import { fontLoader } from '@app/utils/fontLoader';
 import {
   ArrowDownIcon,
@@ -925,9 +926,8 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                             >
                               {intl.formatMessage(messages.primary)}
                             </label>
-                            <input
+                            <ColorInput
                               id={`primary-color-${selectedSourceType}`}
-                              type="color"
                               value={
                                 posterData.background.sourceColors?.[
                                   selectedSourceType
@@ -937,14 +937,13 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                                 ]?.primaryColor ||
                                 '#6366f1'
                               }
-                              onChange={(e) =>
+                              onChange={(value) =>
                                 updateSourceColor(
                                   selectedSourceType,
                                   'primaryColor',
-                                  (e.target as HTMLInputElement).value
+                                  value
                                 )
                               }
-                              className="h-6 w-full rounded border border-stone-600"
                             />
                           </div>
 
@@ -955,9 +954,8 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                             >
                               {intl.formatMessage(messages.secondary)}
                             </label>
-                            <input
+                            <ColorInput
                               id={`secondary-color-${selectedSourceType}`}
-                              type="color"
                               value={
                                 posterData.background.sourceColors?.[
                                   selectedSourceType
@@ -967,14 +965,13 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                                 ]?.secondaryColor ||
                                 '#1e1b4b'
                               }
-                              onChange={(e) =>
+                              onChange={(value) =>
                                 updateSourceColor(
                                   selectedSourceType,
                                   'secondaryColor',
-                                  (e.target as HTMLInputElement).value
+                                  value
                                 )
                               }
-                              className="h-6 w-full rounded border border-stone-600"
                             />
                           </div>
                         </div>
@@ -987,9 +984,8 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                           >
                             {intl.formatMessage(messages.textColor)}
                           </label>
-                          <input
+                          <ColorInput
                             id={`text-color-${selectedSourceType}`}
-                            type="color"
                             value={
                               posterData.background.sourceColors?.[
                                 selectedSourceType
@@ -998,14 +994,13 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                                 ?.textColor ||
                               '#ffffff'
                             }
-                            onChange={(e) =>
+                            onChange={(value) =>
                               updateSourceColor(
                                 selectedSourceType,
                                 'textColor',
-                                (e.target as HTMLInputElement).value
+                                value
                               )
                             }
-                            className="h-6 w-full rounded border border-stone-600"
                           />
                         </div>
 
@@ -1038,20 +1033,10 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
               <label className="mb-1 block text-xs text-stone-400">
                 {intl.formatMessage(messages.primaryColor)}
               </label>
-              <input
-                type="color"
+              <ColorInput
                 value={posterData.background.color || '#6366f1'}
-                onChange={(e) =>
-                  updateBackground({
-                    color: (e.target as HTMLInputElement).value,
-                  })
-                }
+                onChange={(value) => updateBackground({ color: value })}
                 disabled={isTemplate && posterData.background.useSourceColors}
-                className={`h-8 w-full rounded border border-stone-600 focus:border-orange-500 focus:outline-none ${
-                  isTemplate && posterData.background.useSourceColors
-                    ? 'cursor-not-allowed opacity-50'
-                    : ''
-                }`}
               />
               {isTemplate && posterData.background.useSourceColors && (
                 <p className="mt-1 text-xs text-stone-500">
@@ -1066,20 +1051,12 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                 <label className="mb-1 block text-xs text-stone-400">
                   {intl.formatMessage(messages.secondaryColor)}
                 </label>
-                <input
-                  type="color"
+                <ColorInput
                   value={posterData.background.secondaryColor || '#1e1b4b'}
-                  onChange={(e) =>
-                    updateBackground({
-                      secondaryColor: (e.target as HTMLInputElement).value,
-                    })
+                  onChange={(value) =>
+                    updateBackground({ secondaryColor: value })
                   }
                   disabled={isTemplate && posterData.background.useSourceColors}
-                  className={`h-8 w-full rounded border border-stone-600 focus:border-orange-500 focus:outline-none ${
-                    isTemplate && posterData.background.useSourceColors
-                      ? 'cursor-not-allowed opacity-50'
-                      : ''
-                  }`}
                 />
                 {isTemplate && posterData.background.useSourceColors && (
                   <p className="mt-1 text-xs text-stone-500">
@@ -1439,14 +1416,13 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                     <label className="mb-1 block text-xs text-stone-400">
                       {intl.formatMessage(messages.textColor)}
                     </label>
-                    <input
-                      type="color"
+                    <ColorInput
                       value={
                         (selectedElement.properties as TextElementProps).color
                       }
-                      onChange={(e) => {
+                      onChange={(value) => {
                         updateElementProperties(selectedElement.id, {
-                          color: (e.target as HTMLInputElement).value,
+                          color: value,
                         });
                       }}
                       disabled={
@@ -1454,13 +1430,6 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                         (selectedElement.properties as TextElementProps)
                           .useSourceColors
                       }
-                      className={`h-8 w-full rounded border border-stone-600 focus:border-orange-500 focus:outline-none ${
-                        isTemplate &&
-                        (selectedElement.properties as TextElementProps)
-                          .useSourceColors
-                          ? 'cursor-not-allowed opacity-50'
-                          : ''
-                      }`}
                     />
                     {isTemplate &&
                       (selectedElement.properties as TextElementProps)

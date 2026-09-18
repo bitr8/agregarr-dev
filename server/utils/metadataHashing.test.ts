@@ -36,7 +36,21 @@ const baseConfig = {
   context: { audioLanguages: ['eng'], mediaType: 'movie' },
 };
 
+// Digest of baseConfig on the last build before Posterizarr (fe0355ed). Re-baking
+// this constant means every user re-renders every poster; do it on purpose.
+const PRE_POSTERIZARR_OVERLAY_HASH =
+  '4f76482efd2bd23953d9a4b2e4734d30277ce32bf948e5135c03d3e0f556bd65';
+
 describe('calculateOverlayInputHash', () => {
+  it('keeps the pre-Posterizarr digest when no render options are supplied', () => {
+    expect(calculateOverlayInputHash(baseConfig)).toBe(
+      PRE_POSTERIZARR_OVERLAY_HASH
+    );
+    expect(
+      calculateOverlayInputHash({ ...baseConfig, renderOptions: undefined })
+    ).toBe(PRE_POSTERIZARR_OVERLAY_HASH);
+  });
+
   it('matches the pre-fix hash when no mapped-icon templates are involved', () => {
     // Captured from the pre-fix implementation for this exact config, before
     // mappedIconMappings existed as an input. Proves the new optional
@@ -188,5 +202,121 @@ describe('extractMappedIconFields', () => {
       },
     ];
     expect(extractMappedIconFields(templateData).size).toBe(0);
+  });
+});
+
+describe('overlay input hashing', () => {
+  it('regenerates artwork when output quality changes', () => {
+    const base = {
+      templateIds: [],
+      templateData: [],
+      usedFields: new Set<string>(),
+      context: {},
+    };
+
+    const quality95 = calculateOverlayInputHash({
+      ...base,
+      renderOptions: { format: 'jpeg', jpegQuality: 95 },
+    });
+    const quality100 = calculateOverlayInputHash({
+      ...base,
+      renderOptions: { format: 'jpeg', jpegQuality: 100 },
+    });
+
+    expect(quality95).not.toBe(quality100);
+  });
+
+  it('regenerates artwork when an effective mapped icon changes', () => {
+    const templateData = [
+      {
+        width: 1000,
+        height: 1500,
+        elements: [
+          {
+            id: 'audio',
+            layerOrder: 0,
+            type: 'mapped-icon' as const,
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            properties: {
+              field: 'audioLanguages',
+              mappings: [],
+              layout: 'horizontal' as const,
+              iconSize: 32,
+              spacingX: 4,
+              spacingY: 4,
+            },
+          },
+        ],
+      },
+    ] satisfies OverlayTemplateData[];
+    const base = {
+      templateIds: [1],
+      templateData,
+      usedFields: new Set(['audioLanguages']),
+      context: { audioLanguages: ['eng'] },
+      renderOptions: { format: 'jpeg', jpegQuality: 95 },
+    };
+
+    const before = calculateOverlayInputHash({
+      ...base,
+      mappedIconMappings: {
+        audioLanguages: [{ value: 'eng', iconPath: '/icons/old.svg' }],
+      },
+    });
+    const after = calculateOverlayInputHash({
+      ...base,
+      mappedIconMappings: {
+        audioLanguages: [{ value: 'eng', iconPath: '/icons/new.svg' }],
+      },
+    });
+
+    expect(before).not.toBe(after);
+    expect(extractMappedIconFields(templateData)).toEqual(
+      new Set(['audioLanguages'])
+    );
+  });
+
+  it('normalizes mapped-icon ordering without dropping render options', () => {
+    const base = {
+      templateIds: [],
+      templateData: [],
+      usedFields: new Set<string>(),
+      context: {},
+      renderOptions: { format: 'jpeg', jpegQuality: 95 },
+    };
+    const first = calculateOverlayInputHash({
+      ...base,
+      mappedIconMappings: {
+        audioLanguages: [
+          { value: 'eng', iconPath: '/icons/en.svg' },
+          { value: 'fra', iconPath: '/icons/fr.svg' },
+        ],
+      },
+    });
+    const reordered = calculateOverlayInputHash({
+      ...base,
+      mappedIconMappings: {
+        audioLanguages: [
+          { value: 'fra', iconPath: '/icons/fr.svg' },
+          { value: 'eng', iconPath: '/icons/en.svg' },
+        ],
+      },
+    });
+    const differentQuality = calculateOverlayInputHash({
+      ...base,
+      renderOptions: { format: 'jpeg', jpegQuality: 90 },
+      mappedIconMappings: {
+        audioLanguages: [
+          { value: 'eng', iconPath: '/icons/en.svg' },
+          { value: 'fra', iconPath: '/icons/fr.svg' },
+        ],
+      },
+    });
+
+    expect(first).toBe(reordered);
+    expect(first).not.toBe(differentQuality);
   });
 });

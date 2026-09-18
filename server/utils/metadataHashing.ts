@@ -244,6 +244,7 @@ export function calculateOverlayInputHash(config: {
   usedFields: Set<string>;
   context: Record<string, unknown>;
   mappedIconMappings?: Record<string, IconMapping[]>;
+  renderOptions?: Record<string, unknown>;
 }): string {
   // Extract only the context fields that are actually used
   const relevantContext: Record<string, unknown> = {};
@@ -257,6 +258,9 @@ export function calculateOverlayInputHash(config: {
     context: relevantContext, // Only include fields actually used by templates
   };
 
+  if (config.renderOptions) {
+    input.renderOptions = config.renderOptions;
+  }
   if (config.mappedIconMappings) {
     const sorted: Record<string, IconMapping[]> = {};
     for (const field of Object.keys(config.mappedIconMappings)) {

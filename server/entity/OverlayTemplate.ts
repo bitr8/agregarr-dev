@@ -9,7 +9,9 @@ import {
 /**
  * Overlay element types - subset of PosterTemplate elements
  * No background, no content-grid (overlays are applied to existing posters)
- * Uses absolute positioning in a 1000x1500 template canvas (scaled when applied to actual posters)
+ * Uses absolute positioning in the template canvas (scaled when applied to
+ * actual artwork). Poster canvases are normally 1000x1500; episode cards are
+ * normally 1920x1080.
  */
 export interface OverlayElement {
   id: string;
@@ -17,7 +19,7 @@ export interface OverlayElement {
   type: 'text' | 'tile' | 'variable' | 'raster' | 'svg' | 'mapped-icon';
 
   // Common properties (absolute pixels in template canvas)
-  x: number; // Absolute pixels (in 1000x1500 template canvas)
+  x: number; // Absolute pixels in the configured template canvas
   y: number; // Absolute pixels
   width: number; // Absolute pixels
   height: number; // Absolute pixels
@@ -158,14 +160,15 @@ export interface OverlayMappedIconElementProps {
 
 /**
  * Overlay template data structure
- * Templates are designed in a 1000x1500 canvas (same as poster templates)
+ * Templates use a target-appropriate canvas: 1000x1500 for posters and
+ * 1920x1080 for episode cards.
  * When applied to actual posters, elements are scaled proportionally
  *
  * One template = One visual design = One application condition
  * The condition is defined at the template level via applicationCondition (field/operator/value)
  */
 export interface OverlayTemplateData {
-  // Canvas dimensions for template editing (typically 1000x1500)
+  // Canvas dimensions for template editing
   width: number;
   height: number;
 

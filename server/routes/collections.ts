@@ -1,7 +1,10 @@
 import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
-import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
+import { serializeCollectionOutcomeCsv } from '@server/lib/collections/collectionOutcomeCsv';
+import collectionSyncProgress, {
+  type CollectionOutcomeFilter,
+} from '@server/lib/collections/CollectionSyncProgress';
 import type { PlexCollection } from '@server/lib/collections/core/types';
 import { libraryCacheService } from '@server/lib/collections/services/LibraryCacheService';
 import { PreExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
@@ -1842,6 +1845,60 @@ collectionsRoutes.get('/sync/progress', (_req, res) => {
     current,
     lastCompleted: collectionSyncProgress.getLastCompleted(),
     pending,
+  });
+});
+
+/**
+ * GET /api/v1/collections/sync/outcomes/export
+ * Download the current or last completed collection sync log
+ */
+collectionsRoutes.get(
+  '/sync/outcomes/export',
+  isAuthenticated(),
+  (_req, res) => {
+    const outcomes = collectionSyncProgress.getOutcomes();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="agregarr-collection-sync-${timestamp}.csv"`
+    );
+    return res
+      .status(200)
+      .send(`\uFEFF${serializeCollectionOutcomeCsv(outcomes)}`);
+  }
+);
+
+/**
+ * GET /api/v1/collections/sync/outcomes
+ * Get detailed results from the current or last completed collection sync
+ */
+collectionsRoutes.get('/sync/outcomes', isAuthenticated(), (req, res) => {
+  const outcome = req.query.outcome;
+  const allowedOutcomes: CollectionOutcomeFilter[] = [
+    'success',
+    'error',
+    'skipped',
+    'created',
+  ];
+
+  if (
+    typeof outcome !== 'string' ||
+    !allowedOutcomes.includes(outcome as CollectionOutcomeFilter)
+  ) {
+    return res.status(400).json({
+      error: `outcome must be one of: ${allowedOutcomes.join(', ')}`,
+    });
+  }
+
+  const outcomes = collectionSyncProgress.getOutcomes(
+    outcome as CollectionOutcomeFilter
+  );
+  return res.status(200).json({
+    outcome,
+    total: outcomes.length,
+    outcomes,
   });
 });
 

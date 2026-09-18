@@ -1,3 +1,4 @@
+import ColorInput from '@app/components/Common/ColorInput';
 import { IconSelector } from '@app/components/PosterEditor/IconSelector';
 import { fontLoader } from '@app/utils/fontLoader';
 import {
@@ -573,15 +574,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           <label className="mb-1 block text-xs text-stone-300">
             {intl.formatMessage(messages.textColor)}
           </label>
-          <input
-            type="color"
+          <ColorInput
             value={props.color || '#FFFFFF'}
-            onChange={(e) =>
+            onChange={(value) =>
               handleUpdateElement(element.id, {
-                properties: { ...props, color: e.target.value },
+                properties: { ...props, color: value },
               })
             }
-            className="h-8 w-full rounded border border-stone-600"
           />
         </div>
 
@@ -640,15 +639,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           <label className="mb-1 block text-xs text-stone-300">
             {intl.formatMessage(messages.fillColor)}
           </label>
-          <input
-            type="color"
+          <ColorInput
             value={props.fillColor || '#000000'}
-            onChange={(e) =>
+            onChange={(value) =>
               handleUpdateElement(element.id, {
-                properties: { ...props, fillColor: e.target.value },
+                properties: { ...props, fillColor: value },
               })
             }
-            className="h-8 w-full rounded border border-stone-600"
           />
         </div>
 
@@ -712,6 +709,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                       className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
                     >
                       <option value="imdbRating">IMDb Rating</option>
+                      <option value="tmdbRating">TMDB Rating</option>
                       <option value="rtCriticRating">RT Critic Score</option>
                       <option value="rtAudienceRating">
                         RT Audience Score
@@ -786,15 +784,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           <label className="mb-1 block text-xs text-stone-300">
             {intl.formatMessage(messages.borderColor)}
           </label>
-          <input
-            type="color"
+          <ColorInput
             value={props.borderColor || '#FFFFFF'}
-            onChange={(e) =>
+            onChange={(value) =>
               handleUpdateElement(element.id, {
-                properties: { ...props, borderColor: e.target.value },
+                properties: { ...props, borderColor: value },
               })
             }
-            className="h-8 w-full rounded border border-stone-600"
           />
         </div>
 
@@ -1362,6 +1358,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                         'nextSeasonAirDate',
                         'lastPlayed',
                         'dateAdded',
+                        'lastEpisodeAddedDate',
                       ].includes(segment.field) && (
                         <div className="mt-2">
                           <label className="mb-1 block text-xs text-stone-400">
@@ -1546,15 +1543,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           <label className="mb-1 block text-xs text-stone-300">
             {intl.formatMessage(messages.textColor)}
           </label>
-          <input
-            type="color"
+          <ColorInput
             value={props.color || '#FFFFFF'}
-            onChange={(e) =>
+            onChange={(value) =>
               handleUpdateElement(element.id, {
-                properties: { ...props, color: e.target.value },
+                properties: { ...props, color: value },
               })
             }
-            className="h-8 w-full rounded border border-stone-600"
           />
         </div>
 

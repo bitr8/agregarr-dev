@@ -22,7 +22,6 @@ import type {
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import logger from '@server/logger';
-import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
@@ -970,7 +969,10 @@ export class NetworksCollectionSync extends BaseCollectionSync<'networks'> {
   ): Promise<string> {
     try {
       // Download the sprite image
-      const response = await axios.get(spriteUrl, {
+      const { CloudflareSolver } = await import(
+        '@server/lib/collections/utils/CloudflareSolver'
+      );
+      const response = await CloudflareSolver.fetchAsset(spriteUrl, {
         responseType: 'arraybuffer',
         headers: {
           'User-Agent':

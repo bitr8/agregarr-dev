@@ -353,7 +353,8 @@ class TheMovieDb extends ExternalAPI {
             language,
             append_to_response: 'external_ids',
           },
-        }
+        },
+        1800 // 30 minutes: shared by season/episode overlays in large syncs
       );
 
       return data;

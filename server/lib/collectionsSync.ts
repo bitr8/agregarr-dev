@@ -1,6 +1,7 @@
 import PlexAPI from '@server/api/plexapi';
 import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
+import posterizarrTriggerJob from '@server/lib/posterizarrTrigger';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { CollectionCleanupService } from './collections/services/CollectionCleanupService';
@@ -160,6 +161,17 @@ class CollectionsSync {
   }
 
   public async run(): Promise<void> {
+    // This check and the pending claim below are deliberately synchronous.
+    // Posterizarr enqueue performs the inverse check, so only one side can win
+    // before either path reaches its first await.
+    if (posterizarrTriggerJob.busy) {
+      logger.warn(
+        'Posterizarr item triggers are running or queued, skipping this Collections Sync; retry manually or wait for the next scheduled run',
+        { label: 'Collections Sync' }
+      );
+      return;
+    }
+
     // Mark pending (not running) so the UI shows the waiting state without the
     // cross-job wait loops below treating this sync as active. `running` is set
     // only once all the waits clear (see below) to avoid a mutual deadlock with

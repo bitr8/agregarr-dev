@@ -368,7 +368,7 @@ class MetadataTrackingService {
       });
     }
 
-    // Record the item kind ('movie' | 'show' | 'season') when the caller knows
+    // Record the item kind ('movie' | 'show' | 'season' | 'episode') when the caller knows
     // it. Only set when provided so callers that don't supply it (e.g. the
     // poster-reset path) never wipe an existing value.
     if (itemType !== undefined) {
@@ -398,6 +398,55 @@ class MetadataTrackingService {
     });
   }
 
+  async recordBasePosterReset(
+    itemRatingKey: string,
+    libraryKey: string,
+    basePosterInfo: {
+      basePosterSource: 'tmdb' | 'plex' | 'local';
+      originalPlexPosterUrl: string;
+      basePosterFilename: string;
+      localPosterModifiedTime?: number | null;
+    },
+    itemType?: string
+  ): Promise<void> {
+    const repo = getRepository(MediaItemMetadata);
+    let metadata = await repo.findOne({
+      where: { plexItemRatingKey: itemRatingKey },
+    });
+
+    if (!metadata) {
+      metadata = new MediaItemMetadata({
+        plexItemRatingKey: itemRatingKey,
+        libraryKey,
+      });
+    }
+
+    metadata.libraryKey = libraryKey;
+    if (itemType !== undefined) metadata.itemType = itemType;
+
+    // A reset row still tracks its reusable clean base, but it must not claim
+    // that the currently selected Plex artwork is an Agregarr overlay.
+    Object.assign(metadata, {
+      lastOverlayInputHash: null,
+      lastPosterUploadUrl: null,
+      lastOverlayAppliedAt: null,
+      ourOverlayPosterUrl: null,
+    });
+    metadata.basePosterSource = basePosterInfo.basePosterSource;
+    metadata.originalPlexPosterUrl = basePosterInfo.originalPlexPosterUrl;
+    metadata.basePosterFilename = basePosterInfo.basePosterFilename;
+    metadata.localPosterModifiedTime =
+      basePosterInfo.localPosterModifiedTime || undefined;
+
+    await repo.save(metadata);
+
+    logger.info('Recorded clean base poster reset', {
+      label: 'MetadataTracking',
+      itemRatingKey,
+      basePosterSource: basePosterInfo.basePosterSource,
+    });
+  }
+
   async getItemMetadata(
     itemRatingKey: string
   ): Promise<MediaItemMetadata | null> {
@@ -419,6 +468,17 @@ class MetadataTrackingService {
     return await repo.find({
       where: { libraryKey, itemType: 'season' },
     });
+  }
+
+  /** Child artwork tracked for a library, used by the user-facing reset job. */
+  async getOverlaidChildMetadata(
+    libraryKey: string
+  ): Promise<MediaItemMetadata[]> {
+    const repo = getRepository(MediaItemMetadata);
+    const rows = await repo.find({ where: { libraryKey } });
+    return rows.filter(
+      (row) => row.itemType === 'season' || row.itemType === 'episode'
+    );
   }
 
   /**

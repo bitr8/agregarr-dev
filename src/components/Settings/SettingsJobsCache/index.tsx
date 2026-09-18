@@ -7,6 +7,7 @@ import PageTitle from '@app/components/Common/PageTitle';
 import Table from '@app/components/Common/Table';
 import useLocale from '@app/hooks/useLocale';
 import globalMessages from '@app/i18n/globalMessages';
+import { nextRunRelativeTimeProps } from '@app/utils/relativeTimeProps';
 import { Transition } from '@headlessui/react';
 import { PlayIcon, StopIcon } from '@heroicons/react/24/outline';
 import { PencilIcon } from '@heroicons/react/24/solid';
@@ -651,34 +652,14 @@ const SettingsJobs = () => {
                       (new Date(job.nextExecutionTime).getTime() - Date.now()) /
                         1000
                     );
-                    const minutesUntilNext = secondsUntilNext / 60;
-                    const hoursUntilNext = secondsUntilNext / 3600;
 
                     // Show minutes for less than 1 hour, hours for up to 48 hours, then switch to days
                     return (
                       <div className="text-sm leading-5 text-white">
-                        {hoursUntilNext < 1 ? (
-                          <FormattedRelativeTime
-                            value={Math.floor(minutesUntilNext)}
-                            updateIntervalInSeconds={10}
-                            numeric="auto"
-                            unit="minute"
-                          />
-                        ) : hoursUntilNext <= 48 ? (
-                          <FormattedRelativeTime
-                            value={Math.floor(hoursUntilNext)}
-                            updateIntervalInSeconds={60}
-                            numeric="auto"
-                            unit="hour"
-                          />
-                        ) : (
-                          <FormattedRelativeTime
-                            value={Math.floor(secondsUntilNext / 86400)}
-                            updateIntervalInSeconds={3600}
-                            numeric="auto"
-                            unit="day"
-                          />
-                        )}
+                        <FormattedRelativeTime
+                          {...nextRunRelativeTimeProps(secondsUntilNext)}
+                          numeric="auto"
+                        />
                       </div>
                     );
                   })()}

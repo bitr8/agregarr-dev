@@ -195,8 +195,10 @@ export interface ConditionRule {
  * Matches server/lib/overlays/OverlayTemplateRenderer.ts OverlayRenderContext
  */
 export interface OverlayRenderContext {
-  // Ratings (from IMDb API / RT API / Plex)
+  // Ratings (from IMDb API / TMDB / RT API / Plex)
   imdbRating?: number;
+  tmdbRating?: number;
+  tmdbVoteCount?: number;
   imdbTop250Rank?: number; // IMDb Top 250 ranking (1-250 for movies, 1-250 for TV)
   isImdbTop250?: boolean; // True if item is in IMDb Top 250 list
   rtCriticsScore?: number;
@@ -264,6 +266,8 @@ export interface OverlayRenderContext {
   dateAdded?: Date; // Date added to Plex
   daysSinceAdded?: number; // Days since item was added to Plex
   daysSinceLastPlayed?: number; // Days since item was last played
+  lastEpisodeAddedDate?: Date; // Show: date of most recently added episode
+  daysSinceLastEpisodeAdded?: number; // Show: days since most recently added episode
 
   // Status fields (for Coming Soon / New Release)
   // PRIMARY RELEASE DATE - Smart calculated field
@@ -279,7 +283,7 @@ export interface OverlayRenderContext {
   daysUntilNextEpisode?: number; // Calculated days until ANY next episode
   nextSeasonAirDate?: string; // Raw date for SEASON PREMIERES only (episode 1)
   daysUntilNextSeason?: number; // Calculated days until next SEASON PREMIERE only
-  daysAgoNextSeason?: number; // Days since next season premiered (only if nextSeasonAirDate is in the past)
+  daysAgoNextSeason?: number; // Days since the latest season premiered
 
   totalSeasons?: number;
   seasonsAvailable?: number;
@@ -380,6 +384,8 @@ export function isSingleValueField(field: string): boolean {
 export const AVAILABLE_VARIABLES = {
   ratings: [
     { field: 'imdbRating', label: 'IMDb Rating', example: '8.7' },
+    { field: 'tmdbRating', label: 'TMDB Rating', example: '8.4' },
+    { field: 'tmdbVoteCount', label: 'TMDB Vote Count', example: '1250' },
     { field: 'imdbTop250Rank', label: 'IMDb Top 250 Rank', example: '42' },
     { field: 'isImdbTop250', label: 'Is IMDb Top 250', example: 'true' },
     { field: 'rtCriticsScore', label: 'RT Critics Score', example: '88' },
@@ -580,6 +586,16 @@ export const AVAILABLE_VARIABLES = {
       label: 'Media Source',
       example: 'aggregated',
     },
+    {
+      field: 'lastEpisodeAddedDate',
+      label: 'Last Episode Added Date',
+      example: '2024-01-01',
+    },
+    {
+      field: 'daysSinceLastEpisodeAdded',
+      label: 'Days Since Last Episode Added',
+      example: '3',
+    },
   ],
   'show-raw': [
     {
@@ -729,6 +745,8 @@ export const CONDITION_FIELD_CATEGORIES = {
   ],
   Ratings: [
     { field: 'imdbRating', label: 'IMDb Rating', example: '8.7' },
+    { field: 'tmdbRating', label: 'TMDB Rating', example: '8.4' },
+    { field: 'tmdbVoteCount', label: 'TMDB Vote Count', example: '1250' },
     { field: 'imdbTop250Rank', label: 'IMDb Top 250 Rank', example: '42' },
     { field: 'isImdbTop250', label: 'Is IMDb Top 250', example: 'true' },
     { field: 'rtCriticsScore', label: 'RT Critics Score', example: '88' },
@@ -818,6 +836,16 @@ export const CONDITION_FIELD_CATEGORIES = {
       field: 'episodeMediaSource',
       label: 'Media Source (aggregated/show)',
       example: 'aggregated',
+    },
+    {
+      field: 'lastEpisodeAddedDate',
+      label: 'Last Episode Added Date',
+      example: '2024-01-01',
+    },
+    {
+      field: 'daysSinceLastEpisodeAdded',
+      label: 'Days Since Last Episode Added',
+      example: '3',
     },
     {
       field: 'showResolution',
@@ -911,6 +939,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     title: 'The Matrix',
     year: 1999,
     imdbRating: 8.7,
+    tmdbRating: 8.7,
+    tmdbVoteCount: 28674,
     imdbTop250Rank: 19,
     isImdbTop250: true,
     rtCriticsScore: 88,
@@ -976,6 +1006,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     title: 'Breaking Bad',
     year: 2008,
     imdbRating: 9.5,
+    tmdbRating: 8.9,
+    tmdbVoteCount: 16842,
     imdbTop250Rank: 2,
     isImdbTop250: true,
     rtCriticsScore: 96,
@@ -1021,6 +1053,13 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     viewCount: 12,
     daysSinceAdded: 120,
     daysSinceLastPlayed: 7,
+    // Getter, not a literal: SAMPLE_PREVIEW_CONTEXTS is a module-level
+    // constant, so a plain `new Date(...)` here would freeze at page load
+    // and drift against daysSinceLastEpisodeAdded: 3 over time.
+    get lastEpisodeAddedDate() {
+      return new Date(Date.now() - 3 * 86400000);
+    },
+    daysSinceLastEpisodeAdded: 3,
     releaseDate: '2008-01-20', // Series premiere (NOT next episode)
     nextEpisodeAirDate: '2025-01-22', // Next episode (any episode, including mid-season)
     daysUntilNextEpisode: 7, // Days until next episode

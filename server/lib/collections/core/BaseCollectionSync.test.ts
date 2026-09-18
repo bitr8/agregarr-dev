@@ -1,11 +1,14 @@
 import type PlexAPI from '@server/api/plexapi';
 import type { CollectionConfig } from '@server/lib/settings';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CollectionSyncErrorType } from './types';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
   CollectionMetadata: class {},
+}));
+vi.mock('@server/entity/CollectionMissingItems', () => ({
+  CollectionMissingItems: class {},
 }));
 vi.mock('@server/entity/PosterTemplate', () => ({ PosterTemplate: class {} }));
 vi.mock('@server/entity/User', () => ({ User: class {} }));
@@ -29,6 +32,7 @@ const settings = {
 };
 vi.mock('@server/lib/settings', () => ({ getSettings: () => settings }));
 
+import { getRepository } from '@server/datasource';
 import logger from '@server/logger';
 import { BaseCollectionSync } from './BaseCollectionSync';
 
@@ -260,5 +264,117 @@ describe('processCollections: surfaces the real cause instead of [object Object]
       'Failed to process Radarr Tag collection Neon Noir'
     );
     expect(meta?.cause).toBe('Request failed with status code 401');
+  });
+});
+
+describe('createOrUpdateCollectionStandardized: smart collections never own missing-item rows', () => {
+  const repo = { delete: vi.fn(), insert: vi.fn() };
+
+  beforeEach(() => {
+    save.mockClear();
+    repo.delete.mockClear();
+    repo.insert.mockClear();
+    vi.mocked(getRepository).mockReturnValue(repo as never);
+  });
+
+  afterEach(() => {
+    vi.mocked(getRepository).mockReset();
+  });
+
+  it('clears existing rows for a newly created smart collection', async () => {
+    const cfg = config({ showUnwatchedOnly: true, autoPoster: false });
+    settings.plex.collectionConfigs = [cfg];
+    const plexClient = {
+      createLabelBasedSmartCollection: vi.fn(async () => '403900'),
+      addLabelToItem: vi.fn(async () => undefined),
+      getItemsWithLabel: vi.fn(async () => []),
+      addLabelToCollection: vi.fn(async () => undefined),
+      updateCollectionTitle: vi.fn(async () => undefined),
+      updateCollectionVisibility: vi.fn(async () => undefined),
+      recordPhaseTime: vi.fn(),
+      plexClient: {
+        query: vi.fn(async () => ({ MediaContainer: { Metadata: [] } })),
+      },
+    } as unknown as PlexAPI;
+
+    const result = await run(plexClient, cfg);
+
+    expect(result.collectionRatingKey).toBe('403900');
+    expect(repo.delete).toHaveBeenCalledWith({
+      collectionRatingKey: '403900',
+    });
+    expect(repo.insert).not.toHaveBeenCalled();
+  });
+
+  it('clears the old key when a regular config replaces a smart collection', async () => {
+    const cfg = config({
+      collectionRatingKey: 'OLD_SMART_KEY',
+      autoPoster: false,
+    });
+    settings.plex.collectionConfigs = [cfg];
+    const oldSmartMeta = {
+      ratingKey: 'OLD_SMART_KEY',
+      title: cfg.name,
+      labels: [],
+      type: 'collection',
+      librarySectionID: cfg.libraryId,
+      smart: '1',
+    };
+    const plexClient = {
+      getCollectionMetadata: vi.fn(async () => oldSmartMeta),
+      getItemsWithLabel: vi.fn(async () => []),
+      deleteCollection: vi.fn(async () => undefined),
+      createEmptyCollection: vi.fn(async () => 'NEW_REGULAR_KEY'),
+      addItemsToCollection: vi.fn(async () => undefined),
+      updateCollectionContentSort: vi.fn(async () => undefined),
+      addLabelToCollection: vi.fn(async () => undefined),
+      updateCollectionTitle: vi.fn(async () => undefined),
+      updateCollectionVisibility: vi.fn(async () => undefined),
+      recordPhaseTime: vi.fn(),
+    } as unknown as PlexAPI;
+
+    const result = await run(plexClient, cfg);
+
+    expect(result.collectionRatingKey).toBe('NEW_REGULAR_KEY');
+    expect(repo.delete).toHaveBeenCalledWith({
+      collectionRatingKey: 'OLD_SMART_KEY',
+    });
+  });
+
+  it('stores missing items for a regular collection', async () => {
+    const missingItems = [
+      {
+        tmdbId: 1,
+        mediaType: 'movie' as const,
+        title: 'Missing Movie',
+        originalPosition: 1,
+        source: 'tmdb',
+      },
+    ];
+    const cfg = config({ autoPoster: false });
+    settings.plex.collectionConfigs = [cfg];
+    const sync = new TestSync();
+    (sync as unknown as Record<string, unknown>).createOrUpdateCollection =
+      vi.fn(async () => ({
+        created: 1,
+        updated: 0,
+        collectionRatingKey: '403901',
+        itemCount: 1,
+        isSmartCollection: false,
+      }));
+
+    await sync.createOrUpdateCollectionStandardized(
+      [{ ratingKey: '55', title: 'Blade Runner', type: 'movie' }],
+      cfg.name,
+      'movie',
+      cfg,
+      {} as PlexAPI,
+      [],
+      undefined,
+      undefined,
+      missingItems as never
+    );
+
+    expect(repo.insert).toHaveBeenCalledTimes(1);
   });
 });

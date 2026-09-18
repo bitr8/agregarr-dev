@@ -98,6 +98,7 @@ interface CollectionUpdateResult {
   updated: number;
   collectionRatingKey?: string;
   itemCount: number;
+  isSmartCollection?: boolean;
   updateStats?: {
     added: number;
     removed: number;
@@ -629,6 +630,26 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     }
   }
 
+  protected async clearCollectionMissingItems(
+    collectionRatingKey: string
+  ): Promise<void> {
+    try {
+      const { getRepository } = await import('@server/datasource');
+      const { CollectionMissingItems } = await import(
+        '@server/entity/CollectionMissingItems'
+      );
+      await getRepository(CollectionMissingItems).delete({
+        collectionRatingKey,
+      });
+    } catch (error) {
+      logger.warn('Failed to clear missing items for smart collection', {
+        label: `${this.source} Collections`,
+        collectionRatingKey,
+        error: extractErrorMessage(error),
+      });
+    }
+  }
+
   /**
    * Helper to store missing items after collection creation (when rating key is available)
    * Call this after creating/updating a collection to enable Quick Sync
@@ -1119,7 +1140,10 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     }
 
     // Store missing items for Quick Sync (now that we have collectionRatingKey)
-    if (updateResult.collectionRatingKey && missingItems) {
+    // Smart collections are label-based and reject addItemsToCollection — never let one own rows
+    if (updateResult.collectionRatingKey && updateResult.isSmartCollection) {
+      await this.clearCollectionMissingItems(updateResult.collectionRatingKey);
+    } else if (updateResult.collectionRatingKey && missingItems) {
       await this.storeCollectionMissingItems(
         missingItems,
         updateResult.collectionRatingKey,
@@ -1148,6 +1172,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       collectionRatingKey: updateResult.collectionRatingKey,
       itemCount: updateResult.itemCount,
       stats: updateResult.updateStats,
+      isSmartCollection: updateResult.isSmartCollection,
     };
   }
 
@@ -1330,6 +1355,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
                 await plexClient.deleteCollection(
                   options.config.collectionRatingKey
                 );
+                await this.clearCollectionMissingItems(
+                  options.config.collectionRatingKey
+                );
                 // Clear existingCollection reference since we just deleted it
                 existingCollection = null;
               }
@@ -1423,6 +1451,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             }
           );
           await plexClient.deleteCollection(existingCollection.ratingKey);
+          await this.clearCollectionMissingItems(existingCollection.ratingKey);
           collectionRatingKey = undefined; // Force creation below
         }
       }
@@ -1488,6 +1517,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             }
           }
           await plexClient.deleteCollection(existingCollection.ratingKey);
+          await this.clearCollectionMissingItems(existingCollection.ratingKey);
 
           // Force creation of regular collection below
           collectionRatingKey = undefined;
@@ -1714,6 +1744,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       updated,
       collectionRatingKey,
       itemCount: plexItems.length,
+      isSmartCollection: shouldCreateSmartCollection,
     };
   }
 
@@ -3497,6 +3528,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
           // Remove the collection from Plex
           await plexClient.deleteCollection(collection.ratingKey);
+          await this.clearCollectionMissingItems(collection.ratingKey);
           deleted = true;
 
           // Also remove from hub management to prevent stale hub entries

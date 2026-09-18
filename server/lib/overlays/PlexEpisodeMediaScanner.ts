@@ -94,6 +94,7 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
       episodeNumber: ep.index ?? 0,
       ...caps,
       mediaHash: computeMediaHash(ep.Media),
+      addedAt: ep.addedAt,
       // Owned by the caller: a lightweight list scan has not fetched stream
       // detail (its caps are Plex-list defaults), so it passes false; the
       // full-detail pass passes true. See resolveFetchedEpisodeDetail.

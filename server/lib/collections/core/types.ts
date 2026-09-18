@@ -225,6 +225,8 @@ export interface CollectionOperationResult {
   collectionRatingKey?: string;
   /** Number of items in the collection */
   itemCount: number;
+  /** True when the collection is a label-based smart collection (never stores Quick Sync missing items) */
+  isSmartCollection?: boolean;
   /** Optional update statistics */
   stats?: {
     added: number;

@@ -15,6 +15,7 @@ export interface CollectionOutcome {
   updated: number;
   errorMessage?: string;
   durationMs: number;
+  processedAt: number;
 }
 
 export interface CollectionSyncStatus {

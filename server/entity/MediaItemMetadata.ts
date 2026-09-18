@@ -25,7 +25,7 @@ export class MediaItemMetadata {
   @Index()
   public libraryKey: string;
 
-  // Kind of Plex item this row tracks ('movie' | 'show' | 'season'). Nullable:
+  // Kind of Plex item this row tracks ('movie' | 'show' | 'season' | 'episode'). Nullable:
   // backfilled on the next overlay application for existing movie/show rows.
   @Column({ type: 'varchar', nullable: true })
   public itemType?: string;

@@ -14,6 +14,7 @@ const SAFE_MESSAGE_PATTERNS = [
   /^(not found|invalid|missing|required|failed to|unable to|cannot|unauthorized|forbidden)/i,
   /^(no .+ found|.+ is required|.+ not configured)/i,
   /^(connection|network|timeout)/i,
+  /^request[./]/i,
 ];
 
 /**

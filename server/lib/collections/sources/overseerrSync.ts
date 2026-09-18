@@ -1246,6 +1246,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
         );
         try {
           await plexClient.deleteCollection(oldDashPrefixedBase.ratingKey);
+          await this.clearCollectionMissingItems(oldDashPrefixedBase.ratingKey);
         } catch (error) {
           logger.warn(
             `Failed to delete old base collection, continuing migration`,
@@ -1270,6 +1271,9 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
         );
         try {
           await plexClient.deleteCollection(oldRegularCollection.ratingKey);
+          await this.clearCollectionMissingItems(
+            oldRegularCollection.ratingKey
+          );
         } catch (error) {
           logger.warn(
             `Failed to delete old regular collection, continuing migration`,

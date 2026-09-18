@@ -66,6 +66,12 @@ export class EpisodeMediaCache {
   @Column({ type: 'boolean', default: false })
   public hasStreamDetail: boolean;
 
+  // Plex addedAt, unix seconds. Explicit null (never undefined) for
+  // never-known, so an update actually clears a stale value instead of
+  // TypeORM silently skipping an undefined column.
+  @Column({ type: 'integer', nullable: true })
+  public addedAt: number | null;
+
   @UpdateDateColumn()
   public updatedAt: Date;
 }

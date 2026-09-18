@@ -15,6 +15,7 @@ import type {
   Library,
 } from '@app/types/collections';
 import { CollectionType } from '@app/types/collections';
+import { apiErrorMessage } from '@app/utils/apiErrorMessage';
 import {
   buildSelectionFieldsPayload,
   saveIndividualConfigs,
@@ -83,7 +84,6 @@ const messages = defineMessages({
     'Failed to save pre-existing collection configuration.',
   collectionNotFound: 'Collection not found',
   lastCollectionDeleted: 'Last collection deleted - final cleanup completed.',
-  failedSaveCollectionConfig: 'Failed to save collection configuration',
   failedCleanupMissing: 'Failed to cleanup missing collections',
   collectionPromoted: 'Collection promoted to top section successfully!',
   failedPromoteCollection: 'Failed to promote collection',
@@ -611,10 +611,16 @@ const CollectionSettings = ({
         });
       }
     } catch (error) {
-      addToast(intl.formatMessage(messages.collectionConfigError), {
-        autoDismiss: true,
-        appearance: 'error',
-      });
+      addToast(
+        apiErrorMessage(
+          error,
+          intl.formatMessage(messages.collectionConfigError)
+        ),
+        {
+          autoDismiss: true,
+          appearance: 'error',
+        }
+      );
       throw error;
     }
   };
@@ -1476,26 +1482,16 @@ const CollectionSettings = ({
             return; // Early return - we're done
           }
         } catch (error) {
-          // Show specific error message from API if available
-          const errorMessage =
-            error instanceof Error && 'response' in error
-              ? (
-                  error as {
-                    response?: { data?: { message?: string; error?: string } };
-                  }
-                ).response?.data?.message ||
-                (
-                  error as {
-                    response?: { data?: { message?: string; error?: string } };
-                  }
-                ).response?.data?.error ||
-                'Failed to create collection. Please try again.'
-              : 'Failed to create collection. Please try again.';
-
-          addToast(errorMessage, {
-            autoDismiss: true,
-            appearance: 'error',
-          });
+          addToast(
+            apiErrorMessage(
+              error,
+              'Failed to create collection. Please try again.'
+            ),
+            {
+              autoDismiss: true,
+              appearance: 'error',
+            }
+          );
 
           return; // Early return on error
         }
@@ -1514,11 +1510,8 @@ const CollectionSettings = ({
 
       setShowConfigForm(false);
       setEditingConfig(null);
-    } catch (error) {
-      addToast(intl.formatMessage(messages.failedSaveCollectionConfig), {
-        autoDismiss: true,
-        appearance: 'error',
-      });
+    } catch {
+      // saveCollectionConfigs already toasted the specific reason; skipping the close below keeps the modal open with the user's edits
     }
   };
 

@@ -42,6 +42,7 @@ export class EpisodeMediaCacheService {
         bitDepth: row.bitDepth,
         mediaHash: row.mediaHash,
         hasStreamDetail: row.hasStreamDetail,
+        addedAt: row.addedAt,
       })),
       hasStreamDetail,
     };
@@ -78,6 +79,9 @@ export class EpisodeMediaCacheService {
         entity.bitDepth = ep.bitDepth;
         entity.mediaHash = ep.mediaHash;
         entity.hasStreamDetail = ep.hasStreamDetail;
+        // Explicit null (not undefined): TypeORM omits an undefined column
+        // from the UPDATE, which would leave a stale value in place.
+        entity.addedAt = ep.addedAt ?? null;
         entity.updatedAt = now;
         return entity;
       });

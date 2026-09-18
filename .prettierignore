@@ -13,3 +13,4 @@ public/
 
 # captured HTML test fixtures, kept byte-exact
 server/api/__fixtures__/
+server/lib/collections/utils/__fixtures__/

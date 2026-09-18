@@ -95,6 +95,7 @@ Detail for each feature is in the [release notes](https://github.com/bitr8/agreg
 
 ### Overlays
 
+- **Posterizarr integration**: uses the active Plex poster as the overlay base, preserves recognizable artwork ownership metadata, and accepts authenticated follow-up callbacks after Arr-triggered uploads. TV libraries can target show, season, and episode artwork independently. See the [Posterizarr integration guide](POSTERIZARR.md). (`:develop`)
 - **Dashboard sync progress cards**: live progress, stats, ETA, start/stop for both collection and overlay syncs. ![Collection Sync Dashboard](public/images/collection-sync-dashboard.png)
 - **Maintainerr season deletion countdown**: reads Maintainerr's collection data and draws the countdown on season posters using your templates. ([v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0)) A per-library option also puts the countdown on the show poster once every season is scheduled to leave. (Contributed by [Rubeanie](https://github.com/Rubeanie), `:develop`) ![Season deletion countdown](public/images/maintainerr-season-countdown.png)
 - **Parallel overlay processing**: **Settings > General > Parallel Items** runs 1 to 10 items at once (default 1, so nothing changes until you raise it). The stop button now cancels per-library jobs mid-run instead of waiting for the batch. (`:develop`)

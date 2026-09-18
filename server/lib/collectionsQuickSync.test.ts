@@ -15,6 +15,9 @@ vi.mock('@server/logger', () => ({
 vi.mock('@server/lib/settings', () => ({
   getSettings: () => ({ plex: { collectionConfigs: [] } }),
 }));
+vi.mock('@server/lib/collectionsSync', () => ({
+  default: { status: { running: false, pending: false } },
+}));
 
 import collectionsQuickSync from './collectionsQuickSync';
 
@@ -90,5 +93,80 @@ describe('collectionsQuickSync.addItemsToCollection - work queue deletion', () =
     expect(added).toBe(1);
     expect(deleteSpy).toHaveBeenCalledTimes(1);
     expect(deleteSpy).toHaveBeenCalledWith([1]);
+  });
+});
+
+describe('collectionsQuickSync.runForItem', () => {
+  it('targets the item library and returns collection/placeholder counts', async () => {
+    const service = collectionsQuickSync as unknown as {
+      running: boolean;
+      getPlexClient: () => Promise<unknown>;
+      cleanupPlaceholdersForRecentItems: (...args: unknown[]) => Promise<{
+        deletedCount: number;
+        cleanedEntries: unknown[];
+      }>;
+      processRecentItems: (...args: unknown[]) => Promise<{
+        matched: number;
+        collectionsUpdated: number;
+        itemsAdded: number;
+      }>;
+      runForItem: (ratingKey: string) => Promise<{
+        libraryId: string;
+        title: string;
+        itemsMatched: number;
+        collectionsUpdated: number;
+        itemsAdded: number;
+        placeholdersDeleted: number;
+      }>;
+    };
+    const getMetadata = vi.fn().mockResolvedValue({
+      ratingKey: '42',
+      title: 'New Movie',
+      type: 'movie',
+      librarySectionID: 7,
+      guid: 'plex://movie/42',
+      Guid: [{ id: 'tmdb://123' }],
+      Media: [],
+      addedAt: 1,
+      updatedAt: 1,
+    });
+
+    const client = { getMetadata };
+    const getPlexClient = vi
+      .spyOn(service, 'getPlexClient')
+      .mockResolvedValue(client);
+    const cleanup = vi
+      .spyOn(service, 'cleanupPlaceholdersForRecentItems')
+      .mockResolvedValue({ deletedCount: 1, cleanedEntries: [] });
+    const process = vi
+      .spyOn(service, 'processRecentItems')
+      .mockResolvedValue({ matched: 2, collectionsUpdated: 2, itemsAdded: 2 });
+
+    const result = await service.runForItem('42');
+
+    expect(getMetadata).toHaveBeenCalledWith('42', { includeChildren: true });
+    expect(cleanup).toHaveBeenCalledWith(
+      [expect.objectContaining({ ratingKey: '42' })],
+      '7',
+      client
+    );
+    expect(process).toHaveBeenCalledWith(
+      [expect.objectContaining({ ratingKey: '42' })],
+      '7',
+      client
+    );
+    expect(result).toEqual({
+      libraryId: '7',
+      title: 'New Movie',
+      itemsMatched: 2,
+      collectionsUpdated: 2,
+      itemsAdded: 2,
+      placeholdersDeleted: 1,
+    });
+    expect(service.running).toBe(false);
+
+    getPlexClient.mockRestore();
+    cleanup.mockRestore();
+    process.mockRestore();
   });
 });

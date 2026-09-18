@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { EpisodeMediaAggregator } from './EpisodeMediaAggregator';
+import {
+  EpisodeMediaAggregator,
+  mergedAddedAt,
+  needsAddedAtResave,
+  newestEpisodeAddedAtByShow,
+} from './EpisodeMediaAggregator';
 import type { EpisodeMediaInfo } from './episodeMediaTypes';
 
 function makeEpisode(
@@ -224,6 +229,194 @@ describe('EpisodeMediaAggregator', () => {
       expect(agg.episodeHdrPercent).toBe(67);
       expect(agg.episodeDvCount).toBe(1);
       expect(agg.episodeDvPercent).toBe(33);
+    });
+  });
+
+  describe('newestEpisodeAddedAtByShow', () => {
+    it('returns per-show max addedAt, ignoring episodes with no addedAt', () => {
+      const episodes = [
+        makeEpisode({ showRatingKey: 'show-1', addedAt: 1000 }),
+        makeEpisode({ showRatingKey: 'show-1', addedAt: 2000 }),
+        makeEpisode({ showRatingKey: 'show-2', addedAt: 500 }),
+      ];
+      const result = newestEpisodeAddedAtByShow(episodes);
+      expect(result.get('show-1')).toBe(2000);
+      expect(result.get('show-2')).toBe(500);
+    });
+
+    it('omits a show entirely when none of its episodes have addedAt', () => {
+      const episodes = [
+        makeEpisode({ showRatingKey: 'show-1' }),
+        makeEpisode({ showRatingKey: 'show-1' }),
+      ];
+      const result = newestEpisodeAddedAtByShow(episodes);
+      expect(result.has('show-1')).toBe(false);
+    });
+
+    it('treats addedAt 0 as absent, not a valid max', () => {
+      const episodes = [
+        makeEpisode({ showRatingKey: 'show-1', addedAt: 0 }),
+        makeEpisode({ showRatingKey: 'show-2', addedAt: 0 }),
+        makeEpisode({ showRatingKey: 'show-2', addedAt: 1000 }),
+      ];
+      const result = newestEpisodeAddedAtByShow(episodes);
+      expect(result.has('show-1')).toBe(false);
+      expect(result.get('show-2')).toBe(1000);
+    });
+  });
+
+  describe('mergedAddedAt', () => {
+    it('prefers the fresh value when present', () => {
+      const freshAddedAtByKey = new Map([['ep-1', 2000]]);
+      expect(mergedAddedAt('ep-1', 1000, freshAddedAtByKey)).toBe(2000);
+    });
+
+    it('keeps the previous value when the fresh scan omits addedAt', () => {
+      const freshAddedAtByKey = new Map<string, number | undefined>([
+        ['ep-1', undefined],
+      ]);
+      expect(mergedAddedAt('ep-1', 100, freshAddedAtByKey)).toBe(100);
+    });
+
+    it('is null when neither fresh nor previous has a value', () => {
+      const freshAddedAtByKey = new Map<string, number | undefined>();
+      expect(mergedAddedAt('ep-1', undefined, freshAddedAtByKey)).toBeNull();
+    });
+  });
+
+  describe('needsAddedAtResave', () => {
+    it('is true when the value changed (cached 100, merged 200)', () => {
+      const cachedEpisodes = [
+        makeEpisode({
+          ratingKey: 'ep-1',
+          showRatingKey: 'show-1',
+          addedAt: 100,
+        }),
+      ];
+      const mergedAddedAtByKey = new Map([['ep-1', 200]]);
+      expect(
+        needsAddedAtResave(
+          cachedEpisodes,
+          mergedAddedAtByKey,
+          new Set(['ep-1'])
+        )
+      ).toBe(true);
+    });
+
+    it('is false when both cached and merged are unknown', () => {
+      const cachedEpisodes = [
+        makeEpisode({ ratingKey: 'ep-1', showRatingKey: 'show-1' }),
+      ];
+      const mergedAddedAtByKey = new Map<string, number | undefined>([
+        ['ep-1', undefined],
+      ]);
+      expect(
+        needsAddedAtResave(
+          cachedEpisodes,
+          mergedAddedAtByKey,
+          new Set(['ep-1'])
+        )
+      ).toBe(false);
+    });
+
+    it('is true when a known value is removed (cached 100, merged absent)', () => {
+      const cachedEpisodes = [
+        makeEpisode({
+          ratingKey: 'ep-1',
+          showRatingKey: 'show-1',
+          addedAt: 100,
+        }),
+      ];
+      const mergedAddedAtByKey = new Map<string, number | undefined>([
+        ['ep-1', undefined],
+      ]);
+      expect(
+        needsAddedAtResave(
+          cachedEpisodes,
+          mergedAddedAtByKey,
+          new Set(['ep-1'])
+        )
+      ).toBe(true);
+    });
+
+    it('is false when the value is identical', () => {
+      const cachedEpisodes = [
+        makeEpisode({
+          ratingKey: 'ep-1',
+          showRatingKey: 'show-1',
+          addedAt: 100,
+        }),
+      ];
+      const mergedAddedAtByKey = new Map([['ep-1', 100]]);
+      expect(
+        needsAddedAtResave(
+          cachedEpisodes,
+          mergedAddedAtByKey,
+          new Set(['ep-1'])
+        )
+      ).toBe(false);
+    });
+
+    it('ignores a cached row whose ratingKey is not in currentKeys', () => {
+      const cachedEpisodes = [
+        makeEpisode({
+          ratingKey: 'ep-1',
+          showRatingKey: 'show-1',
+          addedAt: 100,
+        }),
+      ];
+      const mergedAddedAtByKey = new Map([['ep-1', 999]]);
+      expect(
+        needsAddedAtResave(cachedEpisodes, mergedAddedAtByKey, new Set())
+      ).toBe(false);
+    });
+
+    it('reflects mergedAddedAt: omission-preserved value is not a change', () => {
+      const cached = makeEpisode({
+        ratingKey: 'ep-1',
+        showRatingKey: 'show-1',
+        addedAt: 100,
+      });
+      const freshAddedAtByKey = new Map<string, number | undefined>([
+        ['ep-1', undefined],
+      ]);
+      const merged = mergedAddedAt('ep-1', cached.addedAt, freshAddedAtByKey);
+      expect(merged).toBe(100);
+      expect(
+        needsAddedAtResave(
+          [cached],
+          new Map([['ep-1', merged]]),
+          new Set(['ep-1'])
+        )
+      ).toBe(false);
+    });
+  });
+
+  describe('aggregateByShow: lastEpisodeAddedAt', () => {
+    it('sets the per-show max addedAt on the aggregate', () => {
+      const episodes = [
+        makeEpisode({ showRatingKey: 'show-1', addedAt: 1000 }),
+        makeEpisode({ showRatingKey: 'show-1', addedAt: 4000 }),
+        makeEpisode({ showRatingKey: 'show-2', addedAt: 2000 }),
+      ];
+      const result = aggregator.aggregateByShow(episodes);
+      expect(result.get('show-1')!.lastEpisodeAddedAt).toBe(4000);
+      expect(result.get('show-2')!.lastEpisodeAddedAt).toBe(2000);
+    });
+
+    it('ignores addedAt 0 when picking the max', () => {
+      const episodes = [
+        makeEpisode({ showRatingKey: 'show-1', addedAt: 0 }),
+        makeEpisode({ showRatingKey: 'show-1', addedAt: 500 }),
+      ];
+      const result = aggregator.aggregateByShow(episodes);
+      expect(result.get('show-1')!.lastEpisodeAddedAt).toBe(500);
+    });
+
+    it('leaves lastEpisodeAddedAt unset when no episode has addedAt', () => {
+      const episodes = [makeEpisode({ showRatingKey: 'show-1' })];
+      const result = aggregator.aggregateByShow(episodes);
+      expect(result.get('show-1')!.lastEpisodeAddedAt).toBeUndefined();
     });
   });
 

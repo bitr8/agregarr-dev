@@ -1,0 +1,39 @@
+name: PR size
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            const lines = pr.additions + pr.deletions;
+            const size = lines < 100 ? 'XS' : lines < 400 ? 'S' : lines < 800 ? 'M' : lines < 1500 ? 'L' : 'XL';
+
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number: number });
+            for (const l of labels.filter((l) => l.name.startsWith('size/') && l.name !== `size/${size}`)) {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name: l.name });
+            }
+            await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: [`size/${size}`] });
+
+            if (lines <= 800) return;
+            const marker = '<!-- pr-size-bot -->';
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number: number, per_page: 100 });
+            if (comments.some((c) => c.body && c.body.includes(marker))) return;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: number,
+              body: `${marker}\nThis PR changes ${lines} lines. PRs over 800 lines are hard to review properly, so they wait behind smaller ones. If it can be split into a series, the first part being the smallest working slice, please do; if it genuinely can't, say why in the description and it'll be read as is. See CONTRIBUTING.md.`,
+            });

@@ -69,6 +69,8 @@ const messages = defineMessages({
 // List of numeric fields
 const NUMERIC_FIELDS = [
   'imdbRating',
+  'tmdbRating',
+  'tmdbVoteCount',
   'rtCriticsScore',
   'rtAudienceScore',
   'plexUserRating',
@@ -94,6 +96,7 @@ const NUMERIC_FIELDS = [
   'imdbTop250Rank',
   'daysSinceAdded',
   'daysSinceLastPlayed',
+  'daysSinceLastEpisodeAdded',
 ];
 
 // List of boolean fields

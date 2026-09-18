@@ -25,6 +25,19 @@ vi.mock('@server/logger', () => ({
   },
 }));
 
+const mockFetchPage = vi.fn();
+const mockFetchAsset = vi.fn();
+// Default: valid CSS so sprite-URL discovery succeeds (no cache in this mock)
+mockFetchAsset.mockResolvedValue({
+  data: '.bg-platform{background-image:var(--fp-url,url(../img/platforms/default.webp));}',
+});
+vi.mock('@server/lib/collections/utils/CloudflareSolver', () => ({
+  CloudflareSolver: {
+    fetchPage: (...args: unknown[]) => mockFetchPage(...args),
+    fetchAsset: (...args: unknown[]) => mockFetchAsset(...args),
+  },
+}));
+
 import FlixPatrolAPI, { parsePlatformSubtype } from './flixpatrol';
 
 describe('parsePlatformSubtype', () => {
@@ -192,6 +205,8 @@ describe('parseStreamingOverviewHtml', () => {
         'fetchFlixPatrolPage'
       )
       .mockResolvedValueOnce(withoutTvTable)
+      // Sprite-URL discovery fetches its own fixed page in between
+      .mockResolvedValueOnce('<html></html>')
       .mockRejectedValueOnce(new Error('503'));
 
     const result = await api.getPlatformTop10(
@@ -200,7 +215,7 @@ describe('parseStreamingOverviewHtml', () => {
       'tv'
     );
 
-    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(fetchPage).toHaveBeenCalledTimes(3);
     expect(result.tvShows).toEqual([]);
     expect(result.movies).toHaveLength(10);
   });
@@ -213,7 +228,10 @@ describe('parseStreamingOverviewHtml', () => {
         'fetchFlixPatrolPage'
       )
       .mockResolvedValueOnce(withoutTvTable)
-      .mockResolvedValueOnce(fixture);
+      // Sprite-URL discovery re-fetches after each day parsed (no cache in this mock)
+      .mockResolvedValueOnce('<html></html>')
+      .mockResolvedValueOnce(fixture)
+      .mockResolvedValueOnce('<html></html>');
 
     const result = await api.getPlatformTop10(
       'apple-tv_top_10',
@@ -221,7 +239,7 @@ describe('parseStreamingOverviewHtml', () => {
       'tv'
     );
 
-    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(fetchPage).toHaveBeenCalledTimes(4);
     expect(result.tvShows.map((i) => i.title)).toContain('Severance');
     expect(result.tvShows.map((i) => i.flixpatrolUrl)).not.toContain(
       'https://flixpatrol.com/title/silo/'
@@ -268,7 +286,14 @@ describe('parseStreamingOverviewHtml', () => {
 
   it("prefers yesterday's own TV table over today's channels-only chart", async () => {
     const api = new FlixPatrolAPI();
-    const fetchPage = mockPages(api, channelsOnly, fixture);
+    // Sprite-URL discovery re-fetches after each day parsed (no cache in this mock)
+    const fetchPage = mockPages(
+      api,
+      channelsOnly,
+      '<html></html>',
+      fixture,
+      '<html></html>'
+    );
 
     const result = await api.getPlatformTop10(
       'apple-tv_top_10',
@@ -276,7 +301,7 @@ describe('parseStreamingOverviewHtml', () => {
       'tv'
     );
 
-    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(fetchPage).toHaveBeenCalledTimes(4);
     const urls = result.tvShows.map((i) => i.flixpatrolUrl);
     expect(urls).toContain('https://flixpatrol.com/title/silo-2023/');
     expect(urls).not.toContain('https://flixpatrol.com/title/silo/');
@@ -289,7 +314,14 @@ describe('parseStreamingOverviewHtml', () => {
     const yesterday = crunchyroll.replace('August 21, 2026', 'August 20, 2026');
     expect(yesterday).not.toBe(crunchyroll);
     const api = new FlixPatrolAPI();
-    const fetchPage = mockPages(api, crunchyroll, yesterday);
+    // Sprite-URL discovery re-fetches after each day parsed (no cache in this mock)
+    const fetchPage = mockPages(
+      api,
+      crunchyroll,
+      '<html></html>',
+      yesterday,
+      '<html></html>'
+    );
 
     const result = await api.getPlatformTop10(
       'crunchyroll_top_10',
@@ -297,7 +329,7 @@ describe('parseStreamingOverviewHtml', () => {
       'tv'
     );
 
-    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(fetchPage).toHaveBeenCalledTimes(4);
     expect(result.tvShows).toHaveLength(10);
     expect(result.date).toBe(
       (await parse(crunchyroll, 'tv', 'crunchyroll')).date
@@ -306,7 +338,13 @@ describe('parseStreamingOverviewHtml', () => {
 
   it("keeps today's channels-only chart when yesterday cannot be fetched", async () => {
     const api = new FlixPatrolAPI();
-    const fetchPage = mockPages(api, channelsOnly, new Error('503'));
+    // Sprite-URL discovery fetches its own fixed page in between
+    const fetchPage = mockPages(
+      api,
+      channelsOnly,
+      '<html></html>',
+      new Error('503')
+    );
 
     const result = await api.getPlatformTop10(
       'apple-tv_top_10',
@@ -314,7 +352,31 @@ describe('parseStreamingOverviewHtml', () => {
       'tv'
     );
 
-    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(fetchPage).toHaveBeenCalledTimes(3);
     expect(result.tvShows).toHaveLength(10);
+  });
+});
+
+describe('getCurrentSpriteUrl', () => {
+  it('extracts the sprite URL from an unquoted url() in the CSS', async () => {
+    const api = new FlixPatrolAPI();
+    vi.spyOn(
+      api as unknown as { fetchFlixPatrolPage: () => Promise<string> },
+      'fetchFlixPatrolPage'
+    ).mockResolvedValueOnce('<link href="/static/dist/all.min.css?v=45">');
+    mockFetchAsset.mockResolvedValueOnce({
+      data: '.bg-platform{background-image:var(--fp-url,url(../img/platforms/platforms-opt.webp?v=45));background-size:100%;}',
+    });
+
+    const spriteUrl = await (
+      api as unknown as { getCurrentSpriteUrl: () => Promise<string | null> }
+    ).getCurrentSpriteUrl();
+
+    expect(spriteUrl).toBe(
+      'https://flixpatrol.com/static/img/platforms/platforms-opt.webp?v=45'
+    );
+    expect(mockFetchAsset.mock.lastCall?.[0]).toBe(
+      'https://flixpatrol.com/static/dist/all.min.css?v=45'
+    );
   });
 });

@@ -27,6 +27,20 @@ export type SeasonCleanupAction =
     };
 
 /**
+ * A full season sync owns the final composed poster, so restoring any tracked
+ * row to its clean base would erase normal season overlays. Without that owner,
+ * Maintainerr cleanup is safe only after a complete membership resolution; a
+ * disabled Maintainerr integration is a deterministic request to restore all.
+ */
+export function shouldRestoreDepartedSeasonOverlays(
+  fullSeasonSyncOwnsPoster: boolean,
+  maintainerr: { enabled: boolean; resolutionComplete?: boolean }
+): boolean {
+  if (fullSeasonSyncOwnsPoster) return false;
+  return maintainerr.enabled ? maintainerr.resolutionComplete === true : true;
+}
+
+/**
  * Decide the action for a departed season, given the guarded Plex lookup.
  *
  * Identity must be POSITIVELY confirmed before any restore: the item is a season

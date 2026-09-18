@@ -253,8 +253,13 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         processedCollectionKeys
       );
 
+      // createOrUpdateCollectionStandardized already clears a smart collection's rows
       const missingItemsToStore = missingItems ?? [];
-      if (result.collectionRatingKey && missingItemsToStore.length > 0) {
+      if (
+        result.collectionRatingKey &&
+        !result.isSmartCollection &&
+        missingItemsToStore.length > 0
+      ) {
         await this.storeCollectionMissingItems(
           missingItemsToStore,
           result.collectionRatingKey,
@@ -362,6 +367,7 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         collectionRatingKey: result.collectionRatingKey,
         itemCount: result.itemCount || items.length,
         stats: result.stats,
+        isSmartCollection: result.isSmartCollection,
       };
     } catch (error) {
       logger.error('Failed to create Coming Soon collection', {

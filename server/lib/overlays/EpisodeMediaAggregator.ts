@@ -56,6 +56,49 @@ function percent(count: number, total: number): number {
   return Math.round((count / total) * 100);
 }
 
+// Newest addedAt per show; 0/undefined treated as absent (not yet known).
+export function newestEpisodeAddedAtByShow(
+  episodes: EpisodeMediaInfo[]
+): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const ep of episodes) {
+    if (!ep.showRatingKey || !ep.addedAt) continue;
+    const current = result.get(ep.showRatingKey);
+    if (current === undefined || ep.addedAt > current) {
+      result.set(ep.showRatingKey, ep.addedAt);
+    }
+  }
+  return result;
+}
+
+function normalizeAddedAt(v: number | null | undefined): number | null {
+  return v ? v : null;
+}
+
+// Fresh value wins; an omitted fresh value keeps the previous one.
+export function mergedAddedAt(
+  ratingKey: string,
+  previous: number | null | undefined,
+  freshAddedAtByKey: Map<string, number | null | undefined>
+): number | null {
+  return freshAddedAtByKey.get(ratingKey) ?? previous ?? null;
+}
+
+// Cached row disagrees with the merged value for a still-current episode.
+export function needsAddedAtResave(
+  cachedEpisodes: EpisodeMediaInfo[],
+  mergedAddedAtByKey: Map<string, number | null | undefined>,
+  currentKeys: Set<string>
+): boolean {
+  return cachedEpisodes.some((c) => {
+    if (!currentKeys.has(c.ratingKey)) return false;
+    return (
+      normalizeAddedAt(c.addedAt) !==
+      normalizeAddedAt(mergedAddedAtByKey.get(c.ratingKey))
+    );
+  });
+}
+
 export class EpisodeMediaAggregator {
   aggregateByShow(
     episodes: EpisodeMediaInfo[]
@@ -78,6 +121,17 @@ export class EpisodeMediaAggregator {
         nonSpecials.length > 0 ? nonSpecials : showEpisodes;
 
       result.set(showKey, this.aggregate(epsToAggregate));
+    }
+
+    // Full `episodes`, specials included on purpose: a new special is still
+    // a newly-added episode for "last added", unlike the quality rollup above.
+    for (const [showKey, lastEpisodeAddedAt] of newestEpisodeAddedAtByShow(
+      episodes
+    )) {
+      const agg = result.get(showKey);
+      if (agg) {
+        agg.lastEpisodeAddedAt = lastEpisodeAddedAt;
+      }
     }
 
     return result;

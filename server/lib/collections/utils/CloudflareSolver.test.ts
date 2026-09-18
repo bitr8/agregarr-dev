@@ -24,6 +24,7 @@ vi.mock('axios', () => ({
 import { CloudflareSolver } from './CloudflareSolver';
 
 const mockPost = vi.mocked(axios.post);
+const mockGet = vi.mocked(axios.get);
 const mockLaunch = vi.mocked(chromium.launch);
 
 const settingsWith = (solvers: { id: string; name: string; url: string }[]) =>
@@ -153,6 +154,29 @@ describe('CloudflareSolver failover', () => {
     ).rejects.toThrow(/could not solve/);
   });
 
+  it('surfaces the FlareSolverr reason on a 500 response', async () => {
+    state.settings = settingsWith([solverOne]);
+    mockPost.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 500'), {
+        isAxiosError: true,
+        response: {
+          status: 500,
+          data: {
+            status: 'error',
+            message:
+              'Error: Error solving the challenge. Timeout after 60.0 seconds.',
+          },
+        },
+      })
+    );
+
+    await expect(
+      CloudflareSolver.fetchPage('https://d14.example/page')
+    ).rejects.toThrow(
+      /Error solving the challenge\. Timeout after 60\.0 seconds\./
+    );
+  });
+
   it('uses Playwright when no solvers are configured', async () => {
     state.settings = settingsWith([]);
     mockLaunch.mockRejectedValueOnce(new Error('no browser in tests'));
@@ -276,5 +300,101 @@ describe('CloudflareSolver failover', () => {
 
     expect(html).toContain('still-trying');
     expect(mockPost).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('CloudflareSolver.fetchAsset', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reuses the cookie/UA captured from a solve for a plain GET', async () => {
+    state.settings = settingsWith([solverOne]);
+    mockPost.mockResolvedValueOnce({
+      data: {
+        status: 'ok',
+        solution: {
+          status: 200,
+          response: '<html><title>FlixPatrol</title></html>',
+          cookies: [{ name: 'cf_clearance', value: 'abc' }],
+          userAgent: 'UA-X',
+        },
+      },
+    });
+    mockGet.mockResolvedValueOnce({ data: 'body { color: red }' });
+
+    await CloudflareSolver.fetchAsset(
+      'https://flixpatrol.example/static/x.css'
+    );
+
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockGet.mock.calls[0][0]).toBe(
+      'https://flixpatrol.example/static/x.css'
+    );
+    expect(mockGet.mock.calls[0][1]?.headers).toMatchObject({
+      Cookie: 'cf_clearance=abc',
+      'User-Agent': 'UA-X',
+    });
+  });
+
+  it('re-solves and retries with a fresh cookie when the asset GET 403s', async () => {
+    state.settings = settingsWith([solverOne]);
+    const solve = (cookieValue: string) => ({
+      data: {
+        status: 'ok',
+        solution: {
+          status: 200,
+          response: '<html><title>FlixPatrol</title></html>',
+          cookies: [{ name: 'cf_clearance', value: cookieValue }],
+          userAgent: 'UA-X',
+        },
+      },
+    });
+    mockPost
+      .mockResolvedValueOnce(solve('stale'))
+      .mockResolvedValueOnce(solve('fresh'));
+    mockGet
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Request failed with status code 403'), {
+          response: { status: 403 },
+        })
+      )
+      .mockResolvedValueOnce({ data: 'body { color: red }' });
+
+    await CloudflareSolver.fetchAsset('https://stale.example/static/x.css');
+
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(mockGet.mock.calls[1][1]?.headers).toMatchObject({
+      Cookie: 'cf_clearance=fresh',
+    });
+  });
+
+  it('solves once, not per call, when the solver returns no cookies', async () => {
+    state.settings = settingsWith([solverOne]);
+    mockPost.mockResolvedValueOnce(okResponse('no-cookies'));
+    mockGet.mockResolvedValue({ data: 'body { color: red }' });
+
+    for (let i = 0; i < 3; i++) {
+      await CloudflareSolver.fetchAsset(
+        `https://cookieless.example/static/${i}.css`
+      );
+    }
+
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockGet).toHaveBeenCalledTimes(3);
+    expect(mockGet.mock.calls[2][1]?.headers?.Cookie).toBeUndefined();
+  });
+
+  it('does a plain GET with no Cookie header when no solvers are configured', async () => {
+    state.settings = settingsWith([]);
+    mockGet.mockResolvedValueOnce({ data: 'body { color: red }' });
+
+    await CloudflareSolver.fetchAsset('https://noflare.example/static/x.css');
+
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockGet.mock.calls[0][1]?.headers?.Cookie).toBeUndefined();
   });
 });

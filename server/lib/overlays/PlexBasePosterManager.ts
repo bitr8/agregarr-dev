@@ -1,11 +1,13 @@
 import type PlexAPI from '@server/api/plexapi';
 import type { PlexLibraryItem } from '@server/api/plexapi';
+import { resolvePlexPosterDownloadPath } from '@server/lib/collections/plex/posterSelection';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isWebpBuffer } from '@server/utils/imageFormat';
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
+import { hasAgregarrOverlayMarker } from './posterOwnershipMetadata';
 
 const BASE_POSTERS_DIR = path.join(
   process.cwd(),
@@ -21,6 +23,36 @@ const TMDB_POSTER_CACHE_DIR = path.join(
 
 // TMDB poster cache TTL: 7 days
 const TMDB_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function extractTmdbId(item: PlexLibraryItem): number | undefined {
+  const tmdbGuid = item.Guid?.find((g) => g.id?.includes('tmdb://'));
+  const match = tmdbGuid?.id.match(/tmdb:\/\/(\d+)/);
+  return match ? parseInt(match[1]) : undefined;
+}
+
+// Seasons and episodes always use Plex: a season guid's TMDB id is in the
+// season namespace, and title cards have no TMDB equivalent. Callers record this value.
+export function resolveBasePosterSource(
+  item: PlexLibraryItem,
+  settings: ReturnType<typeof getSettings>
+): 'tmdb' | 'plex' | 'local' {
+  if (item.type === 'season' || item.type === 'episode') {
+    return 'plex';
+  }
+
+  const source = settings.overlays?.defaultPosterSource || 'tmdb';
+
+  if (source === 'tmdb' && !extractTmdbId(item)) {
+    logger.debug('No TMDB ID found, falling back to Plex poster', {
+      label: 'PlexBasePosterManager',
+      itemTitle: item.title,
+      ratingKey: item.ratingKey,
+    });
+    return 'plex';
+  }
+
+  return source;
+}
 
 /**
  * Simple file storage manager for base posters used in overlay application
@@ -328,41 +360,6 @@ class PlexBasePosterManager {
   }
 
   /**
-   * Convert upload:// URL to downloadable path
-   */
-  private async convertUploadUrlToPath(
-    plexApi: PlexAPI,
-    uploadUrl: string,
-    ratingKey: string
-  ): Promise<string> {
-    // If it's already a path, return it
-    if (uploadUrl.startsWith('/')) {
-      return uploadUrl;
-    }
-
-    // If it's upload://posters/{id}, convert to /library/metadata/{ratingKey}/thumb/{id}
-    if (uploadUrl.startsWith('upload://posters/')) {
-      const uploadId = uploadUrl.replace('upload://posters/', '');
-      return `/library/metadata/${ratingKey}/thumb/${uploadId}`;
-    }
-
-    // Unknown format - try to get fresh metadata
-    logger.warn('Unknown poster URL format, fetching fresh metadata', {
-      label: 'PlexBasePosterManager',
-      uploadUrl,
-      ratingKey,
-    });
-
-    const metadata = await plexApi.getMetadata(ratingKey);
-    const thumb = (metadata as { thumb?: string }).thumb;
-    if (thumb && thumb.startsWith('/')) {
-      return thumb;
-    }
-
-    throw new Error(`Cannot convert poster URL: ${uploadUrl}`);
-  }
-
-  /**
    * Download poster from Plex
    */
   private async downloadFromPlex(
@@ -372,13 +369,10 @@ class PlexBasePosterManager {
   ): Promise<Buffer> {
     let downloadPath = thumbUrl;
 
-    // Convert upload:// URLs to downloadable paths
-    if (thumbUrl.startsWith('upload://') && ratingKey) {
-      downloadPath = await this.convertUploadUrlToPath(
-        plexApi,
-        thumbUrl,
-        ratingKey
-      );
+    // Pin content-addressed posters to their exact bytes. This handles both
+    // Posterizarr uploads and metadata-agent posters.
+    if (ratingKey) {
+      downloadPath = resolvePlexPosterDownloadPath(thumbUrl, ratingKey);
     }
 
     let fullUrl: string;
@@ -396,8 +390,9 @@ class PlexBasePosterManager {
         settings.plex.ip
       }:${settings.plex.port}`;
 
-      // Build full URL with token
-      fullUrl = `${baseUrl}${downloadPath}?X-Plex-Token=${plexApi['plexToken']}`;
+      // Build full URL with token, preserving an existing file?url= query.
+      const separator = downloadPath.includes('?') ? '&' : '?';
+      fullUrl = `${baseUrl}${downloadPath}${separator}X-Plex-Token=${plexApi['plexToken']}`;
     }
 
     const response = await axios.get(fullUrl, {
@@ -405,7 +400,12 @@ class PlexBasePosterManager {
       timeout: 30000,
     });
 
-    return Buffer.from(response.data);
+    const posterBuffer = Buffer.from(response.data);
+    if (posterBuffer.length === 0) {
+      throw new Error('Plex returned an empty poster');
+    }
+
+    return posterBuffer;
   }
 
   /**
@@ -701,6 +701,13 @@ class PlexBasePosterManager {
     return { posterBuffer, fileModTime, fileChanged };
   }
 
+  private resolveTmdbId(
+    tmdbId: number | undefined,
+    item: PlexLibraryItem
+  ): number | undefined {
+    return tmdbId ?? extractTmdbId(item);
+  }
+
   /**
    * Check if base poster has changed WITHOUT downloading it
    * Returns true if poster needs to be re-downloaded (URL changed or source switched)
@@ -747,17 +754,7 @@ class PlexBasePosterManager {
       // ===== TMDB SOURCE =====
       const { getTmdbLanguage } = await import('@server/lib/settings');
 
-      // Extract TMDB ID
-      let tmdbId: number | undefined;
-      if (item.Guid) {
-        const tmdbGuid = item.Guid.find((g) => g.id?.includes('tmdb://'));
-        if (tmdbGuid) {
-          const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
-          if (match) {
-            tmdbId = parseInt(match[1]);
-          }
-        }
-      }
+      const tmdbId = this.resolveTmdbId(undefined, item);
 
       if (!tmdbId) {
         throw new Error('No TMDB ID found for item');
@@ -1109,17 +1106,18 @@ class PlexBasePosterManager {
       );
 
       // Adopting the current poster as the new base is only safe when it really
-      // is a poster Plex owns. Every poster Agregarr uploads is WebP, so a WebP
-      // poster on an item we have already overlaid is very likely our own
-      // overlay whose tracking went stale - the overlay upload can succeed while
-      // the write recording ourOverlayPosterUrl does not (OverlayLibraryService
+      // is a poster Plex owns. Current Agregarr JPEGs carry an explicit marker;
+      // older releases used WebP. Either format on an item we have already
+      // overlaid can be our own poster whose tracking went stale - the upload
+      // can succeed while the write recording ourOverlayPosterUrl does not
+      // (OverlayLibraryService
       // swallows that failure, and seasonPosterRestore.ts documents the same
       // window). Storing it would bake the overlay in as the base and every
       // later run would composite on top of it. Prefer the tracked base.
       //
-      // The inference only holds one way: a user CAN upload a WebP poster, and
-      // then we keep the old base until they reset it. That is recoverable;
-      // baking in an overlay is not.
+      // The legacy WebP inference only holds one way: a user CAN upload a WebP
+      // poster, and then we keep the old base until they reset it. That is
+      // recoverable; baking in an overlay is not.
       const isTrackedOriginal = posterUrlsMatch(
         currentPlexPosterUrl,
         metadata.originalPlexPosterUrl
@@ -1128,10 +1126,10 @@ class PlexBasePosterManager {
       if (
         !isTrackedOriginal &&
         metadata.ourOverlayPosterUrl &&
-        isWebpBuffer(posterBuffer)
+        (hasAgregarrOverlayMarker(posterBuffer) || isWebpBuffer(posterBuffer))
       ) {
         logger.warn(
-          'Unrecognised WebP poster on an overlaid item - refusing to adopt it as the base',
+          'Unrecognised generated poster on an overlaid item - refusing to adopt it as the base',
           {
             label: 'PlexBasePosterManager',
             libraryId,
@@ -1207,16 +1205,7 @@ class PlexBasePosterManager {
       const { getTmdbLanguage } = await import('@server/lib/settings');
 
       // Use passed tmdbId if available, otherwise extract from item
-      let resolvedTmdbId = tmdbId;
-      if (!resolvedTmdbId && item.Guid) {
-        const tmdbGuid = item.Guid.find((g) => g.id?.includes('tmdb://'));
-        if (tmdbGuid) {
-          const match = tmdbGuid.id.match(/tmdb:\/\/(\d+)/);
-          if (match) {
-            resolvedTmdbId = parseInt(match[1]);
-          }
-        }
-      }
+      const resolvedTmdbId = this.resolveTmdbId(tmdbId, item);
 
       if (!resolvedTmdbId) {
         throw new Error('No TMDB ID found for item');
@@ -1328,7 +1317,11 @@ class PlexBasePosterManager {
       const item = allItems[i];
 
       try {
-        if (!item.thumb) {
+        const preferredPosterUrl =
+          (await plexApi.getPreferredBasePosterUrl(item.ratingKey)) ||
+          item.thumb;
+
+        if (!preferredPosterUrl) {
           logger.debug('Item has no poster, skipping', {
             label: 'PlexBasePosterManager',
             title: item.title,
@@ -1340,7 +1333,7 @@ class PlexBasePosterManager {
 
         const posterBuffer = await this.downloadFromPlex(
           plexApi,
-          item.thumb,
+          preferredPosterUrl,
           item.ratingKey
         );
         await this.storeBasePoster(posterBuffer, libraryId, item.ratingKey);

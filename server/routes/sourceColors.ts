@@ -6,6 +6,7 @@ import {
 import { sourceColorsService } from '@server/lib/services/SourceColorsService';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { COLOR_VALUE_PATTERN } from '@server/utils/colorValue';
 import { Router } from 'express';
 
 const sourceColorsRoutes = Router();
@@ -66,15 +67,14 @@ sourceColorsRoutes.put('/:sourceType', isAuthenticated(), async (req, res) => {
       });
     }
 
-    // Validate hex color format
-    const hexColorRegex = /^#[0-9a-fA-F]{6}$/;
+    // Validate color format
     if (
-      !hexColorRegex.test(primaryColor) ||
-      !hexColorRegex.test(secondaryColor) ||
-      !hexColorRegex.test(textColor)
+      !COLOR_VALUE_PATTERN.test(primaryColor) ||
+      !COLOR_VALUE_PATTERN.test(secondaryColor) ||
+      !COLOR_VALUE_PATTERN.test(textColor)
     ) {
       return res.status(400).json({
-        error: 'Colors must be valid hex format (#RRGGBB)',
+        error: 'Colors must be valid hex or rgba format',
       });
     }
 
@@ -190,7 +190,6 @@ sourceColorsRoutes.post('/import', isAuthenticated(), async (req, res) => {
     }
 
     // Validate each color scheme
-    const hexColorRegex = /^#[0-9a-fA-F]{6}$/;
     for (const [sourceType, colorScheme] of Object.entries(sourceColors)) {
       if (typeof colorScheme !== 'object' || !colorScheme) {
         return res.status(400).json({
@@ -208,12 +207,12 @@ sourceColorsRoutes.post('/import', isAuthenticated(), async (req, res) => {
       }
 
       if (
-        !hexColorRegex.test(primaryColor) ||
-        !hexColorRegex.test(secondaryColor) ||
-        !hexColorRegex.test(textColor)
+        !COLOR_VALUE_PATTERN.test(primaryColor) ||
+        !COLOR_VALUE_PATTERN.test(secondaryColor) ||
+        !COLOR_VALUE_PATTERN.test(textColor)
       ) {
         return res.status(400).json({
-          error: `Invalid hex color format for ${sourceType}`,
+          error: `Invalid hex or rgba color format for ${sourceType}`,
         });
       }
     }

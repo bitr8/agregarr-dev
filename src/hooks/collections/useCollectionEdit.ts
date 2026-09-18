@@ -4,6 +4,7 @@ import type {
   PreExistingCollectionConfig,
 } from '@app/types/collections';
 import { toCollectionCreateRequest } from '@app/types/collections';
+import { apiErrorMessage } from '@app/utils/apiErrorMessage';
 import { prepareLinkedConfigForEditing } from '@app/utils/collections/collectionUtils';
 import axios from 'axios';
 import { useState } from 'react';
@@ -219,26 +220,13 @@ export const useCollectionEdit = () => {
           autoDismiss: true,
         });
       } catch (error) {
-        // Show specific error message from API if available
-        const errorMessage =
-          error instanceof Error && 'response' in error
-            ? (
-                error as {
-                  response?: { data?: { message?: string; error?: string } };
-                }
-              ).response?.data?.message ||
-              (
-                error as {
-                  response?: { data?: { message?: string; error?: string } };
-                }
-              ).response?.data?.error ||
-              'Failed to save collection configuration'
-            : 'Failed to save collection configuration';
-
-        addToast(errorMessage, {
-          appearance: 'error',
-          autoDismiss: true,
-        });
+        addToast(
+          apiErrorMessage(error, 'Failed to save collection configuration'),
+          {
+            appearance: 'error',
+            autoDismiss: true,
+          }
+        );
       }
     }
 

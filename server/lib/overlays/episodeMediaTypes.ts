@@ -23,6 +23,9 @@ export interface EpisodeMediaInfo {
   // getMetadataBatch failure, sets this false). Tracked per episode so a stale
   // or lightweight-only row can't mask itself as detailed.
   hasStreamDetail: boolean;
+  // unix seconds. null/undefined both mean "unknown" in memory; the cache
+  // layer normalises to explicit null before persisting (see saveEpisodes).
+  addedAt?: number | null;
 }
 
 export interface AggregatedMediaInfo {
@@ -43,6 +46,8 @@ export interface AggregatedMediaInfo {
   episodeDvCount: number;
   episodeDvPercent: number;
   episodeMediaSource: 'aggregated' | 'show';
+
+  lastEpisodeAddedAt?: number; // unix seconds, from the latest lightweight scan
 }
 
 export interface EpisodeMediaScanner {

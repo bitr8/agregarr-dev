@@ -1,7 +1,10 @@
-import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
+import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { MediaItemMetadata } from '@server/entity/MediaItemMetadata';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
+import type { OverlayItemInput } from '@server/lib/overlays/OverlayLibraryService';
+import { buildOverlaySyncItems } from '@server/lib/overlays/overlaySyncItems';
+import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 
@@ -149,7 +152,9 @@ class OverlaysQuickSync {
       const activeConfigs = configs.filter(
         (config) =>
           config.enabledOverlays &&
-          config.enabledOverlays.some((o) => o.enabled)
+          config.enabledOverlays.some((o) => o.enabled) &&
+          normalizeOverlaySyncTargets(config.quickSyncTargets, config.mediaType)
+            .length > 0
       );
 
       if (activeConfigs.length === 0) {
@@ -158,6 +163,11 @@ class OverlaysQuickSync {
         });
         return;
       }
+
+      const { overlayLibraryService } = await import(
+        '@server/lib/overlays/OverlayLibraryService'
+      );
+      overlayLibraryService.beginOutcomeRun();
 
       logger.info('Found libraries with overlays configured', {
         label: 'Overlays Quick Sync',
@@ -201,13 +211,30 @@ class OverlaysQuickSync {
 
           this.setStage(`Applying overlays to library: ${library.name}...`);
 
-          // Get recently added items
           const mediaType = library.type === 'show' ? 'show' : 'movie';
-          const recentItems = await plexClient.getRecentlyAdded(
-            library.key,
-            { addedAt: cutoffTime },
+          const quickSyncTargets = normalizeOverlaySyncTargets(
+            config.quickSyncTargets,
             mediaType
           );
+          const recentItems: OverlayItemInput[] = [];
+
+          for (const target of quickSyncTargets) {
+            const plexType =
+              target === 'main'
+                ? mediaType === 'show'
+                  ? 2
+                  : 1
+                : target === 'season'
+                ? 3
+                : 4;
+            const targetItems = await plexClient.getRecentlyAddedByType(
+              library.key,
+              { addedAt: cutoffTime },
+              plexType
+            );
+
+            recentItems.push(...buildOverlaySyncItems(targetItems, target));
+          }
 
           if (!recentItems || recentItems.length === 0) {
             logger.debug('No recently added items in library', {
@@ -222,6 +249,7 @@ class OverlaysQuickSync {
             label: 'Overlays Quick Sync',
             libraryName: library.name,
             itemCount: recentItems.length,
+            syncTargets: quickSyncTargets,
           });
 
           // Filter to items needing overlays
@@ -242,10 +270,6 @@ class OverlaysQuickSync {
           });
 
           // Apply overlays using existing service
-          const { overlayLibraryService } = await import(
-            '@server/lib/overlays/OverlayLibraryService'
-          );
-
           await overlayLibraryService.applyOverlaysToCollectionItems(
             itemsNeedingOverlays,
             library.key
@@ -295,9 +319,23 @@ class OverlaysQuickSync {
    * Filter recent items to only those NOT in MediaItemMetadata
    * These are items that haven't had overlays applied yet
    */
-  private async filterNewItems(items: PlexLibraryItem[]): Promise<string[]> {
+  private async filterNewItems(
+    items: OverlayItemInput[]
+  ): Promise<OverlayItemInput[]> {
     const repository = getRepository(MediaItemMetadata);
-    const ratingKeys = items.map((item) => item.ratingKey);
+    const uniqueItems = Array.from(
+      new Map(
+        items.map((item) => [
+          `${item.target || 'main'}:${item.ratingKey}`,
+          item,
+        ])
+      ).values()
+    );
+    const ratingKeys = Array.from(
+      new Set(uniqueItems.map((item) => item.ratingKey))
+    );
+
+    if (ratingKeys.length === 0) return [];
 
     // Batch query for existing metadata
     const existing = await repository
@@ -309,13 +347,13 @@ class OverlaysQuickSync {
     const existingKeys = new Set(existing.map((e) => e.plexItemRatingKey));
 
     // Return items NOT in metadata (need overlays)
-    const newItems = items
-      .filter((item) => !existingKeys.has(item.ratingKey))
-      .map((item) => item.ratingKey);
+    const newItems = uniqueItems.filter(
+      (item) => !existingKeys.has(item.ratingKey)
+    );
 
     logger.debug('Filtered items for overlay application', {
       label: 'Overlays Quick Sync',
-      totalItems: items.length,
+      totalItems: uniqueItems.length,
       existingItems: existingKeys.size,
       newItems: newItems.length,
     });

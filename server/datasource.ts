@@ -12,7 +12,7 @@ const devConfig: DataSourceOptions = {
   logging: false,
   enableWAL: true,
   entities: ['server/entity/**/*.ts'],
-  migrations: ['server/migration/**/*.ts'],
+  migrations: ['server/migration/**/!(*.test|*.spec).ts'],
   subscribers: ['server/subscriber/**/*.ts'],
 };
 
@@ -26,7 +26,7 @@ const prodConfig: DataSourceOptions = {
   logging: false,
   enableWAL: true,
   entities: ['dist/entity/**/*.js'],
-  migrations: ['dist/migration/**/*.js'],
+  migrations: ['dist/migration/**/!(*.test|*.spec).js'],
   subscribers: ['dist/subscriber/**/*.js'],
 };
 

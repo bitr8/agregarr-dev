@@ -1504,35 +1504,28 @@ https://letterboxd.com/dave/list/imdb-top-250/
   }
 
   /**
-   * Discover Letterboxd lists using random page strategy
-   * Strategy: Random page (1-250) from https://letterboxd.com/lists/popular/page/{N}/
+   * Discover Letterboxd lists to draw from.
+   * Plain HTTP: only the popular root returns 200 (paginated /page/N/ URLs
+   * are Cloudflare-challenged without a solver), so we fetch just that page.
+   * Solver: random page (1-250) from https://letterboxd.com/lists/popular/page/{N}/
    */
   private static async discoverLetterboxdLists(): Promise<string[]> {
     try {
-      // Pick 3 random pages from the 250 available to get good variety
-      const scrapedPages = new Set<number>();
-      while (scrapedPages.size < 3) {
-        scrapedPages.add(Math.floor(Math.random() * 250) + 1);
-      }
-
-      const pageUrls = Array.from(scrapedPages).map((p) =>
-        p === 1
-          ? 'https://letterboxd.com/lists/popular/'
-          : `https://letterboxd.com/lists/popular/page/${p}/`
-      );
-
-      logger.debug(`Scraping ${pageUrls.length} Letterboxd discovery pages`, {
-        label: 'RandomListManager',
-        pages: Array.from(scrapedPages),
-      });
-
       const { getSettings } = await import('@server/lib/settings');
       const usePlainHttp = getSettings().main.letterboxdUsePlainHttp ?? true;
 
       const discoveredUrls = new Set<string>();
       const listUrlRegex = /href="(\/[^/]+\/list\/[^/]+\/)"[^>]*>/g;
+      let scrapedPages: Set<number> | undefined;
 
       if (usePlainHttp) {
+        const pageUrls = ['https://letterboxd.com/lists/popular/'];
+
+        logger.debug(`Scraping ${pageUrls.length} Letterboxd discovery page`, {
+          label: 'RandomListManager',
+          pages: pageUrls,
+        });
+
         const { LetterboxdHttpClient } = await import(
           '@server/lib/collections/utils/LetterboxdHttpClient'
         );
@@ -1552,6 +1545,23 @@ https://letterboxd.com/dave/list/imdb-top-250/
           }
         }
       } else {
+        // Pick 3 random pages from the 250 available to get good variety
+        scrapedPages = new Set<number>();
+        while (scrapedPages.size < 3) {
+          scrapedPages.add(Math.floor(Math.random() * 250) + 1);
+        }
+
+        const pageUrls = Array.from(scrapedPages).map((p) =>
+          p === 1
+            ? 'https://letterboxd.com/lists/popular/'
+            : `https://letterboxd.com/lists/popular/page/${p}/`
+        );
+
+        logger.debug(`Scraping ${pageUrls.length} Letterboxd discovery pages`, {
+          label: 'RandomListManager',
+          pages: Array.from(scrapedPages),
+        });
+
         const { CloudflareSolver } = await import(
           '@server/lib/collections/utils/CloudflareSolver'
         );
@@ -1567,14 +1577,24 @@ https://letterboxd.com/dave/list/imdb-top-250/
 
       const result = Array.from(discoveredUrls);
 
-      logger.info(
-        `Discovered ${result.length} Letterboxd lists from ${scrapedPages.size} pages`,
-        {
-          label: 'RandomListManager',
-          count: result.length,
-          pagesScraped: Array.from(scrapedPages),
-        }
-      );
+      if (scrapedPages) {
+        logger.info(
+          `Discovered ${result.length} Letterboxd lists from ${scrapedPages.size} pages`,
+          {
+            label: 'RandomListManager',
+            count: result.length,
+            pagesScraped: Array.from(scrapedPages),
+          }
+        );
+      } else {
+        logger.info(
+          `Discovered ${result.length} Letterboxd lists from 1 page`,
+          {
+            label: 'RandomListManager',
+            count: result.length,
+          }
+        );
+      }
 
       return result;
     } catch (error) {

@@ -1,10 +1,26 @@
 import {
   calculateDaysSince,
   isAirDateUpcoming,
+  isDateInFuture,
   toServerCalendarDate,
 } from '@server/utils/dateHelpers';
 import type { ReleaseDateInfo } from './OverlayContextBuilder';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
+
+/** Latest aired season air_date; specials and unaired seasons ignored. */
+export function latestAiredSeasonDate(
+  seasons: { season_number: number; air_date?: string }[] | undefined
+): string | undefined {
+  let latest: string | undefined;
+  for (const season of seasons ?? []) {
+    if (season.season_number <= 0 || !season.air_date) continue;
+    if (isDateInFuture(season.air_date)) continue;
+    if (!latest || season.air_date > latest) {
+      latest = season.air_date;
+    }
+  }
+  return latest;
+}
 
 /**
  * Derive the release-date render context (the day-count fields) from resolved
@@ -71,6 +87,7 @@ export function deriveReleaseDateContext(
   // Symmetric with nextEpisode: a season premiere past its airing instant flips
   // to "days ago" rather than reporting "premieres today" for the rest of the
   // local day. The day-granular counts still use the tz calendar date.
+  let pastSeasonAirDate: string | undefined;
   if (info.nextSeasonAirDate) {
     if (isAirDateUpcoming(info.nextSeasonAirDate)) {
       daysUntilNextSeason = Math.max(
@@ -78,10 +95,19 @@ export function deriveReleaseDateContext(
         -calculateDaysSince(toServerCalendarDate(info.nextSeasonAirDate))
       );
     } else {
-      daysAgoNextSeason = calculateDaysSince(
-        toServerCalendarDate(info.nextSeasonAirDate)
-      );
+      pastSeasonAirDate = info.nextSeasonAirDate;
     }
+  }
+
+  // nextSeasonAirDate only holds a premiere until the pointer advances; lastSeasonAirDate outlives it.
+  const lastAiredSeasonDate = [pastSeasonAirDate, info.lastSeasonAirDate]
+    .filter((d): d is string => !!d)
+    .sort()
+    .pop();
+  if (lastAiredSeasonDate) {
+    daysAgoNextSeason = calculateDaysSince(
+      toServerCalendarDate(lastAiredSeasonDate)
+    );
   }
 
   return {
