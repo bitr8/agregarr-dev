@@ -13,6 +13,8 @@ import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
+  buildPromotedSortTitle,
+  buildSortTitleFromOverride,
   createCollectionLabel,
   createSyncError,
   getCollectionSyncCounter,
@@ -2963,7 +2965,7 @@ export class MultiSourceOrchestrator {
       try {
         await plexClient.updateCollectionSortTitle(
           collectionRatingKey,
-          `${config.sortTitleOverride}${collectionName}`,
+          buildSortTitleFromOverride(config.sortTitleOverride, collectionName),
           currentTitleSort
         );
       } catch (error) {
@@ -3002,29 +3004,8 @@ export class MultiSourceOrchestrator {
       const sortOrderLibrary = config.sortOrderLibrary;
 
       if (isLibraryPromoted && sortOrderLibrary > 0) {
-        // Promoted: Set exclamation marks based on sort order
-        const sameLibraryConfigs = allConfigs.filter((c) => {
-          const configLibraryId = Array.isArray(c.libraryId)
-            ? c.libraryId[0]
-            : c.libraryId;
-          return (
-            configLibraryId === config.libraryId &&
-            c.sortOrderLibrary !== undefined &&
-            c.isLibraryPromoted === true
-          );
-        });
-
-        if (sameLibraryConfigs.length > 0) {
-          const sortOrders = sameLibraryConfigs
-            .map((c) => c.sortOrderLibrary)
-            .filter((order): order is number => order !== undefined);
-          const maxSortOrder = Math.max(...sortOrders);
-          const exclamationCount = maxSortOrder - sortOrderLibrary + 2;
-          const exclamationPrefix = '!'.repeat(exclamationCount);
-          sortTitle = `${exclamationPrefix}${collectionName}`;
-        } else {
-          sortTitle = `!!${collectionName}`;
-        }
+        // Promoted: positional sortTitle (see buildPromotedSortTitle)
+        sortTitle = buildPromotedSortTitle(collectionName, sortOrderLibrary);
       } else {
         // Demoted: Reset to natural title
         sortTitle = collectionName;

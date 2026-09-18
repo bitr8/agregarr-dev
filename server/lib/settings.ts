@@ -118,7 +118,7 @@ export interface CollectionConfig {
   readonly libraryName: string; // Library name for display
   readonly sortOrderHome?: number; // Order for Plex home screen (1+ for positioned items, 0 for void/unpositioned)
   readonly sortOrderLibrary?: number; // Order for Plex library tab (0 for A-Z section, 1+ for promoted section)
-  readonly isLibraryPromoted?: boolean; // true = promoted section (uses exclamation marks), false = A-Z section (defaults to true for Agregarr collections)
+  readonly isLibraryPromoted?: boolean; // true = promoted section (rank-prefixed sort title), false = A-Z section (defaults to true for Agregarr collections)
   readonly sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto !-prefix)
   readonly randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   readonly isLinked?: boolean; // True if collection is actively linked to other collections
@@ -370,7 +370,7 @@ export interface PlexHubConfig {
   mediaType: 'movie' | 'tv'; // Media type (hubs are always single type)
   sortOrderHome: number; // Position on Plex home screen (1+ for positioned items, 0 for void)
   sortOrderLibrary: number; // Position in library (0 for A-Z section, 1+ for promoted section)
-  isLibraryPromoted: boolean; // true = promoted section (uses exclamation marks), false = A-Z section
+  isLibraryPromoted: boolean; // true = promoted section (rank-prefixed sort title), false = A-Z section
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
     usersHome: boolean;
@@ -428,7 +428,7 @@ export interface PreExistingCollectionConfig {
   titleSort?: string; // Plex sortTitle field for alphabetical ordering
   sortOrderHome: number; // Position on Plex home screen (1+ for positioned items, 0 for void)
   sortOrderLibrary: number; // Position in library (0 for A-Z section, 1+ for promoted section)
-  isLibraryPromoted: boolean; // true = promoted section (uses exclamation marks), false = A-Z section
+  isLibraryPromoted: boolean; // true = promoted section (rank-prefixed sort title), false = A-Z section
   sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto)
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
