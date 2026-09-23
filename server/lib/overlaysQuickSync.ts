@@ -3,6 +3,7 @@ import { getRepository } from '@server/datasource';
 import { MediaItemMetadata } from '@server/entity/MediaItemMetadata';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import type { OverlayItemInput } from '@server/lib/overlays/OverlayLibraryService';
+import { getOverlayLibraryType } from '@server/lib/overlays/overlayLibraryType';
 import { buildOverlaySyncItems } from '@server/lib/overlays/overlaySyncItems';
 import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
 import { getSettings } from '@server/lib/settings';
@@ -153,8 +154,10 @@ class OverlaysQuickSync {
         (config) =>
           config.enabledOverlays &&
           config.enabledOverlays.some((o) => o.enabled) &&
-          normalizeOverlaySyncTargets(config.quickSyncTargets, config.mediaType)
-            .length > 0
+          normalizeOverlaySyncTargets(
+            config.quickSyncTargets,
+            getOverlayLibraryType(config.libraryId, config.mediaType)
+          ).length > 0
       );
 
       if (activeConfigs.length === 0) {
@@ -211,7 +214,10 @@ class OverlaysQuickSync {
 
           this.setStage(`Applying overlays to library: ${library.name}...`);
 
-          const mediaType = library.type === 'show' ? 'show' : 'movie';
+          const mediaType = getOverlayLibraryType(
+            config.libraryId,
+            config.mediaType
+          );
           const quickSyncTargets = normalizeOverlaySyncTargets(
             config.quickSyncTargets,
             mediaType

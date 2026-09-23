@@ -46,6 +46,7 @@ import {
   fetchReleaseDateInfo,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
+import { getOverlayLibraryType } from './overlayLibraryType';
 import {
   normalizeOverlayJpegQuality,
   overlayOutputFormat,
@@ -1805,9 +1806,10 @@ class OverlayLibraryService {
         return;
       }
 
+      const mediaType = getOverlayLibraryType(libraryId, config.mediaType);
       const fullSyncTargets = normalizeOverlaySyncTargets(
         config.fullSyncTargets,
-        config.mediaType
+        mediaType
       );
       if (fullSyncTargets.length === 0) {
         logger.info('Full overlay sync disabled for library', {
@@ -1871,13 +1873,13 @@ class OverlayLibraryService {
           )
         : [];
       const syncSeasons =
-        config.mediaType === 'show' &&
+        mediaType === 'show' &&
         fullSyncTargets.includes('season') &&
         sortedTemplates.some((template) =>
           targetsArtwork(template.getTags(), 'season')
         );
       const syncEpisodes =
-        config.mediaType === 'show' &&
+        mediaType === 'show' &&
         fullSyncTargets.includes('episode') &&
         sortedTemplates.some((template) =>
           targetsArtwork(template.getTags(), 'episode')
@@ -2121,7 +2123,7 @@ class OverlayLibraryService {
           : new Map<string, PlexMetadata>();
 
       // Episode media scanning: aggregate episode-level resolution/HDR/DV to show posters
-      if (config.enableEpisodeScanning && config.mediaType === 'show') {
+      if (config.enableEpisodeScanning && mediaType === 'show') {
         await this.runEpisodeScan(plexApi, libraryId, requiredContextFields);
       }
 
@@ -2154,7 +2156,7 @@ class OverlayLibraryService {
             plexApi,
             itemWithFullMetadata,
             mainTemplates,
-            config.mediaType,
+            mediaType,
             libraryId,
             config.libraryName,
             maintainerrCollections,
@@ -2235,7 +2237,7 @@ class OverlayLibraryService {
         return;
       }
 
-      if (config.mediaType === 'show') {
+      if (mediaType === 'show') {
         if (childItems.length > 0 && !checkCancelled?.()) {
           const completedChildItems = new Set<string>();
           const childItemKey = (item: OverlayItemInput) =>
@@ -2320,10 +2322,7 @@ class OverlayLibraryService {
 
       // Seasons never appear in the library listing above; Maintainerr nominates
       // them by ratingKey. Opt-in, show libraries only.
-      if (
-        config.mediaType === 'show' &&
-        config.enableMaintainerrSeasonOverlays
-      ) {
+      if (mediaType === 'show' && config.enableMaintainerrSeasonOverlays) {
         const seasonResult = await this.applyMaintainerrSeasonOverlays(
           plexApi,
           libraryId,
@@ -2430,14 +2429,30 @@ class OverlayLibraryService {
     const config = await getRepository(OverlayLibraryConfig).findOne({
       where: { libraryId },
     });
-    if (!config?.enabledOverlays.some((overlay) => overlay.enabled)) return;
+    if (!config?.enabledOverlays.some((overlay) => overlay.enabled)) {
+      logger.debug(
+        'Skipping Posterizarr overlays: no enabled library overlays',
+        {
+          label: 'Posterizarr Trigger',
+          libraryId,
+        }
+      );
+      return;
+    }
 
     // Item callbacks share the quick-sync opt-in, not the full-library scope.
+    const mediaType = getOverlayLibraryType(libraryId, config.mediaType);
     const targets = normalizeOverlaySyncTargets(
       config.quickSyncTargets,
-      config.mediaType
+      mediaType
     );
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      logger.debug('Skipping Posterizarr overlays: Quick sync scope is empty', {
+        label: 'Posterizarr Trigger',
+        libraryId,
+      });
+      return;
+    }
 
     const items: OverlayItemInput[] = targets.includes('main')
       ? [{ ratingKey: input.ratingKey, target: 'main' }]
@@ -2446,7 +2461,7 @@ class OverlayLibraryService {
     const syncEpisodes = targets.includes('episode');
 
     if (
-      config.mediaType === 'show' &&
+      mediaType === 'show' &&
       input.seasonNumber !== undefined &&
       (syncSeasons || (syncEpisodes && input.episodeNumber !== undefined))
     ) {
@@ -2509,9 +2524,19 @@ class OverlayLibraryService {
       }
     }
 
-    if (items.length > 0) {
-      await this.applyOverlaysToCollectionItems(items, libraryId);
+    if (items.length === 0) {
+      logger.debug(
+        'Skipping Posterizarr overlays: no items match Quick sync scope',
+        {
+          label: 'Posterizarr Trigger',
+          libraryId,
+          ratingKey: input.ratingKey,
+          targets,
+        }
+      );
+      return;
     }
+    await this.applyOverlaysToCollectionItems(items, libraryId);
   }
 
   /**
@@ -2633,8 +2658,7 @@ class OverlayLibraryService {
           await this.buildCollectionMembershipMap(plexApi);
       }
 
-      // Determine media type from library config
-      const mediaType = config.mediaType || 'movie';
+      const mediaType = getOverlayLibraryType(libraryId, config.mediaType);
 
       // Batch-fetch metadata for all items in a single Plex call
       const itemRatingKeys = [
@@ -3729,11 +3753,12 @@ class OverlayLibraryService {
         return { skipped: true };
       }
 
-      // Single composite + JPEG encode for all templates
+      // Use the same format snapshot for the hash, encode, and upload filename.
       const currentBuffer = await overlayTemplateRenderer.compositeOverlays(
         posterBuffer,
         allOverlays,
-        jpegQuality
+        jpegQuality,
+        outputFormat
       );
 
       // Save to temporary file
@@ -4007,7 +4032,7 @@ class OverlayLibraryService {
     );
     const includeFullSeasonTemplates = normalizeOverlaySyncTargets(
       config.fullSyncTargets,
-      config.mediaType
+      getOverlayLibraryType(libraryId, config.mediaType)
     ).includes('season');
     const seasonTemplates = sortedTemplates.filter(
       (template) =>
@@ -4038,13 +4063,15 @@ class OverlayLibraryService {
       seasonTemplates.map((template) => template.getTemplateData()),
       seasonTemplates.map((template) => template.getApplicationCondition())
     );
-    const seasonImdbRatings = seasonRequiredContextFields.has('imdbRating')
-      ? fullSyncSeasonImdbRatings ??
-        (await this.fetchSeasonImdbRatings(
-          plexApi,
-          activeSeasons.map((season) => season.ratingKey)
-        ))
-      : undefined;
+    const seasonImdbRatings =
+      getSettings().overlays?.posterizarrIntegrationEnabled &&
+      seasonRequiredContextFields.has('imdbRating')
+        ? fullSyncSeasonImdbRatings ??
+          (await this.fetchSeasonImdbRatings(
+            plexApi,
+            activeSeasons.map((season) => season.ratingKey)
+          ))
+        : undefined;
     const seasonTmdbRatings = usesTmdbRatingFields(seasonRequiredContextFields)
       ? await this.fetchTmdbChildRatingContexts(
           plexApi,

@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  libraries: [] as { key: string; type: string }[],
   findOne: vi.fn(),
   getChildrenMetadata: vi.fn(),
   getAdminUser: vi.fn(async () => ({ plexToken: 'test-token' })),
+}));
+vi.mock('@server/lib/settings', () => ({
+  getSettings: () => ({ plex: { libraries: mocks.libraries } }),
 }));
 
 vi.mock('@server/datasource', () => ({ getRepository: () => mocks }));
@@ -27,6 +31,7 @@ vi.mock('@server/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
 
+import logger from '@server/logger';
 import { overlayLibraryService } from './OverlayLibraryService';
 
 describe('Posterizarr overlay scope at the batch-write boundary', () => {
@@ -42,6 +47,7 @@ describe('Posterizarr overlay scope at the batch-write boundary', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.libraries = [];
     mocks.findOne.mockResolvedValue({
       mediaType: 'show',
       enabledOverlays: [{ templateId: 1, enabled: true }],
@@ -66,7 +72,12 @@ describe('Posterizarr overlay scope at the batch-write boundary', () => {
     expect(mocks.getChildrenMetadata).not.toHaveBeenCalled();
   });
 
-  it.each([['season'], ['episode'], ['main', 'season', 'episode']])(
+  it.each([
+    ['season'],
+    ['episode'],
+    ['main', 'season', 'episode'],
+    ['episode', 'main'],
+  ])(
     'only hands selected quick-sync targets %j to the writer',
     async (...targets) => {
       mocks.findOne.mockResolvedValue({
@@ -80,17 +91,20 @@ describe('Posterizarr overlay scope at the batch-write boundary', () => {
         '2'
       );
       expect(apply).toHaveBeenCalledOnce();
+      expect(apply.mock.calls[0][0]).toHaveLength(targets.length);
       expect(apply.mock.calls[0][0]).toEqual(
-        targets.map((target) =>
-          expect.objectContaining({
-            target,
-            ratingKey:
-              target === 'main'
-                ? 'show-1'
-                : target === 'season'
-                ? 'season-2'
-                : 'episode-3',
-          })
+        expect.arrayContaining(
+          targets.map((target) =>
+            expect.objectContaining({
+              target,
+              ratingKey:
+                target === 'main'
+                  ? 'show-1'
+                  : target === 'season'
+                  ? 'season-2'
+                  : 'episode-3',
+            })
+          )
         )
       );
       expect(mocks.getChildrenMetadata).toHaveBeenCalledTimes(
@@ -121,6 +135,61 @@ describe('Posterizarr overlay scope at the batch-write boundary', () => {
       );
       expect(apply).not.toHaveBeenCalled();
       expect(mocks.getChildrenMetadata).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          config?.quickSyncTargets.length === 0
+            ? 'scope is empty'
+            : 'no enabled library overlays'
+        ),
+        expect.objectContaining({ libraryId: '2' })
+      );
+    }
+  );
+
+  it('logs when the callback cannot select an item in its scope', async () => {
+    mocks.findOne.mockResolvedValue({
+      mediaType: 'show',
+      quickSyncTargets: ['episode'],
+      enabledOverlays: [{ enabled: true }],
+    });
+    await overlayLibraryService.applyPosterizarrTriggeredOverlays(
+      { ratingKey: 'show-1' },
+      '2'
+    );
+    expect(apply).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('no items match Quick sync scope'),
+      expect.objectContaining({
+        libraryId: '2',
+        ratingKey: 'show-1',
+        targets: ['episode'],
+      })
+    );
+  });
+
+  it.each([
+    ['movie', 'show', ['season-2']],
+    ['show', 'movie', []],
+  ] as const)(
+    'ignores stored type %s in favor of Plex library type %s',
+    async (storedType, plexType, expectedKeys) => {
+      mocks.libraries = [{ key: '2', type: plexType }];
+      mocks.findOne.mockResolvedValue({
+        mediaType: storedType,
+        quickSyncTargets: ['season'],
+        enabledOverlays: [{ enabled: true }],
+      });
+      await overlayLibraryService.applyPosterizarrTriggeredOverlays(
+        callback,
+        '2'
+      );
+      expect(
+        apply.mock.calls.flatMap(([items]) =>
+          items.map((item) =>
+            typeof item === 'string' ? item : item.ratingKey
+          )
+        )
+      ).toEqual(expectedKeys);
     }
   );
 

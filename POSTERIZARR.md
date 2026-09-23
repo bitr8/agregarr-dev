@@ -91,9 +91,11 @@ can recognize this marker and will not treat an Agregarr overlay as an
 unmanaged poster. Reset and restore operations preserve recognized Posterizarr
 ownership metadata when re-encoding artwork.
 
-The JPEG output is deliberate: the ownership marker must be stored where
-Posterizarr can read it reliably. The first full overlay sync after upgrading
-from an older WebP-producing build re-renders and re-uploads eligible artwork
+JPEG output is enabled by Agregarr's Posterizarr integration toggle so the
+ownership marker is stored where Posterizarr can read it reliably. With the
+integration left off, existing WebP output and render hashes stay unchanged.
+The first full overlay sync after enabling the integration on a WebP-producing
+installation re-renders and re-uploads eligible artwork
 owned by Agregarr because the output format and render hash changed. Collection
 syncs with **Apply overlays during sync** enabled, or item callbacks, can refresh
 their eligible items earlier. Quick sync only picks up items without a metadata
@@ -104,6 +106,12 @@ To postpone the JPEG overlay re-render through all these paths, **disable all
 overlay templates for the library**. Deselecting full/quick sync targets alone
 does not stop collection sync overlays; disabling the Posterizarr callback
 setting alone does not stop scheduled overlay or collection jobs.
+
+Callbacks share the library's Quick sync scope. Enable debug logging to see
+why callback overlays were skipped: no enabled library overlays, an empty
+Quick sync scope, or no callback items matching the selected targets. The
+library configuration warns about missing templates for both Full sync and
+Quick sync / Posterizarr callbacks.
 
 Outcome details are retained in memory for the current or last run, capped at
 5,000 items per library. Search and CSV export include only retained details;
