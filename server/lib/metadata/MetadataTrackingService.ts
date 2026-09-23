@@ -2,6 +2,7 @@ import { getRepository } from '@server/datasource';
 import { CollectionMetadata } from '@server/entity/CollectionMetadata';
 import { MediaItemMetadata } from '@server/entity/MediaItemMetadata';
 import logger from '@server/logger';
+import { In, IsNull, Not } from 'typeorm';
 
 /**
  * Service for managing collection and media item metadata tracking
@@ -475,10 +476,13 @@ class MetadataTrackingService {
     libraryKey: string
   ): Promise<MediaItemMetadata[]> {
     const repo = getRepository(MediaItemMetadata);
-    const rows = await repo.find({ where: { libraryKey } });
-    return rows.filter(
-      (row) => row.itemType === 'season' || row.itemType === 'episode'
-    );
+    return repo.find({
+      where: {
+        libraryKey,
+        itemType: In(['season', 'episode']),
+        ourOverlayPosterUrl: Not(IsNull()),
+      },
+    });
   }
 
   /**

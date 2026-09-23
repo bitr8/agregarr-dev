@@ -1,5 +1,6 @@
 import type { PlexLibraryItem } from '@server/api/plexapi';
 import PlexAPI from '@server/api/plexapi';
+import { PLEX_METADATA_BATCH_SIZE } from '@server/api/plexMetadataBatch';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import fs from 'fs/promises';
@@ -138,6 +139,7 @@ class PosterResetJob {
         });
 
         allItems = allItems.concat(response.items);
+        this.total = response.totalSize;
 
         if (offset + pageSize >= response.totalSize) {
           hasMore = false;
@@ -156,34 +158,47 @@ class PosterResetJob {
         libraryId
       );
       const existingKeys = new Set(allItems.map((item) => item.ratingKey));
-      for (const row of childRows) {
-        if (existingKeys.has(row.plexItemRatingKey)) continue;
-        try {
-          const child = await plexApi.getMetadata(row.plexItemRatingKey);
-          if (child.type !== 'season' && child.type !== 'episode') continue;
-          allItems.push({
-            ratingKey: child.ratingKey,
-            parentRatingKey: child.parentRatingKey,
-            grandparentRatingKey: child.grandparentRatingKey,
-            title: child.title,
-            guid: child.guid || '',
-            Guid: child.Guid,
-            Media: child.Media,
-            Label: child.Label,
-            type: child.type,
-            index: child.index,
-            parentIndex: child.parentIndex,
-            userRating: child.userRating,
-            addedAt: child.addedAt || 0,
-            updatedAt: child.updatedAt || 0,
-          });
-          existingKeys.add(child.ratingKey);
-        } catch (error) {
-          logger.warn('Tracked child artwork no longer exists in Plex', {
-            label: 'PosterReset',
-            ratingKey: row.plexItemRatingKey,
-            error: error instanceof Error ? error.message : String(error),
-          });
+      const childKeys = [
+        ...new Set(childRows.map((row) => row.plexItemRatingKey)),
+      ].filter((key) => !existingKeys.has(key));
+      this.total = allItems.length + childKeys.length;
+      for (
+        let offset = 0;
+        offset < childKeys.length;
+        offset += PLEX_METADATA_BATCH_SIZE
+      ) {
+        if (this.cancelled) return;
+        const keys = childKeys.slice(offset, offset + PLEX_METADATA_BATCH_SIZE);
+        const batch = await plexApi.getMetadataBatch(keys);
+        for (const key of keys) {
+          if (this.cancelled) return;
+          try {
+            const child = batch.get(key) ?? (await plexApi.getMetadata(key));
+            if (child.type !== 'season' && child.type !== 'episode') continue;
+            allItems.push({
+              ratingKey: child.ratingKey,
+              parentRatingKey: child.parentRatingKey,
+              grandparentRatingKey: child.grandparentRatingKey,
+              title: child.title,
+              guid: child.guid || '',
+              Guid: child.Guid,
+              Media: child.Media,
+              Label: child.Label,
+              type: child.type,
+              index: child.index,
+              parentIndex: child.parentIndex,
+              userRating: child.userRating,
+              addedAt: child.addedAt || 0,
+              updatedAt: child.updatedAt || 0,
+            });
+            existingKeys.add(child.ratingKey);
+          } catch (error) {
+            logger.warn('Tracked child artwork no longer exists in Plex', {
+              label: 'PosterReset',
+              ratingKey: key,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       }
 
@@ -247,7 +262,6 @@ class PosterResetJob {
       throw error;
     } finally {
       this.running = false;
-      this.cancelled = false;
     }
   }
 
