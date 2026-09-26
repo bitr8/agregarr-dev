@@ -532,7 +532,7 @@ components:
           nullable: true
         isLibraryPromoted:
           type: boolean
-          description: 'true = promoted section (uses exclamation marks), false = A-Z section'
+          description: 'true = promoted section (rank-prefixed sort title), false = A-Z section'
           example: true
         randomizeHomeOrder:
           type: boolean
@@ -2181,7 +2181,7 @@ components:
           nullable: true
         isLibraryPromoted:
           type: boolean
-          description: 'true = promoted section (uses exclamation marks), false = A-Z section'
+          description: 'true = promoted section (rank-prefixed sort title), false = A-Z section'
           example: true
         randomizeHomeOrder:
           type: boolean
@@ -3041,7 +3041,7 @@ components:
           example: 0
         isLibraryPromoted:
           type: boolean
-          description: 'true = promoted section (uses exclamation marks), false = A-Z section'
+          description: 'true = promoted section (rank-prefixed sort title), false = A-Z section'
           example: false
         randomizeHomeOrder:
           type: boolean
@@ -3189,7 +3189,7 @@ components:
           example: 0
         isLibraryPromoted:
           type: boolean
-          description: 'true = promoted section (uses exclamation marks), false = A-Z section'
+          description: 'true = promoted section (rank-prefixed sort title), false = A-Z section'
           example: false
         visibilityConfig:
           type: object
@@ -3350,7 +3350,7 @@ components:
           example: 0
         isLibraryPromoted:
           type: boolean
-          description: 'true = promoted section (uses exclamation marks), false = A-Z section'
+          description: 'true = promoted section (rank-prefixed sort title), false = A-Z section'
           example: false
         visibilityConfig:
           type: object
@@ -3608,7 +3608,7 @@ components:
           example: 0
         isLibraryPromoted:
           type: boolean
-          description: 'true = promoted section (uses exclamation marks), false = A-Z section'
+          description: 'true = promoted section (rank-prefixed sort title), false = A-Z section'
           example: false
         visibilityConfig:
           type: object
@@ -7358,6 +7358,18 @@ paths:
           schema:
             type: string
             example: 'collection-123'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetRank:
+                  type: integer
+                  minimum: 1
+                  description: 'Position to promote to within the promoted section. Omit to append to the bottom. Out-of-range values clamp to the bottom.'
+                  example: 5
       responses:
         '200':
           description: Collection promoted successfully
@@ -9139,6 +9151,18 @@ paths:
           schema:
             type: string
             example: '1-35954'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetRank:
+                  type: integer
+                  minimum: 1
+                  description: 'Position to promote to within the promoted section. Omit to append to the bottom. Out-of-range values clamp to the bottom.'
+                  example: 5
       responses:
         '200':
           description: Pre-existing collection promoted successfully

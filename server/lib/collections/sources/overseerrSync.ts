@@ -1,6 +1,8 @@
 import type PlexAPI from '@server/api/plexapi';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  buildPromotedSortTitle,
+  buildSortTitleFromOverride,
   extractErrorMessage,
   findPlexItemsByTmdbIds,
   getCollectionMediaType,
@@ -928,7 +930,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
   // Helper methods
 
   /**
-   * Apply sort title to user collection (handles promoted collections with exclamation marks)
+   * Apply sort title to user collection (handles promoted collections' rank-prefixed sort titles)
    * This is needed because user collections don't have collectionRatingKey stored in config,
    * so BaseCollectionSync.updateCollectionMetadata can't find the matching config
    */
@@ -942,7 +944,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
     if (config.sortTitleOverride) {
       await plexClient.updateCollectionSortTitle(
         collectionRatingKey,
-        `${config.sortTitleOverride}${collectionName}`
+        buildSortTitleFromOverride(config.sortTitleOverride, collectionName)
       );
       return;
     }
@@ -958,34 +960,8 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
 
     // Treat sortOrderLibrary > 0 as promoted even if isLibraryPromoted is undefined
     if (isLibraryPromoted !== false && sortOrderLibrary > 0) {
-      // Promoted: Calculate exclamation marks based on other promoted collections in same library
-      const { getSettings } = await import('@server/lib/settings');
-      const settings = getSettings();
-      const allConfigs = settings.plex.collectionConfigs || [];
-      const libraryKey = this.getLibraryKeyFromConfig(config);
-
-      const sameLibraryConfigs = allConfigs.filter((c: CollectionConfig) => {
-        const configLibraryId = Array.isArray(c.libraryId)
-          ? c.libraryId[0]
-          : c.libraryId;
-        return (
-          configLibraryId === libraryKey &&
-          c.sortOrderLibrary !== undefined &&
-          c.isLibraryPromoted === true
-        );
-      });
-
-      if (sameLibraryConfigs.length > 0) {
-        const sortOrders = sameLibraryConfigs
-          .map((c: CollectionConfig) => c.sortOrderLibrary)
-          .filter((order): order is number => order !== undefined);
-        const maxSortOrder = Math.max(...sortOrders);
-        const exclamationCount = maxSortOrder - sortOrderLibrary + 2;
-        const exclamationPrefix = '!'.repeat(exclamationCount);
-        sortTitle = `${exclamationPrefix}${collectionName}`;
-      } else {
-        sortTitle = `!!${collectionName}`;
-      }
+      // Promoted: positional sortTitle (see buildPromotedSortTitle)
+      sortTitle = buildPromotedSortTitle(collectionName, sortOrderLibrary);
     } else {
       // Not promoted: Use natural title
       sortTitle = collectionName;
@@ -1396,34 +1372,11 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
 
           // Treat sortOrderLibrary > 0 as promoted even if isLibraryPromoted is undefined
           if (isLibraryPromoted !== false && sortOrderLibrary > 0) {
-            // Promoted: Calculate exclamation marks based on other promoted collections in same library
-            const { getSettings } = await import('@server/lib/settings');
-            const settings = getSettings();
-            const allConfigs = settings.plex.collectionConfigs || [];
-            const sameLibraryConfigs = allConfigs.filter(
-              (c: CollectionConfig) => {
-                const configLibraryId = Array.isArray(c.libraryId)
-                  ? c.libraryId[0]
-                  : c.libraryId;
-                return (
-                  configLibraryId === libraryKey &&
-                  c.sortOrderLibrary !== undefined &&
-                  c.isLibraryPromoted === true
-                );
-              }
+            // Promoted: positional sortTitle (see buildPromotedSortTitle)
+            sortTitle = buildPromotedSortTitle(
+              collectionName,
+              sortOrderLibrary
             );
-
-            if (sameLibraryConfigs.length > 0) {
-              const sortOrders = sameLibraryConfigs
-                .map((c: CollectionConfig) => c.sortOrderLibrary)
-                .filter((order): order is number => order !== undefined);
-              const maxSortOrder = Math.max(...sortOrders);
-              const exclamationCount = maxSortOrder - sortOrderLibrary + 2;
-              const exclamationPrefix = '!'.repeat(exclamationCount);
-              sortTitle = `${exclamationPrefix}${collectionName}`;
-            } else {
-              sortTitle = `!!${collectionName}`;
-            }
           } else {
             // Not promoted: Use natural title
             sortTitle = collectionName;
