@@ -1,4 +1,3 @@
-import TautulliAPI from '@server/api/tautulli';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -8,7 +7,11 @@ import type {
   MediaResultsResponse,
   MediaWatchDataResponse,
 } from '@server/interfaces/api/mediaInterfaces';
-import { getSettings } from '@server/lib/settings';
+import type { MediaWatchDataQuery } from '@server/lib/statistics';
+import {
+  getStatisticsProvider,
+  getStatisticsProviderDisplayName,
+} from '@server/lib/statistics';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -179,12 +182,12 @@ mediaRoutes.get<{ id: string }, MediaWatchDataResponse>(
   '/:id/watch_data',
   isAuthenticated(),
   async (req, res, next) => {
-    const settings = getSettings().tautulli;
+    const provider = getStatisticsProvider();
 
-    if (!settings.hostname || !settings.port || !settings.apiKey) {
+    if (!provider) {
       return next({
         status: 404,
-        message: 'Tautulli API not configured.',
+        message: `${getStatisticsProviderDisplayName()} API not configured.`,
       });
     }
 
@@ -197,69 +200,43 @@ mediaRoutes.get<{ id: string }, MediaWatchDataResponse>(
     }
 
     try {
-      const tautulli = new TautulliAPI(settings);
       const userRepository = getRepository(User);
 
       const response: MediaWatchDataResponse = {};
 
-      if (media.ratingKey) {
-        const watchStats = await tautulli.getMediaWatchStats(media.ratingKey);
-        const watchUsers = await tautulli.getMediaWatchUsers(media.ratingKey);
-
-        const users = await userRepository
-          .createQueryBuilder('user')
-          .where('user.plexId IN (:...plexIds)', {
-            plexIds: watchUsers.map((u) => u.user_id),
-          })
-          .getMany();
-
-        const playCount =
-          watchStats.find((i) => i.query_days == 0)?.total_plays ?? 0;
-
-        const playCount7Days =
-          watchStats.find((i) => i.query_days == 7)?.total_plays ?? 0;
-
-        const playCount30Days =
-          watchStats.find((i) => i.query_days == 30)?.total_plays ?? 0;
-
-        response.data = {
-          users: users,
-          playCount,
-          playCount7Days,
-          playCount30Days,
+      const fetchWatchData = async (ratingKey: string) => {
+        const query: MediaWatchDataQuery = {
+          ratingKey,
+          mediaType: media.mediaType === MediaType.MOVIE ? 'movie' : 'tv',
+          tmdbId: media.tmdbId,
+          tvdbId: media.tvdbId,
+          imdbId: media.imdbId,
         };
+        const watchData = await provider.getMediaWatchData(query);
+
+        const users = watchData.plexUserIds.length
+          ? await userRepository
+              .createQueryBuilder('user')
+              .where('user.plexId IN (:...plexIds)', {
+                plexIds: watchData.plexUserIds,
+              })
+              .getMany()
+          : [];
+
+        return {
+          users,
+          playCount: watchData.playCount,
+          playCount7Days: watchData.playCount7Days,
+          playCount30Days: watchData.playCount30Days,
+        };
+      };
+
+      if (media.ratingKey) {
+        response.data = await fetchWatchData(media.ratingKey);
       }
 
       if (media.ratingKey4k) {
-        const watchStats4k = await tautulli.getMediaWatchStats(
-          media.ratingKey4k
-        );
-        const watchUsers4k = await tautulli.getMediaWatchUsers(
-          media.ratingKey4k
-        );
-
-        const users = await userRepository
-          .createQueryBuilder('user')
-          .where('user.plexId IN (:...plexIds)', {
-            plexIds: watchUsers4k.map((u) => u.user_id),
-          })
-          .getMany();
-
-        const playCount =
-          watchStats4k.find((i) => i.query_days == 0)?.total_plays ?? 0;
-
-        const playCount7Days =
-          watchStats4k.find((i) => i.query_days == 7)?.total_plays ?? 0;
-
-        const playCount30Days =
-          watchStats4k.find((i) => i.query_days == 30)?.total_plays ?? 0;
-
-        response.data4k = {
-          users,
-          playCount,
-          playCount7Days,
-          playCount30Days,
-        };
+        response.data4k = await fetchWatchData(media.ratingKey4k);
       }
 
       return res.status(200).json(response);

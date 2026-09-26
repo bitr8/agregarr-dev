@@ -1,5 +1,4 @@
 import type PlexAPI from '@server/api/plexapi';
-import TautulliAPI from '@server/api/tautulli';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   extractTmdbIdFromGuids,
@@ -20,7 +19,13 @@ import type {
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
-import { getSettings } from '@server/lib/settings';
+import type { StatisticsProvider } from '@server/lib/statistics';
+import {
+  getStatisticsProvider,
+  getStatisticsProviderDisplayName,
+  getStatisticsProviderType,
+  isStatisticsProviderConfigured,
+} from '@server/lib/statistics';
 import logger from '@server/logger';
 
 interface TautulliCollectionItem extends CollectionItem {
@@ -30,11 +35,12 @@ interface TautulliCollectionItem extends CollectionItem {
 // TautulliSourceData interface is now imported from types.ts
 
 /**
- * New Tautulli Collection Sync implementation using the base class
+ * Watch-statistics collection sync ("Tautulli Statistics" in the UI).
  *
- * This implementation uses the shared foundation utilities and follows
- * the standardized pipeline while maintaining identical functionality
- * to the original TautulliCollectionSync class.
+ * The source type stays `tautulli` for backwards compatibility with saved
+ * configs, but the data now comes from whichever statistics provider is
+ * selected in settings (Tautulli or Tracearr) via the StatisticsProvider
+ * abstraction. Both return the same normalized "top content" rows.
  */
 export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
   constructor() {
@@ -42,19 +48,26 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
   }
 
   /**
-   * Validate that Tautulli is properly configured
+   * Validate that the selected statistics provider is properly configured
    */
   protected async validateConfiguration(): Promise<void> {
-    const settings = getSettings();
-    if (!settings.tautulli.apiKey || !settings.tautulli.hostname) {
+    if (!isStatisticsProviderConfigured()) {
       throw this.createSyncError(
         CollectionSyncErrorType.CONFIGURATION_ERROR,
-        'Tautulli not configured - missing API key or hostname'
+        `${getStatisticsProviderDisplayName()} not configured - missing API key or hostname`
       );
     }
 
     // Test connection by getting the client
-    await this.getTautulliClient();
+    this.getProvider();
+  }
+
+  /**
+   * Cached lists are provider-specific: switching between Tautulli and
+   * Tracearr must not serve the other backend's stale rows.
+   */
+  protected generateCacheKey(config: CollectionConfig): string {
+    return `${super.generateCacheKey(config)}:${getStatisticsProviderType()}`;
   }
 
   /**
@@ -157,7 +170,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used in mapSourceDataToItems via processConfiguration
     libraryCache?: LibraryItemsCache
   ): Promise<TautulliSourceData[]> {
-    const tautulli = await this.getTautulliClient();
+    const provider = this.getProvider();
     const timeRangeDays = this.getTimeRangeDays(config);
     const statType = this.getStatTypeFromSubtype(config);
     const collectionType = this.getCollectionTypeFromSubtype(config);
@@ -176,7 +189,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
       throw new Error('Media type is required for Tautulli collection sync');
     }
 
-    const tautulliStats = await tautulli.getContent(
+    const rows = await provider.getContent(
       mediaType,
       timeRangeDays,
       statType,
@@ -184,8 +197,15 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
       9999
     );
 
-    // Convert TautulliHomeStatRow[] to TautulliSourceData[] - the old code worked directly with the raw data
-    return tautulliStats as TautulliSourceData[];
+    logger.debug('Fetched statistics source data', {
+      label: 'Tautulli Collections',
+      provider: provider.type,
+      configName: config.name,
+      rows: rows.length,
+    });
+
+    // StatisticsContentRow is a structural subset of TautulliSourceData
+    return rows as TautulliSourceData[];
   }
 
   // GUID extraction uses shared utilities from CollectionUtilities:
@@ -326,6 +346,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
           totalPlays: item.total_plays || 0,
           type: mediaType,
           tmdbId: item.tmdb_id,
+          tvdbId: item.tvdb_id,
           year: item.year,
         };
       })
@@ -335,7 +356,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     const mappedItems: TautulliCollectionItem[] = [];
     for (const item of basicMappedItems) {
       let tmdbId = item.tmdbId;
-      let tvdbId: number | undefined;
+      let tvdbId: number | undefined = item.tvdbId;
 
       // If no TMDB ID and we have Plex client, try to get it from Plex metadata
       if (!tmdbId && plexClient && item.ratingKey) {
@@ -430,12 +451,18 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
   // Private helper methods
 
   /**
-   * Get Tautulli API client with current settings
+   * Get the selected statistics provider (Tautulli or Tracearr) with current settings
    */
-  private async getTautulliClient(): Promise<TautulliAPI> {
-    const settings = getSettings();
-    // Create fresh client with current settings
-    return new TautulliAPI(settings.tautulli);
+  private getProvider(): StatisticsProvider {
+    // Create fresh provider with current settings
+    const provider = getStatisticsProvider();
+    if (!provider) {
+      throw this.createSyncError(
+        CollectionSyncErrorType.CONFIGURATION_ERROR,
+        `${getStatisticsProviderDisplayName()} not configured - missing API key or hostname`
+      );
+    }
+    return provider;
   }
 
   private isValidTautulliConfig(config: CollectionConfig): boolean {
@@ -485,14 +512,14 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     let totalCreated = 0;
     let totalUpdated = 0;
 
-    const tautulli = await this.getTautulliClient();
+    const provider = this.getProvider();
     const timeRangeDays = this.getTimeRangeDays(config);
     const statType = this.getStatTypeFromSubtype(config);
     const collectionType = this.getCollectionTypeFromSubtype(config);
 
     // Process Movies
     try {
-      const movieSourceData = await tautulli.getContent(
+      const movieSourceData = await provider.getContent(
         'movie',
         timeRangeDays,
         statType,
@@ -565,7 +592,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
 
     // Process TV Shows
     try {
-      const tvSourceData = await tautulli.getContent(
+      const tvSourceData = await provider.getContent(
         'tv',
         timeRangeDays,
         statType,

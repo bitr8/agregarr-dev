@@ -4,6 +4,7 @@ import { getRankedAnime } from '@server/api/myanimelist';
 import PlexAPI from '@server/api/plexapi';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
+import TracearrAPI from '@server/api/tracearr';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -24,6 +25,7 @@ import { runHealthChecks } from '@server/lib/healthcheck';
 import type {
   JobId,
   MainSettings,
+  StatisticsProviderType,
   WatchlistSyncSettings,
 } from '@server/lib/settings';
 import { getSettings, normalizeCloudflareSolvers } from '@server/lib/settings';
@@ -611,6 +613,148 @@ settingsRoutes.post('/tautulli/test', async (req, res, next) => {
         ssl: req.body.useSsl,
         urlBase: req.body.urlBase,
       },
+    });
+
+    return next({
+      status,
+      message: `${message} (${connectionUrl})`,
+    });
+  }
+});
+
+// Statistics provider selection (Tautulli or Tracearr)
+settingsRoutes.get('/statistics', (_req, res) => {
+  const settings = getSettings();
+
+  res.status(200).json(settings.statistics);
+});
+
+settingsRoutes.post('/statistics', async (req, res, next) => {
+  const settings = getSettings();
+  const provider = req.body?.provider as StatisticsProviderType | undefined;
+
+  if (provider !== 'tautulli' && provider !== 'tracearr') {
+    return next({
+      status: 400,
+      message: 'provider must be "tautulli" or "tracearr"',
+    });
+  }
+
+  settings.statistics = { ...settings.statistics, provider };
+  settings.save();
+
+  logger.info('Statistics provider updated', {
+    label: 'Settings',
+    provider,
+  });
+
+  return res.status(200).json(settings.statistics);
+});
+
+settingsRoutes.get('/tracearr', (_req, res) => {
+  const settings = getSettings();
+
+  res.status(200).json(settings.tracearr);
+});
+
+settingsRoutes.post('/tracearr', async (req, res) => {
+  const settings = getSettings();
+
+  Object.assign(settings.tracearr, req.body);
+  settings.save();
+
+  return res.status(200).json(settings.tracearr);
+});
+
+settingsRoutes.post('/tracearr/test', async (req, res, next) => {
+  const startTime = Date.now();
+
+  logger.debug('Tracearr connection test requested', {
+    label: 'Tracearr Connection',
+    hostname: req.body.hostname,
+    port: req.body.port,
+    useSsl: req.body.useSsl,
+    urlBase: req.body.urlBase,
+  });
+
+  const connectionUrl = `${req.body.useSsl ? 'https' : 'http'}://${
+    req.body.hostname
+  }${req.body.port ? `:${req.body.port}` : ''}${req.body.urlBase || ''}`;
+
+  try {
+    const { hostname, port, apiKey, useSsl, urlBase } = req.body;
+
+    if (!hostname || !apiKey) {
+      return next({
+        status: 400,
+        message: 'Hostname and API key are required',
+      });
+    }
+
+    const client = new TracearrAPI({
+      hostname,
+      port: port ? Number(port) : undefined,
+      useSsl: useSsl || false,
+      urlBase: urlBase || '',
+      apiKey,
+    });
+    const health = await client.getHealth();
+
+    if (!health || health.status !== 'ok') {
+      throw new Error('Unable to connect to Tracearr');
+    }
+
+    logger.info('Tracearr connection test successful', {
+      label: 'Tracearr Connection',
+      version: health.version,
+      servers: health.servers.length,
+      responseTime: Date.now() - startTime,
+    });
+
+    return res.status(200).json({
+      success: true,
+      version: health.version,
+      servers: health.servers.map((server) => ({
+        id: server.id,
+        name: server.name,
+        type: server.type,
+        online: server.online,
+      })),
+    });
+  } catch (e) {
+    let status = 500;
+    let message = 'Unable to connect to Tracearr';
+
+    if (e.response) {
+      status = e.response.status;
+
+      if (status === 401 || status === 403) {
+        message =
+          'Invalid API key - Authentication failed (use a public API key starting with trr_pub_)';
+      } else if (status === 404) {
+        message = 'Tracearr API not found - Check URL base and port';
+      } else {
+        message = `Tracearr returned error: ${
+          e.response.statusText || 'Unknown error'
+        }`;
+      }
+    } else if (e.code === 'ECONNREFUSED') {
+      message = 'Connection refused - Check hostname and port';
+    } else if (e.code === 'ENOTFOUND') {
+      message = 'Host not found - Check hostname';
+    } else if (e.code === 'ETIMEDOUT') {
+      message = 'Connection timeout - Check network connectivity';
+    } else if (e.message) {
+      message = e.message;
+    }
+
+    logger.error('Tracearr connection test failed', {
+      label: 'Tracearr Connection',
+      error: e.message,
+      errorCode: e.code,
+      httpStatus: e.response?.status,
+      connectionUrl,
+      responseTime: Date.now() - startTime,
     });
 
     return next({

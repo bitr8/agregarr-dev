@@ -13,7 +13,9 @@ import type {
   PlexSettings,
   RadarrSettings,
   SonarrSettings,
+  StatisticsSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 import { Field } from 'formik';
@@ -65,7 +67,7 @@ const messages = defineMessages({
   sourceNumber: 'Source {number}',
   remove: 'Remove',
   overseerrRequests: 'Seerr Requests',
-  tautulliStatistics: 'Tautulli Statistics',
+  tautulliStatistics: 'Watch Statistics (Tautulli / Tracearr)',
   traktLists: 'Trakt Lists',
   letterboxdLists: 'Letterboxd Lists',
   tmdbLists: 'TMDB Lists',
@@ -418,6 +420,12 @@ const MultiSourceConfigSection = ({
   );
   const { data: tautulliSettings } = useSWR<TautulliSettings>(
     '/api/v1/settings/tautulli'
+  );
+  const { data: tracearrSettings } = useSWR<TracearrSettings>(
+    '/api/v1/settings/tracearr'
+  );
+  const { data: statisticsSettings } = useSWR<StatisticsSettings>(
+    '/api/v1/settings/statistics'
   );
   const { data: overseerrSettings } = useSWR<OverseerrSettings>(
     '/api/v1/settings/overseerr'
@@ -1117,6 +1125,8 @@ const MultiSourceConfigSection = ({
                       trakt: traktSettings,
                       mdblist: mdblistSettings,
                       tautulli: tautulliSettings,
+                      tracearr: tracearrSettings,
+                      statistics: statisticsSettings,
                       overseerr: overseerrSettings,
                       myanimelist: myanimelistSettings,
                       radarr: radarrSettings,

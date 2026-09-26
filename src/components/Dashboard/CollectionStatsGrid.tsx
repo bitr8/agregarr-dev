@@ -16,10 +16,10 @@ import useSWR from 'swr';
 const messages = defineMessages({
   collectionStatistics: 'Collection Statistics',
   noData: 'No collection data available',
-  tautulliRequired: 'Tautulli Setup Required',
+  tautulliRequired: 'Statistics Provider Setup Required',
   tautulliDescriptionCollections:
-    'Configure Tautulli in your settings to view detailed statistics about your collections, including play counts, watch time, and viewer activity.',
-  configureTautulli: 'Configure Tautulli',
+    'Configure Tautulli or Tracearr in your settings to view detailed statistics about your collections, including play counts, watch time, and viewer activity.',
+  configureTautulli: 'Configure Statistics Provider',
   plays: 'plays',
   hours: 'hours',
   items: 'items',
@@ -92,8 +92,10 @@ const CollectionStatsGrid: React.FC = () => {
   if (error) {
     // Check if it's a Tautulli configuration error
     const isTautulliError =
+      error.message.includes('Statistics provider not configured') ||
       error.message.includes('Tautulli not configured') ||
-      error.message.includes('Tautulli settings');
+      error.message.includes('Tautulli settings') ||
+      error.message.includes('Tracearr settings');
 
     if (isTautulliError) {
       return (
