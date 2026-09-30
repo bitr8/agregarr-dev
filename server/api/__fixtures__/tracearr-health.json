@@ -1,0 +1,21 @@
+{
+  "status": "ok",
+  "version": "v2.2.3",
+  "timestamp": "2026-09-16T16:10:26.731Z",
+  "servers": [
+    {
+      "id": "6ea86a86-355d-4cd7-affc-7026a2a3a787",
+      "name": "Luke's Media",
+      "type": "emby",
+      "online": true,
+      "activeStreams": 0
+    },
+    {
+      "id": "d0465c72-88ea-41a6-83d9-d0c33404646d",
+      "name": "Luke's Media",
+      "type": "plex",
+      "online": true,
+      "activeStreams": 1
+    }
+  ]
+}

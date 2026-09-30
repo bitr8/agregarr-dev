@@ -1,0 +1,33 @@
+{
+  "media_id": "9cec04ae-b067-479a-a6ec-21b87646ac6e",
+  "media_type": "show",
+  "window": "all_time",
+  "watchers": [
+    {
+      "user": {
+        "server_user_id": "c95ed99a-412f-4430-8565-56ef7979ef89",
+        "user_id": "7478113e-a193-489f-b9bd-67f36538929a",
+        "username": "moviefan",
+        "identity_name": "moviefan"
+      },
+      "plays": 23,
+      "watch_time_ms": 64987030,
+      "completion_pct": 99.9,
+      "last_watched_day": "2026-07-04",
+      "distinct_episodes_watched": 16
+    },
+    {
+      "user": {
+        "server_user_id": "0225e254-1c0d-4728-9a1c-512f5af332e9",
+        "user_id": "da8aea99-f40c-4c54-9e19-597e01c976ca",
+        "username": "binger",
+        "identity_name": null
+      },
+      "plays": 17,
+      "watch_time_ms": 45978102,
+      "completion_pct": 100,
+      "last_watched_day": "2026-09-16",
+      "distinct_episodes_watched": 16
+    }
+  ]
+}

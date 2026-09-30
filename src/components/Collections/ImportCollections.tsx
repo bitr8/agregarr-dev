@@ -125,7 +125,9 @@ const ImportCollections: React.FC<ImportCollectionsProps> = ({ trigger }) => {
     if (types.has('overseerr'))
       warnings.push('Requires Overseerr to be configured.');
     if (types.has('tautulli'))
-      warnings.push('Requires Tautulli to be configured.');
+      warnings.push(
+        'Requires a statistics provider (Tautulli or Tracearr) to be configured.'
+      );
     if (types.has('radarrtag'))
       warnings.push('Requires Radarr to be configured (tag-based).');
     if (types.has('sonarrtag'))

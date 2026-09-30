@@ -1,0 +1,40 @@
+{
+  "data": [
+    {
+      "id": "db9bad3e-b223-4f3b-a9be-182634e4b135",
+      "username": "plexviewer",
+      "email": null,
+      "plex_account_id": null,
+      "accounts": [
+        {
+          "server_id": "d0465c72-88ea-41a6-83d9-d0c33404646d",
+          "server_type": "plex",
+          "server_user_id": "f933968c-1dad-4c23-b919-dc1e6227e3c5",
+          "external_user_id": "307611349",
+          "username": "plexviewer",
+          "removed_at": null
+        }
+      ]
+    },
+    {
+      "id": "4ea259f1-261b-4ea1-9379-11b9db847ee1",
+      "username": "embyviewer",
+      "email": null,
+      "plex_account_id": null,
+      "accounts": [
+        {
+          "server_id": "6ea86a86-355d-4cd7-affc-7026a2a3a787",
+          "server_type": "emby",
+          "server_user_id": "864c7250-09ce-494f-b984-47440856afdc",
+          "external_user_id": "6d170cae2c7a44b58092f0fa5f7ef942",
+          "username": "embyviewer",
+          "removed_at": null
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "nextCursor": null,
+    "pageSize": 100
+  }
+}
