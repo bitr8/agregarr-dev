@@ -334,6 +334,7 @@ describe('getHealthStatus aggregation', () => {
     const { getCheckIds } = await import('@server/lib/healthcheck');
     const ids = getCheckIds();
     expect(ids).toContain('connection:plex');
+    expect(ids).toContain('plex-version');
     expect(ids).toContain('connection:sonarr');
     expect(ids).toContain('connection:radarr');
     expect(ids).toContain('connection:tmdb');
@@ -350,6 +351,6 @@ describe('getHealthStatus aggregation', () => {
     expect(ids).toContain('placeholder-root-volume');
     expect(ids).toContain('timezone-configuration');
     expect(ids).toContain('job-freshness');
-    expect(ids).toHaveLength(17);
+    expect(ids).toHaveLength(18);
   });
 });
