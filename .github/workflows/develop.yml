@@ -30,7 +30,7 @@ jobs:
   test:
     name: Lint, Typecheck & Test
     runs-on: ubuntu-22.04
-    container: node:20.19.5-alpine
+    container: node:22.23.4-alpine
     steps:
       # Without git, checkout falls back to a REST tarball, which honours
       # .gitattributes export-ignore and strips .prettierignore from the tree.
@@ -153,7 +153,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       # package.json stays 0.1.0 on develop so those builds self-identify as
       # develop-<sha>; the tag is the only source of a release version.
       - name: Set version from tag
