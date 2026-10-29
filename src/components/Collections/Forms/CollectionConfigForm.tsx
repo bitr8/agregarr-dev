@@ -54,9 +54,11 @@ import {
   getLibraryEssentialsLabel,
   isLibraryEssentialsPattern,
 } from '@app/utils/collections/collectionUtils';
+import type { SortTitleArticleMode } from '@app/utils/collections/sortTitle';
 import {
   agregarrOwnsSortTitle,
   buildPromotedSortTitle,
+  normalizeArticleForDisplay,
 } from '@app/utils/collections/sortTitle';
 
 const messages = defineMessages({
@@ -308,6 +310,7 @@ type SortTitleConfigLike = {
   titleSort?: string;
   sortOrderLibrary?: number;
   isLibraryPromoted?: boolean;
+  sortTitleArticleNormalized?: boolean;
   everLibraryPromoted?: boolean;
 };
 
@@ -340,11 +343,19 @@ function isMultiCollectionSortTitleField(
  * The sort title someone set in Plex, when it differs from what Agregarr
  * would write. Shown as a note under the field, not as its value.
  */
-function plexSetSortTitle(target: SortTitleConfigLike): string | undefined {
+function plexSetSortTitle(
+  target: SortTitleConfigLike,
+  articleMode?: SortTitleArticleMode
+): string | undefined {
   const stored = target.titleSort?.trim();
   if (!stored) return undefined;
   if (
-    agregarrOwnsSortTitle(stored, target.name || '', target.everLibraryPromoted)
+    agregarrOwnsSortTitle(
+      stored,
+      target.name || '',
+      target.sortTitleArticleNormalized,
+      target.everLibraryPromoted
+    )
   ) {
     return undefined;
   }
@@ -353,7 +364,7 @@ function plexSetSortTitle(target: SortTitleConfigLike): string | undefined {
   // back whenever Agregarr does not own it, so the two were always equal and
   // this note could never appear in the one case it exists for: an A-Z
   // collection someone had set by hand in Plex.
-  const sortKey = target.name || '';
+  const sortKey = normalizeArticleForDisplay(target.name || '', articleMode);
   const rank = target.sortOrderLibrary;
   const wouldWrite =
     target.isLibraryPromoted === true && rank !== undefined && rank > 0
@@ -368,10 +379,16 @@ function plexSetSortTitle(target: SortTitleConfigLike): string | undefined {
  * position, ignoring any override. Pre-fills the field and tells an
  * untouched default apart from a real override on save.
  */
-function computeAgregarrSortTitle(target: SortTitleConfigLike): string {
+function computeAgregarrSortTitle(
+  target: SortTitleConfigLike,
+  articleMode?: SortTitleArticleMode
+): string {
   const name = target.name || '';
   const sortOrderLibrary = target.sortOrderLibrary;
-  const sortKey = name;
+  // The same key the server sorts by. Without the article normalization the
+  // field claimed "The Crow" while Plex sorted the collection as "Crow" -
+  // the field has to state what the next sync will actually write.
+  const sortKey = normalizeArticleForDisplay(name, articleMode);
 
   // Shows the sort title the collection actually has, including one set by
   // hand in Plex once discovery has seen it - the field would otherwise
@@ -388,7 +405,12 @@ function computeAgregarrSortTitle(target: SortTitleConfigLike): string {
     const plexTitleSort = target.titleSort?.trim();
     if (
       plexTitleSort &&
-      !agregarrOwnsSortTitle(plexTitleSort, name, target.everLibraryPromoted)
+      !agregarrOwnsSortTitle(
+        plexTitleSort,
+        name,
+        target.sortTitleArticleNormalized,
+        target.everLibraryPromoted
+      )
     ) {
       return plexTitleSort;
     }
@@ -414,6 +436,11 @@ const CollectionFormConfigForm = ({
 
   // Get current user data which includes Plex Pass status
   const { data: currentUser } = useSWR('/api/v1/auth/me');
+  // Mirrors what the sync will write - see normalizeSortTitleArticle.
+  const { data: plexSortSettings } = useSWR<{
+    sortTitleArticleHandling?: SortTitleArticleMode;
+  }>('/api/v1/settings/plex');
+  const articleMode = plexSortSettings?.sortTitleArticleHandling;
 
   // Fetch overlay library configs to check if overlays are configured
   const { data: overlayConfigsResponse } = useSWR<{
@@ -1124,13 +1151,13 @@ const CollectionFormConfigForm = ({
   // pre-existing configs are computed identically — no peer list required.
   const agregarrSortTitle =
     isCollection || isPreExisting
-      ? computeAgregarrSortTitle(config as CollectionFormConfig)
+      ? computeAgregarrSortTitle(config as CollectionFormConfig, articleMode)
       : '';
 
   // Reported under the field, never inside it - see plexSetSortTitle.
   const plexEditedSortTitle =
     isCollection || isPreExisting
-      ? plexSetSortTitle(config as CollectionFormConfig)
+      ? plexSetSortTitle(config as CollectionFormConfig, articleMode)
       : undefined;
 
   // Sort Title follows the same availability as drag-and-drop: shown in the

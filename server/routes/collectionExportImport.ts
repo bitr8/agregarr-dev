@@ -177,6 +177,7 @@ const strippedFields = [
   'isActive',
   'everLibraryPromoted',
   'groupSortTitleOptIn',
+  'sortTitleArticleNormalized',
   'isPromotedToHub',
 ] as const satisfies readonly (keyof CollectionConfig)[];
 

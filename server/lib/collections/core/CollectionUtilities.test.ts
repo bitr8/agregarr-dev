@@ -1012,3 +1012,153 @@ describe('parseConfigIdFromLabel: target-user label', () => {
     expect(parseConfigIdFromLabel('Agregarrmdblist10')).toBe('10');
   });
 });
+
+describe('normalizeSortTitleArticle', () => {
+  it("leaves the title untouched under 'off'", async () => {
+    // The upgrade guarantee: 'off' is the default, so an install that never
+    // touches this setting must compute exactly the name develop already
+    // writes. Anything else re-sorts collections nobody asked to change.
+    const { normalizeSortTitleArticle } = await import('./CollectionUtilities');
+    expect(normalizeSortTitleArticle('The Accountant', 'off')).toBe(
+      'The Accountant'
+    );
+    expect(normalizeSortTitleArticle('... And Justice for All', 'off')).toBe(
+      '... And Justice for All'
+    );
+  });
+
+  it('strips a leading article', async () => {
+    const { normalizeSortTitleArticle } = await import('./CollectionUtilities');
+    expect(normalizeSortTitleArticle('The Accountant', 'strip')).toBe(
+      'Accountant'
+    );
+    expect(normalizeSortTitleArticle('An Education', 'strip')).toBe(
+      'Education'
+    );
+    expect(normalizeSortTitleArticle('A Few Good Men', 'strip')).toBe(
+      'Few Good Men'
+    );
+  });
+
+  it('moves a leading article to the end', async () => {
+    const { normalizeSortTitleArticle } = await import('./CollectionUtilities');
+    expect(normalizeSortTitleArticle('The Accountant', 'moveToEnd')).toBe(
+      'Accountant, The'
+    );
+  });
+
+  it('leaves a title with no leading article alone', async () => {
+    const { normalizeSortTitleArticle } = await import('./CollectionUtilities');
+    expect(normalizeSortTitleArticle('Theodore Rex', 'strip')).toBe(
+      'Theodore Rex'
+    );
+    expect(normalizeSortTitleArticle('Andor', 'strip')).toBe('Andor');
+  });
+
+  it('drops leading punctuation first, the way Plex does', async () => {
+    // "... And Justice for All" files under A rather than at the very top of
+    // the library - Plex drops the punctuation before looking for an article.
+    // "And" is also not the article "An": the pattern requires whitespace
+    // after it, so the word survives intact.
+    const { normalizeSortTitleArticle } = await import('./CollectionUtilities');
+    expect(normalizeSortTitleArticle('... And Justice for All', 'strip')).toBe(
+      'And Justice for All'
+    );
+  });
+
+  it('does not mistake a word starting with an article for one', async () => {
+    const { normalizeSortTitleArticle } = await import('./CollectionUtilities');
+    expect(normalizeSortTitleArticle('Anaconda', 'strip')).toBe('Anaconda');
+    expect(normalizeSortTitleArticle('Theatre of Blood', 'strip')).toBe(
+      'Theatre of Blood'
+    );
+  });
+
+  it('keeps a title that is nothing but punctuation', async () => {
+    const { normalizeSortTitleArticle } = await import('./CollectionUtilities');
+    expect(normalizeSortTitleArticle('...', 'strip')).toBe('...');
+  });
+});
+
+describe('isAgregarrOwnedSortTitle', () => {
+  it('owns an empty sort title', async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(isAgregarrOwnedSortTitle(undefined, 'The Crow')).toBe(true);
+    expect(isAgregarrOwnedSortTitle('  ', 'The Crow')).toBe(true);
+  });
+
+  it("owns a sort title that is just the collection's name", async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(isAgregarrOwnedSortTitle('The Crow', 'The Crow')).toBe(true);
+  });
+
+  it('owns a rank left behind by a demotion', async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(isAgregarrOwnedSortTitle('!003_The Crow', 'The Crow')).toBe(true);
+  });
+
+  it('owns a value matching article handling under any mode', async () => {
+    // Plex generates its own sort title by stripping the article, so "The
+    // Crow" arrives already sorting as "Crow" with nothing of Agregarr's
+    // involved. Read as a human's edit, 'moveToEnd' could never produce
+    // "Crow, The" and 'off' could never restore the original.
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(isAgregarrOwnedSortTitle('Crow', 'The Crow')).toBe(true);
+    expect(isAgregarrOwnedSortTitle('Crow, The', 'The Crow')).toBe(true);
+  });
+
+  it('leaves a sort title a human typed in Plex alone', async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow')).toBe(false);
+  });
+
+  it('owns it again once Agregarr has demonstrably written it before', async () => {
+    // everLibraryPromoted covers the case the value checks cannot see: a
+    // sort title written through an override that has since been cleared.
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(
+      isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow', undefined, true)
+    ).toBe(true);
+  });
+
+  it('owns a value it recorded normalizing', async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow', true)).toBe(true);
+  });
+});
+
+describe('isSortTitleResetRequest', () => {
+  it('is a reset when a filled field is emptied', async () => {
+    const { isSortTitleResetRequest } = await import('./CollectionUtilities');
+    expect(isSortTitleResetRequest('', 'ZZZ_Crow')).toBe(true);
+    expect(isSortTitleResetRequest('   ', 'ZZZ_Crow')).toBe(true);
+  });
+
+  it('is NOT a reset when the field was already empty', async () => {
+    // A collection that never had an override submits the same empty string
+    // on every save - treating that as a clear would hand the sort title back
+    // on a poster edit.
+    const { isSortTitleResetRequest } = await import('./CollectionUtilities');
+    expect(isSortTitleResetRequest('', undefined)).toBe(false);
+    expect(isSortTitleResetRequest('', '')).toBe(false);
+    expect(isSortTitleResetRequest('', '   ')).toBe(false);
+  });
+
+  it('is NOT a reset when the user typed a new value', async () => {
+    const { isSortTitleResetRequest } = await import('./CollectionUtilities');
+    expect(isSortTitleResetRequest('AAA', 'ZZZ_Crow')).toBe(false);
+    expect(isSortTitleResetRequest('AAA', undefined)).toBe(false);
+  });
+
+  it('is NOT a reset when the stored value is posted back unchanged', async () => {
+    // The form posts the stored override on every save.
+    const { isSortTitleResetRequest } = await import('./CollectionUtilities');
+    expect(isSortTitleResetRequest('ZZZ_Crow', 'ZZZ_Crow')).toBe(false);
+  });
+
+  it('ignores a non-string body value', async () => {
+    const { isSortTitleResetRequest } = await import('./CollectionUtilities');
+    expect(isSortTitleResetRequest(undefined, 'ZZZ_Crow')).toBe(false);
+    expect(isSortTitleResetRequest(null, 'ZZZ_Crow')).toBe(false);
+  });
+});

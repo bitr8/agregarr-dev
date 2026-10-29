@@ -236,6 +236,7 @@ settingsRoutes.post('/plex', async (req, res, next) => {
     'useSsl',
     'webAppUrl',
     'autoEmptyTrash',
+    'sortTitleArticleHandling',
   ]);
 
   logger.debug('Plex settings update requested', {

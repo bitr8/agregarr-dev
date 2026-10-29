@@ -3,6 +3,8 @@ import {
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
   extractErrorMessage,
+  isAgregarrOwnedSortTitle,
+  normalizeSortTitleArticle,
 } from '@server/lib/collections/core/CollectionUtilities';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
@@ -1727,9 +1729,28 @@ export class HubSyncService {
           continue;
         }
 
-        // Only update sortTitle if everLibraryPromoted is not explicitly false
-        if (config.everLibraryPromoted === false) {
-          // If everLibraryPromoted is explicitly false: DO NOT touch sortTitle at all
+        // Only fully skip when the collection has never been promoted AND
+        // leading-article normalization is disabled - a collection
+        // Agregarr has never promoted/demoted still gets article
+        // normalization applied when that setting is enabled, since it's
+        // a lightweight cosmetic sort fix, not a claim of ownership over
+        // the collection's position the way positional (promoted)
+        // sortTitle is, which stays gated behind promotion history below.
+        const articleHandlingEnabled =
+          !!settings.plex.sortTitleArticleHandling &&
+          settings.plex.sortTitleArticleHandling !== 'off';
+        // Switching to 'off' has to actively restore the natural title on
+        // anything previously normalized - otherwise "off" just stops
+        // touching them, stranding whatever the last enabled mode wrote
+        // (e.g. leaving "Fast and the Furious, The" in place forever).
+        const needsArticleReset = config.sortTitleArticleNormalized === true;
+        if (
+          !config.sortTitleResetRequested &&
+          config.everLibraryPromoted === false &&
+          !config.isLibraryPromoted &&
+          !articleHandlingEnabled &&
+          !needsArticleReset
+        ) {
           continue;
         }
 
@@ -1742,11 +1763,42 @@ export class HubSyncService {
             config.name,
             config.sortOrderLibrary
           );
+        } else if (
+          // A reset is the user asking for exactly this: take the sort title
+          // back. Without the bypass the ownership check refuses, because the
+          // value in Plex is precisely the hand-set one they want gone.
+          !config.sortTitleResetRequested &&
+          !isAgregarrOwnedSortTitle(
+            config.titleSort,
+            config.name,
+            config.sortTitleArticleNormalized,
+            config.everLibraryPromoted
+          )
+        ) {
+          // A sort title the user set in Plex outranks article handling:
+          // normalization is the rule for collections without a deliberate
+          // one, not a licence to replace one that exists. Leave Plex's
+          // value exactly as it is - discovery keeps the stored copy current
+          // (see DiscoveryService), so it is picked up rather than owned.
+          continue;
         } else {
-          // Demoted: Reset to natural title and mark as cleaned
-          sortTitle = config.name;
-          // After reset, set everLibraryPromoted back to false
-          updateConfig.everLibraryPromoted = false;
+          // A-Z: reset/normalize to the natural title (normalized per the
+          // configured leading-article handling - see
+          // normalizeSortTitleArticle). Applies even to collections
+          // Agregarr has never promoted/demoted before, as long as
+          // article handling is actually enabled (checked above).
+          sortTitle = normalizeSortTitleArticle(
+            config.name,
+            settings.plex.sortTitleArticleHandling
+          );
+          const isNormalized = sortTitle !== config.name;
+          if (isNormalized !== (config.sortTitleArticleNormalized === true)) {
+            updateConfig.sortTitleArticleNormalized = isNormalized;
+          }
+          if (config.everLibraryPromoted !== false) {
+            // Was previously promoted at some point - mark cleaned
+            updateConfig.everLibraryPromoted = false;
+          }
         }
 
         try {
@@ -1777,7 +1829,16 @@ export class HubSyncService {
             updateConfig.titleSort = sortTitle;
           }
 
-          // Persist whatever changed.
+          // A reset is one-shot: consumed here, or it would keep
+          // overriding the ownership check on every future sync and the
+          // collection could never hold a hand-set Plex value again.
+          if (config.sortTitleResetRequested) {
+            updateConfig.sortTitleResetRequested = false;
+          }
+
+          // Persist whatever changed - everLibraryPromoted being reset,
+          // the article-normalization marker flipping, the reset flag being
+          // consumed, or any combination.
           if (Object.keys(updateConfig).length > 0) {
             this.updatePreExistingConfigField(config.id, updateConfig);
           }

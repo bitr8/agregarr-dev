@@ -52,6 +52,13 @@ const messages = defineMessages({
   autoEmptyTrash: 'Auto Empty Trash',
   autoEmptyTrashTip:
     'Automatically empty Plex library trash after placeholder cleanup to remove ghost entries',
+  sortTitleArticleHandling: 'Collection Sort Format',
+  sortTitleArticleHandlingTip:
+    'How a leading "The", "A" or "An" is handled when sorting collections. Strip and Move to End change only the sort title, never the collection name. Move to End groups titles by article, at the cost of sequence order within a series ("Matrix Reloaded, The" files ahead of "Matrix, The"). Collection naming conflicts may occur with other tools that control collection sorting, such as Kometa - set both to the same scheme, or disable one, to avoid conflicts.',
+  sortTitleArticleHandlingStrip: 'Strip (e.g. "The Accountant" → "Accountant")',
+  sortTitleArticleHandlingMoveToEnd:
+    'Move to End (e.g. "The Accountant" → "Accountant, The")',
+  sortTitleArticleHandlingOff: 'Off (sort exactly as typed)',
 });
 
 interface Library {
@@ -240,6 +247,10 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
           selectedPreset: undefined,
           webAppUrl: data?.webAppUrl,
           autoEmptyTrash: data?.autoEmptyTrash !== false,
+          // Default 'off': this runs on every existing install at upgrade,
+          // and anything else would silently rewrite sort titles nobody asked
+          // to change. Opt in, never opt out.
+          sortTitleArticleHandling: data?.sortTitleArticleHandling ?? 'off',
         }}
         validationSchema={PlexSettingsSchema}
         onSubmit={async (values) => {
@@ -261,6 +272,7 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
               useSsl: values.useSsl,
               webAppUrl: values.webAppUrl,
               autoEmptyTrash: values.autoEmptyTrash,
+              sortTitleArticleHandling: values.sortTitleArticleHandling,
             } as PlexSettings);
 
             syncLibraries();
@@ -488,6 +500,42 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
                       setFieldValue('autoEmptyTrash', !values.autoEmptyTrash);
                     }}
                   />
+                </div>
+              </div>
+              <div className="form-row">
+                <label
+                  htmlFor="sortTitleArticleHandling"
+                  className="text-label"
+                >
+                  {intl.formatMessage(messages.sortTitleArticleHandling)}
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.sortTitleArticleHandlingTip)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <div className="form-input-field">
+                    <Field
+                      as="select"
+                      id="sortTitleArticleHandling"
+                      name="sortTitleArticleHandling"
+                    >
+                      <option value="strip">
+                        {intl.formatMessage(
+                          messages.sortTitleArticleHandlingStrip
+                        )}
+                      </option>
+                      <option value="moveToEnd">
+                        {intl.formatMessage(
+                          messages.sortTitleArticleHandlingMoveToEnd
+                        )}
+                      </option>
+                      <option value="off">
+                        {intl.formatMessage(
+                          messages.sortTitleArticleHandlingOff
+                        )}
+                      </option>
+                    </Field>
+                  </div>
                 </div>
               </div>
               <div className="actions">
