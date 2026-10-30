@@ -65,6 +65,7 @@ jobs:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !startsWith(github.ref, 'refs/tags/')
     needs: test
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
     steps:
       - name: Skip if superseded
         id: skip
@@ -130,6 +131,7 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: test
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       matrix:
         include:
