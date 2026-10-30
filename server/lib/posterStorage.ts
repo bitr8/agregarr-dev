@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import {
   generatePosterBuffer,
   type PosterGenerationConfig,
@@ -261,7 +261,7 @@ export async function savePosterFile(
     counter++;
   }
 
-  let image: sharp.Sharp | null = null;
+  let image: Sharp | null = null;
   try {
     // Security: Validate the image buffer with Sharp (this also prevents malicious files)
     image = sharp(fileBuffer);
@@ -524,7 +524,9 @@ export async function downloadAndSavePoster(
     });
 
     // Get content type
-    const contentType = response.headers['content-type'] || 'image/jpeg';
+    const contentType = String(
+      response.headers['content-type'] || 'image/jpeg'
+    );
 
     // Validate content type
     if (!ALLOWED_MIME_TYPES.includes(contentType)) {

@@ -26,7 +26,7 @@ import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 import * as fsPromises from 'fs/promises';
 import path from 'path';
-import type sharp from 'sharp';
+import type { OverlayOptions } from 'sharp';
 
 const router = Router();
 
@@ -983,7 +983,7 @@ router.post('/combined-preview', async (req, res, next) => {
     // Batch render: collect all overlay elements, then composite once
     const { width: posterWidth, height: posterHeight } =
       await overlayTemplateRenderer.getPosterDimensions(posterBuffer);
-    const allOverlays: sharp.OverlayOptions[] = [];
+    const allOverlays: OverlayOptions[] = [];
 
     for (const template of orderedTemplates) {
       // Check before each expensive rendering operation
