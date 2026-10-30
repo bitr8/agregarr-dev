@@ -2,7 +2,7 @@ import logger from '@server/logger';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 
 const WALLPAPER_STORAGE_DIR = path.join(process.cwd(), 'config', 'wallpapers');
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -87,7 +87,7 @@ export async function saveWallpaperFile(
   const filename = `${randomUUID()}.${fileExtension}`;
   const filePath = path.join(WALLPAPER_STORAGE_DIR, filename);
 
-  let image: sharp.Sharp | null = null;
+  let image: Sharp | null = null;
   try {
     // Security: Validate the image buffer with Sharp (this also prevents malicious files)
     image = sharp(fileBuffer);

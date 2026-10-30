@@ -12,7 +12,7 @@ vi.mock('./youtubeCookies', () => ({
   youtubeCookiesPath: () => '/cfg/youtube-cookies.txt',
 }));
 
-import { downloadWithYtDlp } from './trailerDownload';
+import { downloadWithYtDlp, searchYouTube } from './trailerDownload';
 
 function fakeProcess() {
   const proc = new EventEmitter() as EventEmitter & {
@@ -44,5 +44,46 @@ describe('downloadWithYtDlp cookies', () => {
     expect(args[args.indexOf('--cookies') + 1]).toBe(
       '/cfg/youtube-cookies.txt'
     );
+  });
+});
+
+describe('searchYouTube', () => {
+  beforeEach(() => spawnMock.mockReset());
+
+  it('parses id/title lines and passes cookies to the search', async () => {
+    stateMock.mockReturnValue('valid');
+    spawnMock.mockImplementation(() => {
+      const proc = fakeProcess();
+      process.nextTick(() =>
+        proc.stdout.emit(
+          'data',
+          Buffer.from('abc123\tDune\tTrailer\nxyz\tTwo\n')
+        )
+      );
+      return proc;
+    });
+    const results = await searchYouTube('Dune 2021 official trailer', 10);
+    expect(results).toEqual([
+      { videoId: 'abc123', title: 'Dune\tTrailer' },
+      { videoId: 'xyz', title: 'Two' },
+    ]);
+    const args = spawnMock.mock.calls[0][1] as string[];
+    expect(args).toContain('--cookies');
+    expect(args[args.length - 1]).toBe('ytsearch10:Dune 2021 official trailer');
+  });
+
+  it('rejects on a non-zero exit so the caller falls back', async () => {
+    stateMock.mockReturnValue('missing');
+    spawnMock.mockImplementation(() => {
+      const proc = new EventEmitter() as EventEmitter & {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+      };
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      setImmediate(() => proc.emit('close', 1));
+      return proc;
+    });
+    await expect(searchYouTube('x', 10)).rejects.toThrow('code 1');
   });
 });
