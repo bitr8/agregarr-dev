@@ -4,71 +4,13 @@ import {
   downloadAndSavePoster,
   generatePoster,
   getPosterUrl,
-  savePosterFile,
 } from '@server/lib/posterStorage';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
-import { posterUpload, rateLimiter } from './collections';
+import { rateLimiter } from './collections';
 
 const collectionPostersRoutes = Router();
-
-/**
- * Upload a poster image for collections
- * POST /api/v1/collections/poster
- */
-collectionPostersRoutes.post(
-  '/poster',
-  isAuthenticated(),
-  (req, res, next) => {
-    posterUpload(req, res, (err) => {
-      if (err) {
-        logger.error('Poster upload error:', err);
-
-        // Handle specific multer errors
-        if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({
-            error: 'File too large. Maximum size is 10MB.',
-          });
-        } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-          return res.status(400).json({
-            error: 'Unexpected field name. Use "poster" as the field name.',
-          });
-        } else {
-          return res.status(400).json({
-            error: err.message || 'File upload failed',
-          });
-        }
-      }
-      next();
-    });
-  },
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
-      // Save the poster file
-      const filename = await savePosterFile(
-        req.file.buffer,
-        req.file.mimetype,
-        req.file.originalname
-      );
-
-      return res.status(200).json({
-        filename,
-        url: getPosterUrl(filename),
-      });
-    } catch (error) {
-      logger.error('Error processing poster upload:', error);
-      return res.status(400).json({
-        error:
-          error instanceof Error ? error.message : 'Failed to process poster',
-      });
-    }
-  }
-);
 
 /**
  * Generate a poster for a collection

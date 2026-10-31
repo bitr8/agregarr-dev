@@ -21,7 +21,6 @@ import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
-import multer from 'multer';
 
 // Plex label can be either a string or an object with a tag property
 type PlexLabel = string | { tag: string };
@@ -194,39 +193,6 @@ export function validateExternalUrl(
 }
 
 const collectionsRoutes = Router();
-
-// Configure multer for poster uploads
-export const posterUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-    files: 1, // Only allow one file
-  },
-  fileFilter: (req, file, callback) => {
-    // Allow specific mime types
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
-
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      return callback(
-        new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.')
-      );
-    }
-
-    // Check file extension matches mime type
-    const fileExt = file.originalname?.toLowerCase().split('.').pop();
-    const expectedExts: Record<string, string[]> = {
-      'image/jpeg': ['jpg', 'jpeg'],
-      'image/png': ['png'],
-      'image/webp': ['webp'],
-    };
-
-    if (fileExt && !expectedExts[file.mimetype]?.includes(fileExt)) {
-      return callback(new Error('File extension does not match file type.'));
-    }
-
-    callback(null, true);
-  },
-}).single('poster');
 
 /**
  * GET /api/v1/collections

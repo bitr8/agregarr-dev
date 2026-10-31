@@ -7852,45 +7852,6 @@ paths:
           description: Too many requests - rate limited
         '500':
           description: Internal server error while detecting media type
-  /collections/poster:
-    post:
-      summary: Upload a poster image for collections
-      description: Uploads a custom poster image that can be used for collections. Supports JPEG, PNG, and WebP formats.
-      tags:
-        - collections-posters
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                poster:
-                  type: string
-                  format: binary
-                  description: The poster image file
-              required:
-                - poster
-      responses:
-        '200':
-          description: Poster uploaded successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  filename:
-                    type: string
-                    example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
-                  url:
-                    type: string
-                    example: '/api/v1/collections/poster/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
-        '400':
-          description: Bad request - invalid file or upload error
-        '403':
-          description: Authentication required
-        '500':
-          description: Internal server error
   /collections/generate-poster:
     post:
       summary: Generate a poster for a collection
