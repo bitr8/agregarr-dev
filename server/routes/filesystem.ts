@@ -1,4 +1,5 @@
 import logger from '@server/logger';
+import { fileRouteLimiter } from '@server/middleware/rateLimit';
 import { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
@@ -17,7 +18,7 @@ interface DirectoryEntry {
  * Query params:
  *   - path: Directory path to browse (optional, defaults to /)
  */
-filesystemRoutes.get('/browse', async (req, res) => {
+filesystemRoutes.get('/browse', fileRouteLimiter, async (req, res) => {
   try {
     const requestedPath = (req.query.path as string) || '/';
 

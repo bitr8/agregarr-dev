@@ -23,6 +23,7 @@ import {
 } from '@server/lib/sourceColors';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { fileRouteLimiter } from '@server/middleware/rateLimit';
 import { isContainedPath } from '@server/utils/fileSystemHelpers';
 import { Router } from 'express';
 import fs from 'fs';
@@ -1104,152 +1105,160 @@ router.get('/icons/:type/:filename', async (req, res, next) => {
 });
 
 // GET /api/v1/posters/templates/:id/export - Export template as ZIP with assets
-router.get('/templates/:id/export', async (req, res, next) => {
-  try {
-    const templateId = parseInt(req.params.id);
+router.get(
+  '/templates/:id/export',
+  fileRouteLimiter,
+  async (req, res, next) => {
+    try {
+      const templateId = parseInt(req.params.id);
 
-    if (isNaN(templateId)) {
-      return res.status(400).json({
-        error: 'Invalid template ID',
-      });
-    }
-
-    const templateRepository = getRepository(PosterTemplate);
-    const template = await templateRepository.findOne({
-      where: { id: templateId, isActive: true },
-    });
-
-    if (!template) {
-      return res.status(404).json({
-        error: 'Template not found',
-      });
-    }
-
-    const templateData = template.getTemplateData();
-
-    // Collect all asset paths that need to be included
-    const assetPaths = new Set<string>();
-
-    // Check unified elements for custom assets
-    templateData.elements?.forEach((element) => {
-      if (element.type === 'svg') {
-        const svgProps = element.properties as { iconPath?: string };
-        if (svgProps.iconPath) {
-          assetPaths.add(svgProps.iconPath);
-        }
-      } else if (element.type === 'raster') {
-        const rasterProps = element.properties as { imagePath?: string };
-        if (rasterProps.imagePath) {
-          assetPaths.add(rasterProps.imagePath);
-        }
+      if (isNaN(templateId)) {
+        return res.status(400).json({
+          error: 'Invalid template ID',
+        });
       }
-    });
 
-    const archiver = (await import('archiver')).default;
-    const archive = archiver('zip', {
-      zlib: { level: 9 }, // Maximum compression
-    });
+      const templateRepository = getRepository(PosterTemplate);
+      const template = await templateRepository.findOne({
+        where: { id: templateId, isActive: true },
+      });
 
-    // Set headers for ZIP download
-    const filename = `${template.name.replace(
-      /[^a-zA-Z0-9]/g,
-      '_'
-    )}_template.zip`;
-    res.set({
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    });
-
-    // Handle archiver events
-    archive.on('error', (err) => {
-      logger.error('Archive error:', err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Failed to create archive' });
+      if (!template) {
+        return res.status(404).json({
+          error: 'Template not found',
+        });
       }
-    });
 
-    // Pipe archive to response
-    archive.pipe(res);
+      const templateData = template.getTemplateData();
 
-    // Add template JSON to the archive
-    const exportData = {
-      name: template.name,
-      description: template.description,
-      templateData: templateData,
-      exportedAt: new Date().toISOString(),
-      version: '2.0', // Increment version for zip format
-    };
+      // Collect all asset paths that need to be included
+      const assetPaths = new Set<string>();
 
-    archive.append(JSON.stringify(exportData, null, 2), {
-      name: 'template.json',
-    });
-
-    // Add asset files to the archive
-    for (const assetPath of assetPaths) {
-      try {
-        // Check if this is an icon URL path (format: /api/v1/posters/icons/{type}/{filename})
-        const iconUrlMatch = assetPath.match(
-          /\/api\/v1\/posters\/icons\/(\w+)\/(.+)/
-        );
-
-        if (iconUrlMatch) {
-          const [, iconType, filename] = iconUrlMatch;
-
-          if (iconType === 'user') {
-            const iconsRoot = path.join(process.cwd(), 'config', 'icons');
-            const iconFilePath = path.join(iconsRoot, filename);
-            if (
-              isContainedPath(iconFilePath, iconsRoot) &&
-              fs.existsSync(iconFilePath)
-            ) {
-              archive.file(iconFilePath, {
-                name: `assets/icons/${path.basename(filename)}`,
-              });
-              logger.debug(`Added user icon to archive: ${filename}`);
-            }
+      // Check unified elements for custom assets
+      templateData.elements?.forEach((element) => {
+        if (element.type === 'svg') {
+          const svgProps = element.properties as { iconPath?: string };
+          if (svgProps.iconPath) {
+            assetPaths.add(svgProps.iconPath);
           }
-        } else {
-          const allowedDirs = [
-            path.join(process.cwd(), 'config', 'uploads'),
-            path.join(process.cwd(), 'config', 'posters'),
-          ];
-          const possiblePaths = allowedDirs.map((dir) =>
-            path.join(dir, assetPath)
+        } else if (element.type === 'raster') {
+          const rasterProps = element.properties as { imagePath?: string };
+          if (rasterProps.imagePath) {
+            assetPaths.add(rasterProps.imagePath);
+          }
+        }
+      });
+
+      const archiver = (await import('archiver')).default;
+      const archive = archiver('zip', {
+        zlib: { level: 9 }, // Maximum compression
+      });
+
+      // Set headers for ZIP download
+      const filename = `${template.name.replace(
+        /[^a-zA-Z0-9]/g,
+        '_'
+      )}_template.zip`;
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      });
+
+      // Handle archiver events
+      archive.on('error', (err) => {
+        logger.error('Archive error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to create archive' });
+        }
+      });
+
+      // Pipe archive to response
+      archive.pipe(res);
+
+      // Add template JSON to the archive
+      const exportData = {
+        name: template.name,
+        description: template.description,
+        templateData: templateData,
+        exportedAt: new Date().toISOString(),
+        version: '2.0', // Increment version for zip format
+      };
+
+      archive.append(JSON.stringify(exportData, null, 2), {
+        name: 'template.json',
+      });
+
+      // Add asset files to the archive
+      for (const assetPath of assetPaths) {
+        try {
+          // Check if this is an icon URL path (format: /api/v1/posters/icons/{type}/{filename})
+          const iconUrlMatch = assetPath.match(
+            /\/api\/v1\/posters\/icons\/(\w+)\/(.+)/
           );
 
-          for (const possiblePath of possiblePaths) {
-            const resolvedPath = path.resolve(possiblePath);
-            if (!allowedDirs.some((dir) => isContainedPath(resolvedPath, dir)))
-              continue;
-            if (fs.existsSync(resolvedPath)) {
-              const relativeName = `assets/images/${path.basename(assetPath)}`;
-              archive.file(resolvedPath, { name: relativeName });
-              logger.debug(`Added raster image to archive: ${relativeName}`);
-              break;
+          if (iconUrlMatch) {
+            const [, iconType, filename] = iconUrlMatch;
+
+            if (iconType === 'user') {
+              const iconsRoot = path.join(process.cwd(), 'config', 'icons');
+              const iconFilePath = path.join(iconsRoot, filename);
+              if (
+                isContainedPath(iconFilePath, iconsRoot) &&
+                fs.existsSync(iconFilePath)
+              ) {
+                archive.file(iconFilePath, {
+                  name: `assets/icons/${path.basename(filename)}`,
+                });
+                logger.debug(`Added user icon to archive: ${filename}`);
+              }
+            }
+          } else {
+            const allowedDirs = [
+              path.join(process.cwd(), 'config', 'uploads'),
+              path.join(process.cwd(), 'config', 'posters'),
+            ];
+            const possiblePaths = allowedDirs.map((dir) =>
+              path.join(dir, assetPath)
+            );
+
+            for (const possiblePath of possiblePaths) {
+              const resolvedPath = path.resolve(possiblePath);
+              if (
+                !allowedDirs.some((dir) => isContainedPath(resolvedPath, dir))
+              )
+                continue;
+              if (fs.existsSync(resolvedPath)) {
+                const relativeName = `assets/images/${path.basename(
+                  assetPath
+                )}`;
+                archive.file(resolvedPath, { name: relativeName });
+                logger.debug(`Added raster image to archive: ${relativeName}`);
+                break;
+              }
             }
           }
+        } catch (error) {
+          logger.warn(`Failed to add asset to archive: ${assetPath}`, error);
         }
-      } catch (error) {
-        logger.warn(`Failed to add asset to archive: ${assetPath}`, error);
       }
+
+      // Finalize the archive
+      archive.finalize();
+
+      logger.info('Exported template as ZIP with assets', {
+        templateId: template.id,
+        name: template.name,
+        assetCount: assetPaths.size,
+      });
+    } catch (error) {
+      logger.error('Failed to export template:', error);
+      return next({
+        status: 500,
+        message: 'Failed to export template',
+      });
     }
-
-    // Finalize the archive
-    archive.finalize();
-
-    logger.info('Exported template as ZIP with assets', {
-      templateId: template.id,
-      name: template.name,
-      assetCount: assetPaths.size,
-    });
-  } catch (error) {
-    logger.error('Failed to export template:', error);
-    return next({
-      status: 500,
-      message: 'Failed to export template',
-    });
   }
-});
+);
 
 // Note: Template import functionality has been moved to /template-import endpoint
 // (direct server route) due to middleware conflicts with multer file uploads

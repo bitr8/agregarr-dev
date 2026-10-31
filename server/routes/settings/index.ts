@@ -7,6 +7,7 @@ import TautulliAPI from '@server/api/tautulli';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import { fileRouteLimiter } from '@server/middleware/rateLimit';
 // MediaRequest entity removed - not needed for Agregarr
 import { User } from '@server/entity/User';
 import type { PlexConnection } from '@server/interfaces/api/plexInterfaces';
@@ -1628,7 +1629,7 @@ settingsRoutes.post('/watchlistsync', (req, res) => {
   return res.status(200).json(settings.watchlistSync);
 });
 
-settingsRoutes.post('/export-debug', (req, res, next) => {
+settingsRoutes.post('/export-debug', fileRouteLimiter, (req, res, next) => {
   try {
     const { includeDatabase, includeSettings, includeLogs } = req.body;
     const configPath = appDataPath();
