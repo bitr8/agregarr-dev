@@ -405,6 +405,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -414,7 +415,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -443,6 +443,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -452,7 +453,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -461,6 +461,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -470,7 +471,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -1162,6 +1162,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -1171,7 +1172,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -1200,6 +1200,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -1209,7 +1210,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -1218,6 +1218,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -1227,7 +1228,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -2064,6 +2064,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -2073,7 +2074,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -2102,6 +2102,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -2111,7 +2112,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -2120,6 +2120,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -2129,7 +2130,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -3512,6 +3512,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -3521,7 +3522,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -3530,6 +3530,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -3539,7 +3540,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -3726,6 +3726,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -3735,7 +3736,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -3769,6 +3769,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -3778,7 +3779,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -3787,6 +3787,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -3796,7 +3797,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
