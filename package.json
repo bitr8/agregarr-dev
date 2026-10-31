@@ -245,5 +245,6 @@
       "latest"
     ],
     "npmPublish": false
-  }
+  },
+  "packageManager": "yarn@1.22.22"
 }
