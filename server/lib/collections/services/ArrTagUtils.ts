@@ -60,13 +60,14 @@ function resolveTagMode(
   return legacyEnabled ? 'granular' : 'off';
 }
 
-function slugifyTagSegment(segment?: string): string {
+export function slugifyTagSegment(segment?: string): string {
   if (!segment) {
     return '';
   }
 
   return segment
     .toString()
+    .slice(0, 200)
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
