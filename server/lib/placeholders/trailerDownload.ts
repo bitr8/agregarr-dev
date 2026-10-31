@@ -255,7 +255,13 @@ export async function downloadWithYtDlp(
           });
         }
 
-        reject(new Error(`yt-dlp exited with code ${code}: ${stderrOutput}`));
+        reject(
+          new Error(
+            `yt-dlp exited with code ${code}: ${
+              isDurationFilterRejection ? stdoutOutput : stderrOutput
+            }`
+          )
+        );
       }
     });
 

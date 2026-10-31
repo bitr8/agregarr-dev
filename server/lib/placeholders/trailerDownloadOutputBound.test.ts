@@ -8,7 +8,7 @@ vi.mock('./youtubeCookies', () => ({
   youtubeCookiesPath: () => '/cfg/youtube-cookies.txt',
 }));
 
-import { searchYouTube } from './trailerDownload';
+import { downloadWithYtDlp, searchYouTube } from './trailerDownload';
 
 // Real child processes: a stand-in yt-dlp that behaves, and one that floods stdout.
 const dir = mkdtempSync(path.join(tmpdir(), 'ytdlp-bound-'));
@@ -21,10 +21,15 @@ const script = (name: string, body: string): string => {
 
 let polite: string;
 let flood: string;
+let tooLong: string;
 
 beforeAll(() => {
   polite = script('polite', 'printf "abc\\tOne\\nxyz\\tTwo\\n"');
   flood = script('flood', 'head -c 1048576 /dev/zero | tr "\\0" x');
+  tooLong = script(
+    'toolong',
+    'echo "[download] Some Trailer does not pass filter (duration < 210)"; echo noise >&2; exit 101'
+  );
 });
 
 afterAll(() => {
@@ -44,5 +49,14 @@ describe('searchYouTube output bound (real processes)', () => {
   it('kills a binary that floods stdout past the limit', async () => {
     process.env.YT_DLP_PATH = flood;
     await expect(searchYouTube('x', 2)).rejects.toThrow(/maxBuffer/);
+  });
+});
+
+describe('downloadWithYtDlp duration filter rejection', () => {
+  it('reports exit 101 together with the filter message', async () => {
+    process.env.YT_DLP_PATH = tooLong;
+    await expect(
+      downloadWithYtDlp('https://x', path.join(dir, 'out.mp4'), 210)
+    ).rejects.toThrow(/code 101.*does not pass filter/s);
   });
 });
