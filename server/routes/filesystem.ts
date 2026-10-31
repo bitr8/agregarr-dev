@@ -12,6 +12,11 @@ interface DirectoryEntry {
   isDirectory: boolean;
 }
 
+const DENIED_ROOTS = ['/proc', '/sys', '/dev', '/app/node_modules'];
+
+export const isDeniedBrowsePath = (p: string): boolean =>
+  DENIED_ROOTS.some((root) => p === root || p.startsWith(`${root}/`));
+
 /**
  * GET /api/v1/filesystem/browse
  * Browse directories on the server filesystem
@@ -20,10 +25,16 @@ interface DirectoryEntry {
  */
 filesystemRoutes.get('/browse', fileRouteLimiter, async (req, res) => {
   try {
-    const requestedPath = (req.query.path as string) || '/';
+    const requestedPath =
+      typeof req.query.path === 'string' && req.query.path
+        ? req.query.path
+        : '/';
 
-    // Security: Resolve to absolute path to prevent directory traversal
-    const absolutePath = path.resolve(requestedPath);
+    const absolutePath = path.resolve('/', requestedPath);
+
+    if (isDeniedBrowsePath(absolutePath)) {
+      return res.status(403).json({ error: 'Path is not browsable' });
+    }
 
     logger.debug('Browsing filesystem directory', {
       label: 'Filesystem Browser',
