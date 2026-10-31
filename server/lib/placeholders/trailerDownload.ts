@@ -1,10 +1,23 @@
 import type { TmdbVideo } from '@server/api/themoviedb/interfaces';
 import logger from '@server/logger';
-import { spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import type { TrailerDownloadOptions } from './types';
 import { getYoutubeCookiesState, youtubeCookiesPath } from './youtubeCookies';
+
+// The image sets an absolute path; a dev checkout resolves yt-dlp on PATH.
+const ytDlpBinary = (): string => process.env.YT_DLP_PATH || 'yt-dlp';
+
+const SEARCH_OUTPUT_LIMIT = 256 * 1024;
+const LOG_CAPTURE_LIMIT = 64 * 1024;
+const MAX_SEARCH_RESULTS = 50;
+const MAX_QUERY_LENGTH = 200;
+
+const capture = (current: string, chunk: Buffer): string =>
+  current.length >= LOG_CAPTURE_LIMIT
+    ? current
+    : (current + chunk.toString()).slice(0, LOG_CAPTURE_LIMIT);
 
 function youtubeCookieArgs(): string[] {
   const cookiesPath = youtubeCookiesPath();
@@ -32,39 +45,50 @@ export function searchYouTube(
   query: string,
   limit: number
 ): Promise<{ videoId: string; title: string }[]> {
+  const count = Math.min(
+    Math.max(1, Math.floor(limit) || 1),
+    MAX_SEARCH_RESULTS
+  );
+  const term = query.replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_LENGTH);
   return new Promise((resolve, reject) => {
-    const ytdlp = spawn(
-      'yt-dlp',
+    execFile(
+      ytDlpBinary(),
       [
         '--flat-playlist',
         '--no-warnings',
         '--print',
         '%(id)s\t%(title)s',
         ...youtubeCookieArgs(),
-        `ytsearch${limit}:${query}`,
+        `ytsearch${count}:${term}`,
       ],
-      { timeout: 30000 }
-    );
-    let stdout = '';
-    let stderr = '';
-    ytdlp.stdout.on('data', (data) => (stdout += data.toString()));
-    ytdlp.stderr.on('data', (data) => (stderr += data.toString()));
-    ytdlp.on('error', reject);
-    ytdlp.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`yt-dlp search exited with code ${code}: ${stderr}`));
-        return;
+      { timeout: 30000, maxBuffer: SEARCH_OUTPUT_LIMIT },
+      (error, stdout, stderr) => {
+        if (error) {
+          // code: number = exit status, string = ENOENT or maxBuffer, null = timed out
+          const reason =
+            typeof error.code === 'number'
+              ? `exited with code ${error.code}`
+              : typeof error.code === 'string'
+              ? error.message
+              : `timed out (${error.signal ?? 'killed'})`;
+          reject(
+            new Error(
+              `yt-dlp search ${reason}: ${stderr.slice(0, LOG_CAPTURE_LIMIT)}`
+            )
+          );
+          return;
+        }
+        resolve(
+          stdout
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => {
+              const [videoId, ...rest] = line.split('\t');
+              return { videoId, title: rest.join('\t') };
+            })
+        );
       }
-      resolve(
-        stdout
-          .split('\n')
-          .filter(Boolean)
-          .map((line) => {
-            const [videoId, ...rest] = line.split('\t');
-            return { videoId, title: rest.join('\t') };
-          })
-      );
-    });
+    );
   });
 }
 
@@ -180,23 +204,24 @@ export async function downloadWithYtDlp(
       'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]',
       '--merge-output-format',
       'mp4',
+      // -o is an output template, so a literal % in the path must be doubled
       '-o',
-      outputPath,
+      outputPath.replace(/%/g, '%%'),
     ];
 
     args.push(...youtubeCookieArgs(), videoUrl);
 
-    const ytdlp = spawn('yt-dlp', args);
+    const ytdlp = spawn(ytDlpBinary(), args);
 
     let stdoutOutput = '';
     let stderrOutput = '';
 
     ytdlp.stdout.on('data', (data) => {
-      stdoutOutput += data.toString();
+      stdoutOutput = capture(stdoutOutput, data);
     });
 
     ytdlp.stderr.on('data', (data) => {
-      stderrOutput += data.toString();
+      stderrOutput = capture(stderrOutput, data);
     });
 
     ytdlp.on('close', (code) => {
