@@ -31,8 +31,9 @@ filesystemRoutes.get('/browse', fileRouteLimiter, async (req, res) => {
         : '/';
 
     const absolutePath = path.resolve('/', requestedPath);
+    const realPath = await fs.realpath(absolutePath).catch(() => absolutePath);
 
-    if (isDeniedBrowsePath(absolutePath)) {
+    if (isDeniedBrowsePath(realPath)) {
       return res.status(403).json({ error: 'Path is not browsable' });
     }
 
