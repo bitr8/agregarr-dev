@@ -49,6 +49,9 @@ jobs:
         run: yarn
       - name: Lint
         run: yarn lint
+      # en.json must match the message ids the code asks for; hand-edited keys drift silently.
+      - name: i18n messages in sync
+        run: yarn i18n:extract && git diff --exit-code -- src/i18n/locale/en.json
       - name: Type Check
         run: yarn typecheck
       - name: Formatting
