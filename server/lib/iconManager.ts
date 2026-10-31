@@ -17,31 +17,17 @@ const ALLOWED_ICON_TYPES = [
 const MAX_ICON_SIZE = 10 * 1024 * 1024; // 10MB
 const ICON_THUMBNAIL_SIZE = 64; // 64x64 thumbnails
 
-/**
- * Sanitize SVG content by removing potentially dangerous elements and attributes.
- * Strips script tags, event handlers, foreignObject, and javascript: URIs.
- */
-function sanitizeSvg(svgBuffer: Buffer): Buffer {
-  let svg = svgBuffer.toString('utf8');
+const ACTIVE_SVG_CONTENT =
+  /<\s*(?:script|foreignObject)\b|\son\w+\s*=|javascript:/i;
 
-  // Remove <script> tags and their contents
-  svg = svg.replace(/<script[\s\S]*?<\/script\s*>/gi, '');
-  svg = svg.replace(/<script[^>]*\/>/gi, '');
-
-  // Remove <foreignObject> tags and their contents
-  svg = svg.replace(/<foreignObject[\s\S]*?<\/foreignObject\s*>/gi, '');
-
-  // Remove event handler attributes (on*)
-  svg = svg.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '');
-
-  // Remove javascript: URIs in href and xlink:href attributes
-  svg = svg.replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"');
-  svg = svg.replace(
-    /xlink:href\s*=\s*["']javascript:[^"']*["']/gi,
-    'xlink:href="#"'
-  );
-
-  return Buffer.from(svg, 'utf8');
+export async function assertSafeSvg(svgBuffer: Buffer): Promise<void> {
+  const { format } = await sharp(svgBuffer).metadata();
+  if (format !== 'svg') {
+    throw new Error('Uploaded file is not a valid SVG');
+  }
+  if (ACTIVE_SVG_CONTENT.test(svgBuffer.toString('utf8'))) {
+    throw new Error('SVG contains scripts or event handlers');
+  }
 }
 
 export interface IconMetadata {
@@ -243,7 +229,7 @@ export async function uploadIcon(
     let thumbnailFilename: string | undefined;
 
     if (mimeType === 'image/svg+xml') {
-      processedBuffer = sanitizeSvg(fileBuffer);
+      await assertSafeSvg(fileBuffer);
     } else {
       // For raster images, ensure reasonable size and create thumbnail
       processedBuffer = await sharp(fileBuffer)

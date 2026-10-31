@@ -1081,6 +1081,9 @@ router.get('/icons/:type/:filename', async (req, res, next) => {
         'Content-Type': contentType,
         'Content-Length': iconBuffer.length,
         'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
+        'Content-Security-Policy':
+          "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        'X-Content-Type-Options': 'nosniff',
       });
 
       return res.send(iconBuffer);
