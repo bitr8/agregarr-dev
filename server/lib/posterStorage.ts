@@ -467,7 +467,8 @@ export async function getPosterUsage(filename: string): Promise<
     // Check both single poster and per-library poster formats
     const usesThisPoster =
       config.customPoster === filename ||
-      (typeof config.customPoster === 'object' &&
+      (config.customPoster !== null &&
+        typeof config.customPoster === 'object' &&
         Object.values(config.customPoster).includes(filename));
 
     if (usesThisPoster) {

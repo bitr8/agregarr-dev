@@ -7,7 +7,7 @@ import {
 } from '@server/lib/posterStorage';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
-import { fileRouteLimiter } from '@server/middleware/rateLimit';
+import { publicFileLimiter } from '@server/middleware/rateLimit';
 import { Router } from 'express';
 import { rateLimiter } from './collections';
 
@@ -232,7 +232,7 @@ collectionPostersRoutes.get('/posters', isAuthenticated(), async (req, res) => {
  */
 collectionPostersRoutes.get(
   '/poster/:filename',
-  fileRouteLimiter,
+  publicFileLimiter,
   async (req, res) => {
     // Note: No authentication required for serving images - they're already uploaded by admins
     // and filenames are UUIDs making them hard to guess

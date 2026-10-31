@@ -18,6 +18,7 @@ describe('assertSafeSvg', () => {
     '<rect onload="alert(1)" width="1" height="1"/>',
     '<a href="javascript:alert(1)"><rect width="1" height="1"/></a>',
     '<foreignObject><div/></foreignObject>',
+    '<svg:script xmlns:svg="http://www.w3.org/2000/svg">alert(1)</svg:script>',
   ])('rejects %s', async (inner) => {
     await expect(assertSafeSvg(svg(inner))).rejects.toThrow();
   });

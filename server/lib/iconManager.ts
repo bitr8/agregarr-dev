@@ -18,7 +18,7 @@ const MAX_ICON_SIZE = 10 * 1024 * 1024; // 10MB
 const ICON_THUMBNAIL_SIZE = 64; // 64x64 thumbnails
 
 const ACTIVE_SVG_CONTENT =
-  /<\s*(?:script|foreignObject)\b|\son\w+\s*=|javascript:/i;
+  /<\s*(?:[\w-]+:)?(?:script|foreignObject)\b|\son\w+\s*=|javascript:/i;
 
 export async function assertSafeSvg(svgBuffer: Buffer): Promise<void> {
   const { format } = await sharp(svgBuffer).metadata();

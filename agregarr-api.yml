@@ -6796,6 +6796,7 @@ paths:
           schema:
             type: string
           required: false
+          allowReserved: true
           description: Directory path to browse (defaults to /)
           example: /data/media
       responses:
