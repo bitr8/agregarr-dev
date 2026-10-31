@@ -51,7 +51,12 @@ jobs:
         run: yarn lint
       # en.json must match the message ids the code asks for; hand-edited keys drift silently.
       - name: i18n messages in sync
-        run: yarn i18n:extract && git diff --exit-code -- src/i18n/locale/en.json
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          yarn i18n:extract
+          rc=0; git diff --exit-code -- src/i18n/locale/en.json || rc=$?
+          if [ "$rc" = 1 ]; then echo "::error::src/i18n/locale/en.json is out of sync with the code. Run 'yarn i18n:extract' and commit the result."; fi
+          exit "$rc"
       - name: Type Check
         run: yarn typecheck
       - name: Formatting
