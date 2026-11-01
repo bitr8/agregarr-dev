@@ -1,11 +1,30 @@
 import {
   calculateDaysSince,
+  determineReleaseDate,
   isAirDateUpcoming,
   isDateInFuture,
   toServerCalendarDate,
 } from '@server/utils/dateHelpers';
 import type { ReleaseDateInfo } from './OverlayContextBuilder';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
+
+export interface RadarrReleaseDates {
+  radarrDigitalRelease?: string;
+  radarrPhysicalRelease?: string;
+}
+
+// Radarr is the source of truth for a placeholder's date: its digital or
+// physical date wins over TMDB's region-preferred guess.
+export function preferRadarrReleaseDate(
+  info: ReleaseDateInfo | undefined,
+  radarr: RadarrReleaseDates
+): ReleaseDateInfo | undefined {
+  const fromRadarr = determineReleaseDate(
+    radarr.radarrDigitalRelease,
+    radarr.radarrPhysicalRelease
+  );
+  return fromRadarr ? { ...info, ...fromRadarr } : info;
+}
 
 /** Latest aired season air_date; specials and unaired seasons ignored. */
 export function latestAiredSeasonDate(

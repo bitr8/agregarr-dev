@@ -74,6 +74,8 @@ import { resolveBasePosterSource } from './PlexBasePosterManager';
 import {
   deriveReleaseDateContext,
   latestAiredSeasonDate,
+  preferRadarrReleaseDate,
+  type RadarrReleaseDates,
 } from './releaseDateContext';
 import {
   RELEASE_DATE_CONTEXT_FIELDS,
@@ -3287,9 +3289,10 @@ class OverlayLibraryService {
       // Fetch release date information for ALL items with TMDB ID
       // Uses preloaded data from batch prefetch when available
       let releaseDateContext: Partial<OverlayRenderContext> = {};
+      let releaseDateInfo: ReleaseDateInfo | undefined;
       if (tmdbId) {
         const releaseDateFetch = { failed: false };
-        const releaseDateInfo = await fetchReleaseDateInfo(
+        releaseDateInfo = await fetchReleaseDateInfo(
           tmdbId,
           actualMediaType,
           this.sonarrSeriesCache,
@@ -3344,13 +3347,17 @@ class OverlayLibraryService {
 
       // Check monitoring status for ALL items with TMDB ID
       let monitoringContext: Partial<OverlayRenderContext> = {};
+      let radarrDates: RadarrReleaseDates = {};
       if (tmdbId) {
-        monitoringContext = await checkMonitoringStatus(
-          tmdbId,
-          actualMediaType,
-          this.radarrMoviesCache,
-          this.sonarrSeriesCache
-        );
+        const { radarrDigitalRelease, radarrPhysicalRelease, ...status } =
+          await checkMonitoringStatus(
+            tmdbId,
+            actualMediaType,
+            this.radarrMoviesCache,
+            this.sonarrSeriesCache
+          );
+        monitoringContext = status;
+        radarrDates = { radarrDigitalRelease, radarrPhysicalRelease };
       }
 
       // Merge contexts: base → release dates → monitoring → explicit overrides
@@ -3361,6 +3368,12 @@ class OverlayLibraryService {
       let actualIsPlaceholder = isPlaceholder;
       if (monitoringContext.hasFile === true) {
         actualIsPlaceholder = false; // *arr has files, so it's definitely not a placeholder
+      }
+      if (actualIsPlaceholder && actualMediaType === 'movie') {
+        const preferred = preferRadarrReleaseDate(releaseDateInfo, radarrDates);
+        if (preferred && preferred !== releaseDateInfo) {
+          releaseDateContext = deriveReleaseDateContext(preferred);
+        }
       }
 
       // For downloaded: placeholders are never downloaded, real items check *arr hasFile status

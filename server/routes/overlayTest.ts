@@ -8,6 +8,7 @@ import {
   buildRenderContext,
   checkMonitoringStatus,
   fetchReleaseDateInfo,
+  type ReleaseDateInfo,
 } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayLibraryService } from '@server/lib/overlays/OverlayLibraryService';
 import {
@@ -24,7 +25,11 @@ import {
   evaluateConditionDetailed,
   overlayTemplateRenderer,
 } from '@server/lib/overlays/OverlayTemplateRenderer';
-import { deriveReleaseDateContext } from '@server/lib/overlays/releaseDateContext';
+import {
+  deriveReleaseDateContext,
+  preferRadarrReleaseDate,
+  type RadarrReleaseDates,
+} from '@server/lib/overlays/releaseDateContext';
 import { usesTmdbRatingFields } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -348,11 +353,9 @@ overlayTestRouter.post('/', async (req, res) => {
 
     // Fetch release date information if TMDB ID available
     let releaseDateContext: Partial<OverlayRenderContext> = {};
+    let releaseDateInfo: ReleaseDateInfo | undefined;
     if (tmdbId) {
-      const releaseDateInfo = await fetchReleaseDateInfo(
-        tmdbId,
-        actualMediaType
-      );
+      releaseDateInfo = await fetchReleaseDateInfo(tmdbId, actualMediaType);
 
       if (releaseDateInfo) {
         // Same shared read-time derivation as the overlay sync path, so the
@@ -364,19 +367,29 @@ overlayTestRouter.post('/', async (req, res) => {
 
     // Check monitoring status if TMDB ID available
     let monitoringContext: Partial<OverlayRenderContext> = {};
+    let radarrDates: RadarrReleaseDates = {};
     if (tmdbId) {
-      monitoringContext = await checkMonitoringStatus(
-        tmdbId,
-        actualMediaType,
-        undefined,
-        undefined
-      );
+      const { radarrDigitalRelease, radarrPhysicalRelease, ...status } =
+        await checkMonitoringStatus(
+          tmdbId,
+          actualMediaType,
+          undefined,
+          undefined
+        );
+      monitoringContext = status;
+      radarrDates = { radarrDigitalRelease, radarrPhysicalRelease };
     }
 
     // Merge contexts
     let actualIsPlaceholder = isPlaceholder;
     if (monitoringContext.hasFile === true) {
       actualIsPlaceholder = false; // *arr has files, so it's definitely not a placeholder
+    }
+    if (actualIsPlaceholder && actualMediaType === 'movie') {
+      const preferred = preferRadarrReleaseDate(releaseDateInfo, radarrDates);
+      if (preferred && preferred !== releaseDateInfo) {
+        releaseDateContext = deriveReleaseDateContext(preferred);
+      }
     }
 
     let downloaded: boolean;

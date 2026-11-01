@@ -1705,6 +1705,8 @@ export async function checkMonitoringStatus(
   missingEpisodeCount?: number;
   radarrTags?: string[];
   sonarrTags?: string[];
+  radarrDigitalRelease?: string;
+  radarrPhysicalRelease?: string;
 }> {
   try {
     const settings = getSettings();
@@ -1766,6 +1768,8 @@ export async function checkMonitoringStatus(
               isMonitored: movie.monitored,
               hasFile: movie.hasFile,
               radarrTags: tagNames.length > 0 ? tagNames : undefined,
+              radarrDigitalRelease: movie.digitalRelease,
+              radarrPhysicalRelease: movie.physicalRelease,
             };
           }
         } catch (error) {
