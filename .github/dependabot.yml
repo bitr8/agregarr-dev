@@ -10,6 +10,9 @@ updates:
         update-types:
           - minor
           - patch
+      security:
+        applies-to: security-updates
+        patterns: ['*']
     # Majors (Next, React, Node) are their own workstreams, not bot PRs.
     ignore:
       - dependency-name: '*'
