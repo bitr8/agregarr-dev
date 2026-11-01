@@ -509,6 +509,8 @@
   "components.Collections.Forms.shuffleHubCollectionHelp": "When enabled, this {itemType}'s position will be randomly shuffled with other collections that have this option enabled during each sync. Custom scheduling for shuffling can be set on the Jobs page.",
   "components.Collections.Forms.shufflePositionHelp": "When enabled, this collection's position will be randomly shuffled with other collections that have this option enabled during each sync. Custom scheduling for shuffling can be set on the Jobs page.",
   "components.Collections.Forms.shufflePositionLabel": "Shuffle position on Home/Recommended screens",
+  "components.Collections.Forms.skipEstimatedDates": "Skip items with an estimated release date",
+  "components.Collections.Forms.skipEstimatedDatesHelp": "Leave out movies that only have a cinema date so far. Their date is a guess of cinema plus 90 days until TMDB lists a digital or physical release.",
   "components.Collections.Forms.smartCollectionHelp": "When enabled, creates a smart collection for the user viewing the collection.",
   "components.Collections.Forms.smartCollectionSort": "Smart Collection Sort Order",
   "components.Collections.Forms.smartCollectionSortNote": "Choose how items in the smart collection should be sorted. Due to Plex limitations, the original list order cannot be preserved when using smart collections.",

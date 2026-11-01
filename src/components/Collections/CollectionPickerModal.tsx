@@ -258,6 +258,7 @@ const CollectionPickerModal: React.FC<CollectionPickerModalProps> = ({
               return (
                 <label
                   key={item.id}
+                  aria-label={item.name}
                   className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-stone-700"
                 >
                   <input
@@ -322,6 +323,7 @@ const CollectionPickerModal: React.FC<CollectionPickerModalProps> = ({
                     {item.sources!.map((source, idx) => (
                       <label
                         key={source.id}
+                        aria-label={`${item.name}: ${source.name}`}
                         className="flex cursor-pointer items-start gap-2 rounded px-2 py-1 hover:bg-stone-700/50"
                       >
                         <input

@@ -288,7 +288,10 @@ const SortableTemplateItem: React.FC<SortableTemplateItemProps> = ({
       </div>
 
       {/* Checkbox */}
-      <label className="flex flex-shrink-0 cursor-pointer items-center">
+      <label
+        className="flex flex-shrink-0 cursor-pointer items-center"
+        aria-label={template.name}
+      >
         <input
           type="checkbox"
           checked={forced || enabled}
@@ -882,7 +885,12 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                     className="grid grid-cols-[minmax(0,1fr)_100px_100px] items-center border-t border-stone-700 px-3 py-2 text-sm text-stone-200"
                   >
                     <span>{label}</span>
-                    <label className="flex cursor-pointer justify-center">
+                    <label
+                      className="flex cursor-pointer justify-center"
+                      aria-label={`${label} ${intl.formatMessage(
+                        messages.fullSync
+                      )}`}
+                    >
                       <input
                         type="checkbox"
                         checked={fullSyncTargets.includes(target)}
@@ -890,7 +898,12 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                         className="h-4 w-4 rounded border-stone-600 text-orange-500 focus:ring-orange-500"
                       />
                     </label>
-                    <label className="flex cursor-pointer justify-center">
+                    <label
+                      className="flex cursor-pointer justify-center"
+                      aria-label={`${label} ${intl.formatMessage(
+                        messages.quickSync
+                      )}`}
+                    >
                       <input
                         type="checkbox"
                         checked={quickSyncTargets.includes(target)}
@@ -917,7 +930,10 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
           {detectedLibraryType === 'show' && (
             <div className="mt-4 border-t border-stone-700 pt-4">
               <div className="flex items-center gap-3">
-                <label className="relative inline-flex cursor-pointer items-center">
+                <label
+                  className="relative inline-flex cursor-pointer items-center"
+                  aria-label="Use episode files for quality badges"
+                >
                   <input
                     type="checkbox"
                     checked={enableEpisodeScanning}
@@ -992,6 +1008,7 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
             <div className="mt-4 border-t border-stone-700 pt-4">
               <div className="flex items-center gap-3">
                 <label
+                  aria-label="Season deletion countdown"
                   className={`relative inline-flex items-center ${
                     configData?.maintainerrConfigured
                       ? 'cursor-pointer'

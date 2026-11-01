@@ -911,12 +911,16 @@ function embedTemplateServiceLogo(
   const offsetY = (height - scaledHeight) / 2;
 
   // Clean the SVG content by removing XML declaration, comments, DOCTYPE, and SVG tags
-  const cleanSvgContent = logoSvg
-    .replace(/<\?xml[^>]*\?>/gi, '') // Remove XML declaration
-    .replace(/<!--[\s\S]*?-->/gi, '') // Remove comments
-    .replace(/<!DOCTYPE[^>]*>/gi, '') // Remove DOCTYPE
-    .replace(/<svg[^>]*>|<\/svg>/gi, '') // Remove SVG tags
-    .trim();
+  let cleanSvgContent = logoSvg;
+  for (let previous = ''; previous !== cleanSvgContent; ) {
+    previous = cleanSvgContent;
+    cleanSvgContent = cleanSvgContent
+      .replace(/<\?xml[^>]*\?>/gi, '')
+      .replace(/<!--[\s\S]*?-->/gi, '')
+      .replace(/<!DOCTYPE[^>]*>/gi, '')
+      .replace(/<svg[^>]*>|<\/svg>/gi, '');
+  }
+  cleanSvgContent = cleanSvgContent.trim();
 
   return `
     <g transform="translate(${x + offsetX}, ${

@@ -612,6 +612,7 @@ const CollectionSettings = ({
           createPlaceholdersForMissing: config.createPlaceholdersForMissing,
           placeholderDaysAhead: config.placeholderDaysAhead,
           placeholderReleasedDays: config.placeholderReleasedDays,
+          placeholderSkipEstimatedDates: config.placeholderSkipEstimatedDates,
           placeholderMinimumYear: config.placeholderMinimumYear,
           placeholderMinimumImdbRating: config.placeholderMinimumImdbRating,
           placeholderMinimumRottenTomatoesRating:

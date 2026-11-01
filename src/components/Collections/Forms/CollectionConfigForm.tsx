@@ -250,6 +250,9 @@ const messages = defineMessages({
   onlyRecentlyReleasedHelp:
     'Only create placeholders for items released within the specified number of days',
   days: 'days',
+  skipEstimatedDates: 'Skip items with an estimated release date',
+  skipEstimatedDatesHelp:
+    'Leave out movies that only have a cinema date so far. Their date is a guess of cinema plus 90 days until TMDB lists a digital or physical release.',
   placeholderFilters: 'Placeholder Filters',
   placeholderFiltersHelp:
     'Optional. Filter which missing items get placeholders. Leave empty for all missing items.',
@@ -1842,6 +1845,9 @@ const CollectionFormConfigForm = ({
                 ? 'Actor Collections'
                 : 'Director Collections'
               : ''),
+          placeholderSkipEstimatedDates:
+            (config as CollectionFormConfig).placeholderSkipEstimatedDates ??
+            false,
           placeholderReleasedDays:
             (config as CollectionFormConfig).placeholderReleasedDays ||
             (config as CollectionFormConfig).comingSoonReleasedDays ||
@@ -2397,6 +2403,9 @@ const CollectionFormConfigForm = ({
               : values.type === 'comingsoon'
               ? true
               : values.createPlaceholdersForMissing ?? false,
+            placeholderSkipEstimatedDates: values.createPlaceholdersForMissing
+              ? values.placeholderSkipEstimatedDates
+              : undefined,
             placeholderReleasedDays: values.createPlaceholdersForMissing
               ? values.placeholderReleasedDays
                 ? parseInt(values.placeholderReleasedDays.toString(), 10)
@@ -4519,6 +4528,30 @@ const CollectionFormConfigForm = ({
                                             )}
                                           </p>
                                         </div>
+
+                                        {(typedValues.type === 'comingsoon' ||
+                                          typedValues.type ===
+                                            'multi-source') && (
+                                          <div>
+                                            <label className="flex items-center gap-2">
+                                              <Field
+                                                type="checkbox"
+                                                name="placeholderSkipEstimatedDates"
+                                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                              />
+                                              <span className="text-sm text-gray-300">
+                                                {intl.formatMessage(
+                                                  messages.skipEstimatedDates
+                                                )}
+                                              </span>
+                                            </label>
+                                            <p className="mt-1 text-xs text-gray-400">
+                                              {intl.formatMessage(
+                                                messages.skipEstimatedDatesHelp
+                                              )}
+                                            </p>
+                                          </div>
+                                        )}
 
                                         {/* Released Items section */}
                                         <div>

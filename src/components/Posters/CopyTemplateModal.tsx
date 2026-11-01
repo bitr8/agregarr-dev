@@ -239,6 +239,10 @@ const CopyTemplateModal: React.FC<CopyTemplateModalProps> = ({
                 sourceElements.map((element) => (
                   <label
                     key={element.id}
+                    aria-label={`${getElementTypeLabel(
+                      element.type,
+                      intl
+                    )}: ${getElementDescription(element)}`}
                     className={`flex cursor-pointer items-center space-x-3 rounded-md p-2 transition-colors ${
                       selectedElementIds.includes(element.id)
                         ? 'bg-orange-500 bg-opacity-20'

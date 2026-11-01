@@ -314,6 +314,7 @@ export interface CollectionFormConfig {
   // Placeholder settings (for createPlaceholdersForMissing feature - unified for all collection types)
   readonly createPlaceholdersForMissing?: boolean; // Create placeholder files for missing items
   readonly placeholderReleasedDays?: number; // Days to keep orphaned placeholders after they fall off source list (from release date if released, otherwise from creation date) (default: 7)
+  readonly placeholderSkipEstimatedDates?: boolean;
   readonly placeholderDaysAhead?: number; // Days to look ahead for release dates (default: 360)
   readonly includeAllReleasedItems?: boolean; // If true, include all released items regardless of release date (default: true for new configs)
   // Placeholder filter settings (independent of auto-request filters)
@@ -549,6 +550,7 @@ export interface CollectionConfigCreateRequest {
   // Placeholder settings (unified for all collection types)
   readonly createPlaceholdersForMissing?: boolean;
   readonly placeholderReleasedDays?: number;
+  readonly placeholderSkipEstimatedDates?: boolean;
   readonly placeholderDaysAhead?: number;
   readonly placeholderMinimumYear?: number;
   readonly placeholderMinimumImdbRating?: number;
@@ -741,6 +743,7 @@ export const toCollectionCreateRequest = (
     tautulliStatType: config.tautulliStatType,
     createPlaceholdersForMissing: config.createPlaceholdersForMissing,
     placeholderReleasedDays: config.placeholderReleasedDays,
+    placeholderSkipEstimatedDates: config.placeholderSkipEstimatedDates,
     placeholderDaysAhead: config.placeholderDaysAhead,
     placeholderMinimumYear: config.placeholderMinimumYear,
     placeholderMinimumImdbRating: config.placeholderMinimumImdbRating,
@@ -1200,6 +1203,7 @@ export interface MultiSourceCollectionConfig {
   readonly createPlaceholdersForMissing?: boolean;
   readonly placeholderDaysAhead?: number;
   readonly placeholderReleasedDays?: number;
+  readonly placeholderSkipEstimatedDates?: boolean;
   readonly includeAllReleasedItems?: boolean;
   // Placeholder filter settings (independent of auto-request filters)
   readonly placeholderMinimumYear?: number;

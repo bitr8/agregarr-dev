@@ -568,6 +568,9 @@ components:
           description: 'Days to look ahead for release dates when creating placeholders (default: 360)'
           example: 360
           nullable: true
+        placeholderSkipEstimatedDates:
+          type: boolean
+          nullable: true
         placeholderReleasedDays:
           type: integer
           description: 'Days to keep released items with overlay before cleanup (default: 7)'
@@ -1318,6 +1321,9 @@ components:
           type: integer
           description: 'Days to look ahead for release dates when creating placeholders (default: 360)'
           example: 360
+          nullable: true
+        placeholderSkipEstimatedDates:
+          type: boolean
           nullable: true
         placeholderReleasedDays:
           type: integer
@@ -2226,6 +2232,9 @@ components:
           type: integer
           description: 'Days to look ahead for release dates when creating placeholders (default: 360)'
           example: 360
+          nullable: true
+        placeholderSkipEstimatedDates:
+          type: boolean
           nullable: true
         placeholderReleasedDays:
           type: integer

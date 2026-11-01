@@ -199,6 +199,10 @@ export const saveIndividualConfigs = async (
         ...(collectionConfig.placeholderReleasedDays !== undefined && {
           placeholderReleasedDays: collectionConfig.placeholderReleasedDays,
         }),
+        ...(collectionConfig.placeholderSkipEstimatedDates !== undefined && {
+          placeholderSkipEstimatedDates:
+            collectionConfig.placeholderSkipEstimatedDates,
+        }),
         ...(collectionConfig.placeholderMinimumYear !== undefined && {
           placeholderMinimumYear: collectionConfig.placeholderMinimumYear,
         }),
