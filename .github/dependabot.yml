@@ -38,6 +38,11 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # 5.10 / 2.5 break 83 callback types across the UI; upgrade by hand.
+      - dependency-name: 'react-select'
+        versions: ['>=5.8.0']
+      - dependency-name: 'swr'
+        versions: ['>=2.1.0']
   - package-ecosystem: docker
     directory: /
     schedule:
