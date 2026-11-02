@@ -428,7 +428,10 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
           </p>
 
           <div className="rounded-lg border-2 border-gray-600 p-4">
-            <label className="flex cursor-pointer items-start gap-3">
+            <label
+              aria-label={intl.formatMessage(messages.posterizarrIntegration)}
+              className="flex cursor-pointer items-start gap-3"
+            >
               <input
                 type="checkbox"
                 checked={posterizarrIntegrationEnabled}
