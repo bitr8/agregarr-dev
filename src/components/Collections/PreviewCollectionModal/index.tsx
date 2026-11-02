@@ -6,6 +6,7 @@ import RadarrOptionsModal from '@app/components/Collections/RadarrOptionsModal';
 import SeasonSelectionModal from '@app/components/Collections/SeasonSelectionModal';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import Modal from '@app/components/Common/Modal';
+import imageLoader from '@app/utils/imageLoader';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import Image from 'next/image';
@@ -787,6 +788,7 @@ const PreviewCollectionModal = ({
                       <div className="absolute inset-0 overflow-hidden rounded-lg">
                         {item.posterUrl ? (
                           <Image
+                            loader={imageLoader}
                             src={item.posterUrl}
                             alt={item.title}
                             layout="fill"

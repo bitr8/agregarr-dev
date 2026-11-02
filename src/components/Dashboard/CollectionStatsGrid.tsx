@@ -113,7 +113,7 @@ const CollectionStatsGrid: React.FC = () => {
               <p className="mb-6 max-w-md text-gray-400">
                 {intl.formatMessage(messages.tautulliDescriptionCollections)}
               </p>
-              <Link href="/settings/sources" passHref>
+              <Link href="/settings/sources" passHref legacyBehavior>
                 <Button as="a" buttonType="primary">
                   <CogIcon className="mr-2 h-5 w-5" />
                   {intl.formatMessage(messages.configureTautulli)}

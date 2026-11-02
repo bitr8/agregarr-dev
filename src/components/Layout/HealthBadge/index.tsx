@@ -38,7 +38,7 @@ const HealthBadge = () => {
   const hasError = data.checks.some((c) => !c.silenced && c.status === 'error');
 
   return (
-    <Link href="/settings/about">
+    <Link href="/settings/about" legacyBehavior>
       <a
         role="button"
         tabIndex={0}

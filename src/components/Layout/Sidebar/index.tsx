@@ -169,6 +169,7 @@ const Sidebar = ({
                             key={`mobile-${sidebarLink.messagesKey}`}
                             href={sidebarLink.href}
                             as={sidebarLink.as}
+                            legacyBehavior
                           >
                             <a
                               onClick={() =>
@@ -255,6 +256,7 @@ const Sidebar = ({
                       key={`desktop-${sidebarLink.messagesKey}`}
                       href={sidebarLink.href}
                       as={sidebarLink.as}
+                      legacyBehavior
                     >
                       <a
                         tabIndex={

@@ -75,7 +75,7 @@
     "lodash": "4.18.1",
     "multer": "^2.0.2",
     "nanoid": "^5.1.5",
-    "next": "12.3.7",
+    "next": "15.5.28",
     "node-cache": "5.1.2",
     "node-gyp": "9.4.1",
     "node-schedule": "2.1.2",
@@ -183,7 +183,8 @@
     "sqlite3/node-gyp": "8.4.1",
     "@types/react": "18.0.28",
     "@types/react-dom": "18.0.11",
-    "@types/express-session": "1.19.0"
+    "@types/express-session": "1.19.0",
+    "postcss": "8.5.31"
   },
   "config": {
     "commitizen": {

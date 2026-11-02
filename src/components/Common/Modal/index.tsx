@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import { useLockBodyScroll } from '@app/hooks/useLockBodyScroll';
 import globalMessages from '@app/i18n/globalMessages';
+import imageLoader from '@app/utils/imageLoader';
 import { Transition } from '@headlessui/react';
 import Image from 'next/image';
 import type { MouseEvent } from 'react';
@@ -155,6 +156,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
             <div className="absolute inset-0 z-0 w-full">
               <div className="absolute inset-0">
                 <Image
+                  loader={imageLoader}
                   alt=""
                   src={backdrop}
                   layout="fill"

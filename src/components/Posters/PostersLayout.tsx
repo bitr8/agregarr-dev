@@ -44,7 +44,7 @@ const PostersLayout = ({ children }: PostersLayoutProps) => {
           {tabs.map((tab) => {
             const isActive = router.pathname.match(tab.regex);
             return (
-              <Link key={tab.route} href={tab.route}>
+              <Link key={tab.route} href={tab.route} legacyBehavior>
                 <a
                   className={`rounded-lg px-6 py-3 text-base font-semibold leading-6 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-75 ${
                     isActive
