@@ -2316,7 +2316,7 @@ const CollectionSettings = ({
                 }
               }}
               disabled={isFirstTimeUser}
-              className={`border-b-2 py-2 px-1 text-sm font-medium ${
+              className={`border-b-2 px-1 py-2 text-sm font-medium ${
                 isFirstTimeUser
                   ? 'cursor-not-allowed border-transparent text-gray-600 opacity-50'
                   : activeTab === 'home'
@@ -2334,7 +2334,7 @@ const CollectionSettings = ({
                 }
               }}
               disabled={isFirstTimeUser}
-              className={`border-b-2 py-2 px-1 text-sm font-medium ${
+              className={`border-b-2 px-1 py-2 text-sm font-medium ${
                 isFirstTimeUser
                   ? 'cursor-not-allowed border-transparent text-gray-600 opacity-50'
                   : activeTab === 'recommended'
@@ -2352,7 +2352,7 @@ const CollectionSettings = ({
                 }
               }}
               disabled={isFirstTimeUser}
-              className={`border-b-2 py-2 px-1 text-sm font-medium ${
+              className={`border-b-2 px-1 py-2 text-sm font-medium ${
                 isFirstTimeUser
                   ? 'cursor-not-allowed border-transparent text-gray-600 opacity-50'
                   : activeTab === 'library'
@@ -2410,7 +2410,7 @@ const CollectionSettings = ({
                     {intl.formatMessage(messages.clickToSeeInactive)}
                   </span>
                   {/* Arrow pointing to the button */}
-                  <div className="absolute left-full top-1/2 h-0 w-0 -translate-y-1/2 transform border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-orange-500"></div>
+                  <div className="absolute left-full top-1/2 h-0 w-0 -translate-y-1/2 transform border-b-4 border-l-4 border-t-4 border-b-transparent border-l-orange-500 border-t-transparent"></div>
                 </div>
               </div>
             )}
@@ -2438,7 +2438,7 @@ const CollectionSettings = ({
                   key={library.key}
                   onClick={() => setActiveLibraryId(library.key)}
                   disabled={!hasConfigs}
-                  className={`border-b-2 py-2 px-1 text-sm font-medium ${
+                  className={`border-b-2 px-1 py-2 text-sm font-medium ${
                     activeLibraryId === library.key
                       ? 'border-orange-400 text-orange-300'
                       : hasConfigs

@@ -40,7 +40,7 @@ const SetupSteps = ({
       </div>
 
       {!isLastStep && (
-        <div className="absolute top-0 right-0 hidden h-full w-5 md:block">
+        <div className="absolute right-0 top-0 hidden h-full w-5 md:block">
           <svg
             className="h-full w-full text-gray-600"
             viewBox="0 0 22 80"

@@ -300,7 +300,7 @@ const PosterTemplateGrid: React.FC<PosterTemplateGridProps> = ({
                     {template.name}
                   </h3>
                   {template.description && (
-                    <p className="line-clamp-2 mt-1 text-xs text-stone-400">
+                    <p className="mt-1 line-clamp-2 text-xs text-stone-400">
                       {template.description}
                     </p>
                   )}

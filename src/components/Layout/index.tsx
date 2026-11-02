@@ -51,7 +51,7 @@ const Layout = ({ children }: LayoutProps) => {
       {/* Hamburger menu button for smaller screens */}
       <div className="lg:hidden">
         <button
-          className="fixed top-4 left-4 z-50 rounded-md bg-stone-800 p-2 text-white shadow-sm hover:bg-stone-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          className="fixed left-4 top-4 z-50 rounded-md bg-stone-800 p-2 text-white shadow-sm hover:bg-stone-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
           onClick={() => setIsSidebarOpen(true)}
           aria-label="Open menu"
         >

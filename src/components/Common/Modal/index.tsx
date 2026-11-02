@@ -105,7 +105,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 
     return ReactDOM.createPortal(
       <div
-        className="fixed top-0 bottom-0 left-0 right-0 z-50 flex h-full w-full items-center justify-center bg-stone-800 bg-opacity-70"
+        className="fixed bottom-0 left-0 right-0 top-0 z-50 flex h-full w-full items-center justify-center bg-stone-800 bg-opacity-70"
         ref={parentRef}
         onMouseDown={handleBackdropMouseDown}
         onMouseUp={handleBackdropMouseUp}
@@ -132,7 +132,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
           </div>
         </Transition>
         <Transition
-          className={`hide-scrollbar relative inline-block w-full overflow-auto bg-stone-800 px-4 pt-4 pb-4 text-left align-bottom shadow-xl ring-1 ring-gray-700 transition-all sm:my-8 ${
+          className={`hide-scrollbar relative inline-block w-full overflow-auto bg-stone-800 px-4 pb-4 pt-4 text-left align-bottom shadow-xl ring-1 ring-gray-700 transition-all sm:my-8 ${
             customMaxWidth || 'sm:max-w-2xl'
           } sm:rounded-lg sm:align-middle`}
           role="dialog"

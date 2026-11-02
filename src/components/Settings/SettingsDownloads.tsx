@@ -563,7 +563,7 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
       </div>
 
       {/* Sonarr Settings */}
-      <div className="mt-10 mb-6">
+      <div className="mb-6 mt-10">
         <h3 className="heading flex items-center">
           <img src="/services/sonarr.svg" alt="" className="mr-2 h-7 w-7" />
           {intl.formatMessage(messages.sonarrsettings)}
