@@ -1949,7 +1949,7 @@ collectionsRoutes.get('/sync/status', async (_req, res) => {
       (job) => job.id === 'plex-collections-sync'
     );
     if (syncJob?.job?.nextInvocation) {
-      nextSyncAt = syncJob.job.nextInvocation().toISOString();
+      nextSyncAt = syncJob.job.nextInvocation()?.toISOString();
     }
   } catch (error) {
     // If we can't get next sync time, just omit it
