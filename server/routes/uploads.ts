@@ -23,6 +23,7 @@ import {
 } from '@server/lib/wallpaperStorage';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { fileRouteLimiter } from '@server/middleware/rateLimit';
 import { isContainedPath } from '@server/utils/fileSystemHelpers';
 import archiver from 'archiver';
 import { randomUUID } from 'crypto';
@@ -459,137 +460,143 @@ router.post('/poster-template', (req, res) => {
 
 // --- GET /api/v1/uploads/overlay-template-export/:id ---
 
-router.get('/overlay-template-export/:id', async (req, res) => {
-  try {
-    const templateId = parseInt(req.params.id);
+router.get(
+  '/overlay-template-export/:id',
+  fileRouteLimiter,
+  async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
 
-    if (isNaN(templateId)) {
-      return res.status(400).json({ error: 'Invalid template ID' });
-    }
-
-    const templateRepository = getRepository(OverlayTemplate);
-    const template = await templateRepository.findOne({
-      where: { id: templateId, isActive: true },
-    });
-
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
-
-    const templateData = template.getTemplateData();
-    const assetPaths = new Set<string>();
-
-    templateData.elements?.forEach((element) => {
-      if (element.type === 'svg') {
-        const svgProps = element.properties as { iconPath?: string };
-        if (svgProps.iconPath) assetPaths.add(svgProps.iconPath);
-      } else if (element.type === 'raster') {
-        const rasterProps = element.properties as { imagePath?: string };
-        if (rasterProps.imagePath) assetPaths.add(rasterProps.imagePath);
+      if (isNaN(templateId)) {
+        return res.status(400).json({ error: 'Invalid template ID' });
       }
-    });
 
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    const filename = `${template.name.replace(
-      /[^a-zA-Z0-9]/g,
-      '_'
-    )}_overlay_template.zip`;
+      const templateRepository = getRepository(OverlayTemplate);
+      const template = await templateRepository.findOne({
+        where: { id: templateId, isActive: true },
+      });
 
-    res.set({
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    });
-
-    archive.on('error', (err) => {
-      logger.error('Archive error:', err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Failed to create archive' });
+      if (!template) {
+        return res.status(404).json({ error: 'Template not found' });
       }
-    });
 
-    archive.pipe(res);
+      const templateData = template.getTemplateData();
+      const assetPaths = new Set<string>();
 
-    const exportData = {
-      name: template.name,
-      description: template.description,
-      type: template.type,
-      templateData,
-      applicationCondition: template.getApplicationCondition(),
-      exportedAt: new Date().toISOString(),
-      version: '1.0',
-    };
+      templateData.elements?.forEach((element) => {
+        if (element.type === 'svg') {
+          const svgProps = element.properties as { iconPath?: string };
+          if (svgProps.iconPath) assetPaths.add(svgProps.iconPath);
+        } else if (element.type === 'raster') {
+          const rasterProps = element.properties as { imagePath?: string };
+          if (rasterProps.imagePath) assetPaths.add(rasterProps.imagePath);
+        }
+      });
 
-    archive.append(JSON.stringify(exportData, null, 2), {
-      name: 'template.json',
-    });
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      const filename = `${template.name.replace(
+        /[^a-zA-Z0-9]/g,
+        '_'
+      )}_overlay_template.zip`;
 
-    for (const assetPath of assetPaths) {
-      try {
-        const iconUrlMatch = assetPath.match(
-          /\/api\/v1\/posters\/icons\/(\w+)\/(.+)/
-        );
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      });
 
-        if (iconUrlMatch) {
-          const [, iconType, iconFilename] = iconUrlMatch;
-          if (iconType === 'user') {
-            const iconsRoot = path.join(process.cwd(), 'config', 'icons');
-            const iconFilePath = path.join(iconsRoot, iconFilename);
-            if (
-              isContainedPath(iconFilePath, iconsRoot) &&
-              fs.existsSync(iconFilePath)
-            ) {
-              archive.file(iconFilePath, {
-                name: `assets/icons/${path.basename(iconFilename)}`,
-              });
-              logger.debug(`Added user icon to archive: ${iconFilename}`);
-            }
-          }
-        } else {
-          const allowedDirs = [
-            path.join(process.cwd(), 'config', 'uploads'),
-            path.join(process.cwd(), 'config', 'posters'),
-          ];
-          const possiblePaths = allowedDirs.map((dir) =>
-            path.join(dir, assetPath)
+      archive.on('error', (err) => {
+        logger.error('Archive error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to create archive' });
+        }
+      });
+
+      archive.pipe(res);
+
+      const exportData = {
+        name: template.name,
+        description: template.description,
+        type: template.type,
+        templateData,
+        applicationCondition: template.getApplicationCondition(),
+        exportedAt: new Date().toISOString(),
+        version: '1.0',
+      };
+
+      archive.append(JSON.stringify(exportData, null, 2), {
+        name: 'template.json',
+      });
+
+      for (const assetPath of assetPaths) {
+        try {
+          const iconUrlMatch = assetPath.match(
+            /\/api\/v1\/posters\/icons\/(\w+)\/(.+)/
           );
 
-          for (const possiblePath of possiblePaths) {
-            const resolvedPath = path.resolve(possiblePath);
-            if (!allowedDirs.some((dir) => isContainedPath(resolvedPath, dir)))
-              continue;
-            if (fs.existsSync(resolvedPath)) {
-              archive.file(resolvedPath, {
-                name: `assets/images/${path.basename(assetPath)}`,
-              });
-              logger.debug(
-                `Added raster image to archive: assets/images/${path.basename(
-                  assetPath
-                )}`
-              );
-              break;
+          if (iconUrlMatch) {
+            const [, iconType, iconFilename] = iconUrlMatch;
+            if (iconType === 'user') {
+              const iconsRoot = path.join(process.cwd(), 'config', 'icons');
+              const iconFilePath = path.join(iconsRoot, iconFilename);
+              if (
+                isContainedPath(iconFilePath, iconsRoot) &&
+                fs.existsSync(iconFilePath)
+              ) {
+                archive.file(iconFilePath, {
+                  name: `assets/icons/${path.basename(iconFilename)}`,
+                });
+                logger.debug(`Added user icon to archive: ${iconFilename}`);
+              }
+            }
+          } else {
+            const allowedDirs = [
+              path.join(process.cwd(), 'config', 'uploads'),
+              path.join(process.cwd(), 'config', 'posters'),
+            ];
+            const possiblePaths = allowedDirs.map((dir) =>
+              path.join(dir, assetPath)
+            );
+
+            for (const possiblePath of possiblePaths) {
+              const resolvedPath = path.resolve(possiblePath);
+              if (
+                !allowedDirs.some((dir) => isContainedPath(resolvedPath, dir))
+              )
+                continue;
+              if (fs.existsSync(resolvedPath)) {
+                archive.file(resolvedPath, {
+                  name: `assets/images/${path.basename(assetPath)}`,
+                });
+                logger.debug(
+                  `Added raster image to archive: assets/images/${path.basename(
+                    assetPath
+                  )}`
+                );
+                break;
+              }
             }
           }
+        } catch (error) {
+          logger.warn(`Failed to add asset to archive: ${assetPath}`, error);
         }
-      } catch (error) {
-        logger.warn(`Failed to add asset to archive: ${assetPath}`, error);
       }
+
+      archive.finalize();
+
+      logger.info('Exported overlay template as ZIP with assets', {
+        templateId: template.id,
+        name: template.name,
+        assetCount: assetPaths.size,
+      });
+    } catch (error) {
+      logger.error('Failed to export overlay template:', error);
+      return res.status(500).json({
+        error: 'Failed to export overlay template',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
-
-    archive.finalize();
-
-    logger.info('Exported overlay template as ZIP with assets', {
-      templateId: template.id,
-      name: template.name,
-      assetCount: assetPaths.size,
-    });
-  } catch (error) {
-    logger.error('Failed to export overlay template:', error);
-    return res.status(500).json({
-      error: 'Failed to export overlay template',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
   }
-});
+);
 
 // --- POST /api/v1/uploads/overlay-template ---
 

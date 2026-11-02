@@ -418,7 +418,7 @@ class LocalPosterFolderService {
           });
 
           // Validate content type is an image
-          const contentType = response.headers['content-type'] || '';
+          const contentType = String(response.headers['content-type'] || '');
           if (!contentType.startsWith('image/')) {
             throw new Error(
               `Invalid content type for poster: ${contentType} (expected image/*)`

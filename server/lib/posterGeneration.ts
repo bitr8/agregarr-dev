@@ -696,11 +696,11 @@ function getFontMetrics(
 /**
  * Fallback text width estimation for when Canvas measurement is unavailable
  */
-function getEstimatedTextWidth(text: string, fontSize: number): number {
+export function getEstimatedTextWidth(text: string, fontSize: number): number {
   // Conservative character width estimation that works across different fonts
   let totalWidth = 0;
 
-  for (let i = 0; i < text.length; i++) {
+  for (let i = 0; i < Math.min(text.length, 1000); i++) {
     const char = text[i];
     let charWidth = 0.6; // Conservative default
 
@@ -911,12 +911,16 @@ function embedTemplateServiceLogo(
   const offsetY = (height - scaledHeight) / 2;
 
   // Clean the SVG content by removing XML declaration, comments, DOCTYPE, and SVG tags
-  const cleanSvgContent = logoSvg
-    .replace(/<\?xml[^>]*\?>/gi, '') // Remove XML declaration
-    .replace(/<!--[\s\S]*?-->/gi, '') // Remove comments
-    .replace(/<!DOCTYPE[^>]*>/gi, '') // Remove DOCTYPE
-    .replace(/<svg[^>]*>|<\/svg>/gi, '') // Remove SVG tags
-    .trim();
+  let cleanSvgContent = logoSvg;
+  for (let previous = ''; previous !== cleanSvgContent; ) {
+    previous = cleanSvgContent;
+    cleanSvgContent = cleanSvgContent
+      .replace(/<\?xml[^>]*\?>/gi, '')
+      .replace(/<!--[\s\S]*?-->/gi, '')
+      .replace(/<!DOCTYPE[^>]*>/gi, '')
+      .replace(/<svg[^>]*>|<\/svg>/gi, '');
+  }
+  cleanSvgContent = cleanSvgContent.trim();
 
   return `
     <g transform="translate(${x + offsetX}, ${
@@ -930,15 +934,15 @@ function embedTemplateServiceLogo(
 /**
  * Create logo placeholder with template-driven positioning
  */
-function createTemplateLogoPlaceholder(
+export function createTemplateLogoPlaceholder(
   serviceType: string,
   centerX: number,
   centerY: number,
   width: number,
   height: number
 ): string {
-  const displayName =
-    serviceType.charAt(0).toUpperCase() + serviceType.slice(1);
+  const name = typeof serviceType === 'string' ? serviceType : '';
+  const displayName = name.charAt(0).toUpperCase() + name.slice(1);
   const fontSize = Math.min(width / 6, height / 6);
 
   return `

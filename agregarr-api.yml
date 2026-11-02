@@ -405,6 +405,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -414,7 +415,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -443,6 +443,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -452,7 +453,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -461,6 +461,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -470,7 +471,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -567,6 +567,9 @@ components:
           type: integer
           description: 'Days to look ahead for release dates when creating placeholders (default: 360)'
           example: 360
+          nullable: true
+        placeholderSkipEstimatedDates:
+          type: boolean
           nullable: true
         placeholderReleasedDays:
           type: integer
@@ -1162,6 +1165,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -1171,7 +1175,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -1200,6 +1203,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -1209,7 +1213,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -1218,6 +1221,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -1227,7 +1231,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -1318,6 +1321,9 @@ components:
           type: integer
           description: 'Days to look ahead for release dates when creating placeholders (default: 360)'
           example: 360
+          nullable: true
+        placeholderSkipEstimatedDates:
+          type: boolean
           nullable: true
         placeholderReleasedDays:
           type: integer
@@ -2064,6 +2070,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -2073,7 +2080,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -2102,6 +2108,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -2111,7 +2118,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -2120,6 +2126,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -2129,7 +2136,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -2226,6 +2232,9 @@ components:
           type: integer
           description: 'Days to look ahead for release dates when creating placeholders (default: 360)'
           example: 360
+          nullable: true
+        placeholderSkipEstimatedDates:
+          type: boolean
           nullable: true
         placeholderReleasedDays:
           type: integer
@@ -3512,6 +3521,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -3521,7 +3531,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -3530,6 +3539,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -3539,7 +3549,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -3726,6 +3735,7 @@ components:
         customPoster:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom poster image (legacy format)'
               example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
             - type: object
@@ -3735,7 +3745,6 @@ components:
               example:
                 lib1: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
                 lib2: 'a12bc34d-58cc-4372-a567-0e02b2c3d480.jpg'
-          nullable: true
         autoPoster:
           type: boolean
           description: 'Auto-generate poster during sync'
@@ -3769,6 +3778,7 @@ components:
         customWallpaper:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom wallpaper image (art)'
               example: 'wallpaper-12345.jpg'
             - type: object
@@ -3778,7 +3788,6 @@ components:
               example:
                 lib1: 'wallpaper-12345.jpg'
                 lib2: 'wallpaper-67890.jpg'
-          nullable: true
         customSummary:
           type: string
           description: 'Custom summary/description text for the collection'
@@ -3787,6 +3796,7 @@ components:
         customTheme:
           oneOf:
             - type: string
+              nullable: true
               description: 'Filename of custom theme music file'
               example: 'theme-12345.mp3'
             - type: object
@@ -3796,7 +3806,6 @@ components:
               example:
                 lib1: 'theme-12345.mp3'
                 lib2: 'theme-67890.mp3'
-          nullable: true
         enableCustomWallpaper:
           type: boolean
           description: 'Enable custom wallpaper sync to Plex'
@@ -6796,6 +6805,7 @@ paths:
           schema:
             type: string
           required: false
+          allowReserved: true
           description: Directory path to browse (defaults to /)
           example: /data/media
       responses:
@@ -7852,45 +7862,6 @@ paths:
           description: Too many requests - rate limited
         '500':
           description: Internal server error while detecting media type
-  /collections/poster:
-    post:
-      summary: Upload a poster image for collections
-      description: Uploads a custom poster image that can be used for collections. Supports JPEG, PNG, and WebP formats.
-      tags:
-        - collections-posters
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                poster:
-                  type: string
-                  format: binary
-                  description: The poster image file
-              required:
-                - poster
-      responses:
-        '200':
-          description: Poster uploaded successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  filename:
-                    type: string
-                    example: 'f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
-                  url:
-                    type: string
-                    example: '/api/v1/collections/poster/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg'
-        '400':
-          description: Bad request - invalid file or upload error
-        '403':
-          description: Authentication required
-        '500':
-          description: Internal server error
   /collections/generate-poster:
     post:
       summary: Generate a poster for a collection

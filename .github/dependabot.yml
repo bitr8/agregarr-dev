@@ -1,0 +1,51 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Skip the window where hijacked releases are live; security updates ignore this.
+    cooldown:
+      default-days: 7
+    groups:
+      dev-tooling:
+        dependency-type: development
+        patterns:
+          - 'eslint*'
+          - '@typescript-eslint/*'
+          - 'prettier*'
+          - '@types/*'
+          - 'vitest*'
+        update-types:
+          - minor
+          - patch
+      everything-else:
+        update-types:
+          - minor
+          - patch
+      security:
+        applies-to: security-updates
+        patterns: ['*']
+    # Majors (Next, React, Node) are their own workstreams, not bot PRs.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']

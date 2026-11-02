@@ -37,7 +37,7 @@ jobs:
       - name: Install git
         run: apk add --no-cache git
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install build dependencies
         run: |
           apk add --no-cache \
@@ -46,9 +46,26 @@ jobs:
       - name: Install dependencies
         env:
           HUSKY: 0
-        run: yarn
+        run: yarn install --non-interactive
+      # A plain install rewrites yarn.lock when it drifts from package.json
+      # (--frozen-lockfile never writes it, so it could not be diffed).
+      - name: Lockfile
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if [ -e package-lock.json ]; then echo "::error::package-lock.json is checked in; yarn.lock is the lockfile, delete it."; exit 1; fi
+          rc=0; git diff --exit-code -- yarn.lock || rc=$?
+          if [ "$rc" = 1 ]; then echo "::error::yarn.lock changed during install. Run 'yarn install' and commit yarn.lock."; fi
+          exit "$rc"
       - name: Lint
         run: yarn lint
+      # en.json must match the message ids the code asks for; hand-edited keys drift silently.
+      - name: i18n messages in sync
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          yarn i18n:extract
+          rc=0; git diff --exit-code -- src/i18n/locale/en.json || rc=$?
+          if [ "$rc" = 1 ]; then echo "::error::src/i18n/locale/en.json is out of sync with the code. Run 'yarn i18n:extract' and commit the result."; fi
+          exit "$rc"
       - name: Type Check
         run: yarn typecheck
       - name: Formatting
@@ -65,6 +82,7 @@ jobs:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !startsWith(github.ref, 'refs/tags/')
     needs: test
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
     steps:
       - name: Skip if superseded
         id: skip
@@ -83,16 +101,16 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghcrunner /usr/local/lib/android /usr/share/swift
       - name: Checkout
         if: steps.skip.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to Docker Hub
         if: steps.skip.outputs.skip != 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
       - name: Set up Docker Buildx
         if: steps.skip.outputs.skip != 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Determine Docker tags
         if: steps.skip.outputs.skip != 'true'
         id: tags
@@ -111,25 +129,36 @@ jobs:
             echo "::error::package.json is $v; develop must stay 0.1.0 so builds report develop-<sha>"
             exit 1
           fi
-      - name: Build and push
+      - name: Build
         if: steps.skip.outputs.skip != 'true'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: true
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
             COMMIT_TAG=${{ github.sha }}
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: agregarr-smoke:${{ github.sha }}
+      # The image optimiser is off by config; prove it on the image before the tag moves.
+      - name: Smoke test the image
+        if: steps.skip.outputs.skip != 'true'
+        run: scripts/smoke-image.sh agregarr-smoke:${{ github.sha }}
+      # Push the bytes that were just tested, not a rebuild.
+      - name: Push
+        if: steps.skip.outputs.skip != 'true'
+        run: |
+          docker tag "agregarr-smoke:$GITHUB_SHA" "${{ steps.tags.outputs.tags }}"
+          docker push "${{ steps.tags.outputs.tags }}"
 
   build_release:
     name: Build ${{ matrix.platform }}
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: test
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       matrix:
         include:
@@ -142,16 +171,16 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghcrunner /usr/local/lib/android /usr/share/swift
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
       # Explicit rather than relying on the runner image having npm, which
       # differs between the x64 and arm64 runners.
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       # package.json stays 0.1.0 on develop so those builds self-identify as
@@ -159,10 +188,10 @@ jobs:
       - name: Set version from tag
         run: npm version "${GITHUB_REF#refs/tags/v}" --no-git-tag-version --allow-same-version
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -190,7 +219,7 @@ jobs:
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digests-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
           path: /tmp/digests/*
@@ -204,15 +233,15 @@ jobs:
     needs: build_release
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digests-*
           path: /tmp/digests
           merge-multiple: true
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}

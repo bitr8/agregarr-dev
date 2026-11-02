@@ -4,7 +4,7 @@
  * placed by centring the expanded box where the unrotated buffer's centre
  * would sit — not by anchoring the expanded box's top-left at element.x/y.
  */
-import sharp from 'sharp';
+import sharp, { type OverlayOptions } from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import type { OverlayElement } from '@server/entity/OverlayTemplate';
@@ -48,7 +48,7 @@ const renderOne = async (
   element: OverlayElement,
   posterW = 1000,
   posterH = 1500
-): Promise<sharp.OverlayOptions> => {
+): Promise<OverlayOptions> => {
   const overlays = await overlayTemplateRenderer.renderOverlayElements(
     posterW,
     posterH,

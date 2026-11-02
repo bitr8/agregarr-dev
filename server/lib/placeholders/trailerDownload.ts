@@ -1,41 +1,95 @@
 import type { TmdbVideo } from '@server/api/themoviedb/interfaces';
 import logger from '@server/logger';
-import { spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import type { TrailerDownloadOptions } from './types';
 import { getYoutubeCookiesState, youtubeCookiesPath } from './youtubeCookies';
 
-// Polyfill Intl.ListFormat if not available (needed for @sindresorhus/is in ts-node/CommonJS context)
-// This must be done BEFORE any dynamic imports that might use it
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-if (!(global as any).Intl.ListFormat) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (global as any).Intl.ListFormat = class ListFormat {
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    constructor() {}
-    format(list: string[]): string {
-      return list.join(', ');
-    }
-  };
-}
+// The image sets an absolute path; a dev checkout resolves yt-dlp on PATH.
+const ytDlpBinary = (): string => process.env.YT_DLP_PATH || 'yt-dlp';
 
-interface YoutubeSearchResult {
-  id: { videoId: string };
-  snippet: { title: string };
-}
+const SEARCH_OUTPUT_LIMIT = 256 * 1024;
+const LOG_CAPTURE_LIMIT = 64 * 1024;
+const MAX_SEARCH_RESULTS = 50;
+const MAX_QUERY_LENGTH = 200;
 
-// Cache the YouTube search module to avoid ES Module race conditions
-let youtubeSearchModule: {
-  search: (query: string) => Promise<YoutubeSearchResult[]>;
-} | null = null;
+const capture = (current: string, chunk: Buffer): string =>
+  current.length >= LOG_CAPTURE_LIMIT
+    ? current
+    : (current + chunk.toString()).slice(0, LOG_CAPTURE_LIMIT);
 
-async function getYoutubeSearch() {
-  if (!youtubeSearchModule) {
-    const imported = await import('youtube-search-without-api-key');
-    youtubeSearchModule = imported.default || imported;
+function youtubeCookieArgs(): string[] {
+  const cookiesPath = youtubeCookiesPath();
+  const cookiesState = getYoutubeCookiesState(cookiesPath);
+  if (cookiesState === 'valid') {
+    logger.debug('Using YouTube cookies', {
+      label: 'PlaceholderService',
+      cookiesPath,
+    });
+    return ['--cookies', cookiesPath];
   }
-  return youtubeSearchModule;
+  logger.debug(
+    cookiesState === 'invalid'
+      ? 'YouTube cookies file is not in Netscape format, proceeding without cookies'
+      : 'No YouTube cookies file found, proceeding without cookies',
+    {
+      label: 'PlaceholderService',
+      expectedPath: cookiesPath,
+    }
+  );
+  return [];
+}
+
+export function searchYouTube(
+  query: string,
+  limit: number
+): Promise<{ videoId: string; title: string }[]> {
+  const count = Math.min(
+    Math.max(1, Math.floor(limit) || 1),
+    MAX_SEARCH_RESULTS
+  );
+  const term = query.replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_LENGTH);
+  return new Promise((resolve, reject) => {
+    execFile(
+      ytDlpBinary(),
+      [
+        '--flat-playlist',
+        '--no-warnings',
+        '--print',
+        '%(id)s\t%(title)s',
+        ...youtubeCookieArgs(),
+        `ytsearch${count}:${term}`,
+      ],
+      { timeout: 30000, maxBuffer: SEARCH_OUTPUT_LIMIT },
+      (error, stdout, stderr) => {
+        if (error) {
+          // code: number = exit status, string = ENOENT or maxBuffer, null = timed out
+          const reason =
+            typeof error.code === 'number'
+              ? `exited with code ${error.code}`
+              : typeof error.code === 'string'
+              ? error.message
+              : `timed out (${error.signal ?? 'killed'})`;
+          reject(
+            new Error(
+              `yt-dlp search ${reason}: ${stderr.slice(0, LOG_CAPTURE_LIMIT)}`
+            )
+          );
+          return;
+        }
+        resolve(
+          stdout
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => {
+              const [videoId, ...rest] = line.split('\t');
+              return { videoId, title: rest.join('\t') };
+            })
+        );
+      }
+    );
+  });
 }
 
 const DEFAULT_EXCLUDE_WORDS =
@@ -150,43 +204,24 @@ export async function downloadWithYtDlp(
       'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]',
       '--merge-output-format',
       'mp4',
+      // -o is an output template, so a literal % in the path must be doubled
       '-o',
-      outputPath,
+      outputPath.replace(/%/g, '%%'),
     ];
 
-    const cookiesPath = youtubeCookiesPath();
-    const cookiesState = getYoutubeCookiesState(cookiesPath);
-    if (cookiesState === 'valid') {
-      args.push('--cookies', cookiesPath);
-      logger.debug('Using YouTube cookies for download', {
-        label: 'PlaceholderService',
-        cookiesPath,
-      });
-    } else {
-      logger.debug(
-        cookiesState === 'invalid'
-          ? 'YouTube cookies file is not in Netscape format, proceeding without cookies'
-          : 'No YouTube cookies file found, proceeding without cookies',
-        {
-          label: 'PlaceholderService',
-          expectedPath: cookiesPath,
-        }
-      );
-    }
+    args.push(...youtubeCookieArgs(), videoUrl);
 
-    args.push(videoUrl);
-
-    const ytdlp = spawn('yt-dlp', args);
+    const ytdlp = spawn(ytDlpBinary(), args);
 
     let stdoutOutput = '';
     let stderrOutput = '';
 
     ytdlp.stdout.on('data', (data) => {
-      stdoutOutput += data.toString();
+      stdoutOutput = capture(stdoutOutput, data);
     });
 
     ytdlp.stderr.on('data', (data) => {
-      stderrOutput += data.toString();
+      stderrOutput = capture(stderrOutput, data);
     });
 
     ytdlp.on('close', (code) => {
@@ -220,7 +255,13 @@ export async function downloadWithYtDlp(
           });
         }
 
-        reject(new Error(`yt-dlp exited with code ${code}: ${stderrOutput}`));
+        reject(
+          new Error(
+            `yt-dlp exited with code ${code}: ${
+              isDurationFilterRejection ? stdoutOutput : stderrOutput
+            }`
+          )
+        );
       }
     });
 
@@ -346,8 +387,7 @@ async function searchAndDownloadFromYoutube(
 
   try {
     const searchQuery = `${title}${year ? ` ${year}` : ''} official trailer`;
-    const youtubeSearch = await getYoutubeSearch();
-    const searchResults = await youtubeSearch.search(searchQuery);
+    const searchResults = await searchYouTube(searchQuery, 10);
 
     if (!searchResults || searchResults.length === 0) {
       logger.warn('No YouTube trailers found, using fallback', {
@@ -362,22 +402,20 @@ async function searchAndDownloadFromYoutube(
     const maxCandidates = Math.min(searchResults.length, 10);
     for (let i = 0; i < maxCandidates; i++) {
       const result = searchResults[i];
-      if (
-        !titlePassesWordFilter(result.snippet.title, includeWords, excludeWords)
-      ) {
+      if (!titlePassesWordFilter(result.title, includeWords, excludeWords)) {
         logger.debug('YouTube result rejected by word filter', {
           label: 'PlaceholderService',
-          videoTitle: result.snippet.title,
+          videoTitle: result.title,
         });
         continue;
       }
 
-      const videoUrl = `https://www.youtube.com/watch?v=${result.id.videoId}`;
+      const videoUrl = `https://www.youtube.com/watch?v=${result.videoId}`;
       logger.info('Downloading YouTube trailer', {
         label: 'PlaceholderService',
         title,
-        videoTitle: result.snippet.title,
-        videoId: result.id.videoId,
+        videoTitle: result.title,
+        videoId: result.videoId,
       });
 
       const maxDuration = options.maxDuration || 210;

@@ -3,7 +3,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deriveReleaseDateContext,
   latestAiredSeasonDate,
+  preferRadarrReleaseDate,
 } from './releaseDateContext';
+
+describe('preferRadarrReleaseDate', () => {
+  const tmdb = { releaseDate: '2026-12-01', isEstimated: true };
+
+  it('uses the earliest Radarr digital or physical date and clears the estimate', () => {
+    expect(
+      preferRadarrReleaseDate(tmdb, {
+        radarrDigitalRelease: '2026-11-11T00:00:00Z',
+        radarrPhysicalRelease: '2026-11-25T00:00:00Z',
+      })
+    ).toEqual({ releaseDate: '2026-11-11', isEstimated: false });
+    expect(
+      preferRadarrReleaseDate(tmdb, {
+        radarrPhysicalRelease: '2026-11-25T00:00:00Z',
+      })
+    ).toEqual({ releaseDate: '2026-11-25', isEstimated: false });
+  });
+
+  it('keeps the TMDB result when Radarr has no digital or physical date', () => {
+    expect(preferRadarrReleaseDate(tmdb, {})).toBe(tmdb);
+    expect(preferRadarrReleaseDate(undefined, {})).toBeUndefined();
+  });
+
+  it('builds a date from Radarr alone when TMDB had nothing', () => {
+    expect(
+      preferRadarrReleaseDate(undefined, {
+        radarrDigitalRelease: '2026-11-11T00:00:00Z',
+      })
+    ).toEqual({ releaseDate: '2026-11-11', isEstimated: false });
+  });
+});
 
 describe('deriveReleaseDateContext', () => {
   const originalTz = process.env.TZ;

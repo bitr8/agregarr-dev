@@ -1,4 +1,5 @@
 import logger from '@server/logger';
+import { fileRouteLimiter } from '@server/middleware/rateLimit';
 import { exec } from 'child_process';
 import { Router } from 'express';
 import path from 'path';
@@ -17,7 +18,7 @@ interface FontInfo {
 /**
  * Get all available fonts in the system
  */
-fontsRoutes.get('/', async (req, res) => {
+fontsRoutes.get('/', fileRouteLimiter, async (req, res) => {
   try {
     // Use fc-list to get all available fonts with file paths
     const { stdout } = await execAsync('fc-list : family file');

@@ -23,10 +23,11 @@ import { toTmdbRatingContext } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { fileRouteLimiter } from '@server/middleware/rateLimit';
 import { Router } from 'express';
 import * as fsPromises from 'fs/promises';
 import path from 'path';
-import type sharp from 'sharp';
+import type { OverlayOptions } from 'sharp';
 
 const router = Router();
 
@@ -210,7 +211,7 @@ interface PreviewPosterMetadata {
 router.use(isAuthenticated());
 
 // GET /api/v1/overlay-templates/preview-posters - List available preview posters
-router.get('/preview-posters', async (_req, res, next) => {
+router.get('/preview-posters', fileRouteLimiter, async (_req, res, next) => {
   try {
     const postersDir = path.join(process.cwd(), 'public', 'preview-posters');
 
@@ -752,7 +753,7 @@ router.delete('/:id', async (req, res, next) => {
 });
 
 // GET /api/v1/overlay-templates/:id/preview - Generate preview of overlay template
-router.get('/:id/preview', async (req, res, next) => {
+router.get('/:id/preview', fileRouteLimiter, async (req, res, next) => {
   try {
     const templateId = parseInt(req.params.id);
     const templateRepository = getRepository(OverlayTemplate);
@@ -844,7 +845,7 @@ router.get('/:id/preview', async (req, res, next) => {
 });
 
 // POST /api/v1/overlay-templates/combined-preview - Generate preview with multiple overlays
-router.post('/combined-preview', async (req, res, next) => {
+router.post('/combined-preview', fileRouteLimiter, async (req, res, next) => {
   try {
     const {
       templateIds,
@@ -983,7 +984,7 @@ router.post('/combined-preview', async (req, res, next) => {
     // Batch render: collect all overlay elements, then composite once
     const { width: posterWidth, height: posterHeight } =
       await overlayTemplateRenderer.getPosterDimensions(posterBuffer);
-    const allOverlays: sharp.OverlayOptions[] = [];
+    const allOverlays: OverlayOptions[] = [];
 
     for (const template of orderedTemplates) {
       // Check before each expensive rendering operation

@@ -238,6 +238,8 @@ export const linkCollectionConfig = async (
               masterConfig.createPlaceholdersForMissing,
             placeholderDaysAhead: masterConfig.placeholderDaysAhead,
             placeholderReleasedDays: masterConfig.placeholderReleasedDays,
+            placeholderSkipEstimatedDates:
+              masterConfig.placeholderSkipEstimatedDates,
             placeholderMinimumYear: masterConfig.placeholderMinimumYear,
             placeholderMinimumImdbRating:
               masterConfig.placeholderMinimumImdbRating,

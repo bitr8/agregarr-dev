@@ -84,6 +84,7 @@ const portableFields = [
   'enableCustomTheme',
   'createPlaceholdersForMissing',
   'placeholderReleasedDays',
+  'placeholderSkipEstimatedDates',
   'placeholderDaysAhead',
   'includeAllReleasedItems',
   'placeholderMinimumYear',

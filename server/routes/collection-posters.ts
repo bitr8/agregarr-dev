@@ -4,71 +4,14 @@ import {
   downloadAndSavePoster,
   generatePoster,
   getPosterUrl,
-  savePosterFile,
 } from '@server/lib/posterStorage';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { publicFileLimiter } from '@server/middleware/rateLimit';
 import { Router } from 'express';
-import { posterUpload, rateLimiter } from './collections';
+import { rateLimiter } from './collections';
 
 const collectionPostersRoutes = Router();
-
-/**
- * Upload a poster image for collections
- * POST /api/v1/collections/poster
- */
-collectionPostersRoutes.post(
-  '/poster',
-  isAuthenticated(),
-  (req, res, next) => {
-    posterUpload(req, res, (err) => {
-      if (err) {
-        logger.error('Poster upload error:', err);
-
-        // Handle specific multer errors
-        if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({
-            error: 'File too large. Maximum size is 10MB.',
-          });
-        } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-          return res.status(400).json({
-            error: 'Unexpected field name. Use "poster" as the field name.',
-          });
-        } else {
-          return res.status(400).json({
-            error: err.message || 'File upload failed',
-          });
-        }
-      }
-      next();
-    });
-  },
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
-      // Save the poster file
-      const filename = await savePosterFile(
-        req.file.buffer,
-        req.file.mimetype,
-        req.file.originalname
-      );
-
-      return res.status(200).json({
-        filename,
-        url: getPosterUrl(filename),
-      });
-    } catch (error) {
-      logger.error('Error processing poster upload:', error);
-      return res.status(400).json({
-        error:
-          error instanceof Error ? error.message : 'Failed to process poster',
-      });
-    }
-  }
-);
 
 /**
  * Generate a poster for a collection
@@ -287,51 +230,55 @@ collectionPostersRoutes.get('/posters', isAuthenticated(), async (req, res) => {
  * Serve poster images
  * GET /api/v1/collections/poster/:filename
  */
-collectionPostersRoutes.get('/poster/:filename', async (req, res) => {
-  // Note: No authentication required for serving images - they're already uploaded by admins
-  // and filenames are UUIDs making them hard to guess
-  try {
-    const { filename } = req.params;
-    const { getPosterPath, posterExists } = await import(
-      '@server/lib/posterStorage'
-    );
+collectionPostersRoutes.get(
+  '/poster/:filename',
+  publicFileLimiter,
+  async (req, res) => {
+    // Note: No authentication required for serving images - they're already uploaded by admins
+    // and filenames are UUIDs making them hard to guess
+    try {
+      const { filename } = req.params;
+      const { getPosterPath, posterExists } = await import(
+        '@server/lib/posterStorage'
+      );
 
-    // Security validation is now handled by posterExists and getPosterPath
-    if (!posterExists(filename)) {
-      return res.status(404).json({ error: 'Poster not found' });
-    }
-
-    const posterPath = getPosterPath(filename);
-
-    // Determine content type from file extension
-    const extension = filename.toLowerCase().split('.').pop();
-    let contentType = 'image/jpeg'; // default
-    if (extension === 'png') {
-      contentType = 'image/png';
-    } else if (extension === 'webp') {
-      contentType = 'image/webp';
-    }
-
-    // Set appropriate headers
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-
-    // Stream the file
-    const fs = await import('fs');
-    const stream = fs.createReadStream(posterPath);
-    stream.pipe(res);
-
-    stream.on('error', (error) => {
-      logger.error('Error streaming poster file:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Failed to serve poster' });
+      // Security validation is now handled by posterExists and getPosterPath
+      if (!posterExists(filename)) {
+        return res.status(404).json({ error: 'Poster not found' });
       }
-    });
-  } catch (error) {
-    logger.error('Error serving poster:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+
+      const posterPath = getPosterPath(filename);
+
+      // Determine content type from file extension
+      const extension = filename.toLowerCase().split('.').pop();
+      let contentType = 'image/jpeg'; // default
+      if (extension === 'png') {
+        contentType = 'image/png';
+      } else if (extension === 'webp') {
+        contentType = 'image/webp';
+      }
+
+      // Set appropriate headers
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+
+      // Stream the file
+      const fs = await import('fs');
+      const stream = fs.createReadStream(posterPath);
+      stream.pipe(res);
+
+      stream.on('error', (error) => {
+        logger.error('Error streaming poster file:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to serve poster' });
+        }
+      });
+    } catch (error) {
+      logger.error('Error serving poster:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
   }
-});
+);
 
 /**
  * Check which collections are using a specific poster

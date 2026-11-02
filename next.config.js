@@ -5,8 +5,10 @@ module.exports = {
   env: {
     commitTag: process.env.COMMIT_TAG || 'local',
   },
+  // The UI never uses the optimiser; a non-default loader makes /_next/image 404.
   images: {
-    domains: ['image.tmdb.org'],
+    loader: 'custom',
+    unoptimized: true,
   },
   webpack(config, { isServer }) {
     config.module.rules.push({

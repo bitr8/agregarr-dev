@@ -12,6 +12,13 @@ vi.mock('@server/api/servarr/sonarr', () => ({
   },
 }));
 
+const mockGetMovies = vi.fn();
+vi.mock('@server/api/servarr/radarr', () => ({
+  default: class {
+    getMovies = mockGetMovies;
+  },
+}));
+
 vi.mock('@server/api/themoviedb', () => ({
   default: class {
     getTvShow = () => Promise.resolve({ external_ids: { tvdb_id: 999 } });
@@ -138,5 +145,27 @@ describe('checkMonitoringStatus', () => {
 
     expect(result.missingEpisodeCount).toBe(0);
     expect(result.isMonitored).toBe(true);
+  });
+
+  it('returns the Radarr digital and physical dates for a movie', async () => {
+    mockGetSettings.mockReturnValue({
+      radarr: [{ hostname: 'h', port: 7878, useSsl: false, apiKey: 'k' }],
+    });
+    mockGetMovies.mockResolvedValueOnce([
+      {
+        tmdbId: 42,
+        monitored: true,
+        hasFile: false,
+        tags: [],
+        digitalRelease: '2026-11-11T00:00:00Z',
+        physicalRelease: '2026-11-25T00:00:00Z',
+      },
+    ]);
+
+    const result = await checkMonitoringStatus(42, 'movie');
+
+    expect(result.inRadarr).toBe(true);
+    expect(result.radarrDigitalRelease).toBe('2026-11-11T00:00:00Z');
+    expect(result.radarrPhysicalRelease).toBe('2026-11-25T00:00:00Z');
   });
 });

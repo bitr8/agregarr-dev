@@ -478,6 +478,15 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         );
     }
 
+    if (config.placeholderSkipEstimatedDates) {
+      const kept = upcomingItems.filter((item) => !item.isEstimatedDate);
+      logger.debug('Skipped items with estimated release dates', {
+        label: 'Coming Soon Collections',
+        skipped: upcomingItems.length - kept.length,
+      });
+      upcomingItems.splice(0, upcomingItems.length, ...kept);
+    }
+
     logger.info('Fetched Coming Soon content', {
       label: 'Coming Soon Collections',
       subtype,

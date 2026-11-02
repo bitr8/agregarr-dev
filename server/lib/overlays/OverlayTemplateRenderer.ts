@@ -14,7 +14,7 @@ import type {
 import logger from '@server/logger';
 import fs from 'fs';
 import path from 'path';
-import sharp from 'sharp';
+import sharp, { type OverlayOptions } from 'sharp';
 import {
   DEFAULT_OVERLAY_JPEG_QUALITY,
   normalizeOverlayJpegQuality,
@@ -598,7 +598,7 @@ class OverlayTemplateRendererService {
     posterHeight: number,
     templateData: OverlayTemplateData,
     context: OverlayRenderContext
-  ): Promise<sharp.OverlayOptions[] | null> {
+  ): Promise<OverlayOptions[] | null> {
     try {
       const elements = templateData.elements;
 
@@ -635,7 +635,7 @@ class OverlayTemplateRendererService {
       );
 
       // Render each element as an overlay
-      const overlays: sharp.OverlayOptions[] = [];
+      const overlays: OverlayOptions[] = [];
 
       for (const element of sortedElements) {
         if (
@@ -723,7 +723,7 @@ class OverlayTemplateRendererService {
    */
   async compositeOverlays(
     posterBuffer: Buffer,
-    overlays: sharp.OverlayOptions[],
+    overlays: OverlayOptions[],
     jpegQuality = DEFAULT_OVERLAY_JPEG_QUALITY
   ): Promise<Buffer> {
     let composite = sharp(posterBuffer);
@@ -1552,7 +1552,7 @@ class OverlayTemplateRendererService {
     }
 
     // Create a transparent canvas and composite all icons
-    const compositeInputs: sharp.OverlayOptions[] = iconBuffers.map(
+    const compositeInputs: OverlayOptions[] = iconBuffers.map(
       ({ buffer, x, y }) => ({
         input: buffer,
         left: x,

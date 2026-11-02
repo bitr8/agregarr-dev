@@ -51,7 +51,7 @@ const messages = defineMessages({
   tmdbLanguageTip: 'Language for TMDB posters',
   watchProviderRegion: 'Watch Provider Region',
   watchProviderRegionTip:
-    'Region used by the Streaming Provider overlay to determine available services',
+    'Region used for release dates and by the Streaming Provider overlay to determine available services',
   overlayConcurrency: 'Parallel Items',
   overlayConcurrencyTip:
     'Number of items to process simultaneously during overlay application. Higher values are faster but use more memory.',
