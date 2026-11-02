@@ -422,7 +422,7 @@ const PosterSelectionPopover: React.FC<PosterSelectionPopoverProps> = ({
   return (
     <div
       ref={popoverRef}
-      className="absolute top-full left-0 z-50 mt-1 w-80 rounded-lg border-2 border-stone-600 bg-stone-800 shadow-xl shadow-black/30"
+      className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border-2 border-stone-600 bg-stone-800 shadow-xl shadow-black/30"
     >
       <div className="p-3">
         <div className="mb-3 flex items-center justify-between">
@@ -496,7 +496,7 @@ const PosterSelectionPopover: React.FC<PosterSelectionPopoverProps> = ({
                     {/* Delete button */}
                     <button
                       type="button"
-                      className="absolute top-1 right-1 rounded-full bg-red-500 p-1 text-white opacity-0 transition-opacity hover:bg-red-600 group-hover:opacity-100"
+                      className="absolute right-1 top-1 rounded-full bg-red-500 p-1 text-white opacity-0 transition-opacity hover:bg-red-600 group-hover:opacity-100"
                       onClick={(e) => handleDeletePoster(poster.filename, e)}
                       disabled={deleting === poster.filename}
                     >

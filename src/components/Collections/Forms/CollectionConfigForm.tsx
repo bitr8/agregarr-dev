@@ -2766,7 +2766,7 @@ const CollectionFormConfigForm = ({
                         <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                           <div className="flex">
                             <svg
-                              className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                              className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                               fill="currentColor"
                               viewBox="0 0 20 20"
                             >
@@ -2986,7 +2986,7 @@ const CollectionFormConfigForm = ({
                           <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                             <div className="flex">
                               <svg
-                                className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                                className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                               >
@@ -3014,7 +3014,7 @@ const CollectionFormConfigForm = ({
                           <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                             <div className="flex">
                               <svg
-                                className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                                className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                               >
@@ -3057,7 +3057,7 @@ const CollectionFormConfigForm = ({
                           <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                             <div className="flex">
                               <svg
-                                className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                                className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                               >
@@ -4413,7 +4413,7 @@ const CollectionFormConfigForm = ({
                                                   messages.youtubeCookiesWarningMessage,
                                                   {
                                                     cookiesPath: (
-                                                      <code className="bg-yellow-950 rounded px-1 py-0.5 font-mono">
+                                                      <code className="rounded bg-yellow-950 px-1 py-0.5 font-mono">
                                                         youtube-cookies.txt
                                                       </code>
                                                     ),
