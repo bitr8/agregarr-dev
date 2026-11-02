@@ -43,6 +43,9 @@ updates:
         versions: ['>=5.8.0']
       - dependency-name: 'swr'
         versions: ['>=2.1.0']
+      # Security updates skip the major rule above; the Next upgrade is its own workstream.
+      - dependency-name: 'next'
+        versions: ['>=13.0.0']
   - package-ecosystem: docker
     directory: /
     schedule:
