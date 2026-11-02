@@ -9,8 +9,8 @@ updates:
     cooldown:
       default-days: 7
     groups:
+      # Keep the two lists identical: Dependabot ranks a pattern-less group as more specific.
       dev-tooling:
-        dependency-type: development
         patterns:
           - 'eslint*'
           - '@typescript-eslint/*'
@@ -21,6 +21,13 @@ updates:
           - minor
           - patch
       everything-else:
+        patterns: ['*']
+        exclude-patterns:
+          - 'eslint*'
+          - '@typescript-eslint/*'
+          - 'prettier*'
+          - '@types/*'
+          - 'vitest*'
         update-types:
           - minor
           - patch
