@@ -20,10 +20,7 @@
     "typecheck": "yarn typecheck:server && yarn typecheck:client",
     "typecheck:server": "tsc --project server/tsconfig.json --noEmit",
     "typecheck:client": "tsc --noEmit",
-    "prepare": "husky install",
-    "cypress:open": "cypress open",
-    "cypress:prepare": "ts-node -r tsconfig-paths/register --files --project server/tsconfig.json server/scripts/prepareTestDb.ts",
-    "cypress:build": "yarn build && yarn cypress:prepare"
+    "prepare": "husky install"
   },
   "repository": {
     "type": "git",
@@ -151,7 +148,6 @@
     "commitizen": "4.3.2",
     "copyfiles": "2.4.1",
     "cy-mobile-commands": "0.3.0",
-    "cypress": "12.17.4",
     "cz-conventional-changelog": "3.3.0",
     "eslint": "8.35.0",
     "eslint-config-next": "12.3.7",
