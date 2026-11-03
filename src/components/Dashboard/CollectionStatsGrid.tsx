@@ -90,10 +90,8 @@ const CollectionStatsGrid: React.FC = () => {
   };
 
   if (error) {
-    // Check if it's a Tautulli configuration error
     const isTautulliError =
-      error.message.includes('Tautulli not configured') ||
-      error.message.includes('Tautulli settings');
+      error.response?.data?.error === 'Tautulli not configured';
 
     if (isTautulliError) {
       return (
