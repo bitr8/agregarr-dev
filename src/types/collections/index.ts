@@ -106,6 +106,8 @@ export interface PreExistingCollectionConfig {
   sortOrderHome: number; // Position on Plex home screen
   sortOrderLibrary: number; // Position in library (0 for A-Z section, 1+ for promoted section)
   isLibraryPromoted: boolean; // true = promoted section (rank-prefixed sort title), false = A-Z section
+  sortTitleResetRequested?: boolean; // One-shot: the user cleared the Sort Title field, asking Agregarr to take the sort title back. Consumed and cleared by the next sync
+  sortTitleArticleNormalized?: boolean; // True while this collection's sortTitle is an article-normalized value Agregarr wrote
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
     usersHome: boolean;

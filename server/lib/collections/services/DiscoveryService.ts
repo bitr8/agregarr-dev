@@ -1480,6 +1480,19 @@ export class DiscoveryService {
               existingPreExisting.excludeFromOrdering = hasExclusionLabel;
               settings.save();
             }
+
+            // Refresh what Plex actually holds, on every pass rather than only
+            // at first discovery: the ownership check reads this, and on stale
+            // data it would overwrite a sort title someone typed in Plex - see
+            // isAgregarrOwnedSortTitle.
+            const discoveredTitleSort =
+              typeof collection.titleSort === 'string'
+                ? collection.titleSort
+                : undefined;
+            if (existingPreExisting.titleSort !== discoveredTitleSort) {
+              existingPreExisting.titleSort = discoveredTitleSort;
+              settings.save();
+            }
           }
 
           if (

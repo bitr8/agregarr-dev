@@ -118,6 +118,22 @@ export function isSortTitleOverrideEdit(
   );
 }
 
+/**
+ * Whether this save is the user clearing the Sort Title field - the documented
+ * way to hand the sort title back to Agregarr.
+ *
+ * An empty submitted value cannot say that on its own, because a collection
+ * that never had an override submits the very same empty string. A value that
+ * CHANGED and is now empty can only be a clear, so the intent is derived from
+ * the stored value rather than trusted from a client-sent flag.
+ */
+export function isSortTitleResetRequest(
+  submitted: unknown,
+  stored: string | undefined
+): boolean {
+  return isSortTitleOverrideEdit(submitted, stored) && submitted.trim() === '';
+}
+
 export function buildSortTitleFromOverride(
   override: string,
   collectionName: string,
@@ -142,6 +158,67 @@ export function buildSortTitleFromOverride(
   }
 
   return isBarePrefix ? `${override}${collectionName}` : override;
+}
+
+/**
+ * Whether Plex's current sortTitle for a collection is one Agregarr produced,
+ * and may therefore rewrite - as opposed to one the user typed in Plex, which
+ * must be left alone.
+ *
+ * The A-Z sort title is always recomputed from the collection's name, because
+ * the name is the only place a leading article reliably survives - strip "The"
+ * once and moving it to the end later becomes impossible. Recomputing from the
+ * name is also what would flatten a sort title the user set in Plex, since the
+ * write replaces whatever is there even when article handling itself changes
+ * nothing ("Cameras" on a collection named "...Cameras" has no article to
+ * strip, and was still overwritten with the name).
+ *
+ * Agregarr owns the sort title when there is none, when it is just the
+ * collection's name, when it is a positional rank left over from a demotion
+ * (see buildPromotedSortTitle - that has to be cleaned up or Plex keeps
+ * showing the collection in its promoted section), when Agregarr recorded
+ * that it normalized this one, or when it matches what leading-article
+ * handling would produce for that name under any mode.
+ *
+ * That last case is not redundant with the recorded marker. Plex generates a
+ * sortTitle of its own for a new collection by stripping the leading article
+ * (and leading punctuation), so "The Avengers" arrives already sorting as
+ * "Avengers" with nothing of Agregarr's involved. Without this check that
+ * reads as a human's doing and Agregarr never touches it - meaning
+ * 'moveToEnd' would silently never produce "Avengers, The", and 'off' would
+ * never restore "The Avengers". Checking every mode rather than the
+ * configured one is also what lets Agregarr recognise its own output after
+ * the setting changes.
+ *
+ * everManaged (everLibraryPromoted) also counts as ownership, and covers the
+ * case the other checks cannot see: a value Agregarr wrote through a Sort
+ * Title override that has since been cleared. Nothing records what that
+ * override produced, so "ZZZ_Video Games" looks indistinguishable from a
+ * human's edit - and the collection would stay pinned to it forever, because
+ * clearing the override is precisely the request to stop using it. Agregarr
+ * has demonstrably written this collection's sort title before, so it may
+ * write it again. This is the same signal upstream already uses to decide
+ * whether the sort title is Agregarr's to manage.
+ *
+ * Anything else was typed by a human and is picked up through discovery
+ * rather than owned.
+ */
+export function isAgregarrOwnedSortTitle(
+  titleSort: string | undefined,
+  collectionName: string,
+  articleNormalized?: boolean,
+  everManaged?: boolean
+): boolean {
+  const current = titleSort?.trim();
+  if (!current) return true;
+  if (current === collectionName.trim()) return true;
+  if (/^!\d+_/.test(current)) return true;
+  if (articleNormalized === true) return true;
+  if (everManaged === true) return true;
+
+  return (['strip', 'moveToEnd'] as const).some(
+    (mode) => current === normalizeSortTitleArticle(collectionName, mode)
+  );
 }
 
 /**
@@ -2830,6 +2907,48 @@ export function isMultiCollectionPattern(config?: {
         'actors',
       ].includes(config?.subtype ?? ''))
   );
+}
+
+export type SortTitleArticleHandling = 'strip' | 'moveToEnd' | 'off';
+
+const LEADING_ARTICLE_PATTERN = /^(The|A|An)\s+(.+)$/i;
+
+// Leading punctuation Plex itself drops when it generates a sort title, so
+// "... Cameras" files under C rather than at the very top.
+//
+// Spelled out as explicit ranges rather than \p{P} with the /u flag: the
+// client bundle's babel/webpack toolchain cannot parse Unicode property
+// escapes and fails the build outright. Listing the characters also keeps
+// this to ASCII punctuation plus a few common Unicode quotes and dashes, so
+// a name opening with an emoji keeps it - there is no evidence Plex strips
+// those, and guessing wrong would fight Plex on every emoji-prefixed
+// collection. Must stay identical to the copy in utils/collections/sortTitle.ts.
+const LEADING_PUNCTUATION_PATTERN =
+  /^[\s\u0021-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u007E\u00A1\u00BF\u2010-\u2027]+/;
+
+/**
+ * Normalizes a leading English article ("The"/"A"/"An") for sorting
+ * purposes only - never touches the actual displayed title, just the
+ * computed default sortTitle written for A-Z (non-promoted) collections.
+ * Plex's own sortTitle defaults are inconsistent about this, so this exists
+ * to make Agregarr-managed collections sort predictably regardless of
+ * whatever the source metadata happened to produce.
+ */
+export function normalizeSortTitleArticle(
+  title: string,
+  mode: SortTitleArticleHandling = 'strip'
+): string {
+  // 'off' is the restore: the name exactly as it is, punctuation and article
+  // both intact. Every other mode mirrors what Plex does to a sort title of
+  // its own - drop the leading punctuation first, then handle the article -
+  // so Agregarr writes what Plex would have written rather than fighting it.
+  if (mode === 'off') return title;
+
+  const trimmed = title.replace(LEADING_PUNCTUATION_PATTERN, '') || title;
+  const match = LEADING_ARTICLE_PATTERN.exec(trimmed);
+  if (!match) return trimmed;
+  const [, article, rest] = match;
+  return mode === 'moveToEnd' ? `${rest}, ${article}` : rest;
 }
 
 /**

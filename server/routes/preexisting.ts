@@ -47,13 +47,23 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       .getConfigs()
       .find((c) => c.id === id);
     delete req.body.sortTitleOverrideIsFullTitle;
-    const { isSortTitleOverrideEdit } = await import(
+    const { isSortTitleOverrideEdit, isSortTitleResetRequest } = await import(
       '@server/lib/collections/core/CollectionUtilities'
     );
     const sortTitleOverrideChanged = isSortTitleOverrideEdit(
       req.body.sortTitleOverride,
       existingConfig?.sortTitleOverride
     );
+
+    // One-shot: the sync that acts on it runs later and clears it.
+    if (
+      isSortTitleResetRequest(
+        req.body.sortTitleOverride,
+        existingConfig?.sortTitleOverride
+      )
+    ) {
+      req.body.sortTitleResetRequested = true;
+    }
 
     // A typed rank on an already-promoted collection moves it and its peers
     // (see TypedRepositionService); an A-Z one is stored verbatim so the
