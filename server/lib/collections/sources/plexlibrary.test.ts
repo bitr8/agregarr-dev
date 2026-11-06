@@ -49,7 +49,7 @@ vi.mock('@server/lib/collections/core/CollectionUtilities', () => ({
 vi.mock('@server/api/plexapi', () => ({ default: class {} }));
 vi.mock('@server/api/themoviedb', () => ({ default: class {} }));
 
-import { PlexLibraryCollectionSync } from './plexlibrary';
+import { PlexLibraryCollectionSync, posterSourceOrder } from './plexlibrary';
 
 describe('PlexLibraryCollectionSync person cleanup', () => {
   let sync: PlexLibraryCollectionSync;
@@ -107,5 +107,21 @@ describe('PlexLibraryCollectionSync person cleanup', () => {
     );
 
     expect(deleteCollection).not.toHaveBeenCalled();
+  });
+});
+
+describe('posterSourceOrder', () => {
+  const items = [{ ratingKey: '30' }, { ratingKey: '4' }, { ratingKey: '200' }];
+
+  it('gives random collections a stable order so the poster hash holds', () => {
+    expect(posterSourceOrder(items, 'random').map((i) => i.ratingKey)).toEqual([
+      '4',
+      '30',
+      '200',
+    ]);
+  });
+
+  it('keeps Plex order for every other sort', () => {
+    expect(posterSourceOrder(items, 'date_added_desc')).toBe(items);
   });
 });

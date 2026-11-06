@@ -38,8 +38,20 @@ import {
   getSettings,
   getTmdbLanguage,
   type CollectionConfig,
+  type CollectionSortOrder,
 } from '@server/lib/settings';
 import logger from '@server/logger';
+
+// Plex reshuffles a random smart collection on every fetch; a stable order keeps the poster hash steady
+export function posterSourceOrder<T extends { ratingKey: string }>(
+  children: T[],
+  sortOrder?: CollectionSortOrder
+): T[] {
+  if (sortOrder !== 'random') return children;
+  return [...children].sort(
+    (a, b) => Number(a.ratingKey) - Number(b.ratingKey)
+  );
+}
 
 type PersonTmdbInfo = {
   tmdbPersonId: number;
@@ -1016,18 +1028,22 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
               const children = await plexClient.getCollectionItemsWithMetadata(
                 collectionRatingKey
               );
-              posterItems = children.slice(0, 12).map((item, index) => ({
-                ratingKey: item.ratingKey,
-                title: item.title,
-                type:
-                  item.type === 'movie' ? ('movie' as const) : ('tv' as const),
-                tmdbId: extractTmdbIdFromGuids(item.Guid) ?? undefined,
-                tvdbId: extractTvdbIdFromGuids(item.Guid) ?? undefined,
-                metadata: {
-                  libraryKey: config.libraryId,
-                  originalPosition: index + 1,
-                },
-              }));
+              posterItems = posterSourceOrder(children, config.sortOrder)
+                .slice(0, 12)
+                .map((item, index) => ({
+                  ratingKey: item.ratingKey,
+                  title: item.title,
+                  type:
+                    item.type === 'movie'
+                      ? ('movie' as const)
+                      : ('tv' as const),
+                  tmdbId: extractTmdbIdFromGuids(item.Guid) ?? undefined,
+                  tvdbId: extractTvdbIdFromGuids(item.Guid) ?? undefined,
+                  metadata: {
+                    libraryKey: config.libraryId,
+                    originalPosition: index + 1,
+                  },
+                }));
             } catch {
               logger.warn(
                 `Failed to fetch items for essentials poster: ${collectionName}`,
