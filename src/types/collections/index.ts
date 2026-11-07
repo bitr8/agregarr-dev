@@ -1108,6 +1108,7 @@ export interface CollectionSourceConfig {
   readonly minimumPlays?: number; // Minimum play count required
   // Networks-specific configuration
   readonly networksCountry?: string; // Selected country for Networks collections
+  readonly tmdbAdvancedFilters?: TmdbAdvancedFilters; // Per-source TMDB discover filters (advanced_custom_tmdb)
   // Radarr/Sonarr tag source configuration
   readonly radarrTagServerId?: number;
   readonly radarrTagId?: number;
@@ -1321,6 +1322,7 @@ export interface SourceDefinition {
   readonly minimumPlays?: number;
   readonly priority: number;
   readonly networksCountry?: string; // Selected country for Networks collections
+  readonly tmdbAdvancedFilters?: TmdbAdvancedFilters; // Per-source TMDB discover filters (advanced_custom_tmdb)
   readonly radarrTagServerId?: number; // Radarr instance ID for radarrtag source
   readonly radarrTagId?: number; // Radarr tag ID for radarrtag source
   readonly radarrTagLabel?: string; // Radarr tag label for display

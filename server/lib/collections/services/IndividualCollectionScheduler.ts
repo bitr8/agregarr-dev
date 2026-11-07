@@ -1,5 +1,6 @@
 import PlexAPI from '@server/api/plexapi';
 import type {
+  CollectionConfig,
   CustomSyncSchedule,
   MultiSourceCombineMode,
   MultiSourceType,
@@ -828,6 +829,7 @@ export class IndividualCollectionScheduler {
           minimumPlays?: number;
           priority: number;
           networksCountry?: string;
+          tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
           radarrTagServerId?: number;
           radarrTagId?: number;
           radarrTagLabel?: string;
@@ -872,6 +874,7 @@ export class IndividualCollectionScheduler {
               minimumPlays: source.minimumPlays,
               priority: source.priority,
               networksCountry: source.networksCountry,
+              tmdbAdvancedFilters: source.tmdbAdvancedFilters,
               radarrTagServerId: source.radarrTagServerId,
               radarrTagId: source.radarrTagId,
               radarrTagLabel: source.radarrTagLabel,

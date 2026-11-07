@@ -73,6 +73,7 @@ export function buildMultiSourceSyncConfig(
         minimumPlays: source.minimumPlays,
         priority: source.priority,
         networksCountry: source.networksCountry,
+        tmdbAdvancedFilters: source.tmdbAdvancedFilters,
         radarrTagServerId: source.radarrTagServerId,
         radarrTagId: source.radarrTagId,
         radarrTagLabel: source.radarrTagLabel,

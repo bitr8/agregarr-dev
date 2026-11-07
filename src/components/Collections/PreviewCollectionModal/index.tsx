@@ -122,6 +122,7 @@ interface PreviewCollectionModalProps {
       customDays?: number;
       minimumPlays?: number;
       networksCountry?: string;
+      tmdbAdvancedFilters?: Record<string, unknown>;
     }[];
     combineMode?: 'interleaved' | 'list_order' | 'randomised' | 'cycle_lists';
     sortOrder?: string;

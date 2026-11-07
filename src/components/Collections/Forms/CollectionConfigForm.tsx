@@ -2165,6 +2165,9 @@ const CollectionFormConfigForm = ({
                   customDays: existingConfig.customDays,
                   minimumPlays: existingConfig.minimumPlays,
                   networksCountry: existingConfig.networksCountry,
+                  ...(existingConfig.subtype === 'advanced_custom_tmdb' && {
+                    tmdbAdvancedFilters: existingConfig.tmdbAdvancedFilters,
+                  }),
                   priority: 0,
                   isExpanded: true,
                 },
@@ -3040,6 +3043,8 @@ const CollectionFormConfigForm = ({
                                     minimumPlays: source.minimumPlays,
                                     priority: source.priority,
                                     networksCountry: source.networksCountry,
+                                    tmdbAdvancedFilters:
+                                      source.tmdbAdvancedFilters,
                                     radarrTagServerId: source.radarrTagServerId,
                                     radarrTagId: source.radarrTagId,
                                     sonarrTagServerId: source.sonarrTagServerId,
@@ -5744,6 +5749,7 @@ const CollectionFormConfigForm = ({
                               customDays?: number;
                               minimumPlays?: number;
                               networksCountry?: string;
+                              tmdbAdvancedFilters?: Record<string, unknown>;
                             }[]
                           | undefined,
                         combineMode: values.combineMode,

@@ -335,6 +335,7 @@ export async function processMultiSourcePreview(
     customDays?: number;
     minimumPlays?: number;
     networksCountry?: string;
+    tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
     radarrTagId?: number;
     radarrTagServerId?: number;
     sonarrTagId?: number;
@@ -436,6 +437,13 @@ export async function processMultiSourcePreview(
         if (source.timePeriod === 'custom') {
           sourceConfigRecord.customDays = source.customDays;
         }
+      }
+
+      if (source.type === 'tmdb' && source.subtype === 'advanced_custom_tmdb') {
+        sourceConfigRecord.tmdbAdvancedFilters = source.tmdbAdvancedFilters;
+        sourceConfigRecord.maxItems = maxItems;
+        sourceConfigRecord.tmdbMovieSortBy = undefined;
+        sourceConfigRecord.tmdbTvSortBy = undefined;
       }
 
       if (source.type === 'networks') {
@@ -965,6 +973,7 @@ async function processPreviewAsync(
       customDays?: number;
       minimumPlays?: number;
       networksCountry?: string;
+      tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
       radarrTagId?: number;
       radarrTagServerId?: number;
       sonarrTagId?: number;
