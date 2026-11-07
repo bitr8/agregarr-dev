@@ -1354,6 +1354,9 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                     {segment.field &&
                       [
                         'releaseDate',
+                        'theatricalReleaseDate',
+                        'digitalReleaseDate',
+                        'physicalReleaseDate',
                         'nextEpisodeAirDate',
                         'nextSeasonAirDate',
                         'lastPlayed',

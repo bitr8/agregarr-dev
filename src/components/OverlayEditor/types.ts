@@ -277,6 +277,14 @@ export interface OverlayRenderContext {
   isEstimatedReleaseDate?: boolean; // releaseDate is the theatrical+90 estimate, not a published date
   daysUntilRelease?: number; // Days until releaseDate
   daysAgo?: number; // Days since releaseDate
+  theatricalReleaseDate?: string; // Movies: published theatrical date
+  digitalReleaseDate?: string; // Movies: published digital date
+  physicalReleaseDate?: string; // Movies: published physical date
+  daysSinceTheatricalRelease?: number; // Negative before the date
+  daysSinceDigitalRelease?: number;
+  daysSincePhysicalRelease?: number;
+  daysSinceHomeRelease?: number; // Earliest of digital / physical
+  releaseDateSource?: string; // digital, physical, estimate (theatrical+90) or tmdb
 
   // TV SHOWS - Episode/Season countdowns (separate from releaseDate)
   nextEpisodeAirDate?: string; // Raw date for ANY next episode (including mid-season)
@@ -518,6 +526,47 @@ export const AVAILABLE_VARIABLES = {
       field: 'isEstimatedReleaseDate',
       label: 'Release Date Is Estimated',
       example: 'false',
+    },
+    {
+      field: 'theatricalReleaseDate',
+      label: 'Theatrical Release Date (Movies)',
+      example: 'OCT 25',
+    },
+    {
+      field: 'digitalReleaseDate',
+      label: 'Digital Release Date (Movies)',
+      example: 'DEC 25',
+    },
+    {
+      field: 'physicalReleaseDate',
+      label: 'Physical Release Date (Movies)',
+      example: 'JAN 14',
+    },
+    {
+      field: 'daysSinceTheatricalRelease',
+      label: 'Days Since Theatrical Release (Movies, negative before the date)',
+      example: '61',
+    },
+    {
+      field: 'daysSinceDigitalRelease',
+      label: 'Days Since Digital Release (Movies, negative before the date)',
+      example: '0',
+    },
+    {
+      field: 'daysSincePhysicalRelease',
+      label: 'Days Since Physical Release (Movies, negative before the date)',
+      example: '-20',
+    },
+    {
+      field: 'daysSinceHomeRelease',
+      label:
+        'Days Since Home Release (Digital or Physical, negative before the date)',
+      example: '0',
+    },
+    {
+      field: 'releaseDateSource',
+      label: 'Release Date Source (digital/physical/estimate)',
+      example: 'digital',
     },
     { field: 'daysUntilRelease', label: 'Days Until Release', example: '14' },
     {
@@ -788,6 +837,47 @@ export const CONDITION_FIELD_CATEGORIES = {
       example: 'false',
     },
     {
+      field: 'theatricalReleaseDate',
+      label: 'Theatrical Release Date (Movies)',
+      example: 'OCT 25',
+    },
+    {
+      field: 'digitalReleaseDate',
+      label: 'Digital Release Date (Movies)',
+      example: 'DEC 25',
+    },
+    {
+      field: 'physicalReleaseDate',
+      label: 'Physical Release Date (Movies)',
+      example: 'JAN 14',
+    },
+    {
+      field: 'daysSinceTheatricalRelease',
+      label: 'Days Since Theatrical Release (Movies), negative before the date',
+      example: '61',
+    },
+    {
+      field: 'daysSinceDigitalRelease',
+      label: 'Days Since Digital Release (Movies), negative before the date',
+      example: '0',
+    },
+    {
+      field: 'daysSincePhysicalRelease',
+      label: 'Days Since Physical Release (Movies), negative before the date',
+      example: '-20',
+    },
+    {
+      field: 'daysSinceHomeRelease',
+      label:
+        'Days Since Home Release (Digital or Physical), negative before the date',
+      example: '0',
+    },
+    {
+      field: 'releaseDateSource',
+      label: 'Release Date Source (digital/physical/estimate)',
+      example: 'digital',
+    },
+    {
       field: 'daysAgo',
       label: 'Days Since Release (incl. release day)',
       example: '3',
@@ -1000,6 +1090,14 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysSinceLastPlayed: 3,
     releaseDate: '2025-02-15', // Primary release date (digital)
     isEstimatedReleaseDate: false,
+    theatricalReleaseDate: '2024-11-20',
+    digitalReleaseDate: '2025-02-15',
+    physicalReleaseDate: '2025-03-04',
+    daysSinceTheatricalRelease: -69,
+    daysSinceDigitalRelease: -14,
+    daysSincePhysicalRelease: -3,
+    daysSinceHomeRelease: -14,
+    releaseDateSource: 'digital',
     daysUntilRelease: 14,
     runtime: 136,
     runtimeHHMM: '2h 16m',

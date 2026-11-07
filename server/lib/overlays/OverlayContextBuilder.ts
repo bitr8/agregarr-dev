@@ -28,7 +28,10 @@ import {
   NO_SEASON_FALLBACK,
 } from './maintainerrCountdown';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
-import { latestAiredSeasonDate } from './releaseDateContext';
+import {
+  latestAiredSeasonDate,
+  movieReleaseInfoFromTmdb,
+} from './releaseDateContext';
 import { toTmdbRatingContext, usesTmdbRatingFields } from './tmdbRatingPolicy';
 
 // Captured defensively: the app replaces the global Intl with the andyearnshaw
@@ -1187,6 +1190,11 @@ export interface ReleaseDateInfo {
   releaseDate?: string;
   // releaseDate is the theatrical+90 guess, not a published digital/physical date.
   isEstimated?: boolean;
+  // Movie per-type dates (date-only), region-preferred like releaseDate.
+  theatricalRelease?: string;
+  digitalRelease?: string;
+  physicalRelease?: string;
+  releaseSource?: 'digital' | 'physical' | 'estimate' | 'tmdb';
   nextEpisodeAirDate?: string;
   nextSeasonAirDate?: string;
   // Fallback source for daysAgoNextSeason once next_episode_to_air moves on.
@@ -1231,7 +1239,7 @@ function hasUpcomingNextEpisode(info: ReleaseDateInfo | undefined): boolean {
 
 /**
  * Fetch release date information from TMDB with Sonarr fallback for TV shows
- * For movies: Gets digital/physical/theatrical release dates
+ * For movies: Gets digital/physical/estimate release dates
  * For TV: Gets next episode air date from TMDB, falls back to Sonarr if unavailable
  *
  * @param tmdbId - TMDB ID of the item
@@ -1317,27 +1325,15 @@ export async function fetchReleaseDateInfo(
       // For movies, use proper release date calculation (digital > physical > theatrical+90)
       // This matches PlaceholderContextService implementation
       if (movieDetails.release_dates?.results) {
-        const { extractReleaseDates, determineReleaseDate } = await import(
-          '@server/utils/dateHelpers'
-        );
         const preferredRegion =
           getSettings().overlays?.watchProviderRegion || 'US';
-        const extracted = extractReleaseDates(
+        const determined = movieReleaseInfoFromTmdb(
           movieDetails.release_dates.results,
           preferredRegion
         );
 
-        const determined = determineReleaseDate(
-          extracted.digitalRelease,
-          extracted.physicalRelease,
-          extracted.inCinemas
-        );
-
         if (determined) {
-          return {
-            releaseDate: determined.releaseDate,
-            isEstimated: determined.isEstimated,
-          };
+          return determined;
         }
       }
 
@@ -1349,6 +1345,7 @@ export async function fetchReleaseDateInfo(
         return {
           releaseDate: movieDetails.release_date,
           isEstimated: false,
+          releaseSource: 'tmdb',
         };
       }
     } else {

@@ -432,6 +432,15 @@ export interface OverlayRenderContext {
   isEstimatedReleaseDate?: boolean; // releaseDate is the theatrical+90 estimate, not a published date
   daysUntilRelease?: number; // Days until releaseDate
   daysAgo?: number; // Days since releaseDate
+  // MOVIES: published per-type dates (region-preferred); negative daysSince = still in the future
+  theatricalReleaseDate?: string;
+  digitalReleaseDate?: string;
+  physicalReleaseDate?: string;
+  daysSinceTheatricalRelease?: number;
+  daysSinceDigitalRelease?: number;
+  daysSincePhysicalRelease?: number;
+  daysSinceHomeRelease?: number; // earliest of digital / physical
+  releaseDateSource?: string; // 'digital' | 'physical' | 'estimate' (theatrical+90) | 'tmdb'
 
   // TV SHOWS - Episode/Season countdowns (separate from releaseDate)
   nextEpisodeAirDate?: string; // Raw date for ANY next episode (including mid-season)
@@ -1123,6 +1132,9 @@ class OverlayTemplateRendererService {
         // Check if this is a date field with custom format
         const isDateField = [
           'releaseDate',
+          'theatricalReleaseDate',
+          'digitalReleaseDate',
+          'physicalReleaseDate',
           'nextEpisodeAirDate',
           'nextSeasonAirDate',
           'lastPlayed',
