@@ -1791,8 +1791,8 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     }
 
     // Fetch from Plex if cache not available
-    const library = await plexClient.getLibraryContents(libraryId);
-    const movies = library.items
+    const items = await plexClient.getAllLibraryContents(libraryId);
+    const movies = items
       .filter((item) => item.type === 'movie')
       .map((item) => ({
         ratingKey: item.ratingKey,
