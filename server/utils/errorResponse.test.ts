@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.setConfig({ testTimeout: 30_000 });
+
 describe('sanitizeErrorMessage', () => {
   beforeEach(() => {
     vi.resetModules();

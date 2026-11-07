@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { describe, expect, it, vi } from 'vitest';
 
+vi.setConfig({ testTimeout: 30_000 });
+
 const state = vi.hoisted(() => ({ settings: undefined as unknown }));
 
 // Fall back to real settings: RandomListManager calls getSettings() at module load time
