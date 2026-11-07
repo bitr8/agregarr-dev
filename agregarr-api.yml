@@ -300,6 +300,10 @@ components:
           type: boolean
           description: If true, new movie placeholder folders are named "Title (Year) {tmdb-ID}" so same-title movies get separate folders. Existing folders are not renamed.
           example: false
+        placeholderFolderTvdbId:
+          type: boolean
+          description: If true, new TV placeholder folders for shows not in Sonarr are named "Title (Year) {tvdb-ID}". Existing folders are not renamed.
+          example: false
         skipYoutubeTrailerDownloads:
           type: boolean
           description: If true, skip YouTube trailer downloads and use hardcoded placeholder video only (speeds up sync)

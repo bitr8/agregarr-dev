@@ -706,6 +706,7 @@ export interface MainSettings {
   placeholderMovieRootFolders?: Record<string, string>; // libraryKey -> movie placeholder path mapping
   placeholderTVRootFolders?: Record<string, string>; // libraryKey -> TV placeholder path mapping
   // Trailer download settings
+  placeholderFolderTvdbId?: boolean; // If true, new TV placeholder folders not in Sonarr are named 'Title (Year) {tvdb-ID}'
   placeholderFolderTmdbId?: boolean; // If true, new movie placeholder folders are named 'Title (Year) {tmdb-ID}'
   placeholderEditions?: boolean; // If true, new TV placeholders use a separate Plex edition folder '{edition-Trailer}'
   skipYoutubeTrailerDownloads?: boolean; // If true, skip YouTube trailer downloads and use hardcoded placeholder video only (speeds up sync)

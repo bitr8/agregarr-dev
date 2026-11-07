@@ -110,8 +110,10 @@ export function resolvePlaceholderPaths(
     tmdbId,
     mediaType,
     libraryPath,
+    tvdbId,
     sonarrFolderName,
     tmdbFolderHint,
+    tvdbFolderHint,
   } = options;
 
   let result: ResolvedPlaceholderPaths;
@@ -136,6 +138,9 @@ export function resolvePlaceholderPaths(
     } else {
       const yearStr = year ? ` (${year})` : '';
       baseFolderName = `${sanitizeFilename(title)}${yearStr}`;
+      if (tvdbFolderHint && tvdbId) {
+        baseFolderName += ` {tvdb-${tvdbId}}`;
+      }
     }
     const useEditions =
       getSettings().main.placeholderEditions !== false &&
@@ -185,6 +190,39 @@ export async function wantsTmdbFolderHint(
     });
     return false;
   }
+}
+
+async function pathExists(target: string): Promise<boolean | 'error'> {
+  try {
+    await fs.access(target);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? false : 'error';
+  }
+}
+
+// An existing placeholder keeps its folder (either form) whatever the setting.
+export async function wantsTvdbFolderHint(
+  options: Omit<PlaceholderOptions, 'trailerPath' | 'tvdbFolderHint'>
+): Promise<boolean> {
+  if (
+    options.mediaType !== 'tv' ||
+    !options.tvdbId ||
+    options.sonarrFolderName
+  ) {
+    return false;
+  }
+  const legacy = await pathExists(
+    resolvePlaceholderPaths(options).destinationPath
+  );
+  if (legacy !== false) return false;
+  const hinted = await pathExists(
+    resolvePlaceholderPaths({ ...options, tvdbFolderHint: true })
+      .destinationPath
+  );
+  if (hinted === true) return true;
+  if (hinted === 'error') return false;
+  return !!getSettings().main.placeholderFolderTvdbId;
 }
 
 /**
