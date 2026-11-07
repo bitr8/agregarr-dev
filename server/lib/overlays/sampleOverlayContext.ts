@@ -196,6 +196,7 @@ export function createSampleOverlayContext(
     context.daysSincePhysicalRelease = undefined;
     context.daysSinceHomeRelease = undefined;
     context.releaseDateSource = undefined;
+    context.edition = undefined;
     // Stream-derived; the show path never sets it (episode aggregation only
     // fills audioCodec), so previewing one would promise a badge live shows
     // never get.

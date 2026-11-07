@@ -457,7 +457,6 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         audioFormat: '5.1',
         audioProfile: 'plus',
         videoCodec: 'H.264',
-        edition: 'Extended Cut',
         status:
           tvDetails.status === 'Ended' || tvDetails.status === 'Canceled'
             ? 'Ended'

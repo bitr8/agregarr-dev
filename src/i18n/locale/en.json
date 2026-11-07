@@ -993,7 +993,7 @@
   "components.OverlayEditor.previewText": "Preview",
   "components.OverlayEditor.properties": "Properties",
   "components.OverlayEditor.rankCollection": "Rank within collection",
-  "components.OverlayEditor.rankHint": "Shows the item's position in this collection. Items outside it get no number.",
+  "components.OverlayEditor.rankHint": "Shows the item's position in this collection, in the order Plex sorts it. Items outside it get no number, and season and episode artwork never shows a rank.",
   "components.OverlayEditor.ratingCountry": "Rating Country",
   "components.OverlayEditor.redo": "Redo",
   "components.OverlayEditor.refreshPoster": "Next Poster",
