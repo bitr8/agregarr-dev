@@ -281,6 +281,22 @@ class PlexTvAPI extends ExternalAPI {
     return parsedXml;
   }
 
+  public async getSharedUserToken(
+    machineId: string,
+    plexUserId: number
+  ): Promise<string | null> {
+    const data = await this.get<string>(
+      `/api/servers/${encodeURIComponent(machineId)}/shared_servers`,
+      { transformResponse: [], responseType: 'text', timeout: 10000 },
+      300
+    );
+    const parsed = await xml2js.parseStringPromise(data);
+    const shares: { $?: { userID?: string; accessToken?: string } }[] =
+      parsed?.MediaContainer?.SharedServer ?? [];
+    const share = shares.find((s) => Number(s.$?.userID) === plexUserId);
+    return share?.$?.accessToken || null;
+  }
+
   public async getWatchlist({
     offset = 0,
     size = 20,

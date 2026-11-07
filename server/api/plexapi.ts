@@ -3733,6 +3733,16 @@ class PlexAPI {
   }
 
   /**
+   * Reset the resume position of a Plex item (same endpoint python-plexapi
+   * uses for updateProgress)
+   */
+  public async resetItemProgress(ratingKey: string): Promise<void> {
+    await this.plexClient.query(
+      `/:/progress?key=${ratingKey}&identifier=com.plexapp.plugins.library&time=0&state=stopped`
+    );
+  }
+
+  /**
    * Get all values for a library attribute (genre, decade, resolution, contentRating)
    * @param libraryId - Library section key
    * @param attribute - Attribute type to query
