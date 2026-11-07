@@ -1810,6 +1810,10 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           { field: 'productionCountries', label: 'Production Countries' },
         ],
       },
+      edition: {
+        label: 'Edition',
+        fields: [{ field: 'edition', label: 'Edition' }],
+      },
       contentRating: {
         label: 'Content Rating',
         fields: [{ field: 'contentRating', label: 'Content Rating' }],
