@@ -310,39 +310,6 @@ class MetadataTrackingService {
     return false;
   }
 
-  async recordOverlayApplication(
-    itemRatingKey: string,
-    libraryKey: string,
-    inputHash: string,
-    uploadUrl: string
-  ): Promise<void> {
-    const repo = getRepository(MediaItemMetadata);
-
-    let metadata = await repo.findOne({
-      where: { plexItemRatingKey: itemRatingKey },
-    });
-
-    if (!metadata) {
-      metadata = new MediaItemMetadata({
-        plexItemRatingKey: itemRatingKey,
-        libraryKey: libraryKey,
-      });
-    }
-
-    metadata.lastOverlayInputHash = inputHash;
-    metadata.lastPosterUploadUrl = uploadUrl;
-    metadata.lastOverlayAppliedAt = new Date();
-
-    await repo.save(metadata);
-
-    logger.info('Recorded overlay application', {
-      label: 'MetadataTracking',
-      itemRatingKey,
-      inputHash: inputHash.substring(0, 8),
-      uploadUrl,
-    });
-  }
-
   async recordOverlayApplicationWithBasePoster(
     itemRatingKey: string,
     libraryKey: string,
