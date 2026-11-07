@@ -433,6 +433,7 @@ export interface CollectionFormConfig {
   readonly comingSoonSonarrTagIds?: number[]; // Sonarr tag IDs to filter by
   readonly comingSoonRadarrRootFolder?: string; // Radarr root folder path to filter by
   readonly comingSoonSonarrRootFolder?: string; // Sonarr root folder path to filter by
+  readonly comingSoonIncludeMidSeason?: boolean; // TV monitored: also include shows whose next episode is mid-season
   // Generic ordering options (applicable to all collection types)
   readonly sortOrder?: CollectionSortOrder; // Sort order for collection items (default: 'default')
   // Plex Library label subtype: build a collection from items carrying this Plex label
@@ -656,6 +657,7 @@ export interface CollectionConfigCreateRequest {
   readonly comingSoonSonarrTagIds?: number[];
   readonly comingSoonRadarrRootFolder?: string;
   readonly comingSoonSonarrRootFolder?: string;
+  readonly comingSoonIncludeMidSeason?: boolean;
   readonly sortOrder?: CollectionSortOrder;
   // Plex Library label subtype: build a collection from items carrying this Plex label
   readonly plexLabel?: string;
@@ -817,6 +819,7 @@ export const toCollectionCreateRequest = (
     comingSoonSonarrTagIds: config.comingSoonSonarrTagIds,
     comingSoonRadarrRootFolder: config.comingSoonRadarrRootFolder,
     comingSoonSonarrRootFolder: config.comingSoonSonarrRootFolder,
+    comingSoonIncludeMidSeason: config.comingSoonIncludeMidSeason,
     sortOrder: config.sortOrder,
     personMinimumItems: config.personMinimumItems,
     franchiseMinimumItems: config.franchiseMinimumItems,

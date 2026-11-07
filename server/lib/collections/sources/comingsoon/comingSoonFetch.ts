@@ -358,10 +358,18 @@ export async function fetchMonitoredShows(
           // Get all episodes for this series
           const episodes = await sonarrClient.getEpisodesBySeries(series.id);
 
-          // Find all season premieres (episode 1 of each season, excluding specials)
-          const seasonPremieres = episodes.filter(
-            (ep) => ep.episodeNumber === 1 && ep.seasonNumber > 0
-          );
+          // Candidates: season premieres, or any episode when mid-season is included (specials excluded)
+          const seasonPremieres = episodes
+            .filter(
+              (ep) =>
+                ep.seasonNumber > 0 &&
+                (config.comingSoonIncludeMidSeason || ep.episodeNumber === 1)
+            )
+            .sort(
+              (a, b) =>
+                new Date(a.airDateUtc ?? 0).getTime() -
+                new Date(b.airDateUtc ?? 0).getTime()
+            );
 
           logger.debug('Checking series for upcoming premiere', {
             label: 'Coming Soon Collections',
@@ -371,7 +379,7 @@ export async function fetchMonitoredShows(
             seriesMonitored: series.monitored,
           });
 
-          // Find the next unaired monitored season premiere
+          // Find the next unaired monitored episode candidate
           // Import timezone-aware helper to convert UTC air dates to server timezone calendar dates
           const { isDateInFuture } = await import('@server/utils/dateHelpers');
 
@@ -395,7 +403,7 @@ export async function fetchMonitoredShows(
               episodeFileId: ep.episodeFileId,
             });
 
-            // Next premiere must be in the future and not downloaded yet
+            // Next episode must be in the future and not downloaded yet
             return isFuture && !hasFile;
           });
 
@@ -470,31 +478,6 @@ export async function fetchMonitoredShows(
             });
           }
 
-          // Determine if has file and when it was downloaded (for the premiere episode)
-          const hasFile = nextPremiere.episodeFileId > 0;
-          let downloadedDate: string | undefined;
-
-          if (hasFile) {
-            try {
-              // Get the actual episode file to get the real dateAdded
-              const episodeFile = await sonarrClient.getEpisodeFile(
-                nextPremiere.episodeFileId
-              );
-              downloadedDate = episodeFile.dateAdded;
-            } catch (error) {
-              logger.debug(
-                'Could not get episode file date, using series added date as fallback',
-                {
-                  label: 'Coming Soon Collections',
-                  seriesTitle: series.title,
-                  episodeFileId: nextPremiere.episodeFileId,
-                }
-              );
-              // Fallback to series added date if we can't get episode file
-              downloadedDate = series.added;
-            }
-          }
-
           items.push({
             tmdbId, // Converted from TVDB ID
             tvdbId: series.tvdbId,
@@ -504,11 +487,10 @@ export async function fetchMonitoredShows(
             source: 'sonarr',
             monitored: true,
             airDate: nextPremiere.airDateUtc,
-            hasFile,
-            downloadedDate,
-            // isReturning based purely on season number
-            // Season 1 = new show (PREMIERES), Season > 1 = returning show (RETURNING)
-            isReturning: nextPremiere.seasonNumber > 1,
+            hasFile: false,
+            // Season 1 = new show (PREMIERES), Season > 1 or mid-season = returning show (RETURNING)
+            isReturning:
+              nextPremiere.seasonNumber > 1 || nextPremiere.episodeNumber > 1,
             seasonNumber: nextPremiere.seasonNumber,
             episodeNumber: nextPremiere.episodeNumber,
           });

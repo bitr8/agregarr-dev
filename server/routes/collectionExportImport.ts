@@ -155,6 +155,7 @@ const strippedFields = [
   'comingSoonSonarrTagIds',
   'comingSoonRadarrRootFolder',
   'comingSoonSonarrRootFolder',
+  'comingSoonIncludeMidSeason',
   'customPoster',
   'customWallpaper',
   'customTheme',

@@ -245,6 +245,9 @@ const messages = defineMessages({
   daysAhead: 'Days Ahead',
   daysAheadHelp:
     'Create placeholders for items releasing within this many days',
+  includeMidSeason: 'Include mid-season episodes (TV)',
+  includeMidSeasonHelp:
+    'Also list shows whose next episode airs inside the window, not just season premieres. Shows already in Plex get no placeholder.',
   releasedItems: 'Released Items',
   includeAllReleasedItems: 'Include all released items',
   includeAllReleasedItemsHelp:
@@ -1978,6 +1981,9 @@ const CollectionFormConfigForm = ({
           comingSoonSonarrRootFolder:
             (config as CollectionFormConfig).comingSoonSonarrRootFolder ??
             undefined,
+          comingSoonIncludeMidSeason:
+            (config as CollectionFormConfig).comingSoonIncludeMidSeason ??
+            false,
           // Direct download server selection
           directDownloadRadarrServerId:
             (config as CollectionFormConfig).directDownloadRadarrServerId ??
@@ -2635,6 +2641,10 @@ const CollectionFormConfigForm = ({
             comingSoonSonarrRootFolder:
               values.type === 'comingsoon' && values.subtype === 'monitored'
                 ? values.comingSoonSonarrRootFolder
+                : undefined,
+            comingSoonIncludeMidSeason:
+              values.type === 'comingsoon' && values.subtype === 'monitored'
+                ? values.comingSoonIncludeMidSeason
                 : undefined,
             selectionMode: isEssentials
               ? values.selectionMode || 'exclude'
@@ -4574,6 +4584,30 @@ const CollectionFormConfigForm = ({
                                           </p>
                                         </div>
 
+                                        {typedValues.type === 'comingsoon' &&
+                                          typedValues.subtype ===
+                                            'monitored' && (
+                                            <div>
+                                              <label className="flex items-center gap-2">
+                                                <Field
+                                                  type="checkbox"
+                                                  name="comingSoonIncludeMidSeason"
+                                                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span className="text-sm text-gray-300">
+                                                  {intl.formatMessage(
+                                                    messages.includeMidSeason
+                                                  )}
+                                                </span>
+                                              </label>
+                                              <p className="mt-1 text-xs text-gray-400">
+                                                {intl.formatMessage(
+                                                  messages.includeMidSeasonHelp
+                                                )}
+                                              </p>
+                                            </div>
+                                          )}
+
                                         {(typedValues.type === 'comingsoon' ||
                                           typedValues.type ===
                                             'multi-source') && (
@@ -5661,6 +5695,8 @@ const CollectionFormConfigForm = ({
                           values.comingSoonRadarrRootFolder,
                         comingSoonSonarrRootFolder:
                           values.comingSoonSonarrRootFolder,
+                        comingSoonIncludeMidSeason:
+                          values.comingSoonIncludeMidSeason,
                         // Multi-source specific fields
                         isMultiSource: values.isMultiSource,
                         sources: values.sources as

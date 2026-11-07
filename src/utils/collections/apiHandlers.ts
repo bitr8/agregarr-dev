@@ -335,6 +335,10 @@ export const saveIndividualConfigs = async (
           comingSoonSonarrRootFolder:
             collectionConfig.comingSoonSonarrRootFolder,
         }),
+        ...(collectionConfig.comingSoonIncludeMidSeason !== undefined && {
+          comingSoonIncludeMidSeason:
+            collectionConfig.comingSoonIncludeMidSeason,
+        }),
         ...buildSelectionFieldsPayload(collectionConfig),
         ...(collectionConfig.isMultiSource !== undefined && {
           isMultiSource: collectionConfig.isMultiSource,
