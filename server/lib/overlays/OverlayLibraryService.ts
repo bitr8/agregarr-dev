@@ -24,6 +24,11 @@ import {
   getAdaptiveTtl,
   getNullRatingTtl,
 } from './adaptiveTtl';
+import {
+  buildItemRankContext,
+  extractRankCollectionIds,
+  rankByRatingKey,
+} from './collectionRank';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -266,6 +271,7 @@ class OverlayLibraryService {
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
   // Maps item ratingKey → array of collection IDs the item belongs to
   private collectionMembershipCache?: Map<string, string[]>;
+  private collectionRankCache = new Map<string, Map<string, number>>();
 
   // Aggregated episode media info for show libraries (per-library, keyed by show ratingKey)
   private aggregatedMediaByLibrary = new Map<
@@ -1590,6 +1596,45 @@ class OverlayLibraryService {
   }
 
   /**
+   * Refresh rank lookups for the collections that enabled templates reference
+   * through a Collection Rank variable. Per-collection replacement keeps
+   * concurrent library jobs from wiping each other's entries.
+   */
+  private async refreshCollectionRanks(
+    plexApi: PlexAPI,
+    templates: OverlayTemplate[]
+  ): Promise<void> {
+    const ids = extractRankCollectionIds(
+      templates.map((template) => template.getTemplateData())
+    );
+    if (ids.size === 0) return;
+
+    const settings = getSettings();
+    const { preExistingCollectionConfigService } = await import(
+      '@server/lib/collections/services/PreExistingCollectionConfigService'
+    );
+    const configs: { id: string; collectionRatingKey?: string }[] = [
+      ...(settings.plex.collectionConfigs || []),
+      ...preExistingCollectionConfigService.getConfigs(),
+    ];
+
+    for (const id of ids) {
+      const ratingKey = configs.find(
+        (config) => config.id === id
+      )?.collectionRatingKey;
+      if (!ratingKey) {
+        this.collectionRankCache.delete(id);
+        continue;
+      }
+      const orderedKeys = await plexApi.getCollectionItems(ratingKey);
+      // getCollectionItems reports a failed fetch as an empty list; keep the
+      // last known ranks rather than stripping every number on a Plex hiccup.
+      if (orderedKeys.length === 0) continue;
+      this.collectionRankCache.set(id, rankByRatingKey(orderedKeys));
+    }
+  }
+
+  /**
    * Apply overlays to all items in a library
    * Uses mutex-like behavior to prevent concurrent processing of the same library
    */
@@ -1974,6 +2019,8 @@ class OverlayLibraryService {
         this.collectionMembershipCache =
           await this.buildCollectionMembershipMap(plexApi);
       }
+
+      await this.refreshCollectionRanks(plexApi, sortedTemplates);
 
       // Fetch all items (handle pagination)
       let allItems: PlexLibraryItem[] = [];
@@ -2632,6 +2679,8 @@ class OverlayLibraryService {
         this.collectionMembershipCache =
           await this.buildCollectionMembershipMap(plexApi);
       }
+
+      await this.refreshCollectionRanks(plexApi, sortedTemplates);
 
       // Determine media type from library config
       const mediaType = config.mediaType || 'movie';
@@ -3446,6 +3495,7 @@ class OverlayLibraryService {
         ...releaseDateContext,
         ...monitoringContext,
         ...(collection ? { collection } : {}),
+        ...buildItemRankContext(item.ratingKey, this.collectionRankCache),
       };
 
       // Filter templates by conditions to get only templates that will actually be applied

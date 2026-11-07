@@ -8,6 +8,7 @@ import type {
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import { sampleCollectionRankContext } from '@server/lib/overlays/collectionRank';
 import { extractStreamingProvider } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayOutputFormat } from '@server/lib/overlays/overlayOutputQuality';
 import { createOverlayPreviewArtwork } from '@server/lib/overlays/overlayPreviewArtwork';
@@ -825,6 +826,7 @@ router.get('/:id/preview', fileRouteLimiter, async (req, res, next) => {
 
     // Render the overlay on the poster
     const templateData = template.getTemplateData();
+    Object.assign(sampleContext, sampleCollectionRankContext([templateData]));
     const renderedBuffer = await overlayTemplateRenderer.renderOverlay(
       posterBuffer,
       templateData,
@@ -997,6 +999,7 @@ router.post('/combined-preview', fileRouteLimiter, async (req, res, next) => {
       }
 
       const templateData = template.getTemplateData();
+      Object.assign(sampleContext, sampleCollectionRankContext([templateData]));
       const templateOverlays =
         await overlayTemplateRenderer.renderOverlayElements(
           posterWidth,

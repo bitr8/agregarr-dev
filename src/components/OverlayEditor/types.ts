@@ -368,6 +368,11 @@ export const SINGLE_VALUE_FIELDS = [
   'streamingProviderId',
 ];
 
+export const COLLECTION_RANK_PREFIX = 'collectionRank:';
+
+export const isCollectionRankField = (field?: string): boolean =>
+  !!field?.startsWith(COLLECTION_RANK_PREFIX);
+
 /**
  * Check if a field is a single-value field
  * Handles both static field names and dynamic prefixes (e.g., contentRating:US)
@@ -507,6 +512,9 @@ export const AVAILABLE_VARIABLES = {
       label: 'Days Since Last Played',
       example: '7',
     },
+  ],
+  collection: [
+    { field: 'collectionRank', label: 'Collection Rank', example: '3' },
   ],
   'coming-soon': [
     { field: 'releaseDate', label: 'Release Date', example: 'JAN 15' },
