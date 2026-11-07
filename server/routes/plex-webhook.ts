@@ -66,6 +66,7 @@ function requireWebhookToken(
 
 interface PlexWebhookMetadata {
   ratingKey?: string;
+  grandparentRatingKey?: string;
   type?: string;
   title?: string;
   editionTitle?: string;
@@ -279,7 +280,13 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
 
     const admin = await getPlexClient();
     if (!admin) return;
-    const confirmed = await isConfirmedPlaceholder(ratingKey, admin.client);
+    // TV placeholders are recorded and labelled on the show, not the episode
+    const grandparentKey = String(metadata.grandparentRatingKey ?? '');
+    const confirmKey =
+      metadata.type === 'episode' && /^\d+$/.test(grandparentKey)
+        ? grandparentKey
+        : ratingKey;
+    const confirmed = await isConfirmedPlaceholder(confirmKey, admin.client);
     const resetProgress = confirmed && event !== 'media.play';
     await unscrobblePlaceholder(
       ratingKey,

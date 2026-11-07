@@ -164,19 +164,48 @@ describe('Plex webhook placeholder unwatch', () => {
     await flush();
   };
 
-  it('does not touch a real special titled Trailer that is not a placeholder', async () => {
-    mocks.metadata.mockResolvedValue({ Label: [] });
+  it('does not touch a real special titled Trailer under a real show', async () => {
+    mocks.metadata.mockImplementation(async (key: string) => ({
+      Label: key === '700' ? [] : [{ tag: 'trailer-placeholder' }],
+    }));
     mocks.sharedToken.mockResolvedValue('user-token');
     await post({
       event: 'media.scrobble',
       Account: { id: 200 },
-      Metadata: { ratingKey: '77', type: 'episode', title: 'Trailer' },
+      Metadata: {
+        ratingKey: '77',
+        grandparentRatingKey: '700',
+        type: 'episode',
+        title: 'Trailer',
+      },
     });
 
     expect(mocks.unscrobble).toHaveBeenCalledTimes(1);
     expect(mocks.unscrobble).toHaveBeenCalledWith('admin-token', '77');
     expect(mocks.sharedToken).not.toHaveBeenCalled();
     expect(mocks.progress).not.toHaveBeenCalled();
+  });
+
+  it('confirms a TV placeholder through the show and acts on the episode key', async () => {
+    mocks.dbRow.mockImplementation(async ({ where }) =>
+      where.plexRatingKey === '800' ? { id: 1 } : null
+    );
+    mocks.metadata.mockResolvedValue({ Label: [] });
+    mocks.sharedToken.mockResolvedValue('user-token');
+    await post({
+      event: 'media.stop',
+      Account: { id: 200 },
+      Metadata: {
+        ratingKey: '88',
+        grandparentRatingKey: '800',
+        type: 'episode',
+        title: 'Trailer (Placeholder)',
+      },
+    });
+
+    expect(mocks.unscrobble).toHaveBeenCalledWith('user-token', '88');
+    expect(mocks.progress).toHaveBeenCalledWith('user-token', '88');
+    expect(mocks.progress).toHaveBeenCalledWith('admin-token', '88');
   });
 
   it('confirms a placeholder from the database row when the label is absent', async () => {
