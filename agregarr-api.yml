@@ -934,6 +934,7 @@ components:
             - date_added_asc
             - alphabetical_asc
             - alphabetical_desc
+            - source_rank
           description: 'Sort order for collection items'
           example: 'default'
           default: 'default'
@@ -1687,6 +1688,7 @@ components:
             - date_added_asc
             - alphabetical_asc
             - alphabetical_desc
+            - source_rank
           description: 'Sort order for collection items'
           example: 'default'
           default: 'default'
@@ -2577,6 +2579,7 @@ components:
             - date_added_asc
             - alphabetical_asc
             - alphabetical_desc
+            - source_rank
           description: 'Sort order for collection items'
           example: 'default'
           default: 'default'

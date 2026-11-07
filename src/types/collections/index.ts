@@ -24,7 +24,8 @@ export type CollectionSortOrder =
   | 'date_added_desc' // Most recently added to Plex
   | 'date_added_asc' // Least recently added to Plex
   | 'alphabetical_asc' // A-Z alphabetical order
-  | 'alphabetical_desc'; // Z-A alphabetical order
+  | 'alphabetical_desc' // Z-A alphabetical order
+  | 'source_rank'; // Source ranking (Trakt anticipated only)
 
 /**
  * Sonarr monitor types - determines which episodes are monitored when adding a series

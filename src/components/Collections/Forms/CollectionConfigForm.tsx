@@ -224,6 +224,7 @@ const messages = defineMessages({
   dateAddedAsc: 'Date Added to Plex (Least Recent)',
   alphabeticalAsc: 'Alphabetical (A-Z)',
   alphabeticalDesc: 'Alphabetical (Z-A)',
+  sourceRankOrder: 'Trakt ranking',
   shufflePositionLabel: 'Shuffle position on Home/Recommended screens',
   shufflePositionHelp:
     "When enabled, this collection's position will be randomly shuffled with other collections that have this option enabled during each sync. Custom scheduling for shuffling can be set on the Jobs page.",
@@ -3451,6 +3452,16 @@ const CollectionFormConfigForm = ({
                                                   messages.alphabeticalDesc
                                                 )}
                                               </option>
+                                              {typedValues.type ===
+                                                'comingsoon' &&
+                                                typedValues.subtype ===
+                                                  'trakt_anticipated' && (
+                                                  <option value="source_rank">
+                                                    {intl.formatMessage(
+                                                      messages.sourceRankOrder
+                                                    )}
+                                                  </option>
+                                                )}
                                             </>
                                           </Field>
                                         </div>
