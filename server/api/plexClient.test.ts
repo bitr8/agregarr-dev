@@ -2,6 +2,7 @@ import { createServer } from 'http';
 import type { AddressInfo } from 'net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import PlexClient from './plexClient';
+import { fetchPlexMetadataBatches } from './plexMetadataBatch';
 
 interface Seen {
   method?: string;
@@ -11,6 +12,7 @@ interface Seen {
 
 let seen: Seen[] = [];
 let port = 0;
+let flakyHits = 0;
 const server = createServer((req, res) => {
   seen.push({ method: req.method, url: req.url, headers: req.headers });
   const path = (req.url ?? '').split('?')[0];
@@ -53,6 +55,41 @@ const server = createServer((req, res) => {
     }
     case '/slow':
       setTimeout(() => res.end('late'), 500);
+      return;
+    case '/truncated':
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'content-length': '500',
+      });
+      res.write('{"MediaContainer":');
+      setTimeout(() => req.socket.destroy(), 20);
+      return;
+    case '/flaky-batch':
+      flakyHits += 1;
+      if (flakyHits === 1) {
+        res.writeHead(200, {
+          'content-type': 'application/json',
+          'content-length': '500',
+        });
+        res.write('{"MediaContainer":');
+        setTimeout(() => req.socket.destroy(), 20);
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({ MediaContainer: { Metadata: [{ ratingKey: '9' }] } })
+      );
+      return;
+    case '/stalled':
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'content-length': '500',
+      });
+      res.write('{"MediaContainer":');
+      return;
+    case '/redirect':
+      res.writeHead(302, { location: '/json' });
+      res.end();
       return;
     case '/forbidden':
       res.writeHead(403);
@@ -222,7 +259,66 @@ describe('PlexClient', () => {
     expect(String(err.code ?? err.message)).toMatch(/ECONNREFUSED/);
   });
 
-  it('defaults to https only on port 443', () => {
-    expect(() => make({ port: 443 })).not.toThrow();
+  it('picks the URL scheme from port and the https option', () => {
+    const base = (o: Partial<ConstructorParameters<typeof PlexClient>[0]>) =>
+      (make(o) as unknown as { baseUrl: string }).baseUrl;
+    expect(base({ port: 443, https: undefined })).toBe('https://127.0.0.1:443');
+    expect(base({ port: 32400, https: undefined })).toBe(
+      'http://127.0.0.1:32400'
+    );
+    expect(base({ port: 443, https: false })).toBe('http://127.0.0.1:443');
+    expect(base({ port: 32400, https: true })).toBe('https://127.0.0.1:32400');
+  });
+
+  it('reports a peer disconnect mid-body as ECONNRESET', async () => {
+    const err = await make()
+      .query('/truncated')
+      .catch((e) => e);
+    expect(err.code).toBe('ECONNRESET');
+  });
+
+  it('lets the metadata batcher retry a mid-body disconnect', async () => {
+    flakyHits = 0;
+    const c = make();
+    const result = await fetchPlexMetadataBatches(
+      ['9'],
+      async () =>
+        (
+          await c.query<{
+            MediaContainer: { Metadata: { ratingKey: string }[] };
+          }>('/flaky-batch')
+        ).MediaContainer.Metadata,
+      { retryDelayMs: 0 }
+    );
+    expect(flakyHits).toBe(2);
+    expect(result.get('9')).toBeDefined();
+  });
+
+  it('reports a stalled body as ESOCKETTIMEDOUT', async () => {
+    const err = await make({ timeout: 150 })
+      .query('/stalled')
+      .catch((e) => e);
+    expect(err.message).toBe('ESOCKETTIMEDOUT');
+    expect(err.code).toBe('ESOCKETTIMEDOUT');
+  });
+
+  it('reports a connect that never completes as ETIMEDOUT', async () => {
+    const err = await make({ hostname: '10.255.255.1', timeout: 150 })
+      .query('/json')
+      .catch((e) => e);
+    if (['ENETUNREACH', 'EHOSTUNREACH', 'ECONNREFUSED'].includes(err.code))
+      return;
+    expect(err.code).toBe('ETIMEDOUT');
+  });
+
+  it('follows redirects on GET but rejects them on PUT/POST/DELETE', async () => {
+    const c = make();
+    expect(await c.query('/redirect')).toMatchObject({
+      MediaContainer: { size: 1 },
+    });
+    for (const call of [c.putQuery, c.postQuery, c.deleteQuery]) {
+      const err = await call.call(c, '/redirect').catch((e: Error) => e);
+      expect(err.message).toMatch(/response code:\s*302$/);
+    }
   });
 });

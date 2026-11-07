@@ -597,9 +597,8 @@ class PlexAPI {
    *   - 'error'     ambiguous (network/auth/5xx/non-Plex 2xx) — callers MUST
    *                 NOT delete on it
    *
-   * plex-api (v5.3.2) exposes NO structured status code (verified: statusCode /
-   * code / status are all undefined); the HTTP status is only in the Error
-   * message as "response code: <n>". We parse that exact number rather than
+   * Errors carry the HTTP status in the message as "response code: <n>" (and as
+   * statusCode). We parse that exact number rather than
    * substring-matching "404", so a ratingKey or URL that happens to contain the
    * digits 404 can never be misread as a deletion. Any other failure, and any
    * successful-but-non-Plex body (a reverse proxy / auth / captive-portal page

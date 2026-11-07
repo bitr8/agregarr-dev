@@ -1,4 +1,6 @@
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 import { parseStringPromise } from 'xml2js';
 
 interface PlexClientOptions {
@@ -106,33 +108,82 @@ export default class PlexClient {
       'X-Plex-Provides': 'controller',
     });
 
-    let response;
+    const secure = this.baseUrl.startsWith('https');
+    const agent = secure ? new https.Agent() : new http.Agent();
+    let connected = false;
+    const baseCreate = Object.getPrototypeOf(agent).createConnection;
+    (agent as unknown as { createConnection: unknown }).createConnection = (
+      opts: never,
+      cb: never
+    ) => {
+      const socket = baseCreate.call(agent, opts, cb);
+      socket.once('connect', () => {
+        connected = true;
+      });
+      return socket;
+    };
+
+    const controller = new AbortController();
+    let timedOut: Error | undefined;
+    let timer: NodeJS.Timeout | undefined;
+    const arm = () => {
+      if (!this.timeout) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const code = connected ? 'ESOCKETTIMEDOUT' : 'ETIMEDOUT';
+        timedOut = new PlexHttpError(code, undefined, code);
+        controller.abort();
+      }, this.timeout);
+    };
+
+    let status: number;
+    let contentType: string | undefined;
+    let body: Buffer;
     try {
-      response = await axios.request<Buffer>({
+      arm();
+      const response = await axios.request<NodeJS.ReadableStream>({
         url: this.baseUrl + uri,
         method,
         headers,
-        timeout: this.timeout,
-        responseType: 'arraybuffer',
+        responseType: 'stream',
         validateStatus: () => true,
-        maxRedirects: 10,
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity,
-        transformResponse: (data) => data,
+        maxRedirects: method === 'GET' ? 10 : 0,
+        signal: controller.signal,
+        httpAgent: agent,
+        httpsAgent: agent,
       });
+      arm();
+      status = response.status;
+      contentType = response.headers['content-type'] as string | undefined;
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const stream = response.data;
+        stream.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+          arm();
+        });
+        stream.on('end', resolve);
+        stream.on('error', reject);
+        stream.on('aborted', () => reject(new Error('aborted')));
+        stream.on('close', () => {
+          if (!(stream as { readableEnded?: boolean }).readableEnded) {
+            reject(new Error('aborted'));
+          }
+        });
+      });
+      body = Buffer.concat(chunks);
     } catch (e) {
+      if (timedOut) throw timedOut;
       const err = e as { code?: string; message?: string };
-      if (err.code === 'ECONNABORTED') {
-        throw new PlexHttpError(
-          'ESOCKETTIMEDOUT',
-          undefined,
-          'ESOCKETTIMEDOUT'
-        );
+      if (err.message === 'aborted') {
+        throw new PlexHttpError('aborted', undefined, 'ECONNRESET');
       }
       throw e;
+    } finally {
+      if (timer) clearTimeout(timer);
+      agent.destroy();
     }
 
-    const status = response.status;
     if (status === 403) {
       throw new PlexHttpError(
         'Plex Server denied request due to lack of managed user permissions! ' +
@@ -157,9 +208,6 @@ export default class PlexClient {
     }
 
     if (!parse) return undefined;
-    return parseBody(
-      response.headers['content-type'] as string | undefined,
-      Buffer.from(response.data)
-    );
+    return parseBody(contentType, body);
   }
 }
