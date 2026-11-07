@@ -1155,6 +1155,12 @@ const MultiSourceConfigSection = ({
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                       const newSubtype = e.target.value;
                       setFieldValue(`sources[${index}].subtype`, newSubtype);
+                      if (newSubtype !== 'advanced_custom_tmdb') {
+                        setFieldValue(
+                          `sources[${index}].tmdbAdvancedFilters`,
+                          undefined
+                        );
+                      }
                     }}
                   >
                     <option value="">

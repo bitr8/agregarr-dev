@@ -918,9 +918,14 @@ export class MultiSourceOrchestrator {
         source.customUrl && {
           tmdbCustomCollectionUrl: source.customUrl,
         }),
+      tmdbAdvancedFilters:
+        source.type === 'tmdb' && source.subtype === 'advanced_custom_tmdb'
+          ? source.tmdbAdvancedFilters
+          : undefined,
       ...(source.type === 'tmdb' &&
         source.subtype === 'advanced_custom_tmdb' && {
-          tmdbAdvancedFilters: source.tmdbAdvancedFilters,
+          tmdbMovieSortBy: undefined,
+          tmdbTvSortBy: undefined,
         }),
       ...(source.type === 'imdb' &&
         source.customUrl && {

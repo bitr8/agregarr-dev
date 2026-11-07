@@ -137,16 +137,20 @@ describe('multi-source TMDB custom advanced filters', () => {
     ]);
   });
 
-  it('non-advanced tmdb sources get no filters', () => {
+  it('non-advanced tmdb sources do not inherit parent-level filters', () => {
     const orchestrator = new MultiSourceOrchestrator() as unknown as {
       createTempConfig: (
         s: SourceDefinition,
         p: MultiSourceCollectionConfig
       ) => CollectionConfig;
     };
+    const parentWithFilters = {
+      ...parent,
+      tmdbAdvancedFilters: filtersA,
+    } as unknown as MultiSourceCollectionConfig;
     const temp = orchestrator.createTempConfig(
       { id: 's3', type: 'tmdb', subtype: 'popular', priority: 0 },
-      parent
+      parentWithFilters
     );
     expect(temp.tmdbAdvancedFilters).toBeUndefined();
   });
@@ -169,5 +173,31 @@ describe('multi-source TMDB custom advanced filters', () => {
       tmdbAdvancedFilters: filtersB,
     } as unknown as CollectionConfig);
     expect(a).not.toBe(b);
+  });
+
+  it('advanced sources ignore leftover parent sort fields', () => {
+    const orchestrator = new MultiSourceOrchestrator() as unknown as {
+      createTempConfig: (
+        s: SourceDefinition,
+        p: MultiSourceCollectionConfig
+      ) => CollectionConfig;
+    };
+    const temp = orchestrator.createTempConfig(
+      {
+        id: 's4',
+        type: 'tmdb',
+        subtype: 'advanced_custom_tmdb',
+        priority: 0,
+        tmdbAdvancedFilters: filtersA,
+      },
+      {
+        ...parent,
+        tmdbMovieSortBy: 'revenue.desc',
+        tmdbTvSortBy: 'vote_average.desc',
+      } as unknown as MultiSourceCollectionConfig
+    );
+    expect(temp.tmdbMovieSortBy).toBeUndefined();
+    expect(temp.tmdbTvSortBy).toBeUndefined();
+    expect(temp.tmdbAdvancedFilters).toEqual(filtersA);
   });
 });

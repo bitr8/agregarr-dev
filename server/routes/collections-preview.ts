@@ -441,6 +441,9 @@ export async function processMultiSourcePreview(
 
       if (source.type === 'tmdb' && source.subtype === 'advanced_custom_tmdb') {
         sourceConfigRecord.tmdbAdvancedFilters = source.tmdbAdvancedFilters;
+        sourceConfigRecord.maxItems = maxItems;
+        sourceConfigRecord.tmdbMovieSortBy = undefined;
+        sourceConfigRecord.tmdbTvSortBy = undefined;
       }
 
       if (source.type === 'networks') {
