@@ -308,6 +308,8 @@ export interface OverlayRenderContext {
   // Collection membership (populated at runtime from Plex collection contents)
   collection?: string[]; // Array of collection IDs this item belongs to
 
+  edition?: string; // Plex edition, e.g. 'Extended Cut'
+
   // Plex Labels (item-level tags applied in Plex)
   plexLabels?: string[]; // Array of Plex label tags on this item
 
@@ -366,6 +368,7 @@ export const SINGLE_VALUE_FIELDS = [
   'audioLanguageCode',
   'streamingProvider',
   'streamingProviderId',
+  'edition',
 ];
 
 /**
@@ -496,6 +499,7 @@ export const AVAILABLE_VARIABLES = {
     { field: 'bitrate', label: 'Bitrate (kbps)', example: '15000' },
     { field: 'fileSize', label: 'File Size (bytes)', example: '4500000000' },
     { field: 'filePath', label: 'File Path', example: '/movies/Inception.mkv' },
+    { field: 'edition', label: 'Edition', example: 'Extended Cut' },
   ],
   playback: [
     { field: 'viewCount', label: 'View Count', example: '5' },
@@ -739,6 +743,7 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'bitrate', label: 'Bitrate (kbps)', example: '15000' },
     { field: 'fileSize', label: 'File Size (bytes)', example: '4500000000' },
     { field: 'filePath', label: 'File Path', example: '/movies/Inception.mkv' },
+    { field: 'edition', label: 'Edition', example: 'Extended Cut' },
     { field: 'viewCount', label: 'View Count', example: '5' },
     { field: 'lastPlayed', label: 'Last Played', example: '2024-01-15' },
     { field: 'dateAdded', label: 'Date Added', example: '2024-01-01' },
@@ -1004,6 +1009,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysUntilAction: 5,
     streamingProvider: 'Netflix',
     streamingProviderId: 8,
+    edition: 'Extended Cut',
     plexLabels: ['4K DV', 'HDR'],
     isPlaceholder: true,
     mediaType: 'movie',
@@ -1085,6 +1091,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysUntilAction: 12,
     streamingProvider: 'Disney Plus',
     streamingProviderId: 337,
+    edition: 'Theatrical Cut',
     plexLabels: ['Kids'],
     isPlaceholder: false,
     mediaType: 'show',

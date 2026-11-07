@@ -99,6 +99,9 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   streamingProvider: 'Netflix',
   streamingProviderId: 8,
 
+  // Edition
+  edition: 'Extended Cut',
+
   // Plex labels
   plexLabels: ['4K DV', 'HDR'],
 

@@ -12,6 +12,7 @@ import type {
 } from '@server/api/themoviedb/interfaces';
 import TvdbAPI from '@server/api/tvdb';
 import cacheManager from '@server/lib/cache';
+import { resolveEdition } from '@server/lib/overlays/editionContext';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import {
@@ -1120,6 +1121,11 @@ export async function buildRenderContext(
     context.plexLabels = item.Label.map((l) => l.tag).filter(
       (tag): tag is string => !!tag
     );
+  }
+
+  const edition = resolveEdition(item);
+  if (edition) {
+    context.edition = edition;
   }
 
   // Maintainerr integration - calculate daysUntilAction via the shared predicate
