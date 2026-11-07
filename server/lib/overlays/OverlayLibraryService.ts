@@ -70,7 +70,7 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
-import { resolveBasePosterSource } from './PlexBasePosterManager';
+import { resolveBasePosterSourceWithTrail } from './PlexBasePosterManager';
 import {
   deriveReleaseDateContext,
   latestAiredSeasonDate,
@@ -3551,7 +3551,8 @@ class OverlayLibraryService {
 
       // Resolved once so the change gate and the fetch below agree.
       const settings = getSettings();
-      const posterSource = resolveBasePosterSource(item, settings);
+      const { source: posterSource, tried: posterSourceTrail } =
+        resolveBasePosterSourceWithTrail(item, settings);
 
       // OPTIMIZATION: Check if overlay inputs changed BEFORE downloading poster
       // This prevents expensive poster downloads when nothing has changed
@@ -3673,7 +3674,8 @@ class OverlayLibraryService {
             basePosterFilename: metadata?.basePosterFilename,
             localPosterModifiedTime: metadata?.localPosterModifiedTime,
           },
-          tmdbId
+          tmdbId,
+          posterSourceTrail
         );
       } catch (error) {
         // Re-throw to let caller track this as a failure

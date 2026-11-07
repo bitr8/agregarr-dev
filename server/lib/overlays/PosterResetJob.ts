@@ -263,9 +263,8 @@ class PosterResetJob {
   ): Promise<void> {
     try {
       // Get base poster based on poster source
-      const { plexBasePosterManager, resolveBasePosterSource } = await import(
-        '@server/lib/overlays/PlexBasePosterManager'
-      );
+      const { plexBasePosterManager, resolveBasePosterSourceWithTrail } =
+        await import('@server/lib/overlays/PlexBasePosterManager');
 
       // Fetch full metadata if needed
       const fullMetadata = await plexApi.getMetadata(item.ratingKey);
@@ -275,10 +274,8 @@ class PosterResetJob {
         Guid: fullMetadata.Guid,
       };
 
-      const posterSource = resolveBasePosterSource(
-        itemWithFullMetadata,
-        getSettings()
-      );
+      const { source: posterSource, tried: posterSourceTrail } =
+        resolveBasePosterSourceWithTrail(itemWithFullMetadata, getSettings());
 
       // Get metadata tracking for this item
       const metadataService = (
@@ -319,7 +316,8 @@ class PosterResetJob {
             basePosterFilename: metadata?.basePosterFilename,
             localPosterModifiedTime: metadata?.localPosterModifiedTime,
           },
-          tmdbId
+          tmdbId,
+          posterSourceTrail
         );
 
       // Root posters keep Agregarr's historical 2:3 reset dimensions. Child

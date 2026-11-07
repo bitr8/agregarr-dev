@@ -30,6 +30,7 @@ vi.mock('@server/api/themoviedb', () => ({
 import {
   plexBasePosterManager,
   resolveBasePosterSource,
+  resolveBasePosterSourceWithTrail,
 } from './PlexBasePosterManager';
 
 function item(overrides: Partial<PlexLibraryItem> = {}): PlexLibraryItem {
@@ -350,6 +351,149 @@ describe('getBasePosterForOverlay driven by resolveBasePosterSource (fork#110)',
     expect(getCurrentPosterUrl).not.toHaveBeenCalled();
   });
 
+  it('names TMDB then Plex when TMDB has the item but no poster and Plex has none', async () => {
+    const testItem = item({ Guid: [{ id: 'tmdb://456' }] });
+    vi.spyOn(
+      plexBasePosterManager as any,
+      'getTmdbPosterUrl'
+    ).mockResolvedValue(undefined);
+
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        testItem,
+        'lib-1',
+        'Shows',
+        'show',
+        'tmdb',
+        {}
+      )
+    ).rejects.toThrow(
+      'No base poster available. Tried: TMDB (no poster on TMDB), Plex (item has no poster in Plex)'
+    );
+  });
+
+  it('names the missing TMDB id and Plex when neither source has a poster', async () => {
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        item({ Guid: [{ id: 'imdb://tt0000001' }] }),
+        'lib-1',
+        'Shows',
+        'show',
+        'tmdb',
+        {}
+      )
+    ).rejects.toThrow(
+      'Tried: TMDB (item has no TMDB id), Plex (item has no poster in Plex)'
+    );
+  });
+
+  it('names only Plex when Plex is the configured source', async () => {
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        item(),
+        'lib-1',
+        'Shows',
+        'show',
+        'plex',
+        {}
+      )
+    ).rejects.toThrow('Tried: Plex (item has no poster in Plex)');
+  });
+
+  it('carries the resolver fallback reason into the error when TMDB is configured but the item has no TMDB guid', async () => {
+    const testItem = item({ Guid: [{ id: 'imdb://tt0000001' }] });
+    const { source, tried } = resolveBasePosterSourceWithTrail(
+      testItem,
+      settingsWith('tmdb')
+    );
+    expect(source).toBe('plex');
+
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        testItem,
+        'lib-1',
+        'Shows',
+        'show',
+        source,
+        {},
+        undefined,
+        tried
+      )
+    ).rejects.toThrow(
+      'Tried: TMDB (item has no TMDB id), Plex (item has no poster in Plex)'
+    );
+  });
+
+  it('lists the local folder first when local, TMDB and Plex all come up empty', async () => {
+    const testItem = item({ Guid: [{ id: 'tmdb://456' }] });
+    vi.spyOn(
+      plexBasePosterManager as any,
+      'buildLocalPosterPath'
+    ).mockResolvedValue('/tmp/none');
+    vi.spyOn(plexBasePosterManager as any, 'scanLocalPoster').mockResolvedValue(
+      {
+        posterBuffer: null,
+        fileModTime: null,
+        fileChanged: false,
+      }
+    );
+    vi.spyOn(
+      plexBasePosterManager as any,
+      'getTmdbPosterUrl'
+    ).mockResolvedValue(undefined);
+
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        testItem,
+        'lib-1',
+        'Shows',
+        'show',
+        'local',
+        {},
+        456
+      )
+    ).rejects.toThrow(
+      'Tried: local folder (no poster file found), TMDB (no poster on TMDB), Plex (item has no poster in Plex)'
+    );
+  });
+
+  it('says a rejected local file is invalid rather than missing', async () => {
+    vi.spyOn(
+      plexBasePosterManager as any,
+      'buildLocalPosterPath'
+    ).mockResolvedValue('/tmp/none');
+    vi.spyOn(plexBasePosterManager as any, 'scanLocalPoster').mockResolvedValue(
+      {
+        posterBuffer: null,
+        fileModTime: null,
+        fileChanged: false,
+        rejected: true,
+      }
+    );
+    vi.spyOn(
+      plexBasePosterManager as any,
+      'getTmdbPosterUrl'
+    ).mockResolvedValue(undefined);
+
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        item({ Guid: [{ id: 'tmdb://456' }] }),
+        'lib-1',
+        'Shows',
+        'show',
+        'local',
+        {},
+        456
+      )
+    ).rejects.toThrow('local folder (poster file invalid or unreadable)');
+  });
+
   it('fetchTmdbPosterUrl rethrows lookup errors instead of caching them as no poster', async () => {
     mockGetMovieImages.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
@@ -390,6 +534,37 @@ describe('getBasePosterForOverlay driven by resolveBasePosterSource (fork#110)',
     );
 
     expect(storeBasePoster).not.toHaveBeenCalled();
+  });
+
+  it('keeps the tried sources on the own-overlay failure', async () => {
+    const plexApi = plexApiStub(
+      'https://plex.local/library/metadata/123/thumb/9'
+    );
+    vi.spyOn(plexBasePosterManager, 'getStoredBasePoster').mockResolvedValue(
+      null
+    );
+    vi.spyOn(plexBasePosterManager, 'storeBasePoster').mockResolvedValue(
+      'x.jpg'
+    );
+    vi.spyOn(axios, 'get').mockResolvedValue({
+      data: Buffer.from('fake jpeg bytes overlay applied by Agregarr trailer'),
+    });
+
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApi,
+        item({ Guid: [{ id: 'tmdb://123' }] }),
+        'lib-1',
+        'Shows',
+        'show',
+        'plex',
+        {},
+        undefined,
+        ['TMDB (no poster on TMDB)']
+      )
+    ).rejects.toThrow(
+      /no original poster is tracked.*\(Sources tried: TMDB \(no poster on TMDB\)\)/
+    );
   });
 
   it('fails closed on cache loss when a fallback item is recorded as tmdb', async () => {
