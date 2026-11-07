@@ -155,6 +155,24 @@ describe('TvdbCollectionSync', () => {
     expect(getEntityInfo).toHaveBeenCalledTimes(2);
   });
 
+  it('aborts when every entry is not found', async () => {
+    getEntityInfo.mockRejectedValue(
+      Object.assign(new Error('nf'), { response: { status: 404 } })
+    );
+    await expect(
+      new TvdbCollectionSync().fetchSourceData(cfg('2'))
+    ).rejects.toThrow(/Failed to fetch data from TVDB/);
+  });
+
+  it('fails when the list itself is not found', async () => {
+    getList.mockRejectedValueOnce(
+      Object.assign(new Error('nf'), { response: { status: 404 } })
+    );
+    await expect(
+      new TvdbCollectionSync().fetchSourceData(cfg('2'))
+    ).rejects.toThrow(/Failed to fetch data from TVDB/);
+  });
+
   it('rejects a config whose URL is not a TVDB list', async () => {
     await expect(
       new TvdbCollectionSync().fetchSourceData({

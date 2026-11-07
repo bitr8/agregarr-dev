@@ -215,6 +215,12 @@ export class TvdbCollectionSync extends BaseCollectionSync<'tvdb'> {
         );
       }
 
+      if (entries.length > 0 && notFoundIds.length === entries.length) {
+        throw new Error(
+          `TVDB returned not found for all ${entries.length} entries`
+        );
+      }
+
       if (failedIds.length > 0) {
         logger.error(
           `TVDB lookup failed for ${failedIds.length} of ${entries.length} ${kind} entries; aborting so the existing collection is kept`,
