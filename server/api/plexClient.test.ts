@@ -8,13 +8,19 @@ interface Seen {
   method?: string;
   url?: string;
   headers: Record<string, string | string[] | undefined>;
+  remotePort?: number;
 }
 
 let seen: Seen[] = [];
 let port = 0;
 let flakyHits = 0;
 const server = createServer((req, res) => {
-  seen.push({ method: req.method, url: req.url, headers: req.headers });
+  seen.push({
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    remotePort: req.socket.remotePort,
+  });
   const path = (req.url ?? '').split('?')[0];
   switch (path) {
     case '/json':
@@ -292,6 +298,15 @@ describe('PlexClient', () => {
     );
     expect(flakyHits).toBe(2);
     expect(result.get('9')).toBeDefined();
+  });
+
+  it('reuses one socket across sequential calls', async () => {
+    seen = [];
+    const c = make();
+    await c.query('/json');
+    await c.query('/json');
+    await c.putQuery('/json');
+    expect(new Set(seen.map((x) => x.remotePort)).size).toBe(1);
   });
 
   it('reports a stalled body as ESOCKETTIMEDOUT', async () => {

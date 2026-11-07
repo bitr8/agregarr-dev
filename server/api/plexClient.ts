@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'async_hooks';
 import axios from 'axios';
 import http from 'http';
 import https from 'https';
@@ -28,6 +29,36 @@ class PlexHttpError extends Error {
   }
 }
 
+const connectState = new AsyncLocalStorage<{ connected: boolean }>();
+
+const trackConnect = <A extends http.Agent>(agent: A): A => {
+  const addRequest = (
+    agent as unknown as {
+      addRequest: (...args: unknown[]) => unknown;
+    }
+  ).addRequest;
+  (agent as unknown as { addRequest: unknown }).addRequest = function (
+    this: unknown,
+    req: http.ClientRequest,
+    ...rest: unknown[]
+  ) {
+    const state = connectState.getStore();
+    if (state) {
+      req.once('socket', (socket) => {
+        if (socket.connecting) {
+          socket.once('connect', () => {
+            state.connected = true;
+          });
+        } else {
+          state.connected = true;
+        }
+      });
+    }
+    return addRequest.call(this, req, ...rest);
+  };
+  return agent;
+};
+
 const parseBody = async (
   contentType: string | undefined,
   body: Buffer
@@ -46,6 +77,12 @@ const parseBody = async (
 
 export default class PlexClient {
   private readonly baseUrl: string;
+  private readonly httpAgent = trackConnect(
+    new http.Agent({ keepAlive: true })
+  );
+  private readonly httpsAgent = trackConnect(
+    new https.Agent({ keepAlive: true })
+  );
   private readonly timeout?: number;
   private readonly token?: string;
   private readonly identity: PlexClientOptions['options'];
@@ -108,20 +145,7 @@ export default class PlexClient {
       'X-Plex-Provides': 'controller',
     });
 
-    const secure = this.baseUrl.startsWith('https');
-    const agent = secure ? new https.Agent() : new http.Agent();
-    let connected = false;
-    const baseCreate = Object.getPrototypeOf(agent).createConnection;
-    (agent as unknown as { createConnection: unknown }).createConnection = (
-      opts: never,
-      cb: never
-    ) => {
-      const socket = baseCreate.call(agent, opts, cb);
-      socket.once('connect', () => {
-        connected = true;
-      });
-      return socket;
-    };
+    const state = { connected: false };
 
     const controller = new AbortController();
     let timedOut: Error | undefined;
@@ -130,7 +154,7 @@ export default class PlexClient {
       if (!this.timeout) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        const code = connected ? 'ESOCKETTIMEDOUT' : 'ETIMEDOUT';
+        const code = state.connected ? 'ESOCKETTIMEDOUT' : 'ETIMEDOUT';
         timedOut = new PlexHttpError(code, undefined, code);
         controller.abort();
       }, this.timeout);
@@ -141,17 +165,19 @@ export default class PlexClient {
     let body: Buffer;
     try {
       arm();
-      const response = await axios.request<NodeJS.ReadableStream>({
-        url: this.baseUrl + uri,
-        method,
-        headers,
-        responseType: 'stream',
-        validateStatus: () => true,
-        maxRedirects: method === 'GET' ? 10 : 0,
-        signal: controller.signal,
-        httpAgent: agent,
-        httpsAgent: agent,
-      });
+      const response = await connectState.run(state, () =>
+        axios.request<NodeJS.ReadableStream>({
+          url: this.baseUrl + uri,
+          method,
+          headers,
+          responseType: 'stream',
+          validateStatus: () => true,
+          maxRedirects: method === 'GET' ? 10 : 0,
+          signal: controller.signal,
+          httpAgent: this.httpAgent,
+          httpsAgent: this.httpsAgent,
+        })
+      );
       arm();
       status = response.status;
       contentType = response.headers['content-type'] as string | undefined;
@@ -181,7 +207,6 @@ export default class PlexClient {
       throw e;
     } finally {
       if (timer) clearTimeout(timer);
-      agent.destroy();
     }
 
     if (status === 403) {
