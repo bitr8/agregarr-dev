@@ -294,7 +294,7 @@ export const useTitleFetching = ({
   const fetchTitle = useCallback(
     async (
       url: string,
-      type: 'trakt' | 'tmdb' | 'imdb' | 'letterboxd' | 'mdblist',
+      type: 'trakt' | 'tmdb' | 'imdb' | 'letterboxd' | 'mdblist' | 'tvdb',
       setFieldValue?: (field: string, value: string) => void
     ) => {
       if (!url.trim()) {

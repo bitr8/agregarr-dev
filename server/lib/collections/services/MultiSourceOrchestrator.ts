@@ -43,6 +43,7 @@ import SonarrTagCollectionSync from '@server/lib/collections/sources/sonarr';
 import { TautulliCollectionSync } from '@server/lib/collections/sources/tautulli';
 import { TmdbCollectionSync } from '@server/lib/collections/sources/tmdb';
 import { TraktCollectionSync } from '@server/lib/collections/sources/trakt';
+import { TvdbCollectionSync } from '@server/lib/collections/sources/tvdb';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import { generatePoster } from '@server/lib/posterStorage';
@@ -945,6 +946,10 @@ export class MultiSourceOrchestrator {
         source.customUrl && {
           mdblistCustomListUrl: source.customUrl,
         }),
+      ...(source.type === 'tvdb' &&
+        source.customUrl && {
+          tvdbCustomListUrl: source.customUrl,
+        }),
       ...(source.type === 'anilist' &&
         source.customUrl && {
           anilistCustomListUrl: source.customUrl,
@@ -993,6 +998,9 @@ export class MultiSourceOrchestrator {
           break;
         case 'mdblist':
           this.syncServices.set(sourceType, new MDBListCollectionSync());
+          break;
+        case 'tvdb':
+          this.syncServices.set(sourceType, new TvdbCollectionSync());
           break;
         case 'tmdb':
           this.syncServices.set(sourceType, new TmdbCollectionSync());
@@ -2824,6 +2832,7 @@ export class MultiSourceOrchestrator {
             | 'anilist'
             | 'myanimelist'
             | 'mdblist'
+            | 'tvdb'
             | 'networks'
             | 'originals'
             | 'multi-source',
@@ -3306,6 +3315,15 @@ export class MultiSourceOrchestrator {
             return extractedTitle;
           }
           return 'AniList List';
+        }
+
+        case 'tvdb': {
+          const { default: TvdbAPI, parseTvdbListInput } = await import(
+            '@server/api/tvdb'
+          );
+          const ref = parseTvdbListInput(source.customUrl);
+          if (!ref) return 'TVDB List';
+          return (await new TvdbAPI().getList(ref)).name;
         }
 
         case 'mdblist': {

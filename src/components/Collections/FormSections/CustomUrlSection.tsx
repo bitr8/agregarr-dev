@@ -9,6 +9,7 @@ const messages = defineMessages({
   customImdbListUrl: 'Custom IMDb List URL',
   customLetterboxdListUrl: 'Custom Letterboxd List URL',
   customMdblistListUrl: 'Custom MDBList List URL',
+  customTvdbListUrl: 'Custom TVDB List URL',
   customAnilistListUrl: 'Custom AniList List URL',
   fetchTitle: 'Validate',
   fetching: 'Fetching...',
@@ -24,6 +25,8 @@ const messages = defineMessages({
   letterboxdWatchlistHelp: 'Enter the full URL to your Letterboxd watchlist.',
   anilistUrlExample:
     'Example: https://anilist.co/animelist/listname or https://anilist.co/user/username/animelist/listname',
+  tvdbUrlExample:
+    'Examples: https://thetvdb.com/lists/matrix (official list) or https://thetvdb.com/lists/7149 (user list)',
   mdblistUrlExample: 'Example: https://mdblist.com/lists/username/list-name',
 });
 
@@ -54,6 +57,10 @@ interface CustomUrlSectionProps {
     url: string,
     setFieldValue?: (field: string, value: string) => void
   ) => Promise<void>;
+  fetchTvdbTitle?: (
+    url: string,
+    setFieldValue?: (field: string, value: string) => void
+  ) => Promise<void>;
   fetchAnilistTitle?: (
     url: string,
     setFieldValue?: (field: string, value: string) => void
@@ -64,6 +71,7 @@ interface CustomUrlSectionProps {
     imdb?: string;
     letterboxd?: string;
     mdblist?: string;
+    tvdb?: string;
     anilist?: string;
   };
 }
@@ -76,6 +84,7 @@ const CustomUrlSection = ({
   fetchImdbTitle,
   fetchLetterboxdTitle,
   fetchMdblistTitle,
+  fetchTvdbTitle,
   fetchAnilistTitle,
   titleFetchProgress,
 }: CustomUrlSectionProps) => {
@@ -83,6 +92,7 @@ const CustomUrlSection = ({
   const [isLoadingTitle, setIsLoadingTitle] = useState({
     trakt: false,
     mdblist: false,
+    tvdb: false,
     tmdb: false,
     imdb: false,
     letterboxd: false,
@@ -90,7 +100,14 @@ const CustomUrlSection = ({
   });
 
   const handleFetchTitle = async (
-    type: 'trakt' | 'tmdb' | 'imdb' | 'letterboxd' | 'mdblist' | 'anilist'
+    type:
+      | 'trakt'
+      | 'tmdb'
+      | 'imdb'
+      | 'letterboxd'
+      | 'mdblist'
+      | 'tvdb'
+      | 'anilist'
   ) => {
     const urlField =
       type === 'tmdb' ? 'tmdbCustomCollectionUrl' : `${type}CustomListUrl`;
@@ -111,6 +128,8 @@ const CustomUrlSection = ({
         await fetchLetterboxdTitle(url, setFieldValue);
       } else if (type === 'mdblist' && fetchMdblistTitle) {
         await fetchMdblistTitle(url, setFieldValue);
+      } else if (type === 'tvdb' && fetchTvdbTitle) {
+        await fetchTvdbTitle(url, setFieldValue);
       } else if (type === 'anilist' && fetchAnilistTitle) {
         await fetchAnilistTitle(url, setFieldValue);
       }
@@ -443,6 +462,50 @@ const CustomUrlSection = ({
         />
         <p className="mt-1 text-xs text-gray-400">
           {intl.formatMessage(messages.mdblistUrlExample)}
+        </p>
+      </div>
+    );
+  }
+
+  // Custom TVDB List URL
+  if (values.type === 'tvdb' && values.subtype === 'custom') {
+    return (
+      <div>
+        <label
+          htmlFor="tvdbCustomListUrl"
+          className="mb-2 block text-sm text-gray-300"
+        >
+          {intl.formatMessage(messages.customTvdbListUrl)}{' '}
+          <span className="text-red-500">*</span>
+        </label>
+        <div className="flex gap-2">
+          <Field
+            type="url"
+            id="tvdbCustomListUrl"
+            name="tvdbCustomListUrl"
+            placeholder="https://thetvdb.com/lists/matrix"
+            className="flex-1 rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          {fetchTvdbTitle && (
+            <button
+              type="button"
+              onClick={() => handleFetchTitle('tvdb')}
+              disabled={!values.tvdbCustomListUrl || isLoadingTitle.tvdb}
+              className="whitespace-nowrap rounded-md bg-orange-600 px-3 py-2 text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isLoadingTitle.tvdb
+                ? intl.formatMessage(messages.fetching)
+                : intl.formatMessage(messages.fetchTitle)}
+            </button>
+          )}
+        </div>
+        <ErrorMessage
+          name="tvdbCustomListUrl"
+          component="div"
+          className="mt-1 text-sm text-red-500"
+        />
+        <p className="mt-1 text-xs text-gray-400">
+          {intl.formatMessage(messages.tvdbUrlExample)}
         </p>
       </div>
     );

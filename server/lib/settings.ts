@@ -80,6 +80,7 @@ export interface CollectionConfig {
     | 'imdb'
     | 'letterboxd'
     | 'mdblist'
+    | 'tvdb'
     | 'networks'
     | 'originals'
     | 'myanimelist'
@@ -230,6 +231,7 @@ export interface CollectionConfig {
   // Letterboxd custom list fields
   readonly letterboxdCustomListUrl?: string; // Custom Letterboxd list URL (e.g., https://letterboxd.com/username/list/list-name/)
   // MDBList custom list fields
+  readonly tvdbCustomListUrl?: string; // TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)
   readonly mdblistCustomListUrl?: string; // Custom MDBList list URL (e.g., https://mdblist.com/lists/123456 or https://mdblist.com/lists/username/list-name)
   // Networks (FlixPatrol) fields
   readonly networksCountry?: string; // Country/region for Networks collections (e.g., 'world', 'us', 'uk')
@@ -2380,6 +2382,7 @@ export type MultiSourceType =
   | 'imdb'
   | 'letterboxd'
   | 'mdblist'
+  | 'tvdb'
   | 'tautulli'
   | 'overseerr'
   | 'networks'

@@ -19,6 +19,7 @@ export const getTemplatePresets = (
     imdb?: string;
     letterboxd?: string;
     mdblist?: string;
+    tvdb?: string;
     anilist?: string;
   },
   detectedMediaTypes?: {
@@ -27,6 +28,7 @@ export const getTemplatePresets = (
     imdb?: 'movie' | 'tv' | 'both';
     letterboxd?: 'movie' | 'tv' | 'both';
     mdblist?: 'movie' | 'tv' | 'both';
+    tvdb?: 'movie' | 'tv' | 'both';
     anilist?: 'movie' | 'tv' | 'both';
   }
 ): TemplatePreset[] => {
@@ -89,6 +91,7 @@ export const getTemplatePresets = (
       | 'imdb'
       | 'letterboxd'
       | 'mdblist'
+      | 'tvdb'
       | 'anilist'
   ): TemplatePreset[] => {
     if (!title) {
@@ -889,6 +892,10 @@ export const getTemplatePresets = (
       default:
         return [{ label: 'Custom', value: 'custom' }];
     }
+  }
+
+  if (values.type === 'tvdb') {
+    return getCustomUrlPresets(fetchedTitles?.tvdb || '', 'tvdb');
   }
 
   // TMDB collection presets

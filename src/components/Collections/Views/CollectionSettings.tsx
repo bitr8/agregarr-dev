@@ -635,6 +635,7 @@ const CollectionSettings = ({
           imdbCustomListUrl: config.imdbCustomListUrl,
           letterboxdCustomListUrl: config.letterboxdCustomListUrl,
           mdblistCustomListUrl: config.mdblistCustomListUrl,
+          tvdbCustomListUrl: config.tvdbCustomListUrl,
           anilistCustomListUrl: config.anilistCustomListUrl,
           radarrInstanceId: config.radarrInstanceId,
           radarrTagId: config.radarrTagId,

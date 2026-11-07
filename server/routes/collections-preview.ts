@@ -196,6 +196,7 @@ function getSourceDisplayName(source: {
       imdb: 'IMDb',
       letterboxd: 'Letterboxd',
       mdblist: 'MDBList',
+      tvdb: 'TVDB',
       anilist: 'AniList',
     };
     return `${sourceNames[type] || type} Custom List`;
@@ -252,6 +253,9 @@ function getSourceDisplayName(source: {
 
     case 'mdblist':
       return 'MDBList';
+
+    case 'tvdb':
+      return 'TVDB List';
 
     case 'networks': {
       // Extract network name from subtype (e.g., "netflix_top_10" -> "Netflix")
@@ -430,6 +434,8 @@ export async function processMultiSourcePreview(
           sourceConfigRecord.letterboxdCustomListUrl = source.customUrl;
         else if (source.type === 'mdblist')
           sourceConfigRecord.mdblistCustomListUrl = source.customUrl;
+        else if (source.type === 'tvdb')
+          sourceConfigRecord.tvdbCustomListUrl = source.customUrl;
         else if (source.type === 'anilist')
           sourceConfigRecord.anilistCustomListUrl = source.customUrl;
       }
@@ -1109,6 +1115,8 @@ async function processPreviewAsync(
         previewConfigRecord.letterboxdCustomListUrl = customUrl;
       else if (type === 'mdblist')
         previewConfigRecord.mdblistCustomListUrl = customUrl;
+      else if (type === 'tvdb')
+        previewConfigRecord.tvdbCustomListUrl = customUrl;
       else if (type === 'anilist')
         previewConfigRecord.anilistCustomListUrl = customUrl;
       else if (type === 'myanimelist')

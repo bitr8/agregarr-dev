@@ -3007,6 +3007,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     if (config.tmdbCustomCollectionUrl)
       parts.push(config.tmdbCustomCollectionUrl);
     if (config.mdblistCustomListUrl) parts.push(config.mdblistCustomListUrl);
+    if (config.tvdbCustomListUrl) parts.push(config.tvdbCustomListUrl);
     if (config.anilistCustomListUrl) parts.push(config.anilistCustomListUrl);
     if (config.timePeriod) parts.push(config.timePeriod);
     if (config.customDays) parts.push(String(config.customDays));
@@ -3027,6 +3028,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     | 'letterboxd-list'
     | 'tmdb-list'
     | 'mdblist-list'
+    | 'tvdb-list'
     | 'tautulli-list'
     | 'overseerr-list'
     | 'networks-list'
@@ -3039,6 +3041,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       letterboxd: 'letterboxd-list',
       tmdb: 'tmdb-list',
       mdblist: 'mdblist-list',
+      tvdb: 'tvdb-list',
       tautulli: 'tautulli-list',
       overseerr: 'overseerr-list',
       networks: 'networks-list',
@@ -3054,6 +3057,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       | 'letterboxd-list'
       | 'tmdb-list'
       | 'mdblist-list'
+      | 'tvdb-list'
       | 'tautulli-list'
       | 'overseerr-list'
       | 'networks-list'

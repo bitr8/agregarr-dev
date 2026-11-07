@@ -84,6 +84,7 @@ export function validateExternalUrl(
       tmdb: ['www.themoviedb.org', 'themoviedb.org'],
       imdb: ['www.imdb.com', 'imdb.com'],
       mdblist: ['mdblist.com', 'www.mdblist.com'],
+      tvdb: ['thetvdb.com', 'www.thetvdb.com'],
       letterboxd: ['letterboxd.com', 'www.letterboxd.com'],
       anilist: ['anilist.co', 'www.anilist.co'],
     };
@@ -143,6 +144,15 @@ export function validateExternalUrl(
             isValid: false,
             error:
               'Invalid MDBList list URL format. Expected: https://mdblist.com/lists/username/listname',
+          };
+        }
+        break;
+      case 'tvdb':
+        if (!urlObj.pathname.match(/^\/lists\/[A-Za-z0-9_-]+\/?$/)) {
+          return {
+            isValid: false,
+            error:
+              'Invalid TVDB list URL format. Expected: https://thetvdb.com/lists/listname or https://thetvdb.com/lists/123456',
           };
         }
         break;

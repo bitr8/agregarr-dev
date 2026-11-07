@@ -161,6 +161,7 @@ export type CollectionSource =
   | 'imdb'
   | 'letterboxd'
   | 'mdblist'
+  | 'tvdb'
   | 'networks'
   | 'originals'
   | 'anilist'
@@ -184,6 +185,7 @@ export type ItemProducingSource =
   | 'imdb'
   | 'letterboxd'
   | 'mdblist'
+  | 'tvdb'
   | 'anilist'
   | 'myanimelist'
   | 'networks'
@@ -552,6 +554,15 @@ export interface MDBListSourceData {
   mediaType: 'movie' | 'tv';
 }
 
+export interface TvdbSourceData {
+  tvdbId: number;
+  tmdbId?: number;
+  title: string;
+  year?: number;
+  mediaType: 'movie' | 'tv';
+  position: number;
+}
+
 export interface TautulliSourceData {
   rating_key?: string;
   guid?: string;
@@ -746,6 +757,7 @@ export interface RecentlyAddedSourceData {
 export type CollectionSourceData =
   | TraktSourceData
   | MDBListSourceData
+  | TvdbSourceData
   | TautulliSourceData
   | OverseerrSourceData
   | TmdbSourceData

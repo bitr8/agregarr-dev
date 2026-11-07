@@ -67,6 +67,7 @@ export class AutoRequestService {
       | 'anilist'
       | 'myanimelist'
       | 'mdblist'
+      | 'tvdb'
       | 'networks'
       | 'originals'
       | 'multi-source'

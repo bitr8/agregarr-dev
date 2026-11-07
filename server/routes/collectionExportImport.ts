@@ -46,6 +46,7 @@ const portableFields = [
   'imdbCustomListUrl',
   'letterboxdCustomListUrl',
   'mdblistCustomListUrl',
+  'tvdbCustomListUrl',
   'anilistCustomListUrl',
   'watchProviderId',
   'region',
