@@ -54,7 +54,7 @@ describe('discovery relabel step', () => {
     const internals = service as unknown as Record<string, unknown> & {
       [k: string]: (...a: unknown[]) => Promise<unknown>;
     };
-    internals.cleanupOrphanedLibraryConfigs = () => ({ removed: 0 });
+    internals.cleanupOrphanedLibraryConfigs = (() => ({ removed: 0 })) as never;
     internals.discoverAllCollectionsFirst = async () => [];
     internals.resetPreExistingPromotionStatus = async () => undefined;
     internals.discoverHubsAndEnhance = async () => undefined;

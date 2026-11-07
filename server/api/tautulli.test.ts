@@ -89,7 +89,7 @@ describe('TautulliAPI.getTopCollections', () => {
     let failed = false;
     const base = get.getMockImplementation() as (
       u: string,
-      c: never
+      c: unknown
     ) => unknown;
     get.mockImplementation(async (url, cfg) => {
       if (!failed && cfg.params.rating_key === '3') {
@@ -135,7 +135,7 @@ describe('TautulliAPI.getTopCollections', () => {
   ])('does not memoize a failed %s call', async (failingCmd, days) => {
     const base = get.getMockImplementation() as (
       u: string,
-      c: never
+      c: unknown
     ) => Promise<unknown>;
     let failed = false;
     get.mockImplementation(async (url, cfg) => {
@@ -155,7 +155,7 @@ describe('TautulliAPI.getTopCollections', () => {
   it('shares in-flight detail calls between overlapping requests', async () => {
     const base = get.getMockImplementation() as (
       u: string,
-      c: never
+      c: unknown
     ) => Promise<unknown>;
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
@@ -177,7 +177,7 @@ describe('TautulliAPI.getTopCollections', () => {
   it('drops details together with an evicted partial pass', async () => {
     const base = get.getMockImplementation() as (
       u: string,
-      c: never
+      c: unknown
     ) => Promise<unknown>;
     let failed = false;
     get.mockImplementation(async (url, cfg) => {
@@ -205,7 +205,7 @@ describe('TautulliAPI.getTopCollections', () => {
       vi.useFakeTimers();
       const base = get.getMockImplementation() as (
         u: string,
-        c: never
+        c: unknown
       ) => Promise<unknown>;
       let release!: () => void;
       const gate = new Promise<void>((r) => (release = r));

@@ -1,6 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
 import type { CollectionConfig } from '@server/lib/settings';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type MockInstance } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
@@ -57,15 +57,17 @@ const missing = (tmdbId: number, userId: number) => ({
 describe('OverseerrCollectionSync user collections: repeated requests', () => {
   it('lists a show once, spends one maxItems slot on it, and keeps it for each user', async () => {
     const sync = new OverseerrCollectionSync();
-    const createCollection = vi
-      .spyOn(
+    const createCollection = (
+      vi.spyOn(
         sync as unknown as { createCollection: unknown },
         'createCollection' as never
-      )
-      .mockResolvedValue({ created: 1, updated: 0 } as never);
-    vi.spyOn(
-      sync as unknown as { createUserCollectionName: unknown },
-      'createUserCollectionName' as never
+      ) as unknown as MockInstance
+    ).mockResolvedValue({ created: 1, updated: 0 } as never);
+    (
+      vi.spyOn(
+        sync as unknown as { createUserCollectionName: unknown },
+        'createUserCollectionName' as never
+      ) as unknown as MockInstance
     ).mockResolvedValue('Kaylyn TV' as never);
 
     const cfg = {

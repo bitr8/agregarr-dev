@@ -558,10 +558,12 @@ overlayTestRouter.post('/', async (req, res) => {
     const jpegQuality = normalizeOverlayJpegQuality(
       settings.overlays?.jpegQuality
     );
+    const outputFormat = overlayOutputFormat();
     posterBuffer = await overlayTemplateRenderer.compositeOverlays(
       posterBuffer,
       allOverlays,
-      jpegQuality
+      jpegQuality,
+      outputFormat
     );
 
     // Return all context variables as a flat list (no grouping)
@@ -593,7 +595,7 @@ overlayTestRouter.post('/', async (req, res) => {
       output: {
         width: posterWidth,
         height: posterHeight,
-        format: overlayOutputFormat(),
+        format: outputFormat,
         jpegQuality,
         bytes: posterBuffer.length,
       },

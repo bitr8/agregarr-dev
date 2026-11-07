@@ -10,7 +10,12 @@ const xml = (id: number) =>
 describe('PlexTvAPI.getSharedUserToken', () => {
   it('finds the token by user id with a request timeout and cache ttl', async () => {
     const api = new PlexTvAPI('admin');
-    const get = vi.spyOn(api as never, 'get').mockResolvedValue(xml(11));
+    const get = vi
+      .spyOn(
+        api as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>,
+        'get'
+      )
+      .mockResolvedValue(xml(11));
 
     expect(await api.getSharedUserToken('m-a', 11)).toBe('tok-11');
     expect(await api.getSharedUserToken('m-a', 12)).toBeNull();

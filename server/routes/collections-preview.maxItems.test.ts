@@ -38,7 +38,11 @@ vi.mock('@server/lib/collections/core/CollectionUtilities', async () => {
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import { processMultiSourcePreview } from './collections-preview';
 
-class TestSync extends BaseCollectionSync<'tmdb'> {
+const LooseSyncBase = BaseCollectionSync as unknown as new (
+  type: string
+) => object;
+
+class TestSync extends LooseSyncBase {
   constructor() {
     super('tmdb');
   }

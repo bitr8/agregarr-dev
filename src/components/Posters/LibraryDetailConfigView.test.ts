@@ -133,7 +133,7 @@ describe('library overlay scope controls', () => {
       false,
       false,
     ]);
-    expect(container.textContent).not.toContain('Full sync will skip');
+    expect(container.textContent).not.toContain('No enabled template for:');
   });
 
   it('shows only movie posters for a movie library', async () => {
@@ -146,10 +146,11 @@ describe('library overlay scope controls', () => {
   it('lets users opt in, warns about missing full-sync templates, and saves the choices', async () => {
     await render();
     await act(async () => checkboxes('Episode cards')[0].click());
-    expect(container.textContent).toContain(
-      'Full sync will skip Episode cards'
-    );
+    expect(container.textContent).toContain('Episode cards (Full sync)');
     await act(async () => checkboxes('Season posters')[1].click());
+    expect(container.textContent).toContain(
+      'Season posters (Quick sync / Posterizarr callbacks)'
+    );
     const saved = await save();
     expect(saved.fullSyncTargets).toEqual(['main', 'episode']);
     expect(saved.quickSyncTargets).toEqual(['main', 'season']);
@@ -167,14 +168,15 @@ describe('library overlay scope controls', () => {
     const saved = await save();
     expect(saved.fullSyncTargets).toEqual(['main']);
     expect(saved.quickSyncTargets).toEqual([]);
-    expect(container.textContent).not.toContain('Full sync will skip');
+    expect(container.textContent).not.toContain('No enabled template for:');
   });
 
   it('does not warn when an enabled template covers the selected child target', async () => {
     mocks.templates[0].tags = ['target:episode'];
     mocks.config.fullSyncTargets = ['episode'];
+    mocks.config.quickSyncTargets = ['episode'];
     await render();
     expect(checkboxes('Episode cards')[0].checked).toBe(true);
-    expect(container.textContent).not.toContain('Full sync will skip');
+    expect(container.textContent).not.toContain('No enabled template for:');
   });
 });

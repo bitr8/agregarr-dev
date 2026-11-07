@@ -223,9 +223,9 @@ describe('PlexClient', () => {
     expect(err.message).toBe(
       'Plex Server didnt respond with a valid 2xx status code, response code: 404'
     );
-    const err500 = await make()
+    const err500 = (await make()
       .putQuery('/boom')
-      .catch((e) => e);
+      .catch((e: Error) => e)) as Error;
     expect(err500.message).toMatch(/response code:\s*500$/);
     const errDel = await make()
       .deleteQuery('/missing')
@@ -332,7 +332,9 @@ describe('PlexClient', () => {
       MediaContainer: { size: 1 },
     });
     for (const call of [c.putQuery, c.postQuery, c.deleteQuery]) {
-      const err = await call.call(c, '/redirect').catch((e: Error) => e);
+      const err = (await call
+        .call(c, '/redirect')
+        .catch((e: Error) => e)) as Error;
       expect(err.message).toMatch(/response code:\s*302$/);
     }
   });

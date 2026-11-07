@@ -1,4 +1,4 @@
-import type { PlexAPI } from '@server/api/plexapi';
+import type PlexAPI from '@server/api/plexapi';
 import type { CollectionItem } from '@server/lib/collections/core/types';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -61,7 +61,11 @@ describe('applyLabelExclusions', () => {
     });
     const result = await applyLabelExclusions(
       items,
-      { name: 'Test', libraryId: ['L1', 'L2'], excludeLabels: ['one', 'two'] },
+      {
+        name: 'Test',
+        libraryId: ['L1', 'L2'] as unknown as string,
+        excludeLabels: ['one', 'two'],
+      },
       client,
       'imdb'
     );

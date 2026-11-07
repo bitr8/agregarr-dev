@@ -155,8 +155,10 @@ const messages = defineMessages({
   syncScope: 'Sync scope',
   syncScopeDescription:
     'Choose which artwork each overlay job processes for this library. Posterizarr callbacks use the Quick sync targets. A selected target also needs an enabled overlay template for that artwork.',
-  missingFullSyncTemplates:
-    'Full sync will skip {targets} because no enabled template targets that artwork.',
+  missingSyncTemplates:
+    'No enabled template for: {targets}. These jobs will skip that artwork.',
+  missingSyncTemplateTarget: '{target} ({jobs})',
+  quickSyncCallbacks: 'Quick sync / Posterizarr callbacks',
   fullSync: 'Full sync',
   quickSync: 'Quick sync',
   artwork: 'Artwork',
@@ -617,9 +619,26 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
       .filter((template) => isEnabled(template.id))
       .flatMap((template) => getOverlayTargets(template.tags))
   );
-  const missingFullSyncTemplateTargets = fullSyncTargets.filter(
-    (target) => !enabledTemplateTargets.has(target)
-  );
+  const missingTemplateWarnings = availableSyncTargets
+    .filter((target) => !enabledTemplateTargets.has(target))
+    .flatMap((target) => {
+      const jobs = [
+        ...(fullSyncTargets.includes(target)
+          ? [intl.formatMessage(messages.fullSync)]
+          : []),
+        ...(quickSyncTargets.includes(target)
+          ? [intl.formatMessage(messages.quickSyncCallbacks)]
+          : []),
+      ];
+      return jobs.length > 0
+        ? [
+            intl.formatMessage(messages.missingSyncTemplateTarget, {
+              target: getSyncTargetLabel(target),
+              jobs: jobs.join(', '),
+            }),
+          ]
+        : [];
+    });
 
   const handleToggle = (templateId: number) => {
     setEnabledOverlays((prev) => {
@@ -915,12 +934,10 @@ const LibraryDetailConfigView: React.FC<LibraryDetailConfigViewProps> = ({
                 );
               })}
             </div>
-            {missingFullSyncTemplateTargets.length > 0 && (
+            {missingTemplateWarnings.length > 0 && (
               <div className="mt-3 rounded-md border border-amber-700 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
-                {intl.formatMessage(messages.missingFullSyncTemplates, {
-                  targets: missingFullSyncTemplateTargets
-                    .map(getSyncTargetLabel)
-                    .join(', '),
+                {intl.formatMessage(messages.missingSyncTemplates, {
+                  targets: missingTemplateWarnings.join('; '),
                 })}
               </div>
             )}

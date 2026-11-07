@@ -1,6 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
 import type { CollectionConfig } from '@server/lib/settings';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type MockInstance } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
@@ -47,9 +47,12 @@ const metadataCall = async (
   laterCollections: { ratingKey: string; labels: string[] }[] = []
 ) => {
   const sync = new FilteredHubCollectionSync();
-  const metadata = vi
-    .spyOn(sync as never, 'updateCollectionMetadata')
-    .mockResolvedValue({} as never);
+  const metadata = (
+    vi.spyOn(
+      sync as never,
+      'updateCollectionMetadata'
+    ) as unknown as MockInstance
+  ).mockResolvedValue({} as never);
   const cfg = {
     id: '10',
     name: 'Hub',

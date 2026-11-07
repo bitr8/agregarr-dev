@@ -35,14 +35,18 @@ function getExplicitHttpStatus(error: unknown): number | undefined {
     statusCode?: unknown;
     response?: { status?: unknown };
   };
-  const value =
-    candidate.status ?? candidate.statusCode ?? candidate.response?.status;
-  const status = Number(value);
-  if (Number.isInteger(status)) return status;
-
   const message = error instanceof Error ? error.message : String(error);
   const messageStatus = message.match(/response code:\s*(\d+)/i);
-  return messageStatus ? Number(messageStatus[1]) : undefined;
+  return [
+    candidate.status,
+    candidate.statusCode,
+    candidate.response?.status,
+    messageStatus?.[1],
+  ]
+    .map(Number)
+    .find(
+      (status) => Number.isInteger(status) && status >= 100 && status <= 599
+    );
 }
 
 function isNonRetryableClientError(error: unknown): boolean {

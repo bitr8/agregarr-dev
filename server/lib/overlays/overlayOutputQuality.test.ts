@@ -27,6 +27,7 @@ describe('overlayOutputFormat', () => {
     const { getSettings } = await import('@server/lib/settings');
     const { overlayOutputFormat } = await import('./overlayOutputQuality');
     const overlays = getSettings().overlays;
+    if (!overlays) throw new Error('Missing default overlay settings');
     const previous = overlays.posterizarrIntegrationEnabled;
     try {
       overlays.posterizarrIntegrationEnabled = false;

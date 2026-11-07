@@ -77,7 +77,11 @@ const parent = {
   sources: [],
 } as unknown as MultiSourceCollectionConfig;
 
-class CapturingSync extends BaseCollectionSync<'tmdb'> {
+const LooseSyncBase = BaseCollectionSync as unknown as new (
+  type: string
+) => object;
+
+class CapturingSync extends LooseSyncBase {
   public seen: CollectionConfig[] = [];
   constructor() {
     super('tmdb');
@@ -102,7 +106,8 @@ describe('multi-source TMDB custom advanced filters', () => {
         plexClient: unknown
       ) => Promise<unknown>;
     };
-    orchestrator.getSyncService = () => sync;
+    orchestrator.getSyncService = () =>
+      sync as unknown as BaseCollectionSync<'tmdb'>;
 
     const sources: SourceDefinition[] = [
       {

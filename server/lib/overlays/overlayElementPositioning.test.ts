@@ -19,6 +19,7 @@ import { createSampleOverlayContext } from './sampleOverlayContext';
 
 const withPosterizarr = async (fn: () => Promise<void>) => {
   const overlays = getSettings().overlays;
+  if (!overlays) throw new Error('Missing default overlay settings');
   const previous = overlays.posterizarrIntegrationEnabled;
   overlays.posterizarrIntegrationEnabled = true;
   try {

@@ -736,7 +736,8 @@ class OverlayTemplateRendererService {
   async compositeOverlays(
     posterBuffer: Buffer,
     overlays: OverlayOptions[],
-    jpegQuality = DEFAULT_OVERLAY_JPEG_QUALITY
+    jpegQuality = DEFAULT_OVERLAY_JPEG_QUALITY,
+    outputFormat = overlayOutputFormat()
   ): Promise<Buffer> {
     let composite = sharp(posterBuffer);
 
@@ -744,7 +745,7 @@ class OverlayTemplateRendererService {
       composite = composite.composite(overlays);
     }
 
-    if (overlayOutputFormat() === 'webp') {
+    if (outputFormat === 'webp') {
       return await composite.webp({ quality: 92 }).toBuffer();
     }
 

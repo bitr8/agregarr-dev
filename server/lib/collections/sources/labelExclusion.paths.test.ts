@@ -138,7 +138,7 @@ describe('label exclusion on every write path', () => {
       .spyOn(sync, 'createOrUpdateCollectionStandardized')
       .mockResolvedValue({ created: 0, updated: 1 } as never);
     vi.spyOn(
-      sync as never,
+      sync as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>,
       'generateCollectionNameWithCustom'
     ).mockResolvedValue('Test' as never);
     const { plex } = makePlex();
@@ -212,11 +212,18 @@ describe('label exclusion on every write path', () => {
       .spyOn(sync, 'createOrUpdateCollectionStandardized')
       .mockResolvedValue({ created: 1, updated: 0 } as never);
     const smart = vi
-      .spyOn(sync as never, 'handleUserSmartCollectionCreation')
+      .spyOn(
+        sync as unknown as Record<
+          string,
+          (...a: unknown[]) => Promise<unknown>
+        >,
+        'handleUserSmartCollectionCreation'
+      )
       .mockResolvedValue({ created: 1, updated: 0 } as never);
-    vi.spyOn(sync as never, 'generateAutoPoster').mockResolvedValue(
-      undefined as never
-    );
+    vi.spyOn(
+      sync as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>,
+      'generateAutoPoster'
+    ).mockResolvedValue(undefined as never);
     const { plex } = makePlex();
     const user = { id: 3, plexId: '3', username: 'u' };
 
