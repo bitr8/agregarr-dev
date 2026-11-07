@@ -1766,6 +1766,8 @@
   "components.Settings.overseerrSettingsDescription": "Configure connection to add missing items as Requests in Seerr.",
   "components.Settings.placeholderFolderTmdbId": "Add TMDB ID to movie placeholder folders",
   "components.Settings.placeholderFolderTmdbIdDescription": "Name new movie placeholder folders like Title (Year) '{'tmdb-12345'}' so different movies with the same title and year get separate folders. Existing folders are not renamed.",
+  "components.Settings.placeholderFolderTvdbId": "Add TVDB ID to TV placeholder folders",
+  "components.Settings.placeholderFolderTvdbIdDescription": "Name new TV placeholder folders for shows that are not in Sonarr like Title (Year) '{'tvdb-12345'}'. Shows already in Sonarr keep Sonarr's folder name. Existing folders are not renamed.",
   "components.Settings.placeholderSettings": "Placeholder Root Folders",
   "components.Settings.placeholderSettingsDescription": "Configure root folders for placeholder files for each library. These paths should match the mounted Plex library paths inside the Agregarr container.",
   "components.Settings.plex": "Plex",
