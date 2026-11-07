@@ -257,7 +257,9 @@ const WallpaperUploadSection = ({
 
                 {/* Hidden file input */}
                 <input
-                  ref={(el) => (fileInputRefs.current[library.key] = el)}
+                  ref={(el) => {
+                    fileInputRefs.current[library.key] = el;
+                  }}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   className="hidden"

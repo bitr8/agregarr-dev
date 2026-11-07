@@ -56,14 +56,14 @@ const ArrTagConfigSection = ({
   // Fetch Radarr instances
   const { data: radarrInstances, error: radarrError } = useSWR<
     RadarrSettings[]
-  >(isRadarr ? '/api/v1/settings/radarr' : null, (url) =>
+  >(isRadarr ? '/api/v1/settings/radarr' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
   // Fetch Sonarr instances
   const { data: sonarrInstances, error: sonarrError } = useSWR<
     SonarrSettings[]
-  >(isSonarr ? '/api/v1/settings/sonarr' : null, (url) =>
+  >(isSonarr ? '/api/v1/settings/sonarr' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
@@ -87,7 +87,7 @@ const ArrTagConfigSection = ({
 
   const { data: radarrTags, error: radarrTagsError } = useSWR<ArrTag[]>(
     radarrTagsUrl,
-    (url) => fetch(url).then((res) => res.json())
+    (url: string) => fetch(url).then((res) => res.json())
   );
 
   // Fetch tags for selected Sonarr instance
@@ -98,7 +98,7 @@ const ArrTagConfigSection = ({
 
   const { data: sonarrTags, error: sonarrTagsError } = useSWR<ArrTag[]>(
     sonarrTagsUrl,
-    (url) => fetch(url).then((res) => res.json())
+    (url: string) => fetch(url).then((res) => res.json())
   );
 
   const isLoadingInstances = isRadarr

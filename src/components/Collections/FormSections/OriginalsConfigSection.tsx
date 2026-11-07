@@ -38,7 +38,7 @@ const OriginalsConfigSection = ({
   // Fetch available streaming providers for originals
   const { data: providers, error: providersError } = useSWR<
     OriginalsProviderOption[]
-  >('/api/v1/collections/originals/providers', (url) =>
+  >('/api/v1/collections/originals/providers', (url: string) =>
     fetch(url).then((res) => {
       if (!res.ok) {
         throw new Error('Failed to fetch providers');
