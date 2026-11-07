@@ -201,7 +201,8 @@ async function pathExists(target: string): Promise<boolean | 'error'> {
   }
 }
 
-// An existing placeholder keeps its folder (either form) whatever the setting.
+// An existing placeholder keeps its folder (either form) whatever the setting;
+// only untracked ones reach this, DB rows never re-resolve their path.
 export async function wantsTvdbFolderHint(
   options: Omit<PlaceholderOptions, 'trailerPath' | 'tvdbFolderHint'>
 ): Promise<boolean> {
@@ -212,10 +213,15 @@ export async function wantsTvdbFolderHint(
   ) {
     return false;
   }
-  const legacy = await pathExists(
-    resolvePlaceholderPaths(options).destinationPath
-  );
-  if (legacy !== false) return false;
+  const legacyPath = resolvePlaceholderPaths(options).destinationPath;
+  const legacy = await pathExists(legacyPath);
+  if (legacy === 'error') return false;
+  if (legacy === true) {
+    const marker = await readPlaceholderMarker(path.dirname(legacyPath));
+    const otherShow =
+      marker?.tmdbId !== undefined && marker.tmdbId !== options.tmdbId;
+    if (!otherShow) return false;
+  }
   const hinted = await pathExists(
     resolvePlaceholderPaths({ ...options, tvdbFolderHint: true })
       .destinationPath
