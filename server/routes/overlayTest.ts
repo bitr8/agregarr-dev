@@ -3,6 +3,7 @@ import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import { rankContextFromOrderedKeys } from '@server/lib/overlays/collectionRank';
 import { seasonFallbackFor } from '@server/lib/overlays/maintainerrCountdown';
 import {
   buildRenderContext,
@@ -416,6 +417,7 @@ overlayTestRouter.post('/', async (req, res) => {
         !!cfg.collectionRatingKey
     );
     const collectionIds: string[] = [];
+    const rankContext: Record<string, number> = {};
     const concurrency = 10;
 
     for (let i = 0; i < collectionsWithKeys.length; i += concurrency) {
@@ -425,6 +427,10 @@ overlayTestRouter.post('/', async (req, res) => {
           try {
             const itemKeys = await plexApi.getCollectionItems(
               cfg.collectionRatingKey
+            );
+            Object.assign(
+              rankContext,
+              rankContextFromOrderedKeys(cfg.id, ratingKey, itemKeys)
             );
             return itemKeys.includes(ratingKey) ? cfg.id : null;
           } catch {
@@ -452,6 +458,7 @@ overlayTestRouter.post('/', async (req, res) => {
       ...releaseDateContext,
       ...monitoringContext,
       collection: collectionIds,
+      ...rankContext,
     };
 
     // Evaluate all templates with detailed results

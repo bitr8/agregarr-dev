@@ -7,7 +7,7 @@ const messages = defineMessages({
   selectCollection: 'Select a collection...',
   plexSuffix: '(Plex)',
   rankHint:
-    "Shows the item's position in this collection. Items outside it get no number.",
+    "Shows the item's position in this collection, in the order Plex sorts it. Items outside it get no number, and season and episode artwork never shows a rank.",
 });
 
 interface CollectionRankPickerProps {
@@ -19,6 +19,8 @@ interface CollectionSummary {
   id: string;
   name: string;
   libraryName: string;
+  collectionRatingKeys?: string[];
+  type?: string;
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -43,7 +45,15 @@ const CollectionRankPicker = ({
     if (!grouped.has(lib)) grouped.set(lib, []);
     grouped.get(lib)?.push({ value: c.id, label });
   };
-  for (const c of agregarr?.collectionConfigs ?? []) add(c, c.name);
+  for (const c of agregarr?.collectionConfigs ?? []) {
+    if (
+      !c.collectionRatingKeys?.length &&
+      c.type !== 'filtered_hub' &&
+      c.type !== 'comingsoon'
+    ) {
+      add(c, c.name);
+    }
+  }
   for (const c of Array.isArray(preExisting) ? preExisting : []) {
     add(c, `${c.name} ${intl.formatMessage(messages.plexSuffix)}`);
   }

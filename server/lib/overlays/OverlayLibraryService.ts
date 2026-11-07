@@ -27,7 +27,8 @@ import {
 import {
   buildItemRankContext,
   extractRankCollectionIds,
-  rankByRatingKey,
+  refreshRankCache,
+  type RankCollectionConfig,
 } from './collectionRank';
 import type {
   AggregatedMediaInfo,
@@ -133,6 +134,7 @@ export interface OverlayLibraryOutcomeDetails {
 
 export interface OverlayBatchOptions {
   checkCancelled?: () => boolean;
+  skipRankRefresh?: boolean;
   onItemStart?: (item: OverlayItemInput) => void;
   onItemComplete?: (
     outcome: OverlayItemOutcome,
@@ -1605,7 +1607,8 @@ class OverlayLibraryService {
     templates: OverlayTemplate[]
   ): Promise<void> {
     const ids = extractRankCollectionIds(
-      templates.map((template) => template.getTemplateData())
+      templates.map((template) => template.getTemplateData()),
+      templates.map((template) => template.getApplicationCondition())
     );
     if (ids.size === 0) return;
 
@@ -1613,25 +1616,26 @@ class OverlayLibraryService {
     const { preExistingCollectionConfigService } = await import(
       '@server/lib/collections/services/PreExistingCollectionConfigService'
     );
-    const configs: { id: string; collectionRatingKey?: string }[] = [
+    const configs: RankCollectionConfig[] = [
       ...(settings.plex.collectionConfigs || []),
       ...preExistingCollectionConfigService.getConfigs(),
     ];
 
-    for (const id of ids) {
-      const ratingKey = configs.find(
-        (config) => config.id === id
-      )?.collectionRatingKey;
-      if (!ratingKey) {
-        this.collectionRankCache.delete(id);
-        continue;
-      }
-      const orderedKeys = await plexApi.getCollectionItems(ratingKey);
-      // getCollectionItems reports a failed fetch as an empty list; keep the
-      // last known ranks rather than stripping every number on a Plex hiccup.
-      if (orderedKeys.length === 0) continue;
-      this.collectionRankCache.set(id, rankByRatingKey(orderedKeys));
-    }
+    await refreshRankCache(
+      this.collectionRankCache,
+      ids,
+      configs,
+      (ratingKey) => plexApi.getCollectionItemsOrThrow(ratingKey),
+      (collectionId, error) =>
+        logger.warn(
+          'Failed to fetch collection order for rank; keeping last known ranks',
+          {
+            label: 'OverlayLibrary',
+            collectionId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        )
+    );
   }
 
   /**
@@ -2289,6 +2293,7 @@ class OverlayLibraryService {
             `${item.target || 'main'}:${item.ratingKey}`;
           const childBatchOptions: OverlayBatchOptions = {
             checkCancelled,
+            skipRankRefresh: true,
             onItemStart: (item) => {
               this.updateProgress(libraryId, (p) => {
                 p.currentTarget = item.target || 'main';
@@ -2680,7 +2685,9 @@ class OverlayLibraryService {
           await this.buildCollectionMembershipMap(plexApi);
       }
 
-      await this.refreshCollectionRanks(plexApi, sortedTemplates);
+      if (!options.skipRankRefresh) {
+        await this.refreshCollectionRanks(plexApi, sortedTemplates);
+      }
 
       // Determine media type from library config
       const mediaType = config.mediaType || 'movie';

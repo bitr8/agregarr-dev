@@ -9,6 +9,7 @@ import {
   collectionRankField,
   extractRankCollectionIds,
   rankByRatingKey,
+  rankContextFromOrderedKeys,
   sampleCollectionRankContext,
 } from './collectionRank';
 
@@ -42,6 +43,25 @@ describe('collection rank', () => {
       template('imdbRating'),
     ]);
     expect([...ids]).toEqual(['col-1']);
+  });
+
+  it('also finds rank fields used by conditions', () => {
+    const withCondition = {
+      ...template('imdbRating'),
+      elements: [
+        {
+          ...template('imdbRating').elements[0],
+          condition: {
+            sections: [{ rules: [{ field: 'collectionRank:el-1' }] }],
+          },
+        },
+      ],
+    } as unknown as OverlayTemplateData;
+    const ids = extractRankCollectionIds(
+      [withCondition],
+      [{ sections: [{ rules: [{ field: 'collectionRank:app-1' }] }] }]
+    );
+    expect([...ids].sort()).toEqual(['app-1', 'el-1']);
   });
 
   it('builds a context key only for collections containing the item', () => {
@@ -83,5 +103,12 @@ describe('collection rank', () => {
     const usedPlain = extractUsedContextFields(plain);
     expect(usedPlain.has('collectionRank:col-1')).toBe(false);
     expect(hashFor(1, usedPlain, plain)).toBe(hashFor(2, usedPlain, plain));
+  });
+
+  it('builds the test-item rank context from collection order', () => {
+    expect(rankContextFromOrderedKeys('c1', 'b', ['a', 'b'])).toEqual({
+      'collectionRank:c1': 2,
+    });
+    expect(rankContextFromOrderedKeys('c1', 'z', ['a', 'b'])).toEqual({});
   });
 });
