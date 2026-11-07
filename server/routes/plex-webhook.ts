@@ -1,4 +1,5 @@
 import PlexAPI from '@server/api/plexapi';
+import PlexTvAPI from '@server/api/plextv';
 import { getAdminUser } from '@server/lib/collections/core/CollectionUtilities';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -70,6 +71,7 @@ interface PlexWebhookMetadata {
 
 interface PlexWebhookPayload {
   event: string;
+  Account?: { id?: number };
   Metadata?: PlexWebhookMetadata;
 }
 
@@ -92,15 +94,23 @@ function isPlaceholderMetadata(metadata: PlexWebhookMetadata): boolean {
   return false;
 }
 
-async function getPlexClient(): Promise<PlexAPI | null> {
+async function getPlexClient(): Promise<{
+  client: PlexAPI;
+  adminToken: string;
+  adminPlexId?: number;
+} | null> {
   try {
     const adminUser = await getAdminUser();
     if (!adminUser?.plexToken) return null;
     const settings = getSettings();
-    return new PlexAPI({
-      plexToken: adminUser.plexToken,
-      plexSettings: settings.plex,
-    });
+    return {
+      client: new PlexAPI({
+        plexToken: adminUser.plexToken,
+        plexSettings: settings.plex,
+      }),
+      adminToken: adminUser.plexToken,
+      adminPlexId: adminUser.plexId,
+    };
   } catch {
     return null;
   }
@@ -108,16 +118,56 @@ async function getPlexClient(): Promise<PlexAPI | null> {
 
 async function unscrobblePlaceholder(
   ratingKey: string,
-  plexClient: PlexAPI
+  plexClient: PlexAPI,
+  who: string
 ): Promise<void> {
   try {
     await plexClient.markItemAsUnplayed(ratingKey);
     logger.info('Unscrobbled placeholder item', {
       label: 'PlexWebhook',
       ratingKey,
+      who,
     });
   } catch (error) {
     logger.error('Failed to unscrobble placeholder item', {
+      label: 'PlexWebhook',
+      ratingKey,
+      who,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  try {
+    await plexClient.resetItemProgress(ratingKey);
+  } catch (error) {
+    logger.warn('Failed to reset placeholder resume progress', {
+      label: 'PlexWebhook',
+      ratingKey,
+      who,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function unscrobbleAsSharedUser(
+  ratingKey: string,
+  accountId: number,
+  adminToken: string
+): Promise<void> {
+  try {
+    const settings = getSettings();
+    if (!settings.plex.machineId) return;
+    const userToken = await new PlexTvAPI(adminToken).getSharedUserToken(
+      settings.plex.machineId,
+      accountId
+    );
+    if (!userToken) return;
+    await unscrobblePlaceholder(
+      ratingKey,
+      new PlexAPI({ plexToken: userToken, plexSettings: settings.plex }),
+      'shared user'
+    );
+  } catch (error) {
+    logger.error('Failed to unscrobble placeholder as shared user', {
       label: 'PlexWebhook',
       ratingKey,
       error: error instanceof Error ? error.message : String(error),
@@ -159,7 +209,11 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
       return;
     }
 
-    const { event, Metadata: metadata } = payload as PlexWebhookPayload;
+    const {
+      event,
+      Metadata: metadata,
+      Account: account,
+    } = payload as PlexWebhookPayload;
 
     logger.info('Plex webhook received', {
       label: 'PlexWebhook',
@@ -200,9 +254,17 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
       editionTitle: metadata.editionTitle,
     });
 
-    const plexClient = await getPlexClient();
-    if (plexClient) {
-      await unscrobblePlaceholder(ratingKey, plexClient);
+    const admin = await getPlexClient();
+    if (!admin) return;
+    await unscrobblePlaceholder(ratingKey, admin.client, 'admin');
+
+    const accountId = Number(account?.id);
+    if (
+      Number.isInteger(accountId) &&
+      accountId > 0 &&
+      accountId !== admin.adminPlexId
+    ) {
+      await unscrobbleAsSharedUser(ratingKey, accountId, admin.adminToken);
     }
   } catch (error) {
     logger.error('Webhook processing failed after responding', {
