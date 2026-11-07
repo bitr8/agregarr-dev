@@ -935,7 +935,7 @@
   "components.OverlayEditor.layers": "Layers",
   "components.OverlayEditor.layout": "Layout",
   "components.OverlayEditor.layoutCheck": "Check Layout",
-  "components.OverlayEditor.layoutCheckHelp": "Advisory only. Estimates text size from the template, so results can differ slightly from the final poster.",
+  "components.OverlayEditor.layoutCheckHelp": "Advisory only. Shows how the text will sit on the final poster, using estimated text widths.",
   "components.OverlayEditor.layoutGrid": "Grid",
   "components.OverlayEditor.layoutHorizontal": "Horizontal",
   "components.OverlayEditor.layoutNoIssues": "No layout issues found",

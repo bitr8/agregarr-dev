@@ -18,7 +18,6 @@ export interface LayoutWarning {
   elementId: string;
   otherElementId?: string;
   otherLabel?: string;
-  detail?: string;
 }
 
 export interface LayoutWarningLayer {
@@ -51,7 +50,6 @@ interface Rect {
 }
 
 const EPSILON = 0.5;
-const MIN_FONT_SIZE = 8;
 const VARIABLE_PLACEHOLDER = '00000';
 
 const estimateTextWidth: MeasureText = (text, fontSize, _family, weight) =>
@@ -96,11 +94,9 @@ const contains = (outer: Rect, inner: Rect): boolean =>
   inner.y + inner.height <= outer.y + outer.height + EPSILON;
 
 interface TextLayout {
-  lines: string[];
+  textWidth: number;
   fontSize: number;
-  maxLineWidth: number;
-  truncated: boolean;
-  longWordOverflow: boolean;
+  clipped: boolean;
 }
 
 const layoutText = (
@@ -111,75 +107,53 @@ const layoutText = (
   const props = element.properties as
     | OverlayTextElementProps
     | OverlayVariableElementProps;
-  const maxLinesProp =
-    element.type === 'text'
-      ? (props as OverlayTextElementProps).maxLines
-      : undefined;
-  const maxLines =
-    maxLinesProp ||
-    (element.type === 'text'
-      ? Math.max(1, Math.floor(element.height / props.fontSize))
-      : Number.POSITIVE_INFINITY);
-
-  let fontSize = props.fontSize;
-  let lines: string[] = [];
-  let truncated = false;
-  for (;;) {
-    const words = text.split(' ');
-    lines = [];
-    let current = '';
-    for (const word of words) {
-      const test = current ? `${current} ${word}` : word;
-      if (
-        !current ||
-        measure(test, fontSize, props.fontFamily, props.fontWeight) <=
-          element.width
-      ) {
-        current = test;
-      } else {
-        lines.push(current);
-        current = word;
-      }
-    }
-    lines.push(current);
-    truncated = lines.length > maxLines;
-    const shown = lines.slice(0, maxLines);
-    const total = (shown.length - 1) * fontSize * 1.1 + fontSize;
-    if (total <= element.height || fontSize * 0.95 < MIN_FONT_SIZE) {
-      lines = shown;
-      break;
-    }
-    fontSize *= 0.95;
-  }
-
-  const widths = lines.map((l) =>
-    measure(l, fontSize, props.fontFamily, props.fontWeight)
+  const textWidth = measure(
+    text,
+    props.fontSize,
+    props.fontFamily,
+    props.fontWeight
   );
   return {
-    lines,
-    fontSize,
-    maxLineWidth: Math.max(0, ...widths),
-    truncated,
-    longWordOverflow: widths.some((w) => w > element.width + EPSILON),
+    textWidth,
+    fontSize: props.fontSize,
+    clipped: textWidth > element.width + EPSILON,
   };
+};
+
+const rotateRect = (
+  rect: Rect,
+  rotationDeg: number,
+  element: OverlayElement
+) => {
+  if (!rotationDeg) return rect;
+  const r = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(r);
+  const sin = Math.sin(r);
+  const ecx = element.x + element.width / 2;
+  const ecy = element.y + element.height / 2;
+  const dx = rect.x + rect.width / 2 - ecx;
+  const dy = rect.y + rect.height / 2 - ecy;
+  const cx = ecx + dx * cos - dy * sin;
+  const cy = ecy + dx * sin + dy * cos;
+  const width = rect.width * Math.abs(cos) + rect.height * Math.abs(sin);
+  const height = rect.width * Math.abs(sin) + rect.height * Math.abs(cos);
+  return { x: cx - width / 2, y: cy - height / 2, width, height };
 };
 
 const textExtent = (element: OverlayElement, layout: TextLayout): Rect => {
   const align = (
     element.properties as OverlayTextElementProps | OverlayVariableElementProps
   ).textAlign;
-  const width = layout.maxLineWidth;
-  const height =
-    (layout.lines.length - 1) * layout.fontSize * 1.1 + layout.fontSize;
+  const width = Math.min(layout.textWidth, element.width);
+  const height = Math.min(layout.fontSize, element.height);
   let x = element.x + (element.width - width) / 2;
   if (align === 'left') x = element.x;
   else if (align === 'right') x = element.x + element.width - width;
-  return {
-    x,
-    y: element.y + (element.height - height) / 2,
-    width,
-    height,
-  };
+  return rotateRect(
+    { x, y: element.y + (element.height - height) / 2, width, height },
+    element.rotation || 0,
+    element
+  );
 };
 
 const looseEqual = (a: unknown, b: unknown): boolean =>
@@ -222,15 +196,45 @@ const rangesDisjoint = (a: NumericRange, b: NumericRange): boolean => {
   return false;
 };
 
+const SCALAR_STRING_FIELDS = new Set([
+  'resolution',
+  'videoCodec',
+  'videoProfile',
+  'audioCodec',
+  'audioProfile',
+  'audioChannelLayout',
+  'audioLanguage',
+  'audioLanguageCode',
+  'container',
+  'tmdbStatus',
+  'tvdbStatus',
+  'streamingProvider',
+  'showResolution',
+  'showVideoCodec',
+  'showAudioCodec',
+]);
+
+const ARRAY_FIELDS = new Set([
+  'radarrTags',
+  'sonarrTags',
+  'audioLanguages',
+  'audioLanguageCodes',
+  'subtitleLanguages',
+  'subtitleLanguageCodes',
+  'collection',
+  'plexLabels',
+]);
+
 const rulesContradict = (a: ConditionRule, b: ConditionRule): boolean => {
   if (a.field !== b.field) return false;
   const ra = toRange(a);
   const rb = toRange(b);
-  if (ra && rb) return rangesDisjoint(ra, rb);
+  if (ra && rb) return !ARRAY_FIELDS.has(a.field) && rangesDisjoint(ra, rb);
 
   const isEqLike = (r: ConditionRule) =>
     r.operator === 'eq' || r.operator === 'in';
   if (isEqLike(a) && isEqLike(b)) {
+    if (!SCALAR_STRING_FIELDS.has(a.field)) return false;
     const bValues = asList(b.value);
     return !asList(a.value).some((va) =>
       bValues.some((vb) => looseEqual(va, vb))
@@ -250,7 +254,7 @@ const conjunctionRules = (
   const rules: ConditionRule[] = [];
   for (let si = 0; si < condition.sections.length; si++) {
     const section = condition.sections[si];
-    if (si > 0 && section.sectionOperator === 'or') return null;
+    if (si > 0 && section.sectionOperator !== 'and') return null;
     for (let ri = 0; ri < section.rules.length; ri++) {
       const rule = section.rules[ri];
       if (ri > 0 && rule.ruleOperator === 'or') return null;
@@ -277,20 +281,24 @@ interface TextItem {
   extent: Rect;
 }
 
-const findCenteredBadge = (
+const findBadge = (
   element: OverlayElement,
   tiles: OverlayElement[]
 ): OverlayElement | undefined => {
   const cx = element.x + element.width / 2;
   const cy = element.y + element.height / 2;
-  return tiles.find(
-    (t) =>
-      !t.rotation &&
-      cx >= t.x &&
-      cx <= t.x + t.width &&
-      cy >= t.y &&
-      cy <= t.y + t.height
-  );
+  return tiles
+    .filter(
+      (t) =>
+        !t.rotation &&
+        t.layerOrder <= element.layerOrder &&
+        cx >= t.x &&
+        cx <= t.x + t.width &&
+        cy >= t.y &&
+        cy <= t.y + t.height &&
+        !conditionsMutuallyExclusive(t.condition, element.condition)
+    )
+    .sort((x, y) => y.layerOrder - x.layerOrder)[0];
 };
 
 export function computeLayoutWarnings(
@@ -316,12 +324,8 @@ export function computeLayoutWarnings(
     if (text === null || text.trim() === '') continue;
 
     const layout = layoutText(element, text, measure);
-    if (layout.truncated || layout.longWordOverflow) {
-      warnings.push({
-        kind: 'text-clipped',
-        elementId: element.id,
-        detail: layout.truncated ? 'lines' : 'width',
-      });
+    if (layout.clipped) {
+      warnings.push({ kind: 'text-clipped', elementId: element.id });
     }
 
     const extent = textExtent(element, layout);
@@ -332,7 +336,7 @@ export function computeLayoutWarnings(
     });
 
     if (!element.rotation) {
-      const badge = findCenteredBadge(element, tiles);
+      const badge = findBadge(element, tiles);
       if (badge && !contains(badge, extent)) {
         warnings.push({ kind: 'text-outside-badge', elementId: element.id });
       }

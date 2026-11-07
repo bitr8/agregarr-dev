@@ -67,7 +67,7 @@ const messages = defineMessages({
   selectedCount: '{count} selected',
   layoutCheck: 'Check Layout',
   layoutCheckHelp:
-    'Advisory only. Estimates text size from the template, so results can differ slightly from the final poster.',
+    'Advisory only. Shows how the text will sit on the final poster, using estimated text widths.',
   layoutNoIssues: 'No layout issues found',
   layoutOutOfBounds: '{element} extends beyond the poster',
   layoutTextClipped: '{element} text will be clipped',

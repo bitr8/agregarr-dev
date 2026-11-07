@@ -94,22 +94,12 @@ describe('computeLayoutWarnings', () => {
     expect(w.some((x) => x.kind === 'text-clipped')).toBe(true);
   });
 
-  it('flags text that needs more lines than allowed', () => {
+  it('flags multiword text that would only fit after wrapping', () => {
     const w = computeLayoutWarnings({
       ...base,
-      elements: [
-        textEl(
-          'a',
-          [100, 100, 100, 60],
-          'one two three four five six',
-          {},
-          {
-            maxLines: 1,
-          }
-        ),
-      ],
+      elements: [textEl('a', [100, 100, 200, 60], 'one two three four five')],
     });
-    expect(w.find((x) => x.kind === 'text-clipped')?.detail).toBe('lines');
+    expect(w.some((x) => x.kind === 'text-clipped')).toBe(true);
   });
 
   it('flags text that spills out of the badge behind it', () => {
@@ -144,10 +134,10 @@ describe('computeLayoutWarnings', () => {
       ...base,
       elements: [
         textEl('a', [100, 100, 400, 80], 'REQUESTABLE', {
-          condition: cond('status', 'eq', 'requestable'),
+          condition: cond('resolution', 'eq', '4K'),
         }),
         textEl('b', [100, 100, 400, 80], 'DOWNLOADING', {
-          condition: cond('status', 'eq', 'downloading'),
+          condition: cond('resolution', 'eq', '1080p'),
         }),
       ],
     });
@@ -210,43 +200,127 @@ describe('computeLayoutWarnings', () => {
 describe('conditionsMutuallyExclusive', () => {
   it('detects disjoint values, lists, ranges and eq/neq', () => {
     expect(
-      conditionsMutuallyExclusive(cond('r', 'eq', 'a'), cond('r', 'eq', 'b'))
-    ).toBe(true);
-    expect(
       conditionsMutuallyExclusive(
-        cond('r', 'in', ['a', 'b']),
-        cond('r', 'eq', 'c')
+        cond('resolution', 'eq', 'a'),
+        cond('resolution', 'eq', 'b')
       )
     ).toBe(true);
     expect(
-      conditionsMutuallyExclusive(cond('n', 'gt', 8), cond('n', 'lt', 5))
+      conditionsMutuallyExclusive(
+        cond('resolution', 'in', ['a', 'b']),
+        cond('resolution', 'eq', 'c')
+      )
     ).toBe(true);
     expect(
-      conditionsMutuallyExclusive(cond('r', 'eq', 'a'), cond('r', 'neq', 'a'))
+      conditionsMutuallyExclusive(
+        cond('imdbRating', 'gt', 8),
+        cond('imdbRating', 'lt', 5)
+      )
+    ).toBe(true);
+    expect(
+      conditionsMutuallyExclusive(
+        cond('resolution', 'eq', 'a'),
+        cond('resolution', 'neq', 'a')
+      )
     ).toBe(true);
   });
 
   it('stays conservative when it cannot prove exclusivity', () => {
     expect(
-      conditionsMutuallyExclusive(cond('n', 'gt', 5), cond('n', 'lt', 8))
+      conditionsMutuallyExclusive(
+        cond('imdbRating', 'gt', 5),
+        cond('imdbRating', 'lt', 8)
+      )
     ).toBe(false);
     expect(
-      conditionsMutuallyExclusive(cond('r', 'eq', 'a'), cond('s', 'eq', 'b'))
+      conditionsMutuallyExclusive(
+        cond('resolution', 'eq', 'a'),
+        cond('container', 'eq', 'b')
+      )
     ).toBe(false);
-    expect(conditionsMutuallyExclusive(undefined, cond('r', 'eq', 'a'))).toBe(
-      false
-    );
+    expect(
+      conditionsMutuallyExclusive(undefined, cond('resolution', 'eq', 'a'))
+    ).toBe(false);
     const withOr: ApplicationCondition = {
       sections: [
-        { rules: [{ field: 'r', operator: 'eq', value: 'a' }] },
+        { rules: [{ field: 'resolution', operator: 'eq', value: 'a' }] },
         {
           sectionOperator: 'or',
-          rules: [{ field: 'r', operator: 'eq', value: 'c' }],
+          rules: [{ field: 'resolution', operator: 'eq', value: 'c' }],
         },
       ],
     };
-    expect(conditionsMutuallyExclusive(withOr, cond('r', 'eq', 'c'))).toBe(
-      false
-    );
+    expect(
+      conditionsMutuallyExclusive(withOr, cond('resolution', 'eq', 'c'))
+    ).toBe(false);
+  });
+
+  it('treats an omitted sectionOperator as OR', () => {
+    const omitted: ApplicationCondition = {
+      sections: [
+        { rules: [{ field: 'resolution', operator: 'eq', value: 'a' }] },
+        { rules: [{ field: 'resolution', operator: 'eq', value: 'c' }] },
+      ],
+    };
+    expect(
+      conditionsMutuallyExclusive(omitted, cond('resolution', 'eq', 'c'))
+    ).toBe(false);
+    const explicitAnd: ApplicationCondition = {
+      sections: [
+        { rules: [{ field: 'resolution', operator: 'eq', value: 'a' }] },
+        {
+          sectionOperator: 'and',
+          rules: [{ field: 'imdbRating', operator: 'gt', value: 1 }],
+        },
+      ],
+    };
+    expect(
+      conditionsMutuallyExclusive(explicitAnd, cond('resolution', 'eq', 'c'))
+    ).toBe(true);
+  });
+
+  it('does not treat array fields as disjoint', () => {
+    expect(
+      conditionsMutuallyExclusive(
+        cond('radarrTags', 'eq', 'a'),
+        cond('radarrTags', 'eq', 'b')
+      )
+    ).toBe(false);
+    expect(
+      conditionsMutuallyExclusive(
+        cond('radarrTags', 'eq', 'a'),
+        cond('radarrTags', 'neq', 'a')
+      )
+    ).toBe(true);
+  });
+});
+
+describe('computeLayoutWarnings rotation and badges', () => {
+  it('uses the rotated extent for overlap', () => {
+    const rotated = textEl('a', [100, 300, 400, 40], 'ROTATED TEXT', {
+      rotation: 90,
+    });
+    const below = textEl('b', [250, 360, 100, 40], 'BELOW');
+    const apart = computeLayoutWarnings({
+      ...base,
+      elements: [{ ...rotated, rotation: 0 }, below],
+    });
+    expect(apart).toEqual([]);
+    const hit = computeLayoutWarnings({ ...base, elements: [rotated, below] });
+    expect(hit.some((x) => x.kind === 'text-overlap')).toBe(true);
+  });
+
+  it('measures against the nearest badge beneath the text', () => {
+    const background = tileEl('bg', [0, 0, 1000, 400]);
+    const badge = { ...tileEl('badge', [100, 100, 150, 60]), layerOrder: 1 };
+    const label = {
+      ...textEl('label', [50, 100, 300, 60], 'AWAITING DOWNLOAD'),
+      layerOrder: 2,
+    };
+    const w = computeLayoutWarnings({
+      ...base,
+      elements: [background, badge, label],
+    });
+    expect(w.some((x) => x.kind === 'text-outside-badge')).toBe(true);
   });
 });
