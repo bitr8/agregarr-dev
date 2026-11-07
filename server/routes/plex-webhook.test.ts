@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   progress: vi.fn(),
   tokens: [] as (string | undefined)[],
   sharedToken: vi.fn(),
+  dbRow: vi.fn(),
+  metadata: vi.fn(),
 }));
 
 vi.mock('@server/api/plexapi', () => ({
@@ -24,6 +26,9 @@ vi.mock('@server/api/plexapi', () => ({
     constructor({ plexToken }: { plexToken?: string }) {
       mocks.tokens.push(plexToken);
       (this as { token?: string }).token = plexToken;
+    }
+    getMetadata(key: string) {
+      return mocks.metadata(key);
     }
     markItemAsUnplayed(key: string) {
       return mocks.unscrobble((this as { token?: string }).token, key);
@@ -33,6 +38,10 @@ vi.mock('@server/api/plexapi', () => ({
     }
   },
 }));
+vi.mock('@server/datasource', () => ({
+  getRepository: () => ({ findOne: mocks.dbRow }),
+}));
+vi.mock('@server/entity/PlaceholderItem', () => ({ PlaceholderItem: {} }));
 vi.mock('@server/api/plextv', () => ({
   default: class {
     getSharedUserToken(machineId: string, id: number) {
@@ -72,14 +81,20 @@ describe('Plex webhook placeholder unwatch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.tokens.length = 0;
+    mocks.dbRow.mockResolvedValue(null);
+    mocks.metadata.mockResolvedValue({
+      Label: [{ tag: 'trailer-placeholder' }],
+    });
   });
+
+  const flush = () => new Promise((r) => setImmediate(r));
 
   const send = async (payload: unknown) => {
     const form = new FormData();
     form.append('payload', JSON.stringify(payload));
     await axios.post(`${baseURL}/plex-webhook?token=secret`, form);
     await vi.waitFor(() => expect(mocks.unscrobble).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 50));
+    await flush();
   };
 
   const trailer = {
@@ -126,7 +141,7 @@ describe('Plex webhook placeholder unwatch', () => {
       })
     );
     await axios.post(`${baseURL}/plex-webhook?token=secret`, form);
-    await new Promise((r) => setTimeout(r, 100));
+    await flush();
     expect(mocks.unscrobble).not.toHaveBeenCalled();
     expect(mocks.sharedToken).not.toHaveBeenCalled();
   });
@@ -138,7 +153,73 @@ describe('Plex webhook placeholder unwatch', () => {
       Account: { id: 300 },
       Metadata: trailer,
     });
-    await new Promise((r) => setTimeout(r, 50));
     expect(mocks.unscrobble).toHaveBeenCalledTimes(1);
+  });
+
+  const post = async (payload: unknown) => {
+    const form = new FormData();
+    form.append('payload', JSON.stringify(payload));
+    await axios.post(`${baseURL}/plex-webhook?token=secret`, form);
+    await vi.waitFor(() => expect(mocks.unscrobble).toHaveBeenCalled());
+    await flush();
+  };
+
+  it('does not touch a real special titled Trailer that is not a placeholder', async () => {
+    mocks.metadata.mockResolvedValue({ Label: [] });
+    mocks.sharedToken.mockResolvedValue('user-token');
+    await post({
+      event: 'media.scrobble',
+      Account: { id: 200 },
+      Metadata: { ratingKey: '77', type: 'episode', title: 'Trailer' },
+    });
+
+    expect(mocks.unscrobble).toHaveBeenCalledTimes(1);
+    expect(mocks.unscrobble).toHaveBeenCalledWith('admin-token', '77');
+    expect(mocks.sharedToken).not.toHaveBeenCalled();
+    expect(mocks.progress).not.toHaveBeenCalled();
+  });
+
+  it('confirms a placeholder from the database row when the label is absent', async () => {
+    mocks.metadata.mockResolvedValue({ Label: [] });
+    mocks.dbRow.mockResolvedValue({ id: 1 });
+    mocks.sharedToken.mockResolvedValue(null);
+    await post({
+      event: 'media.stop',
+      Account: { id: 200 },
+      Metadata: trailer,
+    });
+    expect(mocks.progress).toHaveBeenCalledWith('admin-token', '555');
+  });
+
+  it('still unscrobbles as owner when plex.tv lookup throws', async () => {
+    mocks.sharedToken.mockRejectedValue(new Error('timeout'));
+    await post({
+      event: 'media.stop',
+      Account: { id: 200 },
+      Metadata: trailer,
+    });
+    expect(mocks.unscrobble).toHaveBeenCalledWith('admin-token', '555');
+    expect(mocks.progress).toHaveBeenCalledWith('admin-token', '555');
+  });
+
+  it('treats local account 1 as the owner', async () => {
+    await post({
+      event: 'media.stop',
+      Account: { id: 1 },
+      Metadata: trailer,
+    });
+    expect(mocks.sharedToken).not.toHaveBeenCalled();
+    expect(mocks.unscrobble).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets progress on stop but not on play', async () => {
+    mocks.sharedToken.mockResolvedValue(null);
+    await post({
+      event: 'media.play',
+      Account: { id: 200 },
+      Metadata: trailer,
+    });
+    expect(mocks.unscrobble).toHaveBeenCalled();
+    expect(mocks.progress).not.toHaveBeenCalled();
   });
 });

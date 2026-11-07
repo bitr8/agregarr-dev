@@ -1,5 +1,7 @@
 import PlexAPI from '@server/api/plexapi';
 import PlexTvAPI from '@server/api/plextv';
+import { getRepository } from '@server/datasource';
+import { PlaceholderItem } from '@server/entity/PlaceholderItem';
 import { getAdminUser } from '@server/lib/collections/core/CollectionUtilities';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -119,7 +121,8 @@ async function getPlexClient(): Promise<{
 async function unscrobblePlaceholder(
   ratingKey: string,
   plexClient: PlexAPI,
-  who: string
+  who: string,
+  resetProgress: boolean
 ): Promise<void> {
   try {
     await plexClient.markItemAsUnplayed(ratingKey);
@@ -136,6 +139,7 @@ async function unscrobblePlaceholder(
       error: error instanceof Error ? error.message : String(error),
     });
   }
+  if (!resetProgress) return;
   try {
     await plexClient.resetItemProgress(ratingKey);
   } catch (error) {
@@ -148,10 +152,27 @@ async function unscrobblePlaceholder(
   }
 }
 
+async function isConfirmedPlaceholder(
+  ratingKey: string,
+  plexClient: PlexAPI
+): Promise<boolean> {
+  try {
+    const row = await getRepository(PlaceholderItem).findOne({
+      where: { plexRatingKey: ratingKey },
+    });
+    if (row) return true;
+    const metadata = await plexClient.getMetadata(ratingKey);
+    return !!metadata?.Label?.some((l) => l.tag === 'trailer-placeholder');
+  } catch {
+    return false;
+  }
+}
+
 async function unscrobbleAsSharedUser(
   ratingKey: string,
   accountId: number,
-  adminToken: string
+  adminToken: string,
+  resetProgress: boolean
 ): Promise<void> {
   try {
     const settings = getSettings();
@@ -164,12 +185,14 @@ async function unscrobbleAsSharedUser(
     await unscrobblePlaceholder(
       ratingKey,
       new PlexAPI({ plexToken: userToken, plexSettings: settings.plex }),
-      'shared user'
+      'shared user',
+      resetProgress
     );
   } catch (error) {
     logger.error('Failed to unscrobble placeholder as shared user', {
       label: 'PlexWebhook',
       ratingKey,
+      accountId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -256,15 +279,29 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
 
     const admin = await getPlexClient();
     if (!admin) return;
-    await unscrobblePlaceholder(ratingKey, admin.client, 'admin');
+    const confirmed = await isConfirmedPlaceholder(ratingKey, admin.client);
+    const resetProgress = confirmed && event !== 'media.play';
+    await unscrobblePlaceholder(
+      ratingKey,
+      admin.client,
+      'admin',
+      resetProgress
+    );
+    if (!confirmed) return;
 
     const accountId = Number(account?.id);
+    // PMS reports the server owner as local account 1
     if (
       Number.isInteger(accountId) &&
-      accountId > 0 &&
+      accountId > 1 &&
       accountId !== admin.adminPlexId
     ) {
-      await unscrobbleAsSharedUser(ratingKey, accountId, admin.adminToken);
+      await unscrobbleAsSharedUser(
+        ratingKey,
+        accountId,
+        admin.adminToken,
+        resetProgress
+      );
     }
   } catch (error) {
     logger.error('Webhook processing failed after responding', {

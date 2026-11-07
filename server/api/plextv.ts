@@ -285,11 +285,12 @@ class PlexTvAPI extends ExternalAPI {
     machineId: string,
     plexUserId: number
   ): Promise<string | null> {
-    const response = await this.axios.get(
+    const data = await this.get<string>(
       `/api/servers/${encodeURIComponent(machineId)}/shared_servers`,
-      { transformResponse: [], responseType: 'text' }
+      { transformResponse: [], responseType: 'text', timeout: 10000 },
+      300
     );
-    const parsed = await xml2js.parseStringPromise(response.data as string);
+    const parsed = await xml2js.parseStringPromise(data);
     const shares: { $?: { userID?: string; accessToken?: string } }[] =
       parsed?.MediaContainer?.SharedServer ?? [];
     const share = shares.find((s) => Number(s.$?.userID) === plexUserId);
