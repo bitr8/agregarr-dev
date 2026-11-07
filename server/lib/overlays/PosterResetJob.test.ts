@@ -45,6 +45,7 @@ vi.mock('@server/api/plexapi', () => ({
 }));
 
 import metadataTrackingService from '@server/lib/metadata/MetadataTrackingService';
+import logger from '@server/logger';
 import { posterResetJob } from './PosterResetJob';
 
 describe('poster reset child artwork', () => {
@@ -156,6 +157,10 @@ describe('poster reset child artwork', () => {
       running: false,
       cancelled: true,
     });
+    expect(logger.info).toHaveBeenCalledWith(
+      'Poster reset cancelled during child enumeration',
+      expect.objectContaining({ label: 'PosterReset', libraryId: '2' })
+    );
   });
 
   it('checks cancellation between individual fallbacks for missing batch rows', async () => {
@@ -168,5 +173,9 @@ describe('poster reset child artwork', () => {
     await posterResetJob.resetLibraryPosters('2');
     expect(mocks.getMetadata).toHaveBeenCalledOnce();
     expect(mocks.upload).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      'Poster reset cancelled during child enumeration',
+      expect.objectContaining({ libraryId: '2' })
+    );
   });
 });

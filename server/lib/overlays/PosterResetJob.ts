@@ -49,6 +49,13 @@ class PosterResetJob {
     };
   }
 
+  private logChildEnumerationCancelled(libraryId: string): void {
+    logger.info('Poster reset cancelled during child enumeration', {
+      label: 'PosterReset',
+      libraryId,
+    });
+  }
+
   public cancel(): void {
     this.cancelled = true;
     logger.info('Poster reset job cancellation requested', {
@@ -167,11 +174,12 @@ class PosterResetJob {
         offset < childKeys.length;
         offset += PLEX_METADATA_BATCH_SIZE
       ) {
-        if (this.cancelled) return;
+        if (this.cancelled) return this.logChildEnumerationCancelled(libraryId);
         const keys = childKeys.slice(offset, offset + PLEX_METADATA_BATCH_SIZE);
         const batch = await plexApi.getMetadataBatch(keys);
         for (const key of keys) {
-          if (this.cancelled) return;
+          if (this.cancelled)
+            return this.logChildEnumerationCancelled(libraryId);
           try {
             const child = batch.get(key) ?? (await plexApi.getMetadata(key));
             if (child.type !== 'season' && child.type !== 'episode') continue;
