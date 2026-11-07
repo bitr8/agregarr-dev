@@ -6,6 +6,21 @@ import { Router } from 'express';
 
 const userRoutes = Router();
 
+export function canManageUser(
+  actorId: number | undefined,
+  targetUserId: number
+): boolean {
+  if (actorId === undefined) return false;
+  return actorId === 1 || actorId === targetUserId;
+}
+
+userRoutes.param('id', (req, _res, next, id) => {
+  if (!canManageUser(req.user?.id, Number(id))) {
+    return next({ status: 403, message: 'Not authorized for this user.' });
+  }
+  return next();
+});
+
 // Simplified user routes for Agregarr - removed Overseerr user management features
 // Focus on basic Plex authentication and user info
 
