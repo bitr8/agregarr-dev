@@ -24,6 +24,12 @@ import {
   getAdaptiveTtl,
   getNullRatingTtl,
 } from './adaptiveTtl';
+import {
+  buildItemRankContext,
+  extractRankCollectionIds,
+  refreshRankCache,
+  type RankCollectionConfig,
+} from './collectionRank';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -129,6 +135,7 @@ export interface OverlayLibraryOutcomeDetails {
 
 export interface OverlayBatchOptions {
   checkCancelled?: () => boolean;
+  skipRankRefresh?: boolean;
   onItemStart?: (item: OverlayItemInput) => void;
   onItemComplete?: (
     outcome: OverlayItemOutcome,
@@ -267,6 +274,7 @@ class OverlayLibraryService {
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
   // Maps item ratingKey → array of collection IDs the item belongs to
   private collectionMembershipCache?: Map<string, string[]>;
+  private collectionRankCache = new Map<string, Map<string, number>>();
 
   // Aggregated episode media info for show libraries (per-library, keyed by show ratingKey)
   private aggregatedMediaByLibrary = new Map<
@@ -1580,6 +1588,47 @@ class OverlayLibraryService {
   }
 
   /**
+   * Refresh rank lookups for the collections that enabled templates reference
+   * through a Collection Rank variable. Per-collection replacement keeps
+   * concurrent library jobs from wiping each other's entries.
+   */
+  private async refreshCollectionRanks(
+    plexApi: PlexAPI,
+    templates: OverlayTemplate[]
+  ): Promise<void> {
+    const ids = extractRankCollectionIds(
+      templates.map((template) => template.getTemplateData()),
+      templates.map((template) => template.getApplicationCondition())
+    );
+    if (ids.size === 0) return;
+
+    const settings = getSettings();
+    const { preExistingCollectionConfigService } = await import(
+      '@server/lib/collections/services/PreExistingCollectionConfigService'
+    );
+    const configs: RankCollectionConfig[] = [
+      ...(settings.plex.collectionConfigs || []),
+      ...preExistingCollectionConfigService.getConfigs(),
+    ];
+
+    await refreshRankCache(
+      this.collectionRankCache,
+      ids,
+      configs,
+      (ratingKey) => plexApi.getCollectionItemsOrThrow(ratingKey),
+      (collectionId, error) =>
+        logger.warn(
+          'Failed to fetch collection order for rank; keeping last known ranks',
+          {
+            label: 'OverlayLibrary',
+            collectionId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        )
+    );
+  }
+
+  /**
    * Apply overlays to all items in a library
    * Uses mutex-like behavior to prevent concurrent processing of the same library
    */
@@ -1965,6 +2014,8 @@ class OverlayLibraryService {
           await this.buildCollectionMembershipMap(plexApi);
       }
 
+      await this.refreshCollectionRanks(plexApi, sortedTemplates);
+
       // Fetch all items (handle pagination)
       let allItems: PlexLibraryItem[] = [];
       let offset = 0;
@@ -2232,6 +2283,7 @@ class OverlayLibraryService {
             `${item.target || 'main'}:${item.ratingKey}`;
           const childBatchOptions: OverlayBatchOptions = {
             checkCancelled,
+            skipRankRefresh: true,
             onItemStart: (item) => {
               this.updateProgress(libraryId, (p) => {
                 p.currentTarget = item.target || 'main';
@@ -2621,6 +2673,10 @@ class OverlayLibraryService {
       if (hasCollectionConditions) {
         this.collectionMembershipCache =
           await this.buildCollectionMembershipMap(plexApi);
+      }
+
+      if (!options.skipRankRefresh) {
+        await this.refreshCollectionRanks(plexApi, sortedTemplates);
       }
 
       // Determine media type from library config
@@ -3436,6 +3492,7 @@ class OverlayLibraryService {
         ...releaseDateContext,
         ...monitoringContext,
         ...(collection ? { collection } : {}),
+        ...buildItemRankContext(item.ratingKey, this.collectionRankCache),
       };
 
       // Filter templates by conditions to get only templates that will actually be applied

@@ -40,7 +40,7 @@ function calculateInputHash(input: unknown): string {
 /**
  * Extract field names from application condition rules recursively
  */
-function extractFieldsFromCondition(
+export function extractFieldsFromCondition(
   condition:
     | {
         sections?: {

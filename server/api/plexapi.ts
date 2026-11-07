@@ -1408,14 +1408,7 @@ class PlexAPI {
     collectionRatingKey: string
   ): Promise<string[]> {
     try {
-      const response = await this.plexClient.query({
-        uri: `/library/collections/${collectionRatingKey}/children`,
-        extraHeaders: {
-          'X-Plex-Container-Size': `0`,
-        },
-      });
-      const items = response.MediaContainer?.Metadata || [];
-      return items.map((item: PlexCollectionItem) => item.ratingKey);
+      return await this.getCollectionItemsOrThrow(collectionRatingKey);
     } catch (error) {
       logger.error(
         `Error getting items from collection ${collectionRatingKey}`,
@@ -1426,6 +1419,23 @@ class PlexAPI {
       );
       return [];
     }
+  }
+
+  /**
+   * Same as getCollectionItems but lets a failed fetch propagate, so callers
+   * can tell "fetch failed" from "collection is empty".
+   */
+  public async getCollectionItemsOrThrow(
+    collectionRatingKey: string
+  ): Promise<string[]> {
+    const response = await this.plexClient.query({
+      uri: `/library/collections/${collectionRatingKey}/children`,
+      extraHeaders: {
+        'X-Plex-Container-Size': `0`,
+      },
+    });
+    const items = response.MediaContainer?.Metadata || [];
+    return items.map((item: PlexCollectionItem) => item.ratingKey);
   }
 
   /**
