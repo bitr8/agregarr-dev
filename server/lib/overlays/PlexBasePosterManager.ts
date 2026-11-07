@@ -54,6 +54,10 @@ export function resolveBasePosterSource(
   return source;
 }
 
+function noBasePosterMessage(tried: string[]): string {
+  return `No base poster available. Tried: ${tried.join(', ')}`;
+}
+
 /**
  * Simple file storage manager for base posters used in overlay application
  * All tracking is done via MediaItemMetadata database - NO JSON registry
@@ -743,7 +747,9 @@ class PlexBasePosterManager {
       );
 
       if (!currentPlexPosterUrl) {
-        throw new Error('Item has no poster in Plex');
+        throw new Error(
+          noBasePosterMessage(['Plex (item has no poster in Plex)'])
+        );
       }
 
       // Check if current URL is different from what we stored
@@ -859,7 +865,8 @@ class PlexBasePosterManager {
       basePosterFilename?: string;
       localPosterModifiedTime?: number;
     },
-    tmdbId?: number
+    tmdbId?: number,
+    tried: string[] = []
   ): Promise<{
     posterBuffer: Buffer;
     basePosterChanged: boolean;
@@ -937,6 +944,8 @@ class PlexBasePosterManager {
         localPosterPath,
       });
 
+      tried.push('local folder (no poster file found)');
+
       // Fall through to TMDB logic below (change posterSource temporarily)
       posterSource = 'tmdb';
     }
@@ -948,7 +957,9 @@ class PlexBasePosterManager {
       );
 
       if (!currentPlexPosterUrl) {
-        throw new Error('Item has no poster in Plex');
+        throw new Error(
+          noBasePosterMessage([...tried, 'Plex (item has no poster in Plex)'])
+        );
       }
 
       // Normalized poster URL comparison, used throughout this branch.
@@ -1221,7 +1232,8 @@ class PlexBasePosterManager {
           configuredLibraryType,
           'plex',
           metadata,
-          tmdbId
+          tmdbId,
+          [...tried, 'TMDB (item has no TMDB id)']
         );
       }
 
@@ -1264,7 +1276,8 @@ class PlexBasePosterManager {
           configuredLibraryType,
           'plex',
           metadata,
-          tmdbId
+          tmdbId,
+          [...tried, 'TMDB (no poster on TMDB)']
         );
       }
 

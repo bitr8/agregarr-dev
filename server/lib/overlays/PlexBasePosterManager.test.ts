@@ -350,6 +350,58 @@ describe('getBasePosterForOverlay driven by resolveBasePosterSource (fork#110)',
     expect(getCurrentPosterUrl).not.toHaveBeenCalled();
   });
 
+  it('names TMDB then Plex when TMDB has the item but no poster and Plex has none', async () => {
+    const testItem = item({ Guid: [{ id: 'tmdb://456' }] });
+    vi.spyOn(
+      plexBasePosterManager as any,
+      'getTmdbPosterUrl'
+    ).mockResolvedValue(undefined);
+
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        testItem,
+        'lib-1',
+        'Shows',
+        'show',
+        'tmdb',
+        {}
+      )
+    ).rejects.toThrow(
+      'No base poster available. Tried: TMDB (no poster on TMDB), Plex (item has no poster in Plex)'
+    );
+  });
+
+  it('names the missing TMDB id and Plex when neither source has a poster', async () => {
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        item({ Guid: [{ id: 'imdb://tt0000001' }] }),
+        'lib-1',
+        'Shows',
+        'show',
+        'tmdb',
+        {}
+      )
+    ).rejects.toThrow(
+      'Tried: TMDB (item has no TMDB id), Plex (item has no poster in Plex)'
+    );
+  });
+
+  it('names only Plex when Plex is the configured source', async () => {
+    await expect(
+      plexBasePosterManager.getBasePosterForOverlay(
+        plexApiStub(null),
+        item(),
+        'lib-1',
+        'Shows',
+        'show',
+        'plex',
+        {}
+      )
+    ).rejects.toThrow('Tried: Plex (item has no poster in Plex)');
+  });
+
   it('fetchTmdbPosterUrl rethrows lookup errors instead of caching them as no poster', async () => {
     mockGetMovieImages.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
