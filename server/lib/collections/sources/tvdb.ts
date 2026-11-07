@@ -27,9 +27,11 @@ import logger from '@server/logger';
 const LOOKUP_BATCH_SIZE = 4;
 const RETRY_DELAY_MS = 1000;
 
+const httpStatus = (error: unknown): number | undefined =>
+  (error as { response?: { status?: number } })?.response?.status;
+
 const isRetryable = (error: unknown): boolean => {
-  const status = (error as { response?: { status?: number } })?.response
-    ?.status;
+  const status = httpStatus(error);
   return status === 429 || (status !== undefined && status >= 500);
 };
 
@@ -175,14 +177,19 @@ export class TvdbCollectionSync extends BaseCollectionSync<'tvdb'> {
 
       const results: TvdbSourceData[] = [];
       const failedIds: number[] = [];
+      const notFoundIds: number[] = [];
       for (let i = 0; i < entries.length; i += LOOKUP_BATCH_SIZE) {
         const batch = entries.slice(i, i + LOOKUP_BATCH_SIZE);
         const infos = await Promise.all(
           batch.map(async (entry) => {
             try {
               return await this.lookupWithRetry(client, kind, entry.tvdbId);
-            } catch {
-              failedIds.push(entry.tvdbId);
+            } catch (error) {
+              if (httpStatus(error) === 404) {
+                notFoundIds.push(entry.tvdbId);
+              } else {
+                failedIds.push(entry.tvdbId);
+              }
               return undefined;
             }
           })
@@ -199,6 +206,13 @@ export class TvdbCollectionSync extends BaseCollectionSync<'tvdb'> {
             position: i + idx + 1,
           });
         });
+      }
+
+      if (notFoundIds.length > 0) {
+        logger.info(
+          `Skipping ${notFoundIds.length} ${kind} entries no longer on TVDB`,
+          { label: 'TVDB Collections', tvdbIds: notFoundIds }
+        );
       }
 
       if (failedIds.length > 0) {

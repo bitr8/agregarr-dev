@@ -144,13 +144,14 @@ describe('TvdbCollectionSync', () => {
     expect(data.map((d) => d.tmdbId)).toEqual([8003, 8004]);
   });
 
-  it('does not retry a 404', async () => {
-    getEntityInfo.mockRejectedValue(
-      Object.assign(new Error('nf'), { response: { status: 404 } })
-    );
-    await expect(
-      new TvdbCollectionSync().fetchSourceData(cfg('2'))
-    ).rejects.toThrow();
+  it('skips a 404 entry without retrying or aborting', async () => {
+    getEntityInfo.mockImplementation(async (_kind: string, id: number) => {
+      if (id === 5004)
+        throw Object.assign(new Error('nf'), { response: { status: 404 } });
+      return infoById[String(id)];
+    });
+    const data = await new TvdbCollectionSync().fetchSourceData(cfg('2'));
+    expect(data.map((d) => d.tmdbId)).toEqual([8003]);
     expect(getEntityInfo).toHaveBeenCalledTimes(2);
   });
 

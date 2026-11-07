@@ -3,6 +3,10 @@ import type { MultiSourceCollectionConfig } from '@server/lib/settings';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
+const handlePlaceholderCleanup = vi.hoisted(() => vi.fn());
+vi.mock('@server/lib/placeholders/services/PlaceholderCleanup', () => ({
+  handlePlaceholderCleanup,
+}));
 vi.mock('@server/entity/CollectionMetadata', () => ({
   CollectionMetadata: class {},
 }));
@@ -134,6 +138,15 @@ describe('multi-source run with failing sources', () => {
       expect.objectContaining({ ratingKey: '1' }),
     ]);
     expect(result.error).toBe('1/2 source(s) failed (beta): upstream 403');
+  });
+
+  it('skips placeholder cleanup when a source failed, runs it when all succeed', async () => {
+    handlePlaceholderCleanup.mockClear();
+    await run(['ok', 'fail']);
+    expect(handlePlaceholderCleanup).not.toHaveBeenCalled();
+
+    await run(['ok', 'ok']);
+    expect(handlePlaceholderCleanup).toHaveBeenCalledTimes(1);
   });
 
   it('reports the failure when every source fails', async () => {
