@@ -95,6 +95,7 @@ const portableFields = [
   'placeholderFilterSettings',
   'comingSoonFilterByTags',
   'comingSoonTagMode',
+  'comingSoonIncludeMidSeason',
   'downloadMode',
   'searchMissingMovies',
   'searchMissingTV',

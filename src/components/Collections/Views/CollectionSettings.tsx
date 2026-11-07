@@ -648,6 +648,7 @@ const CollectionSettings = ({
           comingSoonSonarrTagIds: config.comingSoonSonarrTagIds,
           comingSoonRadarrRootFolder: config.comingSoonRadarrRootFolder,
           comingSoonSonarrRootFolder: config.comingSoonSonarrRootFolder,
+          comingSoonIncludeMidSeason: config.comingSoonIncludeMidSeason,
           sortOrder: config.sortOrder,
           timeRestriction: config.timeRestriction,
           customPoster: config.customPoster,

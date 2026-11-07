@@ -820,6 +820,14 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     // Add missing items (not yet in Plex at all)
     for (const sourceItem of sourceData) {
       if (sourceItem.tmdbId > 0 && !matchedTmdbIds.has(sourceItem.tmdbId)) {
+        // Mid-season shows are already underway, so they never get a placeholder
+        if (
+          sourceItem.mediaType === 'tv' &&
+          config.comingSoonIncludeMidSeason &&
+          (sourceItem.episodeNumber ?? 1) > 1
+        ) {
+          continue;
+        }
         // isReturning was already set in fetchMonitoredShows based on season number
         missingItems.push({
           tmdbId: sourceItem.tmdbId,

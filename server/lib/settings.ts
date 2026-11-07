@@ -305,6 +305,7 @@ export interface CollectionConfig {
   readonly comingSoonSonarrTagIds?: number[]; // Sonarr tag IDs to filter by
   readonly comingSoonRadarrRootFolder?: string; // Radarr root folder path to filter by
   readonly comingSoonSonarrRootFolder?: string; // Sonarr root folder path to filter by
+  readonly comingSoonIncludeMidSeason?: boolean; // TV monitored: also include shows whose next episode is mid-season
   // Overlay sync option
   readonly applyOverlaysDuringSync?: boolean; // If true, apply overlays to collection items immediately after sync (default: true for Coming Soon, false for others)
   // Time restriction settings

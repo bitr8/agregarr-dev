@@ -109,6 +109,7 @@ interface PreviewCollectionModalProps {
     comingSoonSonarrServerId?: number;
     comingSoonRadarrRootFolder?: string;
     comingSoonSonarrRootFolder?: string;
+    comingSoonIncludeMidSeason?: boolean;
     // Multi-source specific fields
     isMultiSource?: boolean;
     sources?: {
@@ -237,6 +238,7 @@ const PreviewCollectionModal = ({
     comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
     comingSoonRadarrRootFolder: previewConfig.comingSoonRadarrRootFolder,
     comingSoonSonarrRootFolder: previewConfig.comingSoonSonarrRootFolder,
+    comingSoonIncludeMidSeason: previewConfig.comingSoonIncludeMidSeason,
     isMultiSource: previewConfig.isMultiSource,
     sources: previewConfig.sources,
     combineMode: previewConfig.combineMode,
@@ -326,6 +328,7 @@ const PreviewCollectionModal = ({
           comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
           comingSoonRadarrRootFolder: previewConfig.comingSoonRadarrRootFolder,
           comingSoonSonarrRootFolder: previewConfig.comingSoonSonarrRootFolder,
+          comingSoonIncludeMidSeason: previewConfig.comingSoonIncludeMidSeason,
           forceRefresh: forceRefresh,
           // Multi-source specific fields
           isMultiSource: previewConfig.isMultiSource,

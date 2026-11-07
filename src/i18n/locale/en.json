@@ -470,6 +470,8 @@
   "components.Collections.Forms.imdbRatingDesc": "IMDb Rating (Highest to Lowest)",
   "components.Collections.Forms.includeAllReleasedItems": "Include all released items",
   "components.Collections.Forms.includeAllReleasedItemsHelp": "Create placeholders for all items regardless of when they were released",
+  "components.Collections.Forms.includeMidSeason": "Include mid-season episodes (TV)",
+  "components.Collections.Forms.includeMidSeasonHelp": "Also list shows whose next episode airs inside the Days Ahead window, not just season premieres. These shows only appear if they are already in Plex, and no placeholder is created for them.",
   "components.Collections.Forms.itemOrder": "Item Order",
   "components.Collections.Forms.limitCollectionItems": "Limit the Collection to this many items{smartCollectionNote}",
   "components.Collections.Forms.limitCollectionItemsSmartNote": " (applies to smart collection)",

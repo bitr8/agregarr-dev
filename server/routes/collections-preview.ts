@@ -951,6 +951,7 @@ async function processPreviewAsync(
     comingSoonSonarrServerId?: number;
     comingSoonRadarrRootFolder?: string;
     comingSoonSonarrRootFolder?: string;
+    comingSoonIncludeMidSeason?: boolean;
     forceRefresh?: boolean; // If true, bypass cache and fetch fresh data
     // Multi-source specific fields
     isMultiSource?: boolean;
@@ -999,6 +1000,7 @@ async function processPreviewAsync(
       comingSoonSonarrServerId,
       comingSoonRadarrRootFolder,
       comingSoonSonarrRootFolder,
+      comingSoonIncludeMidSeason,
       forceRefresh,
       isMultiSource,
       sources,
@@ -1141,6 +1143,8 @@ async function processPreviewAsync(
         comingSoonRadarrRootFolder;
       previewConfigRecord.comingSoonSonarrRootFolder =
         comingSoonSonarrRootFolder;
+      previewConfigRecord.comingSoonIncludeMidSeason =
+        comingSoonIncludeMidSeason;
     }
 
     const previewConfig = previewConfigRecord as unknown as CollectionConfig;
