@@ -50,7 +50,7 @@ export function movieReleaseInfoFromTmdb(
     physicalRelease: dateOnly(extracted.physicalRelease),
     releaseSource:
       homeReleaseSource(extracted.digitalRelease, extracted.physicalRelease) ??
-      'theatrical',
+      'estimate',
   };
 }
 

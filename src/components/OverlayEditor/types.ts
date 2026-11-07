@@ -280,11 +280,11 @@ export interface OverlayRenderContext {
   theatricalReleaseDate?: string; // Movies: published theatrical date
   digitalReleaseDate?: string; // Movies: published digital date
   physicalReleaseDate?: string; // Movies: published physical date
-  daysSinceTheatricalRelease?: number; // Negative = still in the future
+  daysSinceTheatricalRelease?: number; // Negative before the date
   daysSinceDigitalRelease?: number;
   daysSincePhysicalRelease?: number;
   daysSinceHomeRelease?: number; // Earliest of digital / physical
-  releaseDateSource?: string; // digital, physical, theatrical (estimate) or tmdb
+  releaseDateSource?: string; // digital, physical, estimate (theatrical+90) or tmdb
 
   // TV SHOWS - Episode/Season countdowns (separate from releaseDate)
   nextEpisodeAirDate?: string; // Raw date for ANY next episode (including mid-season)
@@ -537,6 +537,32 @@ export const AVAILABLE_VARIABLES = {
       field: 'physicalReleaseDate',
       label: 'Physical Release Date (Movies)',
       example: 'JAN 14',
+    },
+    {
+      field: 'daysSinceTheatricalRelease',
+      label: 'Days Since Theatrical Release (Movies, negative before the date)',
+      example: '61',
+    },
+    {
+      field: 'daysSinceDigitalRelease',
+      label: 'Days Since Digital Release (Movies, negative before the date)',
+      example: '0',
+    },
+    {
+      field: 'daysSincePhysicalRelease',
+      label: 'Days Since Physical Release (Movies, negative before the date)',
+      example: '-20',
+    },
+    {
+      field: 'daysSinceHomeRelease',
+      label:
+        'Days Since Home Release (Digital or Physical, negative before the date)',
+      example: '0',
+    },
+    {
+      field: 'releaseDateSource',
+      label: 'Release Date Source (digital/physical/estimate)',
+      example: 'digital',
     },
     { field: 'daysUntilRelease', label: 'Days Until Release', example: '14' },
     {
@@ -822,27 +848,28 @@ export const CONDITION_FIELD_CATEGORIES = {
     },
     {
       field: 'daysSinceTheatricalRelease',
-      label: 'Days Since Theatrical Release (Movies)',
+      label: 'Days Since Theatrical Release (Movies), negative before the date',
       example: '61',
     },
     {
       field: 'daysSinceDigitalRelease',
-      label: 'Days Since Digital Release (Movies)',
+      label: 'Days Since Digital Release (Movies), negative before the date',
       example: '0',
     },
     {
       field: 'daysSincePhysicalRelease',
-      label: 'Days Since Physical Release (Movies)',
+      label: 'Days Since Physical Release (Movies), negative before the date',
       example: '-20',
     },
     {
       field: 'daysSinceHomeRelease',
-      label: 'Days Since Home Release (Digital or Physical)',
+      label:
+        'Days Since Home Release (Digital or Physical), negative before the date',
       example: '0',
     },
     {
       field: 'releaseDateSource',
-      label: 'Release Date Source (digital/physical/theatrical)',
+      label: 'Release Date Source (digital/physical/estimate)',
       example: 'digital',
     },
     {

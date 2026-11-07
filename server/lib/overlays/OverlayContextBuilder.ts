@@ -1188,7 +1188,7 @@ export interface ReleaseDateInfo {
   theatricalRelease?: string;
   digitalRelease?: string;
   physicalRelease?: string;
-  releaseSource?: 'digital' | 'physical' | 'theatrical' | 'tmdb';
+  releaseSource?: 'digital' | 'physical' | 'estimate' | 'tmdb';
   nextEpisodeAirDate?: string;
   nextSeasonAirDate?: string;
   // Fallback source for daysAgoNextSeason once next_episode_to_air moves on.
@@ -1233,7 +1233,7 @@ function hasUpcomingNextEpisode(info: ReleaseDateInfo | undefined): boolean {
 
 /**
  * Fetch release date information from TMDB with Sonarr fallback for TV shows
- * For movies: Gets digital/physical/theatrical release dates
+ * For movies: Gets digital/physical/estimate release dates
  * For TV: Gets next episode air date from TMDB, falls back to Sonarr if unavailable
  *
  * @param tmdbId - TMDB ID of the item

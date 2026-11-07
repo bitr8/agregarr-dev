@@ -15646,6 +15646,38 @@ paths:
                   releaseDate:
                     type: string
                     example: '1999-10-15'
+                  theatricalReleaseDate:
+                    type: string
+                    example: '1999-10-15'
+                    description: 'Movies only: theatrical date, region-preferred'
+                  digitalReleaseDate:
+                    type: string
+                    example: '2000-03-21'
+                    description: 'Movies only: digital date, region-preferred'
+                  physicalReleaseDate:
+                    type: string
+                    example: '2000-03-21'
+                    description: 'Movies only: physical date, region-preferred'
+                  daysSinceTheatricalRelease:
+                    type: integer
+                    example: 9000
+                    description: 'Movies only: days since the theatrical date (negative before it)'
+                  daysSinceDigitalRelease:
+                    type: integer
+                    example: 8900
+                    description: 'Movies only: days since the digital date (negative before it)'
+                  daysSincePhysicalRelease:
+                    type: integer
+                    example: 8900
+                    description: 'Movies only: days since the physical date (negative before it)'
+                  daysSinceHomeRelease:
+                    type: integer
+                    example: 8900
+                    description: 'Movies only: days since the earliest of digital or physical (negative before it)'
+                  releaseDateSource:
+                    type: string
+                    enum: [digital, physical, estimate, tmdb]
+                    description: 'Movies only: where releaseDate came from; estimate is theatrical plus 90 days'
                   runtime:
                     type: integer
                     example: 139

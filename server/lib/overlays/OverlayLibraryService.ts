@@ -1203,11 +1203,7 @@ class OverlayLibraryService {
         const cacheKey = `${mapKey}:${region}`;
         const cached = adaptiveCache.get<ReleaseDateInfo | null>(cacheKey);
 
-        // Movie entries cached before per-type dates existed carry no source.
-        const predatesPerTypeDates =
-          item.mediaType === 'movie' && !!cached && !cached.releaseSource;
-
-        if (cached !== undefined && !predatesPerTypeDates) {
+        if (cached !== undefined) {
           this.preloadedTmdbReleaseDates.set(mapKey, cached);
           logger.debug('Prefetch: cache HIT', {
             label: 'OverlayLibrary',

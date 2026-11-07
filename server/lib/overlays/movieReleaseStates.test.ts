@@ -83,7 +83,7 @@ describe('movieReleaseInfoFromTmdb', () => {
     );
     expect(info).toMatchObject({
       isEstimated: true,
-      releaseSource: 'theatrical',
+      releaseSource: 'estimate',
       theatricalRelease: '2026-03-01',
     });
     expect(info?.digitalRelease).toBeUndefined();
@@ -107,7 +107,7 @@ describe('deriveReleaseDateContext per-type states', () => {
       releaseDate: '2026-06-01',
       isEstimated: true,
       theatricalRelease: '2026-03-03',
-      releaseSource: 'theatrical',
+      releaseSource: 'estimate',
     });
     expect(ctx.daysSinceTheatricalRelease).toBe(130);
     expect(ctx.daysSinceHomeRelease).toBeUndefined();
@@ -188,19 +188,6 @@ describe('prefetch producer (real overlay job path)', () => {
     expect(ctx.digitalReleaseDate).toBe('2026-05-10');
     expect(ctx.daysSinceHomeRelease).toBe(62);
     expect(ctx.releaseDateSource).toBe('digital');
-  });
-
-  it('refetches a movie cached before per-type dates existed', async () => {
-    cacheStore.set('9003:movie:US', {
-      releaseDate: '2026-05-10',
-      isEstimated: false,
-    });
-    mockGetMovie.mockResolvedValue({ release_dates: { results } });
-    const preloaded = await prefetch([plexMovie(9003)]);
-    expect(mockGetMovie).toHaveBeenCalledTimes(1);
-    expect(preloaded.get('9003:movie')).toMatchObject({
-      releaseSource: 'digital',
-    });
   });
 
   it('serves a current cache entry without refetching', async () => {

@@ -440,7 +440,7 @@ export interface OverlayRenderContext {
   daysSinceDigitalRelease?: number;
   daysSincePhysicalRelease?: number;
   daysSinceHomeRelease?: number; // earliest of digital / physical
-  releaseDateSource?: string; // 'digital' | 'physical' | 'theatrical' (estimate) | 'tmdb'
+  releaseDateSource?: string; // 'digital' | 'physical' | 'estimate' (theatrical+90) | 'tmdb'
 
   // TV SHOWS - Episode/Season countdowns (separate from releaseDate)
   nextEpisodeAirDate?: string; // Raw date for ANY next episode (including mid-season)
