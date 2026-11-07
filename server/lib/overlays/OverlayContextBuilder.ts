@@ -1123,7 +1123,7 @@ export async function buildRenderContext(
     );
   }
 
-  const edition = resolveEdition(item);
+  const edition = isPlaceholder ? undefined : resolveEdition(item);
   if (edition) {
     context.edition = edition;
   }

@@ -15637,6 +15637,9 @@ paths:
                   audioProfile:
                     type: string
                     example: 'truehd_atmos'
+                  edition:
+                    type: string
+                    example: 'Extended Cut'
                   videoCodec:
                     type: string
                     example: 'HEVC'

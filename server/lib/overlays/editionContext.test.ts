@@ -145,3 +145,17 @@ describe('edition and the overlay input hash', () => {
     );
   });
 });
+
+describe('buildRenderContext edition on placeholders', () => {
+  it('does not expose the placeholder trailer tag as an edition', async () => {
+    const { context } = await buildRenderContext(
+      movie({ editionTitle: 'Trailer', file: '/m/Film {edition-Trailer}.mp4' }),
+      'movie',
+      true,
+      undefined,
+      undefined,
+      new Set(['edition'])
+    );
+    expect(context.edition).toBeUndefined();
+  });
+});

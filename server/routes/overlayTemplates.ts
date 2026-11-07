@@ -200,6 +200,7 @@ interface PreviewPosterMetadata {
   audioFormat: string;
   audioProfile?: string;
   videoCodec: string;
+  edition?: string;
   status: string;
   daysUntilRelease?: number;
   releaseDate?: string;
@@ -357,6 +358,7 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         audioFormat: 'Dolby Atmos',
         audioProfile: 'truehd_atmos',
         videoCodec: 'HEVC',
+        edition: 'Extended Cut',
         status: 'Available',
         releaseDate: movieDetails.release_date,
         runtime: movieDetails.runtime,
@@ -419,6 +421,7 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         audioFormat: '5.1',
         audioProfile: 'plus',
         videoCodec: 'H.264',
+        edition: 'Extended Cut',
         status:
           tvDetails.status === 'Ended' || tvDetails.status === 'Canceled'
             ? 'Ended'

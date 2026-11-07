@@ -1091,7 +1091,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysUntilAction: 12,
     streamingProvider: 'Disney Plus',
     streamingProviderId: 337,
-    edition: 'Theatrical Cut',
+    edition: 'Extended Cut',
     plexLabels: ['Kids'],
     isPlaceholder: false,
     mediaType: 'show',
