@@ -129,7 +129,7 @@ const NetworksPlatformSelect = ({
     { value: string; label: string }[]
   >(
     platformsUrl,
-    platformsUrl ? (url) => fetch(url).then((res) => res.json()) : null
+    platformsUrl ? (url: string) => fetch(url).then((res) => res.json()) : null
   );
 
   const isLoadingPlatforms = country && !platforms && !platformsError;
@@ -225,13 +225,13 @@ const ArrTagSelect = ({
   // Fetch instances
   const { data: radarrInstances, error: radarrError } = useSWR<
     RadarrSettings[]
-  >(isRadarr ? '/api/v1/settings/radarr' : null, (url) =>
+  >(isRadarr ? '/api/v1/settings/radarr' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
   const { data: sonarrInstances, error: sonarrError } = useSWR<
     SonarrSettings[]
-  >(isSonarr ? '/api/v1/settings/sonarr' : null, (url) =>
+  >(isSonarr ? '/api/v1/settings/sonarr' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
@@ -248,12 +248,12 @@ const ArrTagSelect = ({
 
   const { data: radarrTags, error: radarrTagsError } = useSWR<ArrTag[]>(
     radarrTagsUrl,
-    radarrTagsUrl ? (url) => fetch(url).then((res) => res.json()) : null
+    radarrTagsUrl ? (url: string) => fetch(url).then((res) => res.json()) : null
   );
 
   const { data: sonarrTags, error: sonarrTagsError } = useSWR<ArrTag[]>(
     sonarrTagsUrl,
-    sonarrTagsUrl ? (url) => fetch(url).then((res) => res.json()) : null
+    sonarrTagsUrl ? (url: string) => fetch(url).then((res) => res.json()) : null
   );
 
   const isLoadingInstances = isRadarr
@@ -404,7 +404,7 @@ const MultiSourceConfigSection = ({
   // Fetch available countries for networks (must be before early return)
   const { data: countries } = useSWR<{ value: string; label: string }[]>(
     '/api/v1/collections/networks/countries',
-    (url) => fetch(url).then((res) => res.json())
+    (url: string) => fetch(url).then((res) => res.json())
   );
 
   // Fetch API settings for validation

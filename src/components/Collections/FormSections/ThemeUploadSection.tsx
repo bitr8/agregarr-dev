@@ -243,7 +243,9 @@ const ThemeUploadSection = ({
                     {/* Hidden audio element */}
                     {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                     <audio
-                      ref={(el) => (audioRefs.current[library.key] = el)}
+                      ref={(el) => {
+                        audioRefs.current[library.key] = el;
+                      }}
                       src={`/theme-files/${libraryTheme}`}
                       onEnded={() => handleAudioEnded(library.key)}
                     />
@@ -316,7 +318,9 @@ const ThemeUploadSection = ({
 
                 {/* Hidden file input */}
                 <input
-                  ref={(el) => (fileInputRefs.current[library.key] = el)}
+                  ref={(el) => {
+                    fileInputRefs.current[library.key] = el;
+                  }}
                   type="file"
                   accept="audio/mpeg,audio/mp3,audio/wav,audio/flac,audio/ogg,audio/aac,audio/x-m4a"
                   className="hidden"

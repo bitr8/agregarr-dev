@@ -52,7 +52,7 @@ const NetworksConfigSection = ({
   // Fetch available countries
   const { data: countries, error: countriesError } = useSWR<
     NetworksCountryOption[]
-  >('/api/v1/collections/networks/countries', (url) =>
+  >('/api/v1/collections/networks/countries', (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
@@ -65,7 +65,7 @@ const NetworksConfigSection = ({
 
   const { data: platforms, error: platformsError } = useSWR<
     NetworksPlatformOption[]
-  >(platformsUrl, (url) => fetch(url).then((res) => res.json()));
+  >(platformsUrl, (url: string) => fetch(url).then((res) => res.json()));
 
   const isLoadingCountries = !countries && !countriesError;
   const isLoadingPlatforms =
