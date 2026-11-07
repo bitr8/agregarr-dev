@@ -135,7 +135,7 @@ describe('tv placeholder folder tvdb hint', () => {
 
   it('a legacy folder owned by a different show does not block the hint', async () => {
     state.enabled = true;
-    const other = show({ libraryPath: lib, tmdbId: 777 });
+    const other = show({ libraryPath: lib, tmdbId: 777, tvdbId: 888 });
     await createPlaceholder({ ...other, trailerPath: trailer });
     await fs.writeFile(trailer, 'x');
     expect(await wantsTvdbFolderHint(show({ libraryPath: lib }))).toBe(true);
@@ -146,6 +146,17 @@ describe('tv placeholder folder tvdb hint', () => {
     const opts = show({ libraryPath: lib });
     await createPlaceholder({ ...opts, trailerPath: trailer });
     expect(await wantsTvdbFolderHint(opts)).toBe(false);
+  });
+
+  it('a legacy marker with the same tvdb id keeps legacy even if the tmdb id differs', async () => {
+    state.enabled = true;
+    const opts = show({ libraryPath: lib });
+    await createPlaceholder({ ...opts, trailerPath: trailer });
+    await fs.writeFile(
+      path.join(lib, 'Some Show (2025)', 'Season 00', '.comingsoon'),
+      JSON.stringify({ title: 'Some Show', tmdbId: 99, tvdbId: 12345 })
+    );
+    expect(await wantsTvdbFolderHint({ ...opts, tmdbId: 42 })).toBe(false);
   });
 
   it('a legacy folder with an unreadable marker keeps the legacy form', async () => {

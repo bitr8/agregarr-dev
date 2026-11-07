@@ -219,7 +219,9 @@ export async function wantsTvdbFolderHint(
   if (legacy === true) {
     const marker = await readPlaceholderMarker(path.dirname(legacyPath));
     const otherShow =
-      marker?.tmdbId !== undefined && marker.tmdbId !== options.tmdbId;
+      marker?.tvdbId !== undefined
+        ? marker.tvdbId !== options.tvdbId
+        : marker?.tmdbId !== undefined && marker.tmdbId !== options.tmdbId;
     if (!otherShow) return false;
   }
   const hinted = await pathExists(
