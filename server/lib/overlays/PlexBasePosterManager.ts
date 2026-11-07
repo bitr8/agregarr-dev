@@ -36,8 +36,15 @@ export function resolveBasePosterSource(
   item: PlexLibraryItem,
   settings: ReturnType<typeof getSettings>
 ): 'tmdb' | 'plex' | 'local' {
+  return resolveBasePosterSourceWithTrail(item, settings).source;
+}
+
+export function resolveBasePosterSourceWithTrail(
+  item: PlexLibraryItem,
+  settings: ReturnType<typeof getSettings>
+): { source: 'tmdb' | 'plex' | 'local'; tried: string[] } {
   if (item.type === 'season' || item.type === 'episode') {
-    return 'plex';
+    return { source: 'plex', tried: [] };
   }
 
   const source = settings.overlays?.defaultPosterSource || 'tmdb';
@@ -48,10 +55,16 @@ export function resolveBasePosterSource(
       itemTitle: item.title,
       ratingKey: item.ratingKey,
     });
-    return 'plex';
+    return { source: 'plex', tried: ['TMDB (item has no TMDB id)'] };
   }
 
-  return source;
+  return { source, tried: [] };
+}
+
+function withTried(message: string, tried: string[]): string {
+  return tried.length
+    ? `${message} (Sources tried: ${tried.join(', ')})`
+    : message;
 }
 
 function noBasePosterMessage(tried: string[]): string {
@@ -639,6 +652,7 @@ class PlexBasePosterManager {
     posterBuffer: Buffer | null;
     fileModTime: number | null;
     fileChanged: boolean;
+    rejected?: boolean;
   }> {
     const { findImageFile, getFileModTime, validateImageFile } = await import(
       '@server/utils/fileSystemHelpers'
@@ -682,7 +696,12 @@ class PlexBasePosterManager {
         label: 'PlexBasePosterManager',
         filePath: imageFilePath,
       });
-      return { posterBuffer: null, fileModTime: null, fileChanged: false };
+      return {
+        posterBuffer: null,
+        fileModTime: null,
+        fileChanged: false,
+        rejected: true,
+      };
     }
 
     // Get file modification time
@@ -944,7 +963,11 @@ class PlexBasePosterManager {
         localPosterPath,
       });
 
-      tried.push('local folder (no poster file found)');
+      tried.push(
+        localPosterResult.rejected
+          ? 'local folder (poster file invalid or unreadable)'
+          : 'local folder (no poster file found)'
+      );
 
       // Fall through to TMDB logic below (change posterSource temporarily)
       posterSource = 'tmdb';
@@ -1072,7 +1095,10 @@ class PlexBasePosterManager {
         }
 
         throw new Error(
-          'Cannot use overlaid poster as base - cache missing and the original could not be recovered from Plex. Please re-download base posters.'
+          withTried(
+            'Cannot use overlaid poster as base - cache missing and the original could not be recovered from Plex. Please re-download base posters.',
+            tried
+          )
         );
       }
 
@@ -1110,11 +1136,22 @@ class PlexBasePosterManager {
         previousUrl: metadata.originalPlexPosterUrl,
       });
 
-      const posterBuffer = await this.downloadFromPlex(
-        plexApi,
-        currentPlexPosterUrl,
-        item.ratingKey
-      );
+      let posterBuffer: Buffer;
+      try {
+        posterBuffer = await this.downloadFromPlex(
+          plexApi,
+          currentPlexPosterUrl,
+          item.ratingKey
+        );
+      } catch (error) {
+        if (!tried.length) throw error;
+        throw new Error(
+          withTried(
+            error instanceof Error ? error.message : String(error),
+            tried
+          )
+        );
+      }
 
       // Adopting the current poster as the new base is only safe when it really
       // is a poster Plex owns. Current Agregarr JPEGs carry an explicit marker;
@@ -1153,7 +1190,10 @@ class PlexBasePosterManager {
         const trackedOriginal = metadata.originalPlexPosterUrl;
         if (!trackedOriginal) {
           throw new Error(
-            'Cannot use the current Plex poster as base - it appears to be our own overlay and no original poster is tracked. Please re-download base posters.'
+            withTried(
+              'Cannot use the current Plex poster as base - it appears to be our own overlay and no original poster is tracked. Please re-download base posters.',
+              tried
+            )
           );
         }
 
@@ -1193,7 +1233,10 @@ class PlexBasePosterManager {
         }
 
         throw new Error(
-          'Cannot use the current Plex poster as base - it appears to be our own overlay, and the original could not be recovered. Please re-download base posters.'
+          withTried(
+            'Cannot use the current Plex poster as base - it appears to be our own overlay, and the original could not be recovered. Please re-download base posters.',
+            tried
+          )
         );
       }
 

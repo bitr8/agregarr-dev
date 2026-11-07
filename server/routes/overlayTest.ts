@@ -471,11 +471,11 @@ overlayTestRouter.post('/', async (req, res) => {
     });
 
     // Fetch base poster
-    const { plexBasePosterManager, resolveBasePosterSource } = await import(
-      '@server/lib/overlays/PlexBasePosterManager'
-    );
+    const { plexBasePosterManager, resolveBasePosterSourceWithTrail } =
+      await import('@server/lib/overlays/PlexBasePosterManager');
 
-    const posterSource = resolveBasePosterSource(item, settings);
+    const { source: posterSource, tried: posterSourceTrail } =
+      resolveBasePosterSourceWithTrail(item, settings);
 
     // Real metadata, or a preview treats an overlaid poster as the original.
     const metadataService = (
@@ -506,7 +506,8 @@ overlayTestRouter.post('/', async (req, res) => {
           basePosterFilename: metadata?.basePosterFilename,
           localPosterModifiedTime: metadata?.localPosterModifiedTime,
         },
-        tmdbId
+        tmdbId,
+        posterSourceTrail
       );
     } catch (error) {
       logger.error('Failed to get base poster', {
