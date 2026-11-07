@@ -4063,15 +4063,15 @@ class OverlayLibraryService {
       seasonTemplates.map((template) => template.getTemplateData()),
       seasonTemplates.map((template) => template.getApplicationCondition())
     );
-    const seasonImdbRatings =
-      getSettings().overlays?.posterizarrIntegrationEnabled &&
-      seasonRequiredContextFields.has('imdbRating')
-        ? fullSyncSeasonImdbRatings ??
-          (await this.fetchSeasonImdbRatings(
-            plexApi,
-            activeSeasons.map((season) => season.ratingKey)
-          ))
-        : undefined;
+    const seasonImdbRatings = seasonRequiredContextFields.has('imdbRating')
+      ? fullSyncSeasonImdbRatings ??
+        (getSettings().overlays?.posterizarrIntegrationEnabled
+          ? await this.fetchSeasonImdbRatings(
+              plexApi,
+              activeSeasons.map((season) => season.ratingKey)
+            )
+          : undefined)
+      : undefined;
     const seasonTmdbRatings = usesTmdbRatingFields(seasonRequiredContextFields)
       ? await this.fetchTmdbChildRatingContexts(
           plexApi,

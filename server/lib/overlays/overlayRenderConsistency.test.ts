@@ -187,4 +187,41 @@ describe('overlay render consistency', () => {
       else expect(context).not.toHaveProperty('imdbRating');
     }
   );
+
+  it.each([false, true])(
+    'keeps preloaded full sync season IMDb ratings regardless of the toggle (%s)',
+    async (enabled) => {
+      mocks.settings.overlays.posterizarrIntegrationEnabled = enabled;
+      const fetchRatings = vi
+        .spyOn(renderService, 'fetchSeasonImdbRatings')
+        .mockResolvedValue(new Map());
+      const apply = vi
+        .spyOn(renderService, 'applyOverlaysToItem')
+        .mockResolvedValue({ skipped: false });
+      const config = {
+        libraryId: '2',
+        libraryName: 'Shows',
+        mediaType: 'show',
+        fullSyncTargets: ['season'],
+      } as OverlayLibraryConfig;
+      const collection = {
+        type: 'season',
+        deleteAfterDays: 30,
+        media: [
+          { mediaServerId: 'season-1', addDate: new Date().toISOString() },
+        ],
+      } as MaintainerrCollection;
+      await service['applyMaintainerrSeasonOverlays'](
+        plex as unknown as PlexAPI,
+        '2',
+        config,
+        [template],
+        { status: 'ok', collections: [collection] },
+        new Map([['season-1', 7.4]])
+      );
+      expect(apply).toHaveBeenCalledOnce();
+      expect(fetchRatings).not.toHaveBeenCalled();
+      expect(apply.mock.calls[0][8]).toHaveProperty('imdbRating', 7.4);
+    }
+  );
 });
