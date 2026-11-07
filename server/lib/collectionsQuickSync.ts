@@ -961,7 +961,8 @@ class CollectionsQuickSync {
     );
     const labelExcludedKeys = await this.resolveLabelExcludedKeys(
       config,
-      plexClient
+      plexClient,
+      cache
     );
 
     const collectionExcluded = matches.filter((m) =>
@@ -1049,7 +1050,8 @@ class CollectionsQuickSync {
 
   private async resolveLabelExcludedKeys(
     config: CollectionConfig,
-    plexClient: PlexAPI
+    plexClient: PlexAPI,
+    cache: Map<string, Set<string>>
   ): Promise<Set<string>> {
     const excludedRatingKeys = new Set<string>();
     const labels = (config.excludeLabels ?? [])
@@ -1063,10 +1065,12 @@ class CollectionsQuickSync {
         : [config.libraryId];
       for (const libraryId of libraryIds) {
         for (const label of labels) {
-          const keys = await plexClient.getRatingKeysWithLabel(
-            libraryId,
-            label
-          );
+          const cacheKey = `label:${libraryId}:${label.toLowerCase()}`;
+          let keys = cache.get(cacheKey);
+          if (!keys) {
+            keys = await plexClient.getRatingKeysWithLabel(libraryId, label);
+            cache.set(cacheKey, keys);
+          }
           for (const key of keys) {
             excludedRatingKeys.add(key);
           }

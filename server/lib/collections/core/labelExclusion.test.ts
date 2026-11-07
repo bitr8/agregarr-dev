@@ -15,9 +15,11 @@ vi.mock('@server/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('@server/lib/settings', () => ({
-  getSettings: () => ({ plex: { collectionConfigs: [] }, save: vi.fn() }),
+const settings = vi.hoisted(() => ({
+  plex: { collectionConfigs: [] as Record<string, unknown>[] },
+  save: () => undefined,
 }));
+vi.mock('@server/lib/settings', () => ({ getSettings: () => settings }));
 
 import { applyLabelExclusions } from '@server/lib/collections/core/CollectionUtilities';
 
@@ -176,6 +178,60 @@ describe('applyLabelExclusions', () => {
       expect(partial.updateCollectionContents).not.toHaveBeenCalled();
       expect(emptyIn.updateCollectionContents).not.toHaveBeenCalled();
       expect(noKey.updateCollectionContents).not.toHaveBeenCalled();
+    });
+
+    it('clears the stored key once the collection has been emptied, and when Plex no longer has it', async () => {
+      const stored = () =>
+        settings.plex.collectionConfigs[0].collectionRatingKey;
+      const base = {
+        name: 'Test',
+        id: 'cfg-1',
+        libraryId: 'L1',
+        excludeLabels: ['some-label'],
+        collectionRatingKey: 'c1',
+        type: 'imdb' as const,
+      };
+
+      settings.plex.collectionConfigs = [
+        { id: 'cfg-1', libraryId: 'L1', collectionRatingKey: 'c1' },
+      ];
+      const removed = emptyingClient({ L1: all });
+      await applyLabelExclusions(items, base, removed.client, 'imdb');
+      expect(stored()).toBeUndefined();
+
+      settings.plex.collectionConfigs = [
+        { id: 'cfg-1', libraryId: 'L1', collectionRatingKey: 'c1' },
+      ];
+      const vanished = emptyingClient({ L1: all });
+      vanished.updateCollectionContents.mockResolvedValue({
+        added: 0,
+        removed: 0,
+        removedKeys: [],
+        reordered: false,
+        errors: [],
+      });
+      (
+        vanished.client as unknown as { getCollectionMetadata: unknown }
+      ).getCollectionMetadata = vi.fn(async () => null);
+      await applyLabelExclusions(items, base, vanished.client, 'imdb');
+      expect(stored()).toBeUndefined();
+
+      settings.plex.collectionConfigs = [
+        { id: 'cfg-1', libraryId: 'L1', collectionRatingKey: 'c1' },
+      ];
+      const present = emptyingClient({ L1: all });
+      present.updateCollectionContents.mockResolvedValue({
+        added: 0,
+        removed: 0,
+        removedKeys: [],
+        reordered: false,
+        errors: [],
+      });
+      (
+        present.client as unknown as { getCollectionMetadata: unknown }
+      ).getCollectionMetadata = vi.fn(async () => ({ ratingKey: 'c1' }));
+      await applyLabelExclusions(items, base, present.client, 'imdb');
+      expect(stored()).toBe('c1');
     });
   });
 });

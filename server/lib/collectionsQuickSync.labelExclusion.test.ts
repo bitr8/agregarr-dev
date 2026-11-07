@@ -113,4 +113,28 @@ describe('collectionsQuickSync.filterExcludedItems label exclusion', () => {
     expect(result.kept).toEqual(matches);
     expect(plexClient.getRatingKeysWithLabel).not.toHaveBeenCalled();
   });
+
+  it('looks each label up once across several collection groups in a run', async () => {
+    setConfig({ excludeLabels: ['Placeholder'] });
+    const plexClient = {
+      getRatingKeysWithLabel: vi.fn(async () => new Set(['b'])),
+    };
+    const cache = new Map<string, Set<string>>();
+    const run = () =>
+      (
+        collectionsQuickSync as unknown as {
+          filterExcludedItems: (
+            m: Match[],
+            c: unknown,
+            cache: Map<string, Set<string>>
+          ) => Promise<{ kept: Match[] }>;
+        }
+      ).filterExcludedItems(matches, plexClient, cache);
+
+    await run();
+    const second = await run();
+
+    expect(plexClient.getRatingKeysWithLabel).toHaveBeenCalledTimes(1);
+    expect(ids(second.kept)).toEqual([1, 3]);
+  });
 });

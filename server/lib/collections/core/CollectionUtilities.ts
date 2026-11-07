@@ -1592,6 +1592,7 @@ export async function applyLabelExclusions(
     Partial<
       Pick<
         CollectionConfig,
+        | 'id'
         | 'excludeLabels'
         | 'libraryId'
         | 'collectionRatingKey'
@@ -1664,7 +1665,12 @@ export async function applyLabelExclusions(
 
 async function emptyExistingCollection(
   config: Pick<CollectionConfig, 'name'> &
-    Partial<Pick<CollectionConfig, 'collectionRatingKey' | 'type' | 'subtype'>>,
+    Partial<
+      Pick<
+        CollectionConfig,
+        'id' | 'libraryId' | 'collectionRatingKey' | 'type' | 'subtype'
+      >
+    >,
   plexClient: PlexAPI,
   source: CollectionSource
 ): Promise<void> {
@@ -1699,6 +1705,25 @@ async function emptyExistingCollection(
         `Removed ${result.removed} label-excluded items from existing collection "${config.name}"`,
         { label: `${source} Collections`, configName: config.name }
       );
+    }
+
+    // Plex drops a regular collection once it is empty; a kept stale key
+    // would make every later sync refuse the missing collection
+    let gone = result.removed > 0;
+    if (!gone) {
+      try {
+        gone = !(await plexClient.getCollectionMetadata(
+          config.collectionRatingKey
+        ));
+      } catch {
+        gone = false;
+      }
+    }
+    if (gone && config.id) {
+      const libraryId = Array.isArray(config.libraryId)
+        ? config.libraryId[0]
+        : config.libraryId;
+      clearConfigRatingKey(config.id, libraryId, config.collectionRatingKey);
     }
   } catch (error) {
     logger.warn(
