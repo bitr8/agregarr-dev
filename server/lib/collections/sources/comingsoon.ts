@@ -944,11 +944,6 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     return filteredData;
   }
 
-  /**
-   * Sort collection items by release date (closest first)
-   * Items without release dates are placed at the end
-   * Uses pre-calculated releaseDate from TMDB enrichment for consistency with overlays
-   */
   private usesSourceRank(config: CollectionConfig): boolean {
     return (
       config.subtype === 'trakt_anticipated' &&
@@ -972,6 +967,11 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     return [...items].sort((a, b) => rankOf(a) - rankOf(b));
   }
 
+  /**
+   * Sort collection items by release date (closest first)
+   * Items without release dates are placed at the end
+   * Uses pre-calculated releaseDate from TMDB enrichment for consistency with overlays
+   */
   private async sortByReleaseDate(
     items: CollectionItem[],
     sourceData: ComingSoonSourceData[],

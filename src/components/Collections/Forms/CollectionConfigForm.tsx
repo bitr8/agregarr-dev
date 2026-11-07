@@ -16,9 +16,15 @@ import { SMART_COLLECTION_SORT_OPTIONS } from '@app/types/collections';
 import { Transition } from '@headlessui/react';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
-import { Field, Formik, type FormikErrors, type FormikTouched } from 'formik';
+import {
+  Field,
+  Formik,
+  useFormikContext,
+  type FormikErrors,
+  type FormikTouched,
+} from 'formik';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { defineMessages, FormattedMessage, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
@@ -58,6 +64,18 @@ import {
   agregarrOwnsSortTitle,
   buildPromotedSortTitle,
 } from '@app/utils/collections/sortTitle';
+
+const SourceRankResetGuard = () => {
+  const { values, setFieldValue } = useFormikContext<CollectionFormConfig>();
+  const isTraktAnticipated =
+    values.type === 'comingsoon' && values.subtype === 'trakt_anticipated';
+  useEffect(() => {
+    if (!isTraktAnticipated && values.sortOrder === 'source_rank') {
+      setFieldValue('sortOrder', 'default');
+    }
+  }, [isTraktAnticipated, values.sortOrder, setFieldValue]);
+  return null;
+};
 
 const messages = defineMessages({
   editCollection: 'Edit Collection Configuration',
@@ -3379,6 +3397,7 @@ const CollectionFormConfigForm = ({
                                       </label>
                                       <div className="form-input-area">
                                         <div className="form-input-field">
+                                          <SourceRankResetGuard />
                                           <Field
                                             as="select"
                                             id="sortOrder"
