@@ -59,6 +59,13 @@ const trackConnect = <A extends http.Agent>(agent: A): A => {
   return agent;
 };
 
+const httpAgent = trackConnect(
+  new http.Agent({ keepAlive: true, timeout: 15000 })
+);
+const httpsAgent = trackConnect(
+  new https.Agent({ keepAlive: true, timeout: 15000 })
+);
+
 const parseBody = async (
   contentType: string | undefined,
   body: Buffer
@@ -77,12 +84,6 @@ const parseBody = async (
 
 export default class PlexClient {
   private readonly baseUrl: string;
-  private readonly httpAgent = trackConnect(
-    new http.Agent({ keepAlive: true })
-  );
-  private readonly httpsAgent = trackConnect(
-    new https.Agent({ keepAlive: true })
-  );
   private readonly timeout?: number;
   private readonly token?: string;
   private readonly identity: PlexClientOptions['options'];
@@ -174,8 +175,8 @@ export default class PlexClient {
           validateStatus: () => true,
           maxRedirects: method === 'GET' ? 10 : 0,
           signal: controller.signal,
-          httpAgent: this.httpAgent,
-          httpsAgent: this.httpsAgent,
+          httpAgent,
+          httpsAgent,
         })
       );
       arm();
