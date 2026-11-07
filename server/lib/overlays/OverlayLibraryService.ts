@@ -74,6 +74,7 @@ import { resolveBasePosterSource } from './PlexBasePosterManager';
 import {
   deriveReleaseDateContext,
   latestAiredSeasonDate,
+  movieReleaseInfoFromTmdb,
   preferRadarrReleaseDate,
   type RadarrReleaseDates,
 } from './releaseDateContext';
@@ -1202,7 +1203,11 @@ class OverlayLibraryService {
         const cacheKey = `${mapKey}:${region}`;
         const cached = adaptiveCache.get<ReleaseDateInfo | null>(cacheKey);
 
-        if (cached !== undefined) {
+        // Movie entries cached before per-type dates existed carry no source.
+        const predatesPerTypeDates =
+          item.mediaType === 'movie' && !!cached && !cached.releaseSource;
+
+        if (cached !== undefined && !predatesPerTypeDates) {
           this.preloadedTmdbReleaseDates.set(mapKey, cached);
           logger.debug('Prefetch: cache HIT', {
             label: 'OverlayLibrary',
@@ -1257,30 +1262,18 @@ class OverlayLibraryService {
 
                 // Extract release date using the same logic as fetchReleaseDateInfo
                 if (movieDetails.release_dates?.results) {
-                  const { extractReleaseDates, determineReleaseDate } =
-                    await import('@server/utils/dateHelpers');
-                  const extracted = extractReleaseDates(
+                  const determined = movieReleaseInfoFromTmdb(
                     movieDetails.release_dates.results,
                     region
                   );
-                  const determined = determineReleaseDate(
-                    extracted.digitalRelease,
-                    extracted.physicalRelease,
-                    extracted.inCinemas
-                  );
                   if (determined) {
-                    releaseDateInfo = {
-                      releaseDate: determined.releaseDate,
-                      isEstimated: determined.isEstimated,
-                    };
+                    releaseDateInfo = determined;
                     logger.debug('Prefetch: determined release date', {
                       label: 'OverlayLibrary',
                       tmdbId,
                       releaseDate: determined.releaseDate,
                       isEstimated: determined.isEstimated,
-                      digitalRelease: extracted.digitalRelease,
-                      physicalRelease: extracted.physicalRelease,
-                      inCinemas: extracted.inCinemas,
+                      releaseSource: determined.releaseSource,
                     });
                   }
                 }
@@ -1290,6 +1283,7 @@ class OverlayLibraryService {
                   releaseDateInfo = {
                     releaseDate: movieDetails.release_date,
                     isEstimated: false,
+                    releaseSource: 'tmdb',
                   };
                 }
               } else {

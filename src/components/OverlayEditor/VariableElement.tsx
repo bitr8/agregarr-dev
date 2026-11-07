@@ -186,6 +186,9 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
             // Check if this is a date field with custom format
             const isDateField = [
               'releaseDate',
+              'theatricalReleaseDate',
+              'digitalReleaseDate',
+              'physicalReleaseDate',
               'lastPlayed',
               'dateAdded',
               'lastEpisodeAddedDate',
