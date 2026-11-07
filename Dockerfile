@@ -26,6 +26,16 @@ RUN yarn install --production --ignore-scripts --prefer-offline
 
 RUN rm -rf src server .next/cache
 
+# node-gyp and its fetch/proxy chain (ip, socks, @tootallnate/once) are only needed to compile native modules
+RUN find node_modules -type d \( -name node-gyp -o -name make-fetch-happen \) -prune -exec rm -rf {} + \
+  && rm -rf node_modules/.bin/node-gyp \
+  node_modules/ip node_modules/socks node_modules/socks-proxy-agent node_modules/smart-buffer \
+  node_modules/http-proxy-agent node_modules/@tootallnate \
+  node_modules/sqlite3/node_modules/socks-proxy-agent node_modules/sqlite3/node_modules/http-proxy-agent \
+  node_modules/sqlite3/node_modules/@tootallnate
+
+RUN node -e "require('jsdom'); require('sqlite3'); require('canvas')"
+
 RUN mkdir -p config && touch config/DOCKER
 
 RUN echo "{\"commitTag\": \"${COMMIT_TAG}\"}" > committag.json
