@@ -247,7 +247,7 @@ const messages = defineMessages({
     'Create placeholders for items releasing within this many days',
   includeMidSeason: 'Include mid-season episodes (TV)',
   includeMidSeasonHelp:
-    'Also list shows whose next episode airs inside the window, not just season premieres. Shows already in Plex get no placeholder.',
+    'Also list shows whose next episode airs inside the Days Ahead window, not just season premieres. These shows only appear if they are already in Plex, and no placeholder is created for them.',
   releasedItems: 'Released Items',
   includeAllReleasedItems: 'Include all released items',
   includeAllReleasedItemsHelp:
@@ -4263,6 +4263,34 @@ const CollectionFormConfigForm = ({
                                 </div>
                               )}
 
+                            {/* Coming Soon Monitored mid-season episodes */}
+                            {typedValues.type === 'comingsoon' &&
+                              typedValues.subtype === 'monitored' && (
+                                <div className="form-row">
+                                  <label
+                                    htmlFor="comingSoonIncludeMidSeason"
+                                    className="text-label"
+                                  >
+                                    {intl.formatMessage(
+                                      messages.includeMidSeason
+                                    )}
+                                  </label>
+                                  <div className="form-input-area">
+                                    <Field
+                                      type="checkbox"
+                                      id="comingSoonIncludeMidSeason"
+                                      name="comingSoonIncludeMidSeason"
+                                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-400">
+                                      {intl.formatMessage(
+                                        messages.includeMidSeasonHelp
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
                             {/* Placeholder Creation - show for external sources that can have missing items */}
                             {/* Hide for: overseerr, tautulli, recently_added, plex directors/actors, essentials */}
                             {typedValues.type &&
@@ -4583,30 +4611,6 @@ const CollectionFormConfigForm = ({
                                             )}
                                           </p>
                                         </div>
-
-                                        {typedValues.type === 'comingsoon' &&
-                                          typedValues.subtype ===
-                                            'monitored' && (
-                                            <div>
-                                              <label className="flex items-center gap-2">
-                                                <Field
-                                                  type="checkbox"
-                                                  name="comingSoonIncludeMidSeason"
-                                                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                                />
-                                                <span className="text-sm text-gray-300">
-                                                  {intl.formatMessage(
-                                                    messages.includeMidSeason
-                                                  )}
-                                                </span>
-                                              </label>
-                                              <p className="mt-1 text-xs text-gray-400">
-                                                {intl.formatMessage(
-                                                  messages.includeMidSeasonHelp
-                                                )}
-                                              </p>
-                                            </div>
-                                          )}
 
                                         {(typedValues.type === 'comingsoon' ||
                                           typedValues.type ===

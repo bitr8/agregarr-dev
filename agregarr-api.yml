@@ -700,6 +700,11 @@ components:
           enum: ['include', 'exclude']
           description: 'Tag filter mode for coming soon monitored subtype'
           nullable: true
+        comingSoonIncludeMidSeason:
+          type: boolean
+          description: 'Also include TV shows whose next episode is mid-season (default false: season premieres only)'
+          default: false
+          nullable: true
         comingSoonRadarrTagIds:
           type: array
           items:
@@ -1447,6 +1452,11 @@ components:
           type: string
           enum: ['include', 'exclude']
           description: 'Tag filter mode for coming soon monitored subtype'
+          nullable: true
+        comingSoonIncludeMidSeason:
+          type: boolean
+          description: 'Also include TV shows whose next episode is mid-season (default false: season premieres only)'
+          default: false
           nullable: true
         comingSoonRadarrTagIds:
           type: array
@@ -2364,6 +2374,11 @@ components:
           type: string
           enum: ['include', 'exclude']
           description: 'Tag filter mode for coming soon monitored subtype'
+          nullable: true
+        comingSoonIncludeMidSeason:
+          type: boolean
+          description: 'Also include TV shows whose next episode is mid-season (default false: season premieres only)'
+          default: false
           nullable: true
         comingSoonRadarrTagIds:
           type: array
