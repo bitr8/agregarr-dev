@@ -1766,6 +1766,7 @@ export async function processMissingItemsWithMode(
     | 'anilist'
     | 'myanimelist'
     | 'mdblist'
+    | 'tvdb'
     | 'networks'
     | 'originals'
     | 'multi-source'

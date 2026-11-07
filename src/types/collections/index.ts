@@ -194,6 +194,7 @@ export interface CollectionFormConfig {
     | 'myanimelist'
     | 'plex'
     | 'mdblist'
+    | 'tvdb'
     | 'networks'
     | 'originals'
     | 'multi-source'
@@ -415,6 +416,8 @@ export interface CollectionFormConfig {
   readonly letterboxdCustomListUrl?: string; // Custom Letterboxd list URL
   // MDBList custom list fields
   readonly mdblistCustomListUrl?: string; // Custom MDBList list URL
+  // TVDB list fields
+  readonly tvdbCustomListUrl?: string; // TVDB list URL
   // Networks fields
   readonly networksCountry?: string; // Selected country for Networks collections
   // AniList custom list fields
@@ -518,6 +521,7 @@ export interface CollectionConfigCreateRequest {
     | 'myanimelist'
     | 'plex'
     | 'mdblist'
+    | 'tvdb'
     | 'networks'
     | 'originals'
     | 'multi-source'
@@ -641,6 +645,7 @@ export interface CollectionConfigCreateRequest {
   readonly imdbCustomListUrl?: string;
   readonly letterboxdCustomListUrl?: string;
   readonly mdblistCustomListUrl?: string;
+  readonly tvdbCustomListUrl?: string;
   readonly networksCountry?: string;
   readonly anilistCustomListUrl?: string;
   readonly radarrInstanceId?: number;
@@ -803,6 +808,7 @@ export const toCollectionCreateRequest = (
     imdbCustomListUrl: config.imdbCustomListUrl,
     letterboxdCustomListUrl: config.letterboxdCustomListUrl,
     mdblistCustomListUrl: config.mdblistCustomListUrl,
+    tvdbCustomListUrl: config.tvdbCustomListUrl,
     networksCountry: config.networksCountry,
     anilistCustomListUrl: config.anilistCustomListUrl,
     radarrInstanceId: config.radarrInstanceId,
@@ -1292,6 +1298,7 @@ export type MultiSourceType =
   | 'imdb'
   | 'letterboxd'
   | 'mdblist'
+  | 'tvdb'
   | 'tautulli'
   | 'overseerr'
   | 'networks'

@@ -71,6 +71,7 @@ const messages = defineMessages({
   tmdbLists: 'TMDB Lists',
   imdbLists: 'IMDb Lists',
   mdblistLists: 'MDBList Lists',
+  tvdbLists: 'TVDB Lists',
   networks: 'Networks',
   streamingOriginals: 'Streaming Originals',
   radarrTags: 'Radarr Tags',
@@ -814,6 +815,14 @@ const MultiSourceConfigSection = ({
             description: 'Import a custom MDBList by URL',
           },
         ];
+      case 'tvdb':
+        return [
+          {
+            value: 'custom',
+            label: 'Custom List',
+            description: 'Import a TVDB list by URL',
+          },
+        ];
       case 'tmdb':
         return [
           { value: 'trending_day', label: 'Trending Today' },
@@ -1081,6 +1090,9 @@ const MultiSourceConfigSection = ({
                 </option>
                 <option value="mdblist">
                   {intl.formatMessage(messages.mdblistLists)}
+                </option>
+                <option value="tvdb">
+                  {intl.formatMessage(messages.tvdbLists)}
                 </option>
                 <option value="networks">
                   {intl.formatMessage(messages.networks)}

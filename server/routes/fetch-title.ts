@@ -618,6 +618,51 @@ fetchTitleRoutes.get('/', isAuthenticated(), async (req, res) => {
         break;
       }
 
+      case 'tvdb': {
+        sendProgress(res, 'connecting', 'Connecting to TVDB...');
+
+        const { default: TvdbAPI, parseTvdbListInput } = await import(
+          '@server/api/tvdb'
+        );
+
+        try {
+          const ref = parseTvdbListInput(sanitizedUrl);
+          if (!ref) {
+            res.write(
+              `data: ${JSON.stringify({
+                status: 'error',
+                message: 'Invalid TVDB URL format',
+              })}\n\n`
+            );
+            return res.end();
+          }
+
+          sendProgress(res, 'fetching', 'Fetching list metadata...');
+          const list = await new TvdbAPI().getList(ref);
+          title = list.name;
+
+          sendProgress(res, 'analyzing', 'Analyzing list content...');
+          const hasMovies = !!list.entities?.some((e) => e.movieId);
+          const hasShows = !!list.entities?.some((e) => e.seriesId);
+          if (hasMovies && hasShows) {
+            mediaType = 'both';
+          } else if (hasMovies) {
+            mediaType = 'movie';
+          } else if (hasShows) {
+            mediaType = 'tv';
+          }
+        } catch (error) {
+          res.write(
+            `data: ${JSON.stringify({
+              status: 'error',
+              message: 'Invalid TVDB list URL or list not accessible',
+            })}\n\n`
+          );
+          return res.end();
+        }
+        break;
+      }
+
       case 'mdblist': {
         sendProgress(res, 'connecting', 'Connecting to MDBList...');
 

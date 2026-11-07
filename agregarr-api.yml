@@ -373,6 +373,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'networks',
               'originals',
@@ -920,6 +921,11 @@ components:
           description: 'Custom MDBList list URL (e.g., https://mdblist.com/lists/username/listname)'
           example: 'https://mdblist.com/lists/garycrawfordgc/netflix-shows'
           nullable: true
+        tvdbCustomListUrl:
+          type: string
+          description: 'Custom TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)'
+          example: 'https://thetvdb.com/lists/matrix'
+          nullable: true
         sortOrder:
           type: string
           enum:
@@ -1139,6 +1145,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'networks',
               'originals',
@@ -1668,6 +1675,11 @@ components:
           description: 'Custom MDBList list URL (e.g., https://mdblist.com/lists/username/listname)'
           example: 'https://mdblist.com/lists/garycrawfordgc/netflix-shows'
           nullable: true
+        tvdbCustomListUrl:
+          type: string
+          description: 'Custom TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)'
+          example: 'https://thetvdb.com/lists/matrix'
+          nullable: true
         anilistCustomListUrl:
           type: string
           description: 'Custom AniList list URL (e.g., https://anilist.co/animelist/{listname} or https://anilist.co/user/{username}/animelist/{listname})'
@@ -2050,6 +2062,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'networks',
               'originals',
@@ -2548,6 +2561,11 @@ components:
           description: 'Custom MDBList list URL (e.g., https://mdblist.com/lists/username/listname)'
           example: 'https://mdblist.com/lists/garycrawfordgc/netflix-shows'
           nullable: true
+        tvdbCustomListUrl:
+          type: string
+          description: 'Custom TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)'
+          example: 'https://thetvdb.com/lists/matrix'
+          nullable: true
         letterboxdCustomListUrl:
           type: string
           description: 'Custom Letterboxd list URL (e.g., https://letterboxd.com/user/list/list-name/)'
@@ -2948,6 +2966,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'tautulli',
               'overseerr',
@@ -5600,6 +5619,7 @@ components:
               imdb,
               letterboxd,
               mdblist,
+              tvdb,
               tautulli,
               networks,
               originals,
@@ -7808,7 +7828,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [trakt, tmdb, imdb, letterboxd, mdblist, anilist]
+            enum: [trakt, tmdb, imdb, letterboxd, mdblist, tvdb, anilist]
           example: 'imdb'
           description: Collection source type
       responses:
@@ -8348,6 +8368,7 @@ paths:
                       imdb,
                       letterboxd,
                       mdblist,
+                      tvdb,
                       tautulli,
                       networks,
                       originals,
@@ -8473,6 +8494,7 @@ paths:
                             imdb,
                             letterboxd,
                             mdblist,
+                            tvdb,
                             tautulli,
                             networks,
                             originals,
@@ -11171,6 +11193,7 @@ paths:
               - anilist
               - myanimelist
               - mdblist
+              - tvdb
               - networks
               - originals
               - multi-source
@@ -11472,6 +11495,7 @@ paths:
               - anilist
               - myanimelist
               - mdblist
+              - tvdb
               - networks
               - originals
               - multi-source
@@ -13010,6 +13034,7 @@ paths:
                 imdb,
                 letterboxd,
                 mdblist,
+                tvdb,
                 tautulli,
                 networks,
                 originals,

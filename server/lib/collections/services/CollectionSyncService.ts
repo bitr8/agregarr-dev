@@ -1587,6 +1587,10 @@ export class CollectionSyncService {
         const { MDBListCollectionSync } = await import('../sources/mdblist');
         return new MDBListCollectionSync();
       }
+      case 'tvdb': {
+        const { TvdbCollectionSync } = await import('../sources/tvdb');
+        return new TvdbCollectionSync();
+      }
       case 'tmdb': {
         const { TmdbCollectionSync } = await import('../sources/tmdb');
         return new TmdbCollectionSync();

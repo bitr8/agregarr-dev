@@ -304,6 +304,7 @@ export const getSubtypeLabel = (type: string, subtype?: string): string => {
           return subtype;
       }
     case 'mdblist':
+    case 'tvdb':
       switch (subtype) {
         case 'custom':
           return 'Custom List';
@@ -455,6 +456,8 @@ export const getTypeLabel = (type: string): string => {
     ? 'IMDb'
     : type === 'mdblist'
     ? 'MDBList'
+    : type === 'tvdb'
+    ? 'TVDB'
     : type === 'letterboxd'
     ? 'Letterboxd'
     : type === 'anilist'

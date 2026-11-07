@@ -290,6 +290,7 @@ const messages = defineMessages({
   failedFetchImdbTitle: 'Failed to fetch IMDb list title',
   failedFetchLetterboxdTitle: 'Failed to fetch Letterboxd list title',
   failedFetchMdblistTitle: 'Failed to fetch MDBList title',
+  failedFetchTvdbTitle: 'Failed to fetch TVDB list title',
   failedFetchAnilistTitle: 'Failed to fetch AniList title',
   failedParseResponse: 'Failed to parse server response',
   connectionErrorTrakt:
@@ -302,6 +303,8 @@ const messages = defineMessages({
     'Connection error while fetching Letterboxd list title. Please check your connection and try again.',
   connectionErrorMdblist:
     'Connection error while fetching MDBList title. Please check your connection and try again.',
+  connectionErrorTvdb:
+    'Connection error while fetching TVDB list title. Please check your connection and try again.',
   connectionErrorAnilist:
     'Connection error while fetching AniList title. Please check your connection and try again.',
   connectionError: 'Connection error',
@@ -474,6 +477,7 @@ const CollectionFormConfigForm = ({
     imdb?: string;
     letterboxd?: string;
     mdblist?: string;
+    tvdb?: string;
     anilist?: string;
   }>({});
 
@@ -483,6 +487,7 @@ const CollectionFormConfigForm = ({
     imdb?: 'movie' | 'tv' | 'both' | 'mixed';
     letterboxd?: 'movie' | 'tv' | 'both' | 'mixed';
     mdblist?: 'movie' | 'tv' | 'both' | 'mixed';
+    tvdb?: 'movie' | 'tv' | 'both' | 'mixed';
     anilist?: 'movie' | 'tv' | 'both' | 'mixed';
   }>({});
 
@@ -492,6 +497,7 @@ const CollectionFormConfigForm = ({
     imdb?: boolean;
     letterboxd?: boolean;
     mdblist?: boolean;
+    tvdb?: boolean;
     anilist?: boolean;
   }>({});
 
@@ -501,6 +507,7 @@ const CollectionFormConfigForm = ({
     imdb?: string;
     letterboxd?: string;
     mdblist?: string;
+    tvdb?: string;
     anilist?: string;
   }>({});
 
@@ -1688,6 +1695,88 @@ const CollectionFormConfigForm = ({
     });
   };
 
+  const fetchTvdbTitle = async (
+    url: string,
+    setFieldValue?: (field: string, value: string) => void
+  ) => {
+    setFetchingTitle((prev) => ({ ...prev, tvdb: true }));
+    setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+
+    return new Promise<void>((resolve, reject) => {
+      const eventSource = new EventSource(
+        `/api/v1/collections/fetch-title?url=${encodeURIComponent(
+          url
+        )}&type=tvdb`
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.status === 'success') {
+            if (data.title) {
+              setFetchedTitles((prev) => ({ ...prev, tvdb: data.title }));
+              if (data.mediaType) {
+                setDetectedMediaTypes((prev) => ({
+                  ...prev,
+                  tvdb: data.mediaType,
+                }));
+              }
+
+              if (setFieldValue) {
+                setTimeout(() => {
+                  setFieldValue('template', data.title);
+                }, 100);
+              }
+            }
+
+            eventSource.close();
+            setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+            setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+            resolve();
+          } else if (data.status === 'error') {
+            addToast(
+              data.message || intl.formatMessage(messages.failedFetchTvdbTitle),
+              {
+                appearance: 'error',
+                autoDismiss: true,
+              }
+            );
+            eventSource.close();
+            setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+            setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+            reject(new Error(data.message));
+          } else {
+            setTitleFetchProgress((prev) => ({
+              ...prev,
+              tvdb: data.message,
+            }));
+          }
+        } catch (parseError) {
+          addToast(intl.formatMessage(messages.failedParseResponse), {
+            appearance: 'error',
+            autoDismiss: true,
+          });
+          eventSource.close();
+          setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+          setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+          reject(parseError);
+        }
+      };
+
+      eventSource.onerror = () => {
+        addToast(intl.formatMessage(messages.connectionErrorTvdb), {
+          appearance: 'error',
+          autoDismiss: true,
+        });
+        eventSource.close();
+        setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+        setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+        reject(new Error(intl.formatMessage(messages.connectionError)));
+      };
+    });
+  };
+
   const fetchAnilistTitle = async (
     url: string,
     setFieldValue?: (field: string, value: string) => void
@@ -2069,6 +2158,8 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).letterboxdCustomListUrl || '',
           mdblistCustomListUrl:
             (config as CollectionFormConfig).mdblistCustomListUrl || '',
+          tvdbCustomListUrl:
+            (config as CollectionFormConfig).tvdbCustomListUrl || '',
           anilistCustomListUrl:
             (config as CollectionFormConfig).anilistCustomListUrl || '',
           // Enable flags for custom features (default to false)
@@ -3161,6 +3252,7 @@ const CollectionFormConfigForm = ({
                           fetchImdbTitle={fetchImdbTitle}
                           fetchLetterboxdTitle={fetchLetterboxdTitle}
                           fetchMdblistTitle={fetchMdblistTitle}
+                          fetchTvdbTitle={fetchTvdbTitle}
                           fetchAnilistTitle={fetchAnilistTitle}
                           titleFetchProgress={titleFetchProgress}
                         />
@@ -3229,6 +3321,9 @@ const CollectionFormConfigForm = ({
                                 (values.type === 'mdblist' &&
                                   values.subtype === 'custom' &&
                                   (fetchedTitles.mdblist || config?.name)) ||
+                                (values.type === 'tvdb' &&
+                                  values.subtype === 'custom' &&
+                                  (fetchedTitles.tvdb || config?.name)) ||
                                 (values.type === 'anilist' &&
                                   values.subtype === 'custom' &&
                                   (fetchedTitles.anilist || config?.name)))
@@ -5619,6 +5714,10 @@ const CollectionFormConfigForm = ({
                                 | undefined)
                             : values.type === 'mdblist'
                             ? (valuesRecord.mdblistCustomListUrl as
+                                | string
+                                | undefined)
+                            : values.type === 'tvdb'
+                            ? (valuesRecord.tvdbCustomListUrl as
                                 | string
                                 | undefined)
                             : values.type === 'anilist'

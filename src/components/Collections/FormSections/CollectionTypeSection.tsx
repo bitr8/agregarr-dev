@@ -212,6 +212,7 @@ const CollectionTypeSection = ({
     { value: 'tmdb', label: 'TMDB Lists' },
     { value: 'imdb', label: 'IMDb Lists' },
     { value: 'mdblist', label: 'MDBList Lists' },
+    { value: 'tvdb', label: 'TVDB Lists' },
     { value: 'networks', label: 'Networks Top 10' },
     { value: 'originals', label: 'Networks Originals' },
     { value: 'anilist', label: 'AniList' },
@@ -319,6 +320,14 @@ const CollectionTypeSection = ({
             value: 'custom',
             label: 'Custom List',
             description: 'Import a custom MDBList by URL',
+          },
+        ];
+      case 'tvdb':
+        return [
+          {
+            value: 'custom',
+            label: 'Custom List',
+            description: 'Import a TVDB list by URL',
           },
         ];
       case 'tmdb':
