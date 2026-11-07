@@ -1,3 +1,4 @@
+import PlexClient from '@server/api/plexClient';
 import { fetchPlexMetadataBatches } from '@server/api/plexMetadataBatch';
 import type { PlexMetadataSafeResult } from '@server/api/plexMetadataClassify';
 import {
@@ -17,19 +18,11 @@ import type {
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { registerLogSecrets } from '@server/utils/logRedaction';
-import NodePlexAPI from 'plex-api';
 
 // Re-export so existing consumers can keep importing the result type from the
 // Plex client module; the classifiers themselves live in a dep-free sibling so
 // they stay unit-testable without the full client graph.
 export type { PlexMetadataSafeResult };
-
-// Extended interface for type-safe Plex API HTTP methods
-interface ExtendedPlexAPI extends NodePlexAPI {
-  postQuery?: (url: string) => Promise<unknown>;
-  putQuery?: (url: string) => Promise<void>;
-  deleteQuery?: (url: string) => Promise<void>;
-}
 
 export interface PlexLibraryItem {
   ratingKey: string;
@@ -221,7 +214,7 @@ interface PlexCollectionResponse {
 }
 
 class PlexAPI {
-  private plexClient: NodePlexAPI;
+  private plexClient: PlexClient;
   private plexToken?: string;
   private hubManager: PlexHubManager;
   private smartCollectionManager: PlexSmartCollectionManager;
@@ -311,38 +304,16 @@ class PlexAPI {
     ).join(', ');
   }
 
-  private getExtendedClient(): ExtendedPlexAPI {
-    return this.plexClient as ExtendedPlexAPI;
-  }
-
   private async safePostQuery(url: string): Promise<unknown> {
-    const client = this.getExtendedClient();
-    if (typeof client.postQuery !== 'function') {
-      throw new Error(
-        'POST operations are not supported by this Plex API version'
-      );
-    }
-    return client.postQuery(url);
+    return this.plexClient.postQuery(url);
   }
 
   private async safePutQuery(url: string): Promise<void> {
-    const client = this.getExtendedClient();
-    if (typeof client.putQuery !== 'function') {
-      throw new Error(
-        'PUT operations are not supported by this Plex API version'
-      );
-    }
-    return client.putQuery(url);
+    await this.plexClient.putQuery(url);
   }
 
   private async safeDeleteQuery(url: string): Promise<void> {
-    const client = this.getExtendedClient();
-    if (typeof client.deleteQuery !== 'function') {
-      throw new Error(
-        'DELETE operations are not supported by this Plex API version'
-      );
-    }
-    return client.deleteQuery(url);
+    return this.plexClient.deleteQuery(url);
   }
 
   constructor({
@@ -366,23 +337,12 @@ class PlexAPI {
     // responses, not settings.json - register here so logs redact them.
     registerLogSecrets([plexToken]);
 
-    this.plexClient = new NodePlexAPI({
+    this.plexClient = new PlexClient({
       hostname: settingsPlex.ip,
       port: settingsPlex.port,
       https: settingsPlex.useSsl,
       timeout: timeout,
       token: plexToken,
-      authenticator: {
-        authenticate: (
-          _plexApi,
-          cb: (err?: string, token?: string) => void
-        ) => {
-          if (!plexToken) {
-            return cb('Plex Token not found!');
-          }
-          cb(undefined, plexToken);
-        },
-      },
       options: {
         identifier: settings.clientId,
         product: 'Agregarr',
