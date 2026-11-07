@@ -189,7 +189,9 @@ const run = (
   );
 
 const cleanupSet = (): number[] =>
-  [...(cleanupMock.mock.calls[0][3] as Set<number>)].sort((a, b) => a - b);
+  [...((cleanupMock.mock.calls[0] as unknown[])[3] as Set<number>)].sort(
+    (a, b) => a - b
+  );
 
 describe('fork#183: franchiseMinimumItems', () => {
   beforeEach(() => {

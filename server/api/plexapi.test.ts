@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest';
 
 /**
  * Tests for the addItemsToCollection read-back verification math
@@ -56,14 +63,18 @@ async function setupArrangeApi(currentOrder: string[], failUrlPart?: string) {
     plexSettings: { name: 'test', ip: '127.0.0.1', port: 32400, libraries: [] },
   });
 
-  vi.spyOn(
-    api as unknown as { isSmartCollection: unknown },
-    'isSmartCollection' as never
+  (
+    vi.spyOn(
+      api as unknown as { isSmartCollection: unknown },
+      'isSmartCollection' as never
+    ) as unknown as MockInstance
   ).mockResolvedValue('not_smart');
   vi.spyOn(api, 'getCollectionItems').mockResolvedValue(currentOrder);
-  vi.spyOn(
-    api as unknown as { safePutQuery: unknown },
-    'safePutQuery' as never
+  (
+    vi.spyOn(
+      api as unknown as { safePutQuery: unknown },
+      'safePutQuery' as never
+    ) as unknown as MockInstance
   ).mockImplementation((async (url: string) => {
     if (failUrlPart && url.includes(failUrlPart)) {
       throw new Error(`PUT ${url} failed, response code: 404`);
@@ -76,7 +87,7 @@ async function setupArrangeApi(currentOrder: string[], failUrlPart?: string) {
 
 function findArrangeWarn(logger: { warn: unknown }) {
   const calls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls;
-  return calls.find(([message]: [string]) =>
+  return calls.find(([message]: string[]) =>
     message.includes('Failed to arrange')
   );
 }
@@ -201,7 +212,7 @@ describe('arrangeCollectionItemsInOrder duplicate ratingKeys', () => {
       { ratingKey: '2', title: 'B' },
     ]);
 
-    expect(put.mock.calls.map(([u]: [string]) => u)).toEqual([
+    expect(put.mock.calls.map(([u]: unknown[]) => String(u))).toEqual([
       '/library/collections/378965/items/3/move',
     ]);
   });
@@ -224,7 +235,7 @@ describe('arrangeCollectionItemsInOrder items missing from the collection', () =
       { ratingKey: '1003', title: 'C' },
     ]);
 
-    const urls = put.mock.calls.map(([u]: [string]) => u);
+    const urls = put.mock.calls.map(([u]: unknown[]) => String(u));
     expect(urls.some((u) => u.includes('/items/9999/'))).toBe(false);
     expect(urls).toEqual([
       '/library/collections/378965/items/1001/move',
@@ -243,7 +254,7 @@ describe('arrangeCollectionItemsInOrder items missing from the collection', () =
       { ratingKey: '9999', title: 'Missing' },
     ]);
 
-    expect(put.mock.calls.map(([u]: [string]) => u)).toEqual([
+    expect(put.mock.calls.map(([u]: unknown[]) => String(u))).toEqual([
       '/library/collections/378965/items/1001/move',
     ]);
   });
