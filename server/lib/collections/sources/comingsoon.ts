@@ -146,6 +146,14 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         libraryCache
       );
 
+      const useSourceRank = this.usesSourceRank(config);
+      if (useSourceRank) {
+        mappedResult.items = this.sortBySourceRank(
+          mappedResult.items,
+          sourceData
+        );
+      }
+
       // Apply filtering (placeholderItems in mappedResult are ignored - overlays handled by overlay sync job)
       const { items, missingItems, mappingStats } =
         await this.applyFilteringToMappedItems(mappedResult, config);
@@ -171,7 +179,11 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
       // So there's no need to fetch or add released items
 
       // Sort items by release date (closest first)
-      const sortedItems = await this.sortByReleaseDate(items, sourceData);
+      const sortedItems = await this.sortByReleaseDate(
+        items,
+        sourceData,
+        useSourceRank
+      );
 
       if (sortedItems.length === 0) {
         // Distinguish "no placeholders materialised" from a generic empty
@@ -940,6 +952,29 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     return filteredData;
   }
 
+  private usesSourceRank(config: CollectionConfig): boolean {
+    return (
+      config.subtype === 'trakt_anticipated' &&
+      config.sortOrder === 'source_rank'
+    );
+  }
+
+  public sortBySourceRank<T extends { tmdbId?: number }>(
+    items: T[],
+    sourceData: ComingSoonSourceData[]
+  ): T[] {
+    const rank = new Map<number, number>();
+    sourceData.forEach((source, index) => {
+      if (source.tmdbId && !rank.has(source.tmdbId)) {
+        rank.set(source.tmdbId, index);
+      }
+    });
+    const rankOf = (item: T) =>
+      (item.tmdbId !== undefined ? rank.get(item.tmdbId) : undefined) ??
+      Number.MAX_SAFE_INTEGER;
+    return [...items].sort((a, b) => rankOf(a) - rankOf(b));
+  }
+
   /**
    * Sort collection items by release date (closest first)
    * Items without release dates are placed at the end
@@ -947,7 +982,8 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
    */
   private async sortByReleaseDate(
     items: CollectionItem[],
-    sourceData: ComingSoonSourceData[]
+    sourceData: ComingSoonSourceData[],
+    bySourceRank = false
   ): Promise<CollectionItem[]> {
     // Create a map of tmdbId to release date
     const releaseDateMap = new Map<number, Date | null>();
@@ -1001,6 +1037,9 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     });
 
     // Sort items by release date
+    if (bySourceRank) {
+      return this.sortBySourceRank(itemsWithMetadata, sourceData);
+    }
     const sortedItems = [...itemsWithMetadata].sort((a, b) => {
       const dateA = a.releaseDateSortValue
         ? new Date(a.releaseDateSortValue)
