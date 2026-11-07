@@ -8399,6 +8399,12 @@ paths:
                   type: number
                   description: Maximum number of items to fetch
                   example: 50
+                excludeLabels:
+                  type: array
+                  items:
+                    type: string
+                  description: Plex item labels; matching items are left out of the preview
+                  example: ['trailer-placeholder']
                 timePeriod:
                   type: string
                   description: Time period for Tautulli collections

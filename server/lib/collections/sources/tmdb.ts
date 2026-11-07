@@ -2,6 +2,7 @@ import type PlexAPI from '@server/api/plexapi';
 import TmdbAPI from '@server/api/themoviedb';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  applyLabelExclusions,
   findPlexItemsByTmdbIds,
   getCollectionMediaType,
   processMissingItemsWithMode,
@@ -2160,6 +2161,12 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     } else {
       finalItems = plexItems;
     }
+    finalItems = await applyLabelExclusions(
+      finalItems,
+      config,
+      plexClient,
+      this.source
+    );
 
     // Check if we should skip auto-poster generation
     // Only skip if useTmdbFranchisePoster is enabled AND the poster is actually available

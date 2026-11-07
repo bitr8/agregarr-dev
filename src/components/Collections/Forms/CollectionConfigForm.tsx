@@ -4239,6 +4239,7 @@ const CollectionFormConfigForm = ({
                             )}
 
                             {isCollection &&
+                              typedValues.type !== 'filtered_hub' &&
                               !(
                                 typedValues.type === 'plex' &&
                                 (typedValues.subtype === 'directors' ||
@@ -5644,6 +5645,7 @@ const CollectionFormConfigForm = ({
                                 | undefined)
                             : undefined,
                         maxItems: values.maxItems,
+                        excludeLabels: values.excludeLabels,
                         // TMDB streaming service + advanced discover fields
                         tmdbAdvancedFilters:
                           valuesRecord.tmdbAdvancedFilters as

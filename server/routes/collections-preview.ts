@@ -2,6 +2,7 @@ import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import {
+  applyLabelExclusions,
   capPreviewItemsToMaxItems,
   combinePreviewMissingItems,
   extractErrorMessage,
@@ -9,6 +10,7 @@ import {
 } from '@server/lib/collections/core/CollectionUtilities';
 import type {
   CollectionItem,
+  CollectionSource,
   ItemProducingSource,
   MissingItem,
 } from '@server/lib/collections/core/types';
@@ -349,7 +351,8 @@ export async function processMultiSourcePreview(
   plexClient: PlexAPI,
   libraryCache: LibraryItemsCache,
   cycleIndex: number,
-  forceRefresh = false
+  forceRefresh = false,
+  excludeLabels?: string[]
 ): Promise<void> {
   const { collectionSyncService } = await import(
     '@server/lib/collections/services/CollectionSyncService'
@@ -612,9 +615,16 @@ export async function processMultiSourcePreview(
     maxItems
   );
 
+  const labelFilteredItems = await applyLabelExclusions(
+    uniqueItems,
+    { name: 'Preview', libraryId, excludeLabels },
+    plexClient,
+    'multi-source'
+  );
+
   // Apply maxItems limit to combined items
   const { items: limitedItems, missingItems: limitedMissingItems } =
-    capPreviewItemsToMaxItems(uniqueItems, uniqueMissingItems, maxItems);
+    capPreviewItemsToMaxItems(labelFilteredItems, uniqueMissingItems, maxItems);
 
   // Now process the combined items for preview display (enrich with TMDB data)
   // This is the same logic as single-source preview
@@ -972,6 +982,7 @@ async function processPreviewAsync(
     combineMode?: 'interleaved' | 'list_order' | 'randomised' | 'cycle_lists';
     sortOrder?: CollectionSortOrder;
     cycleIndex?: number; // For cycle_lists mode, which source to show
+    excludeLabels?: string[];
   }
 ): Promise<void> {
   try {
@@ -1005,6 +1016,7 @@ async function processPreviewAsync(
       combineMode,
       sortOrder,
       cycleIndex,
+      excludeLabels,
     } = requestBody;
 
     logger.info(
@@ -1178,7 +1190,8 @@ async function processPreviewAsync(
         plexClient,
         libraryCache,
         cycleIndex || 0,
-        forceRefresh || false
+        forceRefresh || false,
+        excludeLabels
       );
     }
 
@@ -1247,11 +1260,18 @@ async function processPreviewAsync(
       previewConfig
     );
 
+    const labelFilteredItems = await applyLabelExclusions(
+      filteredResult.items,
+      { name: 'Preview', libraryId, excludeLabels },
+      plexClient,
+      type as CollectionSource
+    );
+
     // matched + missing are filtered independently (count vs position) and can
     // together exceed maxItems - couple them here, same as the multi-source path
     const { items: cappedItems, missingItems: cappedMissingItems } =
       capPreviewItemsToMaxItems(
-        filteredResult.items,
+        labelFilteredItems,
         filteredResult.missingItems || [],
         previewConfig.maxItems
       );

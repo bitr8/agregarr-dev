@@ -1581,35 +1581,24 @@ export function capPreviewItemsToMaxItems<
   };
 }
 
-type ExclusionConfig = Pick<
-  CollectionConfig,
-  'name' | 'excludeFromCollections' | 'excludeLabels' | 'libraryId'
->;
-
 /**
- * Apply per-collection exclusions: mutual exclusion with other collections, then item labels.
- * Used by BaseCollectionSync, MultiSourceOrchestrator and Coming Soon.
+ * Drop items carrying any of the config's excludeLabels. When that empties a
+ * non-empty list, the existing Plex collection is emptied too so it does not
+ * keep the excluded items.
  */
-export async function applyCollectionExclusions(
+export async function applyLabelExclusions(
   items: CollectionItem[],
-  config:
-    | CollectionConfig
-    | (Pick<CollectionConfig, 'name'> & Partial<ExclusionConfig>),
-  plexClient: PlexAPI,
-  source: CollectionSource
-): Promise<CollectionItem[]> {
-  const afterCollections = await applyMutualExclusions(
-    items,
-    config,
-    plexClient,
-    source
-  );
-  return applyLabelExclusions(afterCollections, config, plexClient, source);
-}
-
-async function applyLabelExclusions(
-  items: CollectionItem[],
-  config: Pick<CollectionConfig, 'name'> & Partial<ExclusionConfig>,
+  config: Pick<CollectionConfig, 'name'> &
+    Partial<
+      Pick<
+        CollectionConfig,
+        | 'excludeLabels'
+        | 'libraryId'
+        | 'collectionRatingKey'
+        | 'type'
+        | 'subtype'
+      >
+    >,
   plexClient: PlexAPI,
   source: CollectionSource
 ): Promise<CollectionItem[]> {
@@ -1620,6 +1609,7 @@ async function applyLabelExclusions(
     return items;
   }
 
+  let filteredItems: CollectionItem[];
   try {
     const libraryIds = Array.isArray(config.libraryId)
       ? config.libraryId
@@ -1635,7 +1625,7 @@ async function applyLabelExclusions(
       }
     }
 
-    const filteredItems = items.filter(
+    filteredItems = items.filter(
       (item) => !excludedRatingKeys.has(item.ratingKey)
     );
     const excludedCount = items.length - filteredItems.length;
@@ -1653,8 +1643,6 @@ async function applyLabelExclusions(
         }
       );
     }
-
-    return filteredItems;
   } catch (error) {
     logger.error(
       `Error applying label exclusions for ${config.name}: ${error}`,
@@ -1666,11 +1654,73 @@ async function applyLabelExclusions(
     );
     return items;
   }
+
+  if (filteredItems.length === 0) {
+    await emptyExistingCollection(config, plexClient, source);
+  }
+
+  return filteredItems;
 }
 
-async function applyMutualExclusions(
+async function emptyExistingCollection(
+  config: Pick<CollectionConfig, 'name'> &
+    Partial<Pick<CollectionConfig, 'collectionRatingKey' | 'type' | 'subtype'>>,
+  plexClient: PlexAPI,
+  source: CollectionSource
+): Promise<void> {
+  if (
+    !config.collectionRatingKey ||
+    isMultiCollectionPattern(config as CollectionConfig)
+  ) {
+    return;
+  }
+
+  try {
+    const result = await plexClient.updateCollectionContents(
+      config.collectionRatingKey,
+      [],
+      config.name
+    );
+    for (const removedKey of result.removedKeys) {
+      try {
+        await plexClient.addLabelToItem(removedKey, 'agregarr-stale');
+      } catch (error) {
+        logger.warn(
+          `Failed to add agregarr-stale label to item ${removedKey}`,
+          {
+            label: `${source} Collections`,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+    }
+    if (result.removed > 0) {
+      logger.info(
+        `Removed ${result.removed} label-excluded items from existing collection "${config.name}"`,
+        { label: `${source} Collections`, configName: config.name }
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      `Could not empty existing collection "${config.name}" after label exclusion`,
+      {
+        label: `${source} Collections`,
+        configName: config.name,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+  }
+}
+
+/**
+ * Apply collection mutual exclusion - remove items that exist in excluded collections
+ * This is a utility function used by both BaseCollectionSync and MultiSourceOrchestrator
+ */
+export async function applyCollectionExclusions(
   items: CollectionItem[],
-  config: Pick<CollectionConfig, 'name' | 'excludeFromCollections'>,
+  config:
+    | CollectionConfig
+    | { name: string; excludeFromCollections?: string[] },
   plexClient: PlexAPI,
   source: CollectionSource
 ): Promise<CollectionItem[]> {

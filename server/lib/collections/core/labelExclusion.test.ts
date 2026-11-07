@@ -19,7 +19,7 @@ vi.mock('@server/lib/settings', () => ({
   getSettings: () => ({ plex: { collectionConfigs: [] }, save: vi.fn() }),
 }));
 
-import { applyCollectionExclusions } from '@server/lib/collections/core/CollectionUtilities';
+import { applyLabelExclusions } from '@server/lib/collections/core/CollectionUtilities';
 
 const item = (ratingKey: string): CollectionItem => ({
   ratingKey,
@@ -40,10 +40,10 @@ const makeClient = (byLibrary: Record<string, Record<string, string[]>>) => {
   };
 };
 
-describe('applyCollectionExclusions label exclusion', () => {
+describe('applyLabelExclusions', () => {
   it('drops items carrying an excluded label and keeps the rest', async () => {
     const { client } = makeClient({ L1: { 'some-label': ['a2'] } });
-    const result = await applyCollectionExclusions(
+    const result = await applyLabelExclusions(
       items,
       { name: 'Test', libraryId: 'L1', excludeLabels: ['Some-Label'] },
       client,
@@ -57,7 +57,7 @@ describe('applyCollectionExclusions label exclusion', () => {
       L1: { one: ['a1'] },
       L2: { two: ['a3'] },
     });
-    const result = await applyCollectionExclusions(
+    const result = await applyLabelExclusions(
       items,
       { name: 'Test', libraryId: ['L1', 'L2'], excludeLabels: ['one', 'two'] },
       client,
@@ -69,7 +69,7 @@ describe('applyCollectionExclusions label exclusion', () => {
   it('leaves items untouched and makes no Plex call when no labels are set', async () => {
     const { client, getRatingKeysWithLabel } = makeClient({});
     for (const excludeLabels of [undefined, [], ['  ']]) {
-      const result = await applyCollectionExclusions(
+      const result = await applyLabelExclusions(
         items,
         { name: 'Test', libraryId: 'L1', excludeLabels },
         client,
@@ -84,12 +84,98 @@ describe('applyCollectionExclusions label exclusion', () => {
     const client = {
       getRatingKeysWithLabel: vi.fn().mockRejectedValue(new Error('boom')),
     } as unknown as PlexAPI;
-    const result = await applyCollectionExclusions(
+    const result = await applyLabelExclusions(
       items,
       { name: 'Test', libraryId: 'L1', excludeLabels: ['x'] },
       client,
       'imdb'
     );
     expect(result).toBe(items);
+  });
+
+  describe('emptying the existing collection', () => {
+    const emptyingClient = (
+      byLibrary: Record<string, Record<string, string[]>>
+    ) => {
+      const { client, getRatingKeysWithLabel } = makeClient(byLibrary);
+      const updateCollectionContents = vi.fn(async () => ({
+        added: 0,
+        removed: 2,
+        removedKeys: ['a1', 'a2'],
+        reordered: false,
+        errors: [],
+      }));
+      const addLabelToItem = vi.fn(async () => undefined);
+      return {
+        client: Object.assign(client, {
+          updateCollectionContents,
+          addLabelToItem,
+        }) as unknown as PlexAPI,
+        getRatingKeysWithLabel,
+        updateCollectionContents,
+        addLabelToItem,
+      };
+    };
+    const all = { 'some-label': ['a1', 'a2', 'a3'] };
+
+    it('removes members and marks them stale when labels exclude every item', async () => {
+      const { client, updateCollectionContents, addLabelToItem } =
+        emptyingClient({ L1: all });
+      const result = await applyLabelExclusions(
+        items,
+        {
+          name: 'Test',
+          libraryId: 'L1',
+          excludeLabels: ['some-label'],
+          collectionRatingKey: 'c1',
+          type: 'imdb',
+        },
+        client,
+        'imdb'
+      );
+      expect(result).toEqual([]);
+      expect(updateCollectionContents).toHaveBeenCalledWith('c1', [], 'Test');
+      expect(addLabelToItem).toHaveBeenCalledWith('a1', 'agregarr-stale');
+      expect(addLabelToItem).toHaveBeenCalledWith('a2', 'agregarr-stale');
+    });
+
+    it('leaves the collection alone when items remain, the list was already empty, or there is no stored collection', async () => {
+      const partial = emptyingClient({ L1: { 'some-label': ['a1'] } });
+      await applyLabelExclusions(
+        items,
+        {
+          name: 'Test',
+          libraryId: 'L1',
+          excludeLabels: ['some-label'],
+          collectionRatingKey: 'c1',
+          type: 'imdb',
+        },
+        partial.client,
+        'imdb'
+      );
+      const emptyIn = emptyingClient({ L1: all });
+      await applyLabelExclusions(
+        [],
+        {
+          name: 'Test',
+          libraryId: 'L1',
+          excludeLabels: ['some-label'],
+          collectionRatingKey: 'c1',
+          type: 'imdb',
+        },
+        emptyIn.client,
+        'imdb'
+      );
+      const noKey = emptyingClient({ L1: all });
+      await applyLabelExclusions(
+        items,
+        { name: 'Test', libraryId: 'L1', excludeLabels: ['some-label'] },
+        noKey.client,
+        'imdb'
+      );
+      expect(partial.updateCollectionContents).not.toHaveBeenCalled();
+      expect(emptyIn.updateCollectionContents).not.toHaveBeenCalled();
+      expect(noKey.updateCollectionContents).not.toHaveBeenCalled();
+    });
   });
 });

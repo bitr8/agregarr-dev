@@ -6,6 +6,7 @@ import type {
 } from '@server/api/themoviedb/interfaces';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  applyLabelExclusions,
   extractErrorMessage,
   findPlexItemsByTmdbIds,
   getCollectionMediaType,
@@ -854,6 +855,12 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
       if (placeholderItems.length > 0) {
         finalItems = [...items, ...placeholderItems];
       }
+      finalItems = await applyLabelExclusions(
+        finalItems,
+        config,
+        plexClient,
+        this.source
+      );
 
       if (finalItems.length === 0) {
         logger.debug('No items found, returning early', {
