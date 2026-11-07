@@ -3615,6 +3615,54 @@ export const PRESET_TEMPLATES: {
       ],
     },
   },
+
+  // Resolution
+  {
+    name: 'Resolution',
+    description:
+      'Shows a resolution badge (4K, 1080, 720, 576, 480, SD) for every item. Turn off the 4K Resolution preset to avoid a double badge on 4K titles.',
+    type: 'technical',
+    tags: ['Technical'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            {
+              field: 'resolution',
+              operator: 'in',
+              value: ['4k', '1080', '720', '576', '480', 'sd'],
+            },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'resolution-icon',
+          layerOrder: 0,
+          type: 'mapped-icon',
+          x: 20,
+          y: 1355,
+          width: 220,
+          height: 220,
+          properties: {
+            field: 'resolution',
+            mappings: [],
+            layout: 'horizontal',
+            iconSize: 220,
+            spacingX: 0,
+            spacingY: 0,
+            maxIcons: 1,
+            grayscale: false,
+            opacity: 100,
+          },
+        },
+      ],
+    },
+  },
 ];
 
 /**
