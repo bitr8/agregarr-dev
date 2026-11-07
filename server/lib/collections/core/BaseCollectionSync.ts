@@ -3055,7 +3055,6 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       | 'tmdb-list'
       | 'mdblist-list'
       | 'tvdb-list'
-      | 'tvdb-list'
       | 'tautulli-list'
       | 'overseerr-list'
       | 'networks-list'

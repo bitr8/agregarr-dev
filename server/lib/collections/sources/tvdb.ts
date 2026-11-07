@@ -24,7 +24,14 @@ import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import logger from '@server/logger';
 
-const LOOKUP_BATCH_SIZE = 8;
+const LOOKUP_BATCH_SIZE = 4;
+const RETRY_DELAY_MS = 1000;
+
+const isRetryable = (error: unknown): boolean => {
+  const status = (error as { response?: { status?: number } })?.response
+    ?.status;
+  return status === 429 || (status !== undefined && status >= 500);
+};
 
 interface TvdbCollectionItem extends CollectionItem {
   tmdbId: number;
@@ -126,6 +133,20 @@ export class TvdbCollectionSync extends BaseCollectionSync<'tvdb'> {
     return this.templateEngine.createTvdbContext(mediaType);
   }
 
+  private async lookupWithRetry(
+    client: TvdbAPI,
+    kind: 'movie' | 'series',
+    tvdbId: number
+  ) {
+    try {
+      return await client.getEntityInfo(kind, tvdbId);
+    } catch (error) {
+      if (!isRetryable(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      return await client.getEntityInfo(kind, tvdbId);
+    }
+  }
+
   public async fetchSourceData(
     config: CollectionConfig,
     options?: CollectionSyncOptions // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -153,20 +174,15 @@ export class TvdbCollectionSync extends BaseCollectionSync<'tvdb'> {
         .sort((a, b) => a.order - b.order);
 
       const results: TvdbSourceData[] = [];
-      let failures = 0;
+      const failedIds: number[] = [];
       for (let i = 0; i < entries.length; i += LOOKUP_BATCH_SIZE) {
         const batch = entries.slice(i, i + LOOKUP_BATCH_SIZE);
         const infos = await Promise.all(
           batch.map(async (entry) => {
             try {
-              return await client.getEntityInfo(kind, entry.tvdbId);
-            } catch (error) {
-              failures++;
-              logger.warn(`TVDB lookup failed for ${kind} ${entry.tvdbId}`, {
-                label: 'TVDB Collections',
-                errorMessage:
-                  error instanceof Error ? error.message : String(error),
-              });
+              return await this.lookupWithRetry(client, kind, entry.tvdbId);
+            } catch {
+              failedIds.push(entry.tvdbId);
               return undefined;
             }
           })
@@ -180,13 +196,30 @@ export class TvdbCollectionSync extends BaseCollectionSync<'tvdb'> {
             title: info.name,
             year: info.year,
             mediaType,
-            position: results.length + 1,
+            position: i + idx + 1,
           });
         });
       }
 
-      if (entries.length > 0 && failures === entries.length) {
-        throw new Error('Every TVDB item lookup failed');
+      if (failedIds.length > 0) {
+        logger.error(
+          `TVDB lookup failed for ${failedIds.length} of ${entries.length} ${kind} entries; aborting so the existing collection is kept`,
+          { label: 'TVDB Collections', failedIds }
+        );
+        throw new Error(
+          `TVDB lookup failed for ${failedIds.length} of ${entries.length} entries`
+        );
+      }
+
+      const unmapped = results.filter((r) => !r.tmdbId);
+      if (unmapped.length > 0) {
+        logger.info(
+          `Skipping ${unmapped.length} ${kind} entries with no TMDB mapping in TVDB`,
+          {
+            label: 'TVDB Collections',
+            tvdbIds: unmapped.map((r) => r.tvdbId),
+          }
+        );
       }
 
       return results;

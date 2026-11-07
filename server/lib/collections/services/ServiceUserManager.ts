@@ -60,6 +60,7 @@ export type ServiceType =
   | 'tmdb'
   | 'imdb'
   | 'mdblist'
+  | 'tvdb'
   | 'letterboxd'
   | 'networks'
   | 'originals'
@@ -82,6 +83,7 @@ export function generateServiceUserConfig(
     tmdb: { name: 'TMDB' },
     imdb: { name: 'IMDb' },
     mdblist: { name: 'MDBList' },
+    tvdb: { name: 'TVDB' },
     letterboxd: { name: 'Letterboxd' },
     networks: { name: 'Networks' },
     originals: { name: 'Originals' },

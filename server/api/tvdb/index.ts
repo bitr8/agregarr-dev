@@ -30,6 +30,7 @@ export type TvdbListRef = { id: number } | { slug: string };
 
 const TVDB_TMDB_SOURCE = /themoviedb/i;
 
+// Lenient on purpose (bare id/slug accepted); the form and route validation require a full thetvdb.com URL.
 export function parseTvdbListInput(input: string): TvdbListRef | null {
   const trimmed = input.trim();
   if (!trimmed) return null;

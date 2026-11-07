@@ -2817,6 +2817,7 @@ export class MultiSourceOrchestrator {
             | 'anilist'
             | 'myanimelist'
             | 'mdblist'
+            | 'tvdb'
             | 'networks'
             | 'originals'
             | 'multi-source',

@@ -49,6 +49,7 @@ vi.mock('@server/lib/collections/core/CollectionUtilities', async (orig) => ({
 }));
 
 import { findPlexItemsByTmdbIds } from '@server/lib/collections/core/CollectionUtilities';
+import logger from '@server/logger';
 import { TvdbCollectionSync } from './tvdb';
 
 const mixedList: TvdbListExtended = {
@@ -113,11 +114,44 @@ describe('TvdbCollectionSync', () => {
     ]);
   });
 
-  it('fails the sync when every lookup fails instead of returning an empty list', async () => {
-    getEntityInfo.mockRejectedValue(new Error('401'));
+  it('aborts the sync when any lookup fails, naming the failed ids', async () => {
+    getEntityInfo.mockImplementation(async (_kind: string, id: number) => {
+      if (id === 5004) throw new Error('boom');
+      return infoById[String(id)];
+    });
     await expect(
       new TvdbCollectionSync().fetchSourceData(cfg('2'))
     ).rejects.toThrow(/Failed to fetch data from TVDB/);
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      expect.stringContaining('aborting'),
+      expect.objectContaining({ failedIds: [5004] })
+    );
+  });
+
+  it('retries once on a 429 and then succeeds', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    getEntityInfo.mockImplementation(async (_kind: string, id: number) => {
+      if (id === 5003 && calls++ === 0)
+        throw Object.assign(new Error('rate'), { response: { status: 429 } });
+      return infoById[String(id)];
+    });
+    const pending = new TvdbCollectionSync().fetchSourceData(cfg('2'));
+    await vi.runAllTimersAsync();
+    const data = await pending;
+    vi.useRealTimers();
+    expect(calls).toBe(2);
+    expect(data.map((d) => d.tmdbId)).toEqual([8003, 8004]);
+  });
+
+  it('does not retry a 404', async () => {
+    getEntityInfo.mockRejectedValue(
+      Object.assign(new Error('nf'), { response: { status: 404 } })
+    );
+    await expect(
+      new TvdbCollectionSync().fetchSourceData(cfg('2'))
+    ).rejects.toThrow();
+    expect(getEntityInfo).toHaveBeenCalledTimes(2);
   });
 
   it('rejects a config whose URL is not a TVDB list', async () => {
