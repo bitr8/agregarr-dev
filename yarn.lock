@@ -2919,10 +2919,10 @@
     lodash "^4.17.4"
     read-pkg-up "^7.0.0"
 
-"@sidekickicons/react@^0.15.0":
-  version "0.15.0"
-  resolved "https://registry.yarnpkg.com/@sidekickicons/react/-/react-0.15.0.tgz#593ec3d8617c16a137fa496b28e27d88d8ec7099"
-  integrity sha512-z59NZ/Pb58aqVDrSuvpDTscudkKU4DFrhawA05TU+zRpwJYiGP21qXgAcgPeHNm38FJm/lygw8ZVCHI7kYr0Sg==
+"@sidekickicons/react@^0.18.0":
+  version "0.18.0"
+  resolved "https://registry.yarnpkg.com/@sidekickicons/react/-/react-0.18.0.tgz#712b5f0e1e3c67d9612cc633cc593b8d4a5c2cee"
+  integrity sha512-pFF/Vs0dJuFHWAcaDqPmX5qsabVdS0cwVnn2CJSTX8Ss16EWzCj1ixC3IhJTBrurfEVYShzXLWztWU6C/SflVA==
 
 "@so-ric/colorspace@^1.1.6":
   version "1.1.6"
