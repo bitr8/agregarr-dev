@@ -382,7 +382,7 @@ describe('fork#96: Auto Franchise placeholder membership', () => {
     placeholderStore.set(cfg.id, new Map([[999, { title: 'stale' }]]));
 
     const sync = new TmdbCollectionSync();
-    wireRealDiscovery(sync, [400, 500, 600], {
+    wireRealDiscovery(sync, [400, 500, 600, 601], {
       movies: {
         400: 'reject', // movie-detail fetch itself throws
         500: { collectionId: 5000 },

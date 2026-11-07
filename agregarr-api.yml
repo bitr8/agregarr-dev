@@ -943,6 +943,12 @@ components:
           description: 'Unified minimum items required to create actor/director collections'
           example: 3
           nullable: true
+        franchiseMinimumItems:
+          type: integer
+          minimum: 1
+          description: 'Minimum movies in the library for an auto franchise collection (default 2)'
+          example: 2
+          nullable: true
         useSeparator:
           type: boolean
           description: 'Create a separator collection for auto actor/director collections'
@@ -1689,6 +1695,12 @@ components:
           type: number
           description: 'Unified minimum items required to create actor/director collections'
           example: 3
+          nullable: true
+        franchiseMinimumItems:
+          type: integer
+          minimum: 1
+          description: 'Minimum movies in the library for an auto franchise collection (default 2)'
+          example: 2
           nullable: true
         useSeparator:
           type: boolean
@@ -2573,6 +2585,12 @@ components:
           type: number
           description: 'Unified minimum items required to create actor/director collections'
           example: 3
+          nullable: true
+        franchiseMinimumItems:
+          type: integer
+          minimum: 1
+          description: 'Minimum movies in the library for an auto franchise collection (default 2)'
+          example: 2
           nullable: true
         useSeparator:
           type: boolean

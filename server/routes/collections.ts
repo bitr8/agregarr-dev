@@ -250,6 +250,25 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
         req.body.sortTitleOverride.trim() !== '';
     }
 
+    if (
+      req.body?.type === 'tmdb' &&
+      req.body?.subtype === 'auto_franchise' &&
+      req.body.franchiseMinimumItems !== undefined &&
+      req.body.franchiseMinimumItems !== null &&
+      req.body.franchiseMinimumItems !== ''
+    ) {
+      const franchiseMinimum = Number(req.body.franchiseMinimumItems);
+      if (!Number.isInteger(franchiseMinimum) || franchiseMinimum < 1) {
+        return res.status(400).json({
+          error:
+            'Franchise minimum movies must be a whole number of at least 1',
+          message:
+            'Franchise minimum movies must be a whole number of at least 1',
+        });
+      }
+      req.body.franchiseMinimumItems = franchiseMinimum;
+    }
+
     // Debug logging for person settings payload (directors/actors)
     if (
       req.body?.type === 'plex' &&

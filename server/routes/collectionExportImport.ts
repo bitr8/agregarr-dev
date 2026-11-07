@@ -72,6 +72,7 @@ const portableFields = [
   'smartCollectionSort',
   'plexLabel',
   'personMinimumItems',
+  'franchiseMinimumItems',
   'useSeparator',
   'separatorTitle',
   'hideIndividualItems',

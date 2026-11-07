@@ -133,6 +133,9 @@ const messages = defineMessages({
   validationCollectionSubtypeRequired: 'Collection sub-type is required',
   validationPersonMinimumItemsRequired: 'Minimum items is required',
   validationPersonMinimumItemsMin: 'Minimum items must be at least 2',
+  validationFranchiseMinimumItemsRequired: 'Minimum movies is required',
+  validationFranchiseMinimumItemsMin:
+    'Minimum movies must be a whole number of at least 1',
   validationSeparatorTitleRequired: 'Separator title is required',
   validationSeparatorTitleMin: 'Separator title must be at least 2 characters',
   validationPlexLabelRequired: 'Please select a Plex label',
@@ -683,6 +686,36 @@ const CollectionFormConfigForm = ({
             .min(
               2,
               intl.formatMessage(messages.validationPersonMinimumItemsMin)
+            ),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+    franchiseMinimumItems: Yup.number()
+      .transform((value, originalValue) => {
+        if (
+          originalValue === null ||
+          originalValue === undefined ||
+          originalValue === ''
+        ) {
+          return undefined;
+        }
+        return Number.isNaN(value) ? undefined : value;
+      })
+      .when(['type', 'subtype'], {
+        is: (type?: string, subtype?: string) =>
+          type === 'tmdb' && subtype === 'auto_franchise',
+        then: (schema) =>
+          schema
+            .required(
+              intl.formatMessage(
+                messages.validationFranchiseMinimumItemsRequired
+              )
+            )
+            .integer(
+              intl.formatMessage(messages.validationFranchiseMinimumItemsMin)
+            )
+            .min(
+              1,
+              intl.formatMessage(messages.validationFranchiseMinimumItemsMin)
             ),
         otherwise: (schema) => schema.notRequired(),
       }),
@@ -1835,6 +1868,12 @@ const CollectionFormConfigForm = ({
               (config as CollectionFormConfig).subtype === 'directors')
               ? 5
               : undefined),
+          franchiseMinimumItems:
+            (config as CollectionFormConfig).franchiseMinimumItems ??
+            ((config as CollectionFormConfig).type === 'tmdb' &&
+            (config as CollectionFormConfig).subtype === 'auto_franchise'
+              ? 2
+              : undefined),
           useSeparator: (config as CollectionFormConfig).useSeparator ?? false,
           separatorTitle:
             (config as CollectionFormConfig).separatorTitle ||
@@ -2488,6 +2527,12 @@ const CollectionFormConfigForm = ({
                 (config as CollectionFormConfig).personMinimumItems ??
                 5
               : undefined,
+            franchiseMinimumItems:
+              values.type === 'tmdb' && values.subtype === 'auto_franchise'
+                ? optionalNumber(values.franchiseMinimumItems) ??
+                  (config as CollectionFormConfig).franchiseMinimumItems ??
+                  2
+                : undefined,
             filterSettings:
               values.enableGrabMissingItems && values.filterSettings
                 ? values.filterSettings

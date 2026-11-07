@@ -43,6 +43,9 @@ const messages = defineMessages({
   minimumItems: 'Minimum Items',
   minimumItemsHelp:
     'Only create if this person has at least this many items (default: 5, minimum allowed: 2)',
+  franchiseMinimumItems: 'Minimum movies in library',
+  franchiseMinimumItemsHelp:
+    'Franchises with fewer movies in your library get no collection, and an existing one is removed on the next sync. Missing items are only grabbed for franchises that meet this, so a minimum of 1 with Grab Missing Items on can send many more requests. Your year and rating filters still apply.',
   useSeparator: 'Use Separator',
   useSeparatorHelp:
     'Create a simple separator collection to group your auto {type} collections.',
@@ -612,6 +615,8 @@ const CollectionTypeSection = ({
               if (newType === 'comingsoon') {
                 setFieldValue('createPlaceholdersForMissing', true);
               }
+
+              setFieldValue('franchiseMinimumItems', undefined);
             }
 
             // Auto-set media type based on collection type
@@ -647,6 +652,12 @@ const CollectionTypeSection = ({
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
               const newSubtype = e.target.value;
               setFieldValue('subtype', newSubtype);
+              setFieldValue(
+                'franchiseMinimumItems',
+                values.type === 'tmdb' && newSubtype === 'auto_franchise'
+                  ? values.franchiseMinimumItems ?? 2
+                  : undefined
+              );
 
               // Clear subtype-specific state when switching
               if (newSubtype === 'separator') {
@@ -817,6 +828,29 @@ const CollectionTypeSection = ({
             />
           </div>
         )}
+
+      {values.type === 'tmdb' && values.subtype === 'auto_franchise' && (
+        <div>
+          <label
+            htmlFor="franchiseMinimumItems"
+            className="mb-2 block text-sm text-gray-300"
+          >
+            {intl.formatMessage(messages.franchiseMinimumItems)}
+          </label>
+          <Field
+            type="number"
+            id="franchiseMinimumItems"
+            name="franchiseMinimumItems"
+            placeholder="2"
+            min="1"
+            step="1"
+            className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            {intl.formatMessage(messages.franchiseMinimumItemsHelp)}
+          </p>
+        </div>
+      )}
 
       {/* Separator option for library essentials */}
       {isLibraryEssentialsPattern(values.type, values.subtype) && (
