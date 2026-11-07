@@ -257,8 +257,9 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
   }>(isOpen ? '/api/v1/overlay-templates' : null);
 
   // Filter out current template being edited (by ID)
-  const availableTemplates = (templatesData?.templates || []).filter(
-    (t) => t.id !== templateId
+  const availableTemplates = useMemo(
+    () => (templatesData?.templates || []).filter((t) => t.id !== templateId),
+    [templatesData, templateId]
   );
 
   // Get selected preview overlay data

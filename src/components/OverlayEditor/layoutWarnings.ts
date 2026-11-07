@@ -116,7 +116,9 @@ const layoutText = (
   return {
     textWidth,
     fontSize: props.fontSize,
-    clipped: textWidth > element.width + EPSILON,
+    clipped:
+      textWidth > element.width + EPSILON ||
+      props.fontSize > element.height + EPSILON,
   };
 };
 

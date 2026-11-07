@@ -94,6 +94,14 @@ describe('computeLayoutWarnings', () => {
     expect(w.some((x) => x.kind === 'text-clipped')).toBe(true);
   });
 
+  it('flags text taller than its box as clipped', () => {
+    const w = computeLayoutWarnings({
+      ...base,
+      elements: [textEl('a', [100, 100, 400, 30], 'OK', {}, { fontSize: 48 })],
+    });
+    expect(w.some((x) => x.kind === 'text-clipped')).toBe(true);
+  });
+
   it('flags multiword text that would only fit after wrapping', () => {
     const w = computeLayoutWarnings({
       ...base,
