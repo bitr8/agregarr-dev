@@ -1581,15 +1581,96 @@ export function capPreviewItemsToMaxItems<
   };
 }
 
+type ExclusionConfig = Pick<
+  CollectionConfig,
+  'name' | 'excludeFromCollections' | 'excludeLabels' | 'libraryId'
+>;
+
 /**
- * Apply collection mutual exclusion - remove items that exist in excluded collections
- * This is a utility function used by both BaseCollectionSync and MultiSourceOrchestrator
+ * Apply per-collection exclusions: mutual exclusion with other collections, then item labels.
+ * Used by BaseCollectionSync, MultiSourceOrchestrator and Coming Soon.
  */
 export async function applyCollectionExclusions(
   items: CollectionItem[],
   config:
     | CollectionConfig
-    | { name: string; excludeFromCollections?: string[] },
+    | (Pick<CollectionConfig, 'name'> & Partial<ExclusionConfig>),
+  plexClient: PlexAPI,
+  source: CollectionSource
+): Promise<CollectionItem[]> {
+  const afterCollections = await applyMutualExclusions(
+    items,
+    config,
+    plexClient,
+    source
+  );
+  return applyLabelExclusions(afterCollections, config, plexClient, source);
+}
+
+async function applyLabelExclusions(
+  items: CollectionItem[],
+  config: Pick<CollectionConfig, 'name'> & Partial<ExclusionConfig>,
+  plexClient: PlexAPI,
+  source: CollectionSource
+): Promise<CollectionItem[]> {
+  const labels = (config.excludeLabels ?? [])
+    .map((label) => label.trim())
+    .filter(Boolean);
+  if (labels.length === 0 || items.length === 0 || !config.libraryId) {
+    return items;
+  }
+
+  try {
+    const libraryIds = Array.isArray(config.libraryId)
+      ? config.libraryId
+      : [config.libraryId];
+    const excludedRatingKeys = new Set<string>();
+
+    for (const libraryId of libraryIds) {
+      for (const label of labels) {
+        const keys = await plexClient.getRatingKeysWithLabel(libraryId, label);
+        for (const key of keys) {
+          excludedRatingKeys.add(key);
+        }
+      }
+    }
+
+    const filteredItems = items.filter(
+      (item) => !excludedRatingKeys.has(item.ratingKey)
+    );
+    const excludedCount = items.length - filteredItems.length;
+
+    if (excludedCount > 0) {
+      logger.info(
+        `Excluded ${excludedCount} items from collection "${
+          config.name
+        }" carrying label ${labels.map((l) => `"${l}"`).join(', ')}`,
+        {
+          label: `${source} Collections`,
+          configName: config.name,
+          excludedCount,
+          excludeLabels: labels,
+        }
+      );
+    }
+
+    return filteredItems;
+  } catch (error) {
+    logger.error(
+      `Error applying label exclusions for ${config.name}: ${error}`,
+      {
+        label: `${source} Collections`,
+        configName: config.name,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+    return items;
+  }
+}
+
+async function applyMutualExclusions(
+  items: CollectionItem[],
+  config: Pick<CollectionConfig, 'name' | 'excludeFromCollections'>,
   plexClient: PlexAPI,
   source: CollectionSource
 ): Promise<CollectionItem[]> {

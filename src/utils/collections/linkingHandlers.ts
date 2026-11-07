@@ -210,6 +210,7 @@ export const linkCollectionConfig = async (
               masterConfig.minimumRottenTomatoesRating,
             filterSettings: masterConfig.filterSettings,
             excludeFromCollections: masterConfig.excludeFromCollections,
+            excludeLabels: masterConfig.excludeLabels,
             timeRestriction: masterConfig.timeRestriction,
             traktCustomListUrl: masterConfig.traktCustomListUrl,
             tmdbCustomCollectionUrl: masterConfig.tmdbCustomCollectionUrl,

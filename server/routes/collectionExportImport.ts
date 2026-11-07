@@ -163,6 +163,7 @@ const strippedFields = [
   'isLinked',
   'isUnlinked',
   'excludeFromCollections',
+  'excludeLabels',
   'excludedGenres',
   'excludedCountries',
   'excludedLanguages',

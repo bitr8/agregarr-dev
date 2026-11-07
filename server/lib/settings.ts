@@ -251,6 +251,7 @@ export interface CollectionConfig {
   readonly separatorTitle?: string; // Custom title for the separator collection
   // Collection exclusion settings
   readonly excludeFromCollections?: string[]; // Array of collection IDs to exclude items from (mutual exclusion)
+  readonly excludeLabels?: string[]; // Plex item labels; items carrying any of them are kept out of the collection
   // Poster settings
   readonly customPoster?: string | Record<string, string>; // Path to custom poster image file, or per-library poster mapping
   readonly autoPoster?: boolean; // Auto-generate poster during sync (only available for Overseerr user collections)

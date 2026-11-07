@@ -966,6 +966,13 @@ components:
           description: 'Array of collection IDs to exclude items from (mutual exclusion)'
           example: ['10001', '10002']
           nullable: true
+        excludeLabels:
+          type: array
+          items:
+            type: string
+          description: 'Plex item labels; items carrying any of them are kept out of the collection'
+          example: ['trailer-placeholder']
+          nullable: true
         timeRestriction:
           type: object
           description: 'Time restriction settings for the collection'
@@ -1718,6 +1725,13 @@ components:
             type: string
           description: 'Array of collection IDs to exclude items from (mutual exclusion)'
           example: ['10001', '10002']
+          nullable: true
+        excludeLabels:
+          type: array
+          items:
+            type: string
+          description: 'Plex item labels; items carrying any of them are kept out of the collection'
+          example: ['trailer-placeholder']
           nullable: true
         timeRestriction:
           type: object
@@ -2608,6 +2622,13 @@ components:
             type: string
           description: 'Array of collection IDs to exclude items from (mutual exclusion)'
           example: ['10001', '10002']
+          nullable: true
+        excludeLabels:
+          type: array
+          items:
+            type: string
+          description: 'Plex item labels; items carrying any of them are kept out of the collection'
+          example: ['trailer-placeholder']
           nullable: true
         timeRestriction:
           type: object

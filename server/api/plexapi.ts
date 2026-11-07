@@ -2018,6 +2018,46 @@ class PlexAPI {
     }
   }
 
+  /**
+   * Rating keys of every item in a library carrying a label (Plex matches labels case-insensitively)
+   */
+  public async getRatingKeysWithLabel(
+    libraryKey: string,
+    label: string
+  ): Promise<Set<string>> {
+    const pageSize = 200;
+    const ratingKeys = new Set<string>();
+
+    for (let offset = 0; ; offset += pageSize) {
+      const response = await this.plexClient.query<{
+        MediaContainer?: {
+          totalSize?: number;
+          Metadata?: { ratingKey: string }[];
+        };
+      }>({
+        uri: `/library/sections/${libraryKey}/all?label=${encodeURIComponent(
+          label
+        )}`,
+        extraHeaders: {
+          'X-Plex-Container-Start': `${offset}`,
+          'X-Plex-Container-Size': `${pageSize}`,
+        },
+      });
+
+      const batch = response.MediaContainer?.Metadata || [];
+      for (const item of batch) {
+        ratingKeys.add(item.ratingKey);
+      }
+
+      const total = response.MediaContainer?.totalSize ?? 0;
+      if (batch.length < pageSize || ratingKeys.size >= total) {
+        break;
+      }
+    }
+
+    return ratingKeys;
+  }
+
   public async updateCollectionSortTitle(
     collectionRatingKey: string,
     sortTitle: string,

@@ -951,16 +951,34 @@ class CollectionsQuickSync {
         (c) => c.id === firstMatch.configId
       );
 
+      const excludeCollectionIds = config?.excludeFromCollections ?? [];
+      const excludeLabels = (config?.excludeLabels ?? [])
+        .map((label) => label.trim())
+        .filter(Boolean);
       if (
-        !config?.excludeFromCollections ||
-        config.excludeFromCollections.length === 0
+        !config ||
+        (excludeCollectionIds.length === 0 && excludeLabels.length === 0)
       ) {
         return matches;
       }
 
       const excludedRatingKeys = new Set<string>();
 
-      for (const excludedCollectionId of config.excludeFromCollections) {
+      const libraryIds = Array.isArray(config.libraryId)
+        ? config.libraryId
+        : [config.libraryId];
+      for (const libraryId of excludeLabels.length ? libraryIds : []) {
+        for (const label of excludeLabels) {
+          for (const key of await plexClient.getRatingKeysWithLabel(
+            libraryId,
+            label
+          )) {
+            excludedRatingKeys.add(key);
+          }
+        }
+      }
+
+      for (const excludedCollectionId of excludeCollectionIds) {
         const excludedConfig = settings.plex.collectionConfigs?.find(
           (c) => c.id === excludedCollectionId
         );
