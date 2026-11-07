@@ -40,6 +40,7 @@ import ComingSoonServerSection from '@app/components/Collections/FormSections/Co
 import CustomUrlSection from '@app/components/Collections/FormSections/CustomUrlSection';
 import FilterWithMode from '@app/components/Collections/FormSections/FilterWithMode';
 import KeywordFilterWithMode from '@app/components/Collections/FormSections/KeywordFilterWithMode';
+import LabelExclusionSection from '@app/components/Collections/FormSections/LabelExclusionSection';
 import LibraryEssentialsPreview from '@app/components/Collections/FormSections/LibraryEssentialsPreview';
 import LibrarySelectionSection from '@app/components/Collections/FormSections/LibrarySelectionSection';
 import MultiSourceConfigSection from '@app/components/Collections/FormSections/MultiSourceConfigSection';
@@ -1969,6 +1970,7 @@ const CollectionFormConfigForm = ({
             .placeholderFilterSettings,
           excludeFromCollections:
             (config as CollectionFormConfig).excludeFromCollections || [],
+          excludeLabels: (config as CollectionFormConfig).excludeLabels || [],
           // Radarr/Sonarr tag configuration
           radarrInstanceId:
             (config as CollectionFormConfig).radarrInstanceId ?? undefined,
@@ -2713,6 +2715,9 @@ const CollectionFormConfigForm = ({
             excludeFromCollections: isPersonCollection
               ? undefined
               : values.excludeFromCollections,
+            excludeLabels: isPersonCollection
+              ? undefined
+              : values.excludeLabels,
             // Target user restriction
             targetUserId: optionalString(values.targetUserId),
             targetUserLabel: optionalString(values.targetUserLabel),
@@ -4278,6 +4283,19 @@ const CollectionFormConfigForm = ({
                               />
                             )}
 
+                            {isCollection &&
+                              typedValues.type !== 'filtered_hub' &&
+                              !(
+                                typedValues.type === 'plex' &&
+                                (typedValues.subtype === 'directors' ||
+                                  typedValues.subtype === 'actors')
+                              ) && (
+                                <LabelExclusionSection
+                                  values={typedValues as CollectionFormConfig}
+                                  setFieldValue={setFieldValue}
+                                />
+                              )}
+
                             {/* Coming Soon Monitored Server/Tag Settings */}
                             {typedValues.type === 'comingsoon' &&
                               typedValues.subtype === 'monitored' && (
@@ -5700,6 +5718,7 @@ const CollectionFormConfigForm = ({
                                 | undefined)
                             : undefined,
                         maxItems: values.maxItems,
+                        excludeLabels: values.excludeLabels,
                         // TMDB streaming service + advanced discover fields
                         tmdbAdvancedFilters:
                           valuesRecord.tmdbAdvancedFilters as

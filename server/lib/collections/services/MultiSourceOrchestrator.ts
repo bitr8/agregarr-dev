@@ -13,6 +13,7 @@ import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
+  applyLabelExclusions,
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
   createCollectionLabel,
@@ -427,8 +428,13 @@ export class MultiSourceOrchestrator {
       }
 
       // Apply collection mutual exclusion if configured
-      const itemsAfterExclusion = await applyCollectionExclusions(
-        validItems,
+      const itemsAfterExclusion = await applyLabelExclusions(
+        await applyCollectionExclusions(
+          validItems,
+          configForSync,
+          plexClient,
+          'multi-source'
+        ),
         configForSync,
         plexClient,
         'multi-source'

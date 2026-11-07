@@ -22,6 +22,7 @@ import logger from '@server/logger';
 import path from 'path';
 import {
   applyCollectionExclusions,
+  applyLabelExclusions,
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
   clearConfigRatingKey,
@@ -3826,11 +3827,17 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       plexClient,
       this.source
     );
+    filteredItems = await applyLabelExclusions(
+      filteredItems,
+      config,
+      plexClient,
+      this.source
+    );
 
     // Check again if we have items after exclusions
     if (filteredItems.length === 0) {
       logger.info(
-        `All ${mediaType} items were excluded from collection "${config.name}" based on mutual exclusion rules`,
+        `All ${mediaType} items were excluded from collection "${config.name}" by exclusion rules`,
         {
           label: `${this.source} Collections`,
           configName: config.name,

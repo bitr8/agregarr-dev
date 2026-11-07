@@ -783,6 +783,9 @@ const CollectionSettings = ({
           ...(config.excludeFromCollections !== undefined && {
             excludeFromCollections: config.excludeFromCollections,
           }),
+          ...(config.excludeLabels !== undefined && {
+            excludeLabels: config.excludeLabels,
+          }),
           ...(config.timePeriod && { timePeriod: config.timePeriod }),
           ...(config.libraryIds && { libraryIds: config.libraryIds }),
           ...(config.libraryNames && { libraryNames: config.libraryNames }),

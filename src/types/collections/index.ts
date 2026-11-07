@@ -447,6 +447,7 @@ export interface CollectionFormConfig {
   readonly separatorTitle?: string; // Custom title for the separator collection
   // Collection exclusion settings
   readonly excludeFromCollections?: string[]; // Array of collection IDs to exclude items from (mutual exclusion)
+  readonly excludeLabels?: string[]; // Plex item labels to keep out of this collection
 
   // Target user restriction (restrict collection visibility to a specific Plex user)
   readonly targetUserId?: string; // Plex user ID to restrict this collection to
@@ -669,6 +670,7 @@ export interface CollectionConfigCreateRequest {
   readonly useSeparator?: boolean;
   readonly separatorTitle?: string;
   readonly excludeFromCollections?: string[];
+  readonly excludeLabels?: string[];
   readonly timeRestriction?: {
     readonly alwaysActive: boolean;
     readonly removeFromPlexWhenInactive?: boolean;
@@ -825,6 +827,7 @@ export const toCollectionCreateRequest = (
     personMinimumItems: config.personMinimumItems,
     franchiseMinimumItems: config.franchiseMinimumItems,
     excludeFromCollections: config.excludeFromCollections,
+    excludeLabels: config.excludeLabels,
     timeRestriction: config.timeRestriction,
     customPoster: config.customPoster,
     autoPoster: config.autoPoster,

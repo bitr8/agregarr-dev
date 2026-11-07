@@ -3,6 +3,7 @@ import { isPlexNotFoundError } from '@server/api/plexMetadataClassify';
 import TautulliAPI from '@server/api/tautulli';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  applyLabelExclusions,
   extractErrorCause,
   extractTmdbIdFromGuids,
   extractTvdbIdFromGuids,
@@ -433,6 +434,13 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     missingItems?: MissingItem[]
   ): Promise<CollectionOperationResult> {
     try {
+      items = await applyLabelExclusions(
+        items,
+        config,
+        plexClient,
+        this.source
+      );
+
       // Use the new standardized approach via BaseCollectionSync
       const result = await this.createOrUpdateCollectionStandardized(
         items,
