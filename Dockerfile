@@ -34,6 +34,8 @@ RUN find node_modules -type d \( -name node-gyp -o -name make-fetch-happen \) -p
   node_modules/sqlite3/node_modules/socks-proxy-agent node_modules/sqlite3/node_modules/http-proxy-agent \
   node_modules/sqlite3/node_modules/@tootallnate
 
+RUN node -e "require('jsdom'); require('sqlite3'); require('canvas')"
+
 RUN mkdir -p config && touch config/DOCKER
 
 RUN echo "{\"commitTag\": \"${COMMIT_TAG}\"}" > committag.json
