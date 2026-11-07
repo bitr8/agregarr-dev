@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Tests for the addItemsToCollection read-back verification math
@@ -82,6 +82,10 @@ function findArrangeWarn(logger: { warn: unknown }) {
 }
 
 describe('arrangeCollectionItemsInOrder failure reporting', () => {
+  beforeAll(async () => {
+    await import('./plexapi');
+  }, 60_000);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

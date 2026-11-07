@@ -11,11 +11,15 @@ describe('fileRouteLimiter', () => {
     const { port } = srv.address() as AddressInfo;
     let last = 200;
     let limit: string | null = null;
-    for (let i = 0; i < 601; i++) {
+    const hit = async () => {
       const res = await fetch(`http://127.0.0.1:${port}/`);
-      last = res.status;
       limit = limit ?? res.headers.get('ratelimit-limit');
+      return res.status;
+    };
+    for (let batch = 0; batch < 6; batch++) {
+      await Promise.all(Array.from({ length: 100 }, hit));
     }
+    last = await hit();
     srv.close();
     expect(limit).toBe('600');
     expect(last).toBe(429);

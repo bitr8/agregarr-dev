@@ -28,7 +28,7 @@ describe('POST /main placeholder root folders', () => {
       server = app.listen(0, () => r());
     });
     base = `http://localhost:${(server.address() as { port: number }).port}`;
-  });
+  }, 60_000);
   afterAll(() => server?.close());
 
   const post = (body: object) =>
