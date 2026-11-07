@@ -343,6 +343,7 @@ export interface CollectionConfig {
     readonly customDays?: number;
     readonly minimumPlays?: number;
     readonly networksCountry?: string; // Selected country for Networks collections
+    readonly tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters']; // Per-source TMDB discover filters (advanced_custom_tmdb)
     readonly radarrTagServerId?: number; // Radarr instance ID for radarrtag sources
     readonly radarrTagId?: number; // Radarr tag ID for radarrtag sources
     readonly radarrTagLabel?: string; // Radarr tag label for display
@@ -2395,6 +2396,7 @@ export interface SourceDefinition {
   readonly minimumPlays?: number;
   readonly priority: number;
   readonly networksCountry?: string;
+  readonly tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
   readonly radarrTagServerId?: number;
   readonly radarrTagId?: number;
   readonly radarrTagLabel?: string;

@@ -918,6 +918,10 @@ export class MultiSourceOrchestrator {
         source.customUrl && {
           tmdbCustomCollectionUrl: source.customUrl,
         }),
+      ...(source.type === 'tmdb' &&
+        source.subtype === 'advanced_custom_tmdb' && {
+          tmdbAdvancedFilters: source.tmdbAdvancedFilters,
+        }),
       ...(source.type === 'imdb' &&
         source.customUrl && {
           imdbCustomListUrl: source.customUrl,
@@ -3406,6 +3410,7 @@ export class MultiSourceOrchestrator {
         trending_week: 'Trending This Week',
         popular: 'Popular',
         top_rated: 'Top Rated',
+        advanced_custom_tmdb: 'Custom Advanced Filters',
       },
       imdb: {
         top_250: 'Top 250',

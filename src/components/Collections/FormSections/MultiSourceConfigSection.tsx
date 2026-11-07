@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import type {
+  CollectionFormConfig,
   MultiSourceCollectionConfig,
   MultiSourceCombineMode,
   MultiSourceType,
@@ -22,6 +23,7 @@ import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 import ApiKeyWarning from './ApiKeyWarning';
+import TmdbAdvancedFiltersSection from './TmdbAdvancedFiltersSection';
 
 const messages = defineMessages({
   sourceType: 'Source Type',
@@ -820,6 +822,12 @@ const MultiSourceConfigSection = ({
           { value: 'trending_week', label: 'Trending This Week' },
           { value: 'popular', label: 'Popular' },
           { value: 'top_rated', label: 'Top Rated' },
+          {
+            value: 'advanced_custom_tmdb',
+            label: 'Custom Advanced Filters',
+            description:
+              'Build your own filter based on https://developer.themoviedb.org/reference/discover-movies and https://developer.themoviedb.org/reference/discover-tv-shows',
+          },
           { value: 'custom', label: 'Custom Collection' },
           {
             value: 'random',
@@ -1306,6 +1314,24 @@ const MultiSourceConfigSection = ({
                 })()}
               </div>
             )}
+
+            {values.sources?.[index]?.type === 'tmdb' &&
+              values.sources[index].subtype === 'advanced_custom_tmdb' && (
+                <TmdbAdvancedFiltersSection
+                  values={
+                    {
+                      tmdbAdvancedFilters:
+                        values.sources[index].tmdbAdvancedFilters,
+                    } as CollectionFormConfig
+                  }
+                  setFieldValue={(field, value) =>
+                    setFieldValue(`sources[${index}].${field}`, value)
+                  }
+                  errors={{}}
+                  touched={{}}
+                  isVisible={true}
+                />
+              )}
 
             {/* Radarr/Sonarr Tag Selection */}
             {(values.sources?.[index]?.type === 'radarrtag' ||

@@ -205,6 +205,7 @@ const portableSourceFields = new Set([
   'customDays',
   'minimumPlays',
   'networksCountry',
+  'tmdbAdvancedFilters',
   'resolvedTitle',
 ]);
 

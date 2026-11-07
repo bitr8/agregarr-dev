@@ -2193,6 +2193,7 @@ collectionsRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
             minimumPlays?: number;
             priority: number;
             networksCountry?: string;
+            tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
             radarrTagServerId?: number;
             radarrTagId?: number;
             radarrTagLabel?: string;
@@ -2252,6 +2253,7 @@ collectionsRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
                 minimumPlays: source.minimumPlays,
                 priority: source.priority,
                 networksCountry: source.networksCountry,
+                tmdbAdvancedFilters: source.tmdbAdvancedFilters,
                 radarrTagServerId: source.radarrTagServerId,
                 radarrTagId: source.radarrTagId,
                 radarrTagLabel: source.radarrTagLabel,

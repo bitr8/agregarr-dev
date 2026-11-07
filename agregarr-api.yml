@@ -3008,6 +3008,11 @@ components:
           description: 'Selected country for Networks collections'
           example: 'united-states'
           nullable: true
+        tmdbAdvancedFilters:
+          type: object
+          description: 'TMDB discover filters for a source with subtype advanced_custom_tmdb'
+          additionalProperties: true
+          nullable: true
       required:
         - id
         - type

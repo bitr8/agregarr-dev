@@ -3011,6 +3011,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     if (config.customDays) parts.push(String(config.customDays));
     if (config.minimumPlays) parts.push(String(config.minimumPlays));
     if (config.networksCountry) parts.push(config.networksCountry);
+    if (config.subtype === 'advanced_custom_tmdb' && config.tmdbAdvancedFilters)
+      parts.push(JSON.stringify(config.tmdbAdvancedFilters));
 
     return parts.join(':');
   }
