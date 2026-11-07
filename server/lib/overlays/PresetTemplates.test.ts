@@ -123,6 +123,17 @@ describe('Resolution preset', () => {
   });
 });
 
+describe('sd resolution icon', () => {
+  it('has a default mapping so SD items get a badge', () => {
+    expect(
+      getDefaultMappings('resolution').find((m) => m.value === 'sd')
+    ).toEqual({
+      value: 'sd',
+      iconPath: expect.stringContaining('/resolution/sd.png'),
+    });
+  });
+});
+
 describe('Awaiting Download preset', () => {
   const preset = PRESET_TEMPLATES.find((p) => p.name === 'Awaiting Download');
 
