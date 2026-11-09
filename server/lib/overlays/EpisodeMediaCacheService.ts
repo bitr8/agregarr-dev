@@ -65,7 +65,7 @@ export class EpisodeMediaCacheService {
   async getCachedEpisodes(
     serverId: string,
     libraryId: string
-  ): Promise<{ episodes: EpisodeMediaInfo[]; hasStreamDetail: boolean }> {
+  ): Promise<{ episodes: EpisodeMediaInfo[] }> {
     const repo = getRepository(EpisodeMediaCache);
     const rows = await repo
       .createQueryBuilder('emc')
@@ -74,17 +74,7 @@ export class EpisodeMediaCacheService {
       .andWhere("emc.updatedAt > datetime('now', '-7 days')")
       .getMany();
 
-    // The set is only "detailed" when EVERY row has stream detail. A single
-    // lightweight-only row (e.g. from a partial getMetadataBatch failure)
-    // makes this false so the next scan re-fetches detail instead of trusting
-    // a poisoned cache. Reading rows[0] alone silently masked missing rows.
-    const hasStreamDetail =
-      rows.length > 0 && rows.every((row) => row.hasStreamDetail);
-
-    return {
-      episodes: rows.map(episodeFromRow),
-      hasStreamDetail,
-    };
+    return { episodes: rows.map(episodeFromRow) };
   }
 
   async saveEpisodes(
@@ -130,6 +120,21 @@ export class EpisodeMediaCacheService {
     }
 
     return stale;
+  }
+
+  // Per episode, so a row for an episode Plex has dropped can't force a full refetch.
+  getKeysNeedingStreamDetail(
+    cachedEpisodes: EpisodeMediaInfo[],
+    freshEpisodes: EpisodeMediaInfo[]
+  ): Set<string> {
+    const keys = this.getStaleRatingKeys(cachedEpisodes, freshEpisodes);
+    const cachedByKey = new Map(cachedEpisodes.map((c) => [c.ratingKey, c]));
+    for (const ep of freshEpisodes) {
+      if (!cachedByKey.get(ep.ratingKey)?.hasStreamDetail) {
+        keys.add(ep.ratingKey);
+      }
+    }
+    return keys;
   }
 
   async cleanExpired(serverId: string, libraryId: string): Promise<void> {

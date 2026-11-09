@@ -3,7 +3,11 @@ import { EpisodeMediaCache } from '@server/entity/EpisodeMediaCache';
 import { calculateOverlayInputHash } from '@server/utils/metadataHashing';
 import { describe, expect, it, vi } from 'vitest';
 import { EpisodeMediaAggregator } from './EpisodeMediaAggregator';
-import { entityFromEpisode, episodeFromRow } from './EpisodeMediaCacheService';
+import {
+  entityFromEpisode,
+  episodeFromRow,
+  EpisodeMediaCacheService,
+} from './EpisodeMediaCacheService';
 import type { EpisodeMediaInfo } from './episodeMediaTypes';
 import { resolveFetchedEpisodeDetail } from './PlexEpisodeMediaScanner';
 import streamFixtures from './__fixtures__/plexEpisodeStreams.json';
@@ -174,5 +178,37 @@ describe('episode media cache round trip', () => {
       aggregator.aggregateByShow(fresh)
     );
     expect(hash(cached)).toBe(hash(fresh));
+  });
+});
+
+describe('which episodes need a stream detail fetch', () => {
+  const service = new EpisodeMediaCacheService();
+  const detailed = (rk: string) =>
+    episode('show', rk, { hasStreamDetail: true });
+
+  it('ignores cached rows for episodes Plex no longer has', () => {
+    const cached = [detailed('a'), detailed('b'), episode('show', 'gone')];
+    const fresh = [episode('show', 'a'), episode('show', 'b')];
+    expect(service.getKeysNeedingStreamDetail(cached, fresh)).toEqual(
+      new Set()
+    );
+  });
+
+  it('fetches only new, changed or undetailed current episodes', () => {
+    const cached = [
+      detailed('kept'),
+      detailed('changed'),
+      episode('show', 'lightweight'),
+      episode('show', 'gone'),
+    ];
+    const fresh = [
+      episode('show', 'kept'),
+      episode('show', 'changed', { mediaHash: 'new-hash' }),
+      episode('show', 'lightweight'),
+      episode('show', 'new'),
+    ];
+    expect(service.getKeysNeedingStreamDetail(cached, fresh)).toEqual(
+      new Set(['changed', 'lightweight', 'new'])
+    );
   });
 });

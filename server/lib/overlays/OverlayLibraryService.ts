@@ -4533,8 +4533,10 @@ class OverlayLibraryService {
       false
     );
 
-    const { episodes: cachedEpisodes, hasStreamDetail: cachedHasStreamDetail } =
-      await cacheService.getCachedEpisodes(serverId, libraryId);
+    const { episodes: cachedEpisodes } = await cacheService.getCachedEpisodes(
+      serverId,
+      libraryId
+    );
 
     // Compare against cache to find stale/missing entries
     const staleKeys = cacheService.getStaleRatingKeys(
@@ -4544,9 +4546,12 @@ class OverlayLibraryService {
     const cachedByKey = new Map(cachedEpisodes.map((c) => [c.ratingKey, c]));
     const currentKeys = new Set(freshLightweight.map((e) => e.ratingKey));
 
-    // If templates now need stream detail but cache was saved without it,
-    // treat all entries as stale so stream detail gets fetched
-    const needsDetailUpgrade = needsStreamDetail && !cachedHasStreamDetail;
+    const detailKeys = needsStreamDetail
+      ? cacheService.getKeysNeedingStreamDetail(
+          cachedEpisodes,
+          freshLightweight
+        )
+      : new Set<string>();
 
     // Previous value comes from the cached row, so an omitted fresh addedAt keeps it.
     const freshAddedAtByKey = new Map(
@@ -4566,7 +4571,7 @@ class OverlayLibraryService {
 
     if (
       staleKeys.size === 0 &&
-      !needsDetailUpgrade &&
+      detailKeys.size === 0 &&
       cachedEpisodes.length >= freshLightweight.length
     ) {
       // All episodes are cached and fresh — filter to current episodes only
@@ -4594,14 +4599,8 @@ class OverlayLibraryService {
           count: episodes.length,
         });
       }
-    } else if (
-      needsStreamDetail &&
-      (staleKeys.size > 0 || needsDetailUpgrade)
-    ) {
-      // Fetch stream detail for stale or detail-upgrade episodes
-      const keysToFetch = needsDetailUpgrade
-        ? freshLightweight.map((e) => e.ratingKey)
-        : [...staleKeys];
+    } else if (detailKeys.size > 0) {
+      const keysToFetch = [...detailKeys];
       const batchStartTime = Date.now();
       const batchMetadata = await plexApi.getMetadataBatch(keysToFetch);
       logger.info('Batch metadata fetch complete', {
@@ -4618,11 +4617,7 @@ class OverlayLibraryService {
       // decision so an empty or missing stream can't masquerade as detailed.
       episodes = withFreshAddedAt(
         freshLightweight.map((ep) => {
-          if (
-            !needsDetailUpgrade &&
-            !staleKeys.has(ep.ratingKey) &&
-            cachedByKey.has(ep.ratingKey)
-          ) {
+          if (!detailKeys.has(ep.ratingKey) && cachedByKey.has(ep.ratingKey)) {
             return cachedByKey.get(ep.ratingKey)!;
           }
           return resolveFetchedEpisodeDetail(
