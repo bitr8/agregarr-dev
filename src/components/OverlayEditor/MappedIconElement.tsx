@@ -1,13 +1,22 @@
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { defineMessages, useIntl } from 'react-intl';
 import { Group, Image, Rect } from 'react-konva';
+import { selectMappedIcons } from './mappedIconSelection';
 import {
   isSingleValueField,
   type OverlayElement,
   type OverlayMappedIconElementProps,
   type OverlayRenderContext,
 } from './types';
+
+const messages = defineMessages({
+  noMapping: {
+    id: 'overlayEditor.mappedIcon.noMapping',
+    defaultMessage: 'No mapping for "{value}"',
+  },
+});
 
 interface MappedIconElementComponentProps {
   element: OverlayElement;
@@ -48,55 +57,23 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
   const [isLoading, setIsLoading] = useState(true);
 
   const isSingleField = isSingleValueField(props.field);
+  const intl = useIntl();
 
-  // Memoize mappings to show - stable reference
-  const mappingsToShow = useMemo(() => {
-    // If we have context and field, try to match actual values
-    if (renderContext && props.field) {
-      const fieldValue = renderContext[props.field];
-      if (fieldValue !== undefined && fieldValue !== null) {
-        const values: string[] = Array.isArray(fieldValue)
-          ? fieldValue.map(String)
-          : [String(fieldValue)];
-
-        const matched: { value: string; iconPath: string }[] = [];
-        for (const value of values) {
-          const mapping = props.mappings.find(
-            (m) => m.value.toLowerCase() === value.toLowerCase()
-          );
-          if (mapping) {
-            matched.push(mapping);
-          }
-        }
-
-        const maxIcons =
-          props.maxIcons && props.maxIcons > 0
-            ? props.maxIcons
-            : matched.length;
-        return matched.slice(0, maxIcons);
-      }
-    }
-
-    // No context - show preview
-    if (props.mappings.length > 0) {
-      // For single-value fields, only show 1 icon in preview
-      // For array fields, show up to maxIcons
-      const previewLimit = isSingleField
-        ? 1
-        : props.maxIcons && props.maxIcons > 0
-        ? props.maxIcons
-        : props.mappings.length;
-      return props.mappings.slice(0, previewLimit);
-    }
-
-    return [];
-  }, [
-    renderContext,
-    props.field,
-    props.mappings,
-    props.maxIcons,
-    isSingleField,
-  ]);
+  const { mappings: mappingsToShow, unmatchedValue } = useMemo(
+    () =>
+      selectMappedIcons(
+        props.mappings,
+        renderContext && props.field ? renderContext[props.field] : undefined,
+        props.maxIcons,
+        isSingleField
+      ),
+    [renderContext, props.field, props.mappings, props.maxIcons, isSingleField]
+  );
+  const isUnmatched = unmatchedValue !== undefined;
+  const setTooltip = (e: KonvaEventObject<MouseEvent>, title: string) => {
+    const container = e.target.getStage()?.container();
+    if (container) container.title = title;
+  };
 
   // Calculate content bounds based on icons
   // Support both new spacingX/spacingY and legacy spacing field
@@ -276,6 +253,16 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
       draggable
       onClick={() => groupRef.current && onSelect(groupRef.current)}
       onTap={() => groupRef.current && onSelect(groupRef.current)}
+      onMouseEnter={(e: KonvaEventObject<MouseEvent>) =>
+        isUnmatched &&
+        setTooltip(
+          e,
+          intl.formatMessage(messages.noMapping, { value: unmatchedValue })
+        )
+      }
+      onMouseLeave={(e: KonvaEventObject<MouseEvent>) =>
+        isUnmatched && setTooltip(e, '')
+      }
       onDragMove={() => groupRef.current && onDragMove(groupRef.current)}
       onDragEnd={(e: KonvaEventObject<DragEvent>) => {
         const node = e.target;
@@ -312,7 +299,7 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
           y={icon.y}
           width={icon.width}
           height={icon.height}
-          opacity={(props.opacity ?? 100) / 100}
+          opacity={((props.opacity ?? 100) / 100) * (isUnmatched ? 0.4 : 1)}
           listening={false}
         />
       ))}

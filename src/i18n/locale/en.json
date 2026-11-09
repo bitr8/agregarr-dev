@@ -1975,6 +1975,7 @@
   "i18n.specials": "Specials",
   "i18n.test": "Test",
   "i18n.testing": "Testing…",
+  "overlayEditor.mappedIcon.noMapping": "No mapping for \"{value}\"",
   "pages.dashboardDescription": "Overview of your Agregarr statistics and collection performance",
   "pages.dashboardTitle": "Dashboard",
   "pages.errormessagewithcode": "{statusCode} - {error}",
