@@ -22,6 +22,10 @@ import type {
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import { syncCacheService } from '@server/lib/collections/services/SyncCacheService';
 import { countFranchiseParts } from '@server/lib/collections/utils/franchiseParts';
+import {
+  pickFranchisePoster,
+  toImageLanguage,
+} from '@server/lib/collections/utils/franchisePoster';
 import { RandomListManager } from '@server/lib/collections/utils/RandomListManager';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getTmdbLanguage } from '@server/lib/settings';
@@ -2006,6 +2010,33 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     return filtered;
   }
 
+  // /collection/{id}?language= falls back to TMDB's primary poster in any language
+  private async resolveFranchisePosterPath(
+    franchiseData: TmdbFranchiseSourceData,
+    libraryId: string
+  ): Promise<string | undefined> {
+    try {
+      const language = await getTmdbLanguage(libraryId);
+      const images = await this.tmdbClient.getCollectionImages({
+        collectionId: franchiseData.franchiseId,
+        languages: [...new Set([toImageLanguage(language), 'en', 'null'])].join(
+          ','
+        ),
+      });
+      const picked = pickFranchisePoster(images.posters ?? [], language);
+      if (picked) return picked;
+    } catch (error) {
+      logger.debug(
+        `Franchise poster language lookup failed for ${franchiseData.franchiseName}, using TMDB default`,
+        {
+          label: 'TMDB Franchise',
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+    }
+    return franchiseData.franchisePosterPath;
+  }
+
   /**
    * Process a single franchise collection
    */
@@ -2174,10 +2205,14 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       this.source
     );
 
+    const franchisePosterPath = config.useTmdbFranchisePoster
+      ? await this.resolveFranchisePosterPath(franchiseData, config.libraryId)
+      : franchiseData.franchisePosterPath;
+
     // Check if we should skip auto-poster generation
     // Only skip if useTmdbFranchisePoster is enabled AND the poster is actually available
     const shouldSkipAutoPoster =
-      config.useTmdbFranchisePoster && !!franchiseData.franchisePosterPath;
+      config.useTmdbFranchisePoster && !!franchisePosterPath;
 
     const configForProcessing = shouldSkipAutoPoster
       ? { ...config, autoPoster: false }
@@ -2229,9 +2264,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       if (config.useTmdbFranchisePoster) {
         let tmdbPosterSuccess = false;
 
-        if (franchiseData.franchisePosterPath) {
+        if (franchisePosterPath) {
           try {
-            const tmdbPosterUrl = `https://image.tmdb.org/t/p/original${franchiseData.franchisePosterPath}`;
+            const tmdbPosterUrl = `https://image.tmdb.org/t/p/original${franchisePosterPath}`;
             const posterManager = plexClient['posterManager'];
 
             logger.debug(

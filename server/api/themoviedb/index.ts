@@ -1111,6 +1111,23 @@ class TheMovieDb extends ExternalAPI {
     }
   }
 
+  public async getCollectionImages({
+    collectionId,
+    languages,
+  }: {
+    collectionId: number;
+    languages: string;
+  }): Promise<TmdbImagesResponse> {
+    try {
+      return await this.get<TmdbImagesResponse>(
+        `/collection/${collectionId}/images`,
+        { params: { include_image_language: languages } }
+      );
+    } catch (e) {
+      throw new Error(`[TMDB] Failed to fetch collection images: ${e.message}`);
+    }
+  }
+
   public async getList({
     listId,
     language = 'en',
