@@ -2470,7 +2470,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         await plexClient.updateCollectionSortTitle(
           collectionRatingKey,
           sortTitle,
-          options.existingTitleSort
+          // Plex omits titleSort when it equals the title.
+          options.existingTitleSort ?? options.existingTitle
         );
 
         // The two fields have different lifetimes, so a group drops them
