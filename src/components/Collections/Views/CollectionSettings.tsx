@@ -664,6 +664,7 @@ const CollectionSettings = ({
           // Plex Library person collections
           personMinimumItems: config.personMinimumItems,
           franchiseMinimumItems: config.franchiseMinimumItems,
+          franchiseCountReleasedOnly: config.franchiseCountReleasedOnly,
           randomizeHomeOrder: config.randomizeHomeOrder,
           customWallpaper: config.customWallpaper,
           customSummary: config.customSummary,

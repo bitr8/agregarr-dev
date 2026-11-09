@@ -46,6 +46,9 @@ const messages = defineMessages({
   franchiseMinimumItems: 'Minimum movies in library',
   franchiseMinimumItemsHelp:
     'Franchises with fewer movies in your library get no collection, and an existing one is removed on the next sync. Missing items are only grabbed for franchises that meet this, so a minimum of 1 with Grab Missing Items on can send many more requests. Your year and rating filters still apply.',
+  franchiseCountReleasedOnly: 'Count only released movies',
+  franchiseCountReleasedOnlyHelp:
+    "Unreleased or undated TMDB entries don't count towards the franchise size.",
   useSeparator: 'Use Separator',
   useSeparatorHelp:
     'Create a simple separator collection to group your auto {type} collections.',
@@ -626,6 +629,7 @@ const CollectionTypeSection = ({
               }
 
               setFieldValue('franchiseMinimumItems', undefined);
+              setFieldValue('franchiseCountReleasedOnly', undefined);
             }
 
             // Auto-set media type based on collection type
@@ -857,6 +861,26 @@ const CollectionTypeSection = ({
           />
           <p className="mt-1 text-xs text-gray-400">
             {intl.formatMessage(messages.franchiseMinimumItemsHelp)}
+          </p>
+          <div className="mt-4 flex items-center">
+            <input
+              type="checkbox"
+              id="franchiseCountReleasedOnly"
+              checked={values.franchiseCountReleasedOnly ?? false}
+              onChange={(e) =>
+                setFieldValue('franchiseCountReleasedOnly', e.target.checked)
+              }
+              className="form-checkbox"
+            />
+            <label
+              htmlFor="franchiseCountReleasedOnly"
+              className="ml-2 text-sm text-gray-300"
+            >
+              {intl.formatMessage(messages.franchiseCountReleasedOnly)}
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-gray-400">
+            {intl.formatMessage(messages.franchiseCountReleasedOnlyHelp)}
           </p>
         </div>
       )}

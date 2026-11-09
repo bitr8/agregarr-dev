@@ -224,6 +224,7 @@ export const linkCollectionConfig = async (
             customPoster: masterConfig.customPoster,
             useTmdbFranchisePoster: masterConfig.useTmdbFranchisePoster,
             franchiseMinimumItems: masterConfig.franchiseMinimumItems,
+            franchiseCountReleasedOnly: masterConfig.franchiseCountReleasedOnly,
             hideIndividualItems: masterConfig.hideIndividualItems,
             applyOverlaysDuringSync: masterConfig.applyOverlaysDuringSync,
             showUnwatchedOnly: masterConfig.showUnwatchedOnly,

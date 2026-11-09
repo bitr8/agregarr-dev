@@ -164,6 +164,8 @@
   "components.Collections.FormSections.filterByTags": "Filter by Tags",
   "components.Collections.FormSections.filterByTagsHelp": "Filter monitored items by tags assigned in Radarr/Sonarr.",
   "components.Collections.FormSections.forLibrary": "for {libraryName}",
+  "components.Collections.FormSections.franchiseCountReleasedOnly": "Count only released movies",
+  "components.Collections.FormSections.franchiseCountReleasedOnlyHelp": "Unreleased or undated TMDB entries don't count towards the franchise size.",
   "components.Collections.FormSections.franchiseMinimumItems": "Minimum movies in library",
   "components.Collections.FormSections.franchiseMinimumItemsHelp": "Franchises with fewer movies in your library get no collection, and an existing one is removed on the next sync. Missing items are only grabbed for franchises that meet this, so a minimum of 1 with Grab Missing Items on can send many more requests. Your year and rating filters still apply.",
   "components.Collections.FormSections.generatePoster": "Generate Poster",

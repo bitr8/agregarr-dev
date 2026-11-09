@@ -445,6 +445,7 @@ export interface CollectionFormConfig {
   // Unified person minimum items for plex/actors|directors
   readonly personMinimumItems?: number;
   readonly franchiseMinimumItems?: number; // tmdb auto_franchise: minimum owned movies (default 2)
+  readonly franchiseCountReleasedOnly?: boolean; // tmdb auto_franchise: only released TMDB parts count towards franchise size
   // Plex Library separator settings for multi-collections (actors/directors)
   readonly useSeparator?: boolean; // Whether to create a separator collection for auto person collections
   readonly separatorTitle?: string; // Custom title for the separator collection
@@ -671,6 +672,7 @@ export interface CollectionConfigCreateRequest {
   // Unified person minimum items for plex actors/directors
   readonly personMinimumItems?: number;
   readonly franchiseMinimumItems?: number; // tmdb auto_franchise: minimum owned movies (default 2)
+  readonly franchiseCountReleasedOnly?: boolean; // tmdb auto_franchise: only released TMDB parts count towards franchise size
   // Plex Library separator settings for auto person multi-collections
   readonly useSeparator?: boolean;
   readonly separatorTitle?: string;
@@ -832,6 +834,7 @@ export const toCollectionCreateRequest = (
     sortOrder: config.sortOrder,
     personMinimumItems: config.personMinimumItems,
     franchiseMinimumItems: config.franchiseMinimumItems,
+    franchiseCountReleasedOnly: config.franchiseCountReleasedOnly,
     excludeFromCollections: config.excludeFromCollections,
     excludeLabels: config.excludeLabels,
     timeRestriction: config.timeRestriction,

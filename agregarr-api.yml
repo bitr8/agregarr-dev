@@ -965,6 +965,11 @@ components:
           description: 'Minimum movies in the library for an auto franchise collection (default 2)'
           example: 2
           nullable: true
+        franchiseCountReleasedOnly:
+          type: boolean
+          description: 'Auto franchise collections: only released TMDB entries count towards franchise size (default false)'
+          example: false
+          nullable: true
         useSeparator:
           type: boolean
           description: 'Create a separator collection for auto actor/director collections'
@@ -1736,6 +1741,11 @@ components:
           minimum: 1
           description: 'Minimum movies in the library for an auto franchise collection (default 2)'
           example: 2
+          nullable: true
+        franchiseCountReleasedOnly:
+          type: boolean
+          description: 'Auto franchise collections: only released TMDB entries count towards franchise size (default false)'
+          example: false
           nullable: true
         useSeparator:
           type: boolean
@@ -2645,6 +2655,11 @@ components:
           minimum: 1
           description: 'Minimum movies in the library for an auto franchise collection (default 2)'
           example: 2
+          nullable: true
+        franchiseCountReleasedOnly:
+          type: boolean
+          description: 'Auto franchise collections: only released TMDB entries count towards franchise size (default false)'
+          example: false
           nullable: true
         useSeparator:
           type: boolean

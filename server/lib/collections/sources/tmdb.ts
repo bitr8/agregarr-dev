@@ -21,6 +21,7 @@ import type {
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import { syncCacheService } from '@server/lib/collections/services/SyncCacheService';
+import { countFranchiseParts } from '@server/lib/collections/utils/franchiseParts';
 import { RandomListManager } from '@server/lib/collections/utils/RandomListManager';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getTmdbLanguage } from '@server/lib/settings';
@@ -1476,7 +1477,11 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     });
 
     // 4. Pre-filter on TMDB parts; the library-count gate follows
-    const validFranchises = this.filterFranchisesByMinItems(franchiseMap, 2);
+    const validFranchises = this.filterFranchisesByMinItems(
+      franchiseMap,
+      2,
+      !!config.franchiseCountReleasedOnly
+    );
 
     logger.info(
       `${validFranchises.size} franchises have 2+ movies in TMDB parts`,
@@ -1987,12 +1992,13 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
    */
   private filterFranchisesByMinItems(
     franchiseMap: Map<number, TmdbFranchiseSourceData>,
-    minItems: number
+    minItems: number,
+    releasedOnly = false
   ): Map<number, TmdbFranchiseSourceData> {
     const filtered = new Map<number, TmdbFranchiseSourceData>();
 
     for (const [franchiseId, franchiseData] of franchiseMap) {
-      if (franchiseData.movies.length >= minItems) {
+      if (countFranchiseParts(franchiseData.movies, releasedOnly) >= minItems) {
         filtered.set(franchiseId, franchiseData);
       }
     }

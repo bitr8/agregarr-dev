@@ -74,6 +74,7 @@ const portableFields = [
   'plexLabel',
   'personMinimumItems',
   'franchiseMinimumItems',
+  'franchiseCountReleasedOnly',
   'useSeparator',
   'separatorTitle',
   'hideIndividualItems',

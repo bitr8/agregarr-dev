@@ -435,6 +435,10 @@ export const saveIndividualConfigs = async (
         ...(collectionConfig.franchiseMinimumItems !== undefined && {
           franchiseMinimumItems: collectionConfig.franchiseMinimumItems,
         }),
+        ...(collectionConfig.franchiseCountReleasedOnly !== undefined && {
+          franchiseCountReleasedOnly:
+            collectionConfig.franchiseCountReleasedOnly,
+        }),
         ...(collectionConfig.hideIndividualItems !== undefined && {
           hideIndividualItems: collectionConfig.hideIndividualItems,
         }),

@@ -1986,6 +1986,9 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).subtype === 'auto_franchise'
               ? 2
               : undefined),
+          franchiseCountReleasedOnly:
+            (config as CollectionFormConfig).franchiseCountReleasedOnly ??
+            false,
           useSeparator: (config as CollectionFormConfig).useSeparator ?? false,
           separatorTitle:
             (config as CollectionFormConfig).separatorTitle ||
@@ -2653,6 +2656,10 @@ const CollectionFormConfigForm = ({
                 ? optionalNumber(values.franchiseMinimumItems) ??
                   (config as CollectionFormConfig).franchiseMinimumItems ??
                   2
+                : undefined,
+            franchiseCountReleasedOnly:
+              values.type === 'tmdb' && values.subtype === 'auto_franchise'
+                ? values.franchiseCountReleasedOnly ?? false
                 : undefined,
             filterSettings:
               values.enableGrabMissingItems && values.filterSettings

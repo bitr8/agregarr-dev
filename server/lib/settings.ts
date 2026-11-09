@@ -249,6 +249,7 @@ export interface CollectionConfig {
   // Unified person minimum items (applies to both actors and directors)
   readonly personMinimumItems?: number;
   readonly franchiseMinimumItems?: number; // tmdb auto_franchise: minimum owned movies (default 2)
+  readonly franchiseCountReleasedOnly?: boolean; // tmdb auto_franchise: only released TMDB parts count towards franchise size
   // Plex Library separator settings for auto person collections
   readonly useSeparator?: boolean; // Create a separator collection for actors/directors multi-collections
   readonly separatorTitle?: string; // Custom title for the separator collection
