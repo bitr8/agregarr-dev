@@ -21,7 +21,10 @@ import type {
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import { syncCacheService } from '@server/lib/collections/services/SyncCacheService';
-import { countFranchiseParts } from '@server/lib/collections/utils/franchiseParts';
+import {
+  countFranchiseParts,
+  franchisesWithTooFewReleased,
+} from '@server/lib/collections/utils/franchiseParts';
 import {
   pickFranchisePoster,
   toImageLanguage,
@@ -1481,10 +1484,12 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     });
 
     // 4. Pre-filter on TMDB parts; the library-count gate follows
+    const libraryOwned = new Set(tmdbIds.map(Number));
     const validFranchises = this.filterFranchisesByMinItems(
       franchiseMap,
       2,
-      !!config.franchiseCountReleasedOnly
+      !!config.franchiseCountReleasedOnly,
+      libraryOwned
     );
 
     logger.info(
@@ -1504,10 +1509,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       franchiseData.movies.filter((movie) => owned.has(Number(movie.tmdbId)))
         .length;
 
-    const discoveredOwned = new Set(tmdbIds.map(Number));
     const candidates = [...validFranchises].filter(
       ([, franchiseData]) =>
-        countOwned(franchiseData, discoveredOwned) < minimumItems
+        countOwned(franchiseData, libraryOwned) < minimumItems
     );
 
     const belowMin = new Map<number, number>();
@@ -1587,6 +1591,25 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
         belowMin,
         minimumItems
       );
+    }
+    if (config.franchiseCountReleasedOnly && failedCount === 0) {
+      const tooFewReleased = franchisesWithTooFewReleased(
+        franchiseMap,
+        validFranchises,
+        2,
+        libraryOwned
+      );
+      if (tooFewReleased.size > 0) {
+        deleted += await this.removeBelowMinimumFranchiseCollections(
+          config,
+          plexClient,
+          allCollections,
+          tooFewReleased,
+          2,
+          'released in TMDB',
+          2
+        );
+      }
     }
 
     if (qualifying.size === 0) {
@@ -1734,7 +1757,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     plexClient: PlexAPI,
     allCollections: PlexCollection[],
     belowMin: Map<number, number>,
-    minimumItems: number
+    minimumItems: number,
+    countedAs = 'in library',
+    onlyBelowItems?: number
   ): Promise<number> {
     let deleted = 0;
 
@@ -1752,12 +1777,29 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           return !!text && text.toLowerCase() === label;
         });
         if (!hasLabel) continue;
+        if (onlyBelowItems !== undefined) {
+          const childCount = Number(
+            (await plexClient.getCollectionMetadataSafe(collection.ratingKey))
+              ?.childCount
+          );
+          if (!Number.isFinite(childCount) || childCount >= onlyBelowItems) {
+            logger.info(
+              `Keeping franchise collection "${collection.title}": Plex reports ${childCount} items`,
+              {
+                label: 'TMDB Franchise',
+                ratingKey: collection.ratingKey,
+                franchiseId,
+              }
+            );
+            continue;
+          }
+        }
 
         try {
           await plexClient.deleteCollection(collection.ratingKey);
           deleted++;
           logger.info(
-            `Removed franchise collection below minimum (${realCount} in library, minimum ${minimumItems}): ${collection.title}`,
+            `Removed franchise collection below minimum (${realCount} ${countedAs}, minimum ${minimumItems}): ${collection.title}`,
             {
               label: 'TMDB Franchise',
               ratingKey: collection.ratingKey,
@@ -1997,12 +2039,20 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
   private filterFranchisesByMinItems(
     franchiseMap: Map<number, TmdbFranchiseSourceData>,
     minItems: number,
-    releasedOnly = false
+    releasedOnly = false,
+    owned: ReadonlySet<number> = new Set()
   ): Map<number, TmdbFranchiseSourceData> {
     const filtered = new Map<number, TmdbFranchiseSourceData>();
 
     for (const [franchiseId, franchiseData] of franchiseMap) {
-      if (countFranchiseParts(franchiseData.movies, releasedOnly) >= minItems) {
+      if (
+        countFranchiseParts(
+          franchiseData.movies,
+          releasedOnly,
+          undefined,
+          owned
+        ) >= minItems
+      ) {
         filtered.set(franchiseId, franchiseData);
       }
     }
