@@ -2165,7 +2165,22 @@ class OverlayLibraryService {
 
       // Episode media scanning: aggregate episode-level resolution/HDR/DV to show posters
       if (config.enableEpisodeScanning && mediaType === 'show') {
-        await this.runEpisodeScan(plexApi, libraryId, requiredContextFields);
+        // Every show-poster template, not just this run's: quick sync renders
+        // show posters from the cache this scan writes.
+        const showPosterTemplates = sortedTemplates.filter((template) =>
+          targetsArtwork(template.getTags(), 'main')
+        );
+        await this.runEpisodeScan(
+          plexApi,
+          libraryId,
+          requiredContextFields,
+          extractUsedContextFields(
+            showPosterTemplates.map((template) => template.getTemplateData()),
+            showPosterTemplates.map((template) =>
+              template.getApplicationCondition()
+            )
+          )
+        );
       }
 
       // Process each item (concurrency-limited)
@@ -3479,8 +3494,10 @@ class OverlayLibraryService {
             hdr: agg.hdr,
             dolbyVision: agg.dolbyVision,
             dolbyVisionProfile: agg.dolbyVisionProfile,
+            hdr10Plus: agg.hdr10Plus,
             videoCodec: agg.videoCodec,
             audioCodec: agg.audioCodec,
+            audioProfile: agg.audioProfile,
             audioChannels: agg.audioChannels,
             bitDepth: agg.bitDepth,
             episodeCount: agg.episodeCount,
@@ -4478,7 +4495,8 @@ class OverlayLibraryService {
   private async runEpisodeScan(
     plexApi: PlexAPI,
     libraryId: string,
-    requiredContextFields: Set<string>
+    requiredContextFields: Set<string>,
+    showPosterContextFields: Set<string>
   ): Promise<void> {
     const { PlexEpisodeMediaScanner, resolveFetchedEpisodeDetail } =
       await import('./PlexEpisodeMediaScanner');
@@ -4497,7 +4515,11 @@ class OverlayLibraryService {
       requiredContextFields.has('episodeHdrCount') ||
       requiredContextFields.has('episodeHdrPercent') ||
       requiredContextFields.has('episodeDvCount') ||
-      requiredContextFields.has('episodeDvPercent');
+      requiredContextFields.has('episodeDvPercent') ||
+      // Show posters only: episode templates read their own streams, so an
+      // episode Audio Codec badge must not pull stream detail library-wide.
+      showPosterContextFields.has('audioProfile') ||
+      showPosterContextFields.has('hdr10Plus');
 
     const settings = getSettings();
     const serverId = settings.plex?.machineId || 'default';
@@ -4580,7 +4602,15 @@ class OverlayLibraryService {
       const keysToFetch = needsDetailUpgrade
         ? freshLightweight.map((e) => e.ratingKey)
         : [...staleKeys];
+      const batchStartTime = Date.now();
       const batchMetadata = await plexApi.getMetadataBatch(keysToFetch);
+      logger.info('Batch metadata fetch complete', {
+        label: 'EpisodeScanner',
+        libraryId,
+        requested: keysToFetch.length,
+        batchSize: batchMetadata.size,
+        durationMs: Date.now() - batchStartTime,
+      });
 
       // Merge: reuse cached rows for fresh entries, and apply the freshly
       // fetched stream detail (or lack of it) for stale / detail-upgrade

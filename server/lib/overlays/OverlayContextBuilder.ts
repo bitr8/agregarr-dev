@@ -979,6 +979,7 @@ export async function buildRenderContext(
       if (videoStream) {
         // HDR/Dolby Vision detection
         context.dolbyVision = videoStream.DOVIPresent || false;
+        context.hdr10Plus = videoStream.HDR10PlusPresent || false;
 
         // Dolby Vision Profile (5, 7, 8, etc.)
         if (videoStream.DOVIProfile !== undefined) {

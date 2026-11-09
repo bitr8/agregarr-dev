@@ -391,6 +391,7 @@ export interface OverlayRenderContext {
   hdr?: boolean; // HDR10/HDR10+
   dolbyVision?: boolean; // Dolby Vision
   dolbyVisionProfile?: number; // Dolby Vision Profile (5, 7, 8, etc.)
+  hdr10Plus?: boolean; // HDR10+ dynamic metadata (Plex HDR10PlusPresent)
   colorTrc?: string; // Color transfer characteristic (e.g., 'smpte2084' for HDR10, 'arib' for HLG)
 
   // Audio specs

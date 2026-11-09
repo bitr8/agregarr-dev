@@ -1,0 +1,137 @@
+{
+  "hdr10plus_dv_atmos_third_track": {
+    "Media": [
+      {
+        "bitrate": 9931,
+        "width": 1920,
+        "height": 1038,
+        "audioChannels": 6,
+        "audioCodec": "ac3",
+        "videoCodec": "hevc",
+        "videoResolution": "1080",
+        "container": "mkv",
+        "videoProfile": "main 10",
+        "Part": [
+          {
+            "Stream": [
+              {
+                "streamType": 1,
+                "default": true,
+                "codec": "hevc",
+                "index": 0,
+                "language": "English",
+                "languageCode": "eng",
+                "DOVIBLCompatID": 1,
+                "DOVILevel": 3,
+                "DOVIPresent": true,
+                "DOVIProfile": 8,
+                "HDR10PlusPresent": true,
+                "bitDepth": 10,
+                "chromaSubsampling": "4:2:0",
+                "colorPrimaries": "bt2020",
+                "colorSpace": "bt2020nc",
+                "colorTrc": "smpte2084",
+                "height": 1038,
+                "profile": "main 10",
+                "width": 1920,
+                "displayTitle": "1080p DoVi/HDR10+",
+                "extendedDisplayTitle": "1080p DoVi/HDR10+ (HEVC Main 10)",
+                "id": 1
+              },
+              {
+                "streamType": 2,
+                "default": true,
+                "codec": "ac3",
+                "index": 1,
+                "channels": 6,
+                "language": "Fran\u00e7ais",
+                "languageCode": "fra",
+                "audioChannelLayout": "5.1(side)",
+                "displayTitle": "Fran\u00e7ais (AC3 5.1)",
+                "extendedDisplayTitle": "VFF (Fran\u00e7ais AC3 5.1)",
+                "id": 2
+              },
+              {
+                "streamType": 2,
+                "codec": "ac3",
+                "index": 2,
+                "channels": 6,
+                "language": "Fran\u00e7ais",
+                "languageCode": "fra",
+                "audioChannelLayout": "5.1(side)",
+                "displayTitle": "Fran\u00e7ais Descriptive (AC3 5.1)",
+                "extendedDisplayTitle": "VFF AD (Fran\u00e7ais AC3 5.1 Descriptive)",
+                "id": 3
+              },
+              {
+                "streamType": 2,
+                "selected": true,
+                "codec": "eac3",
+                "index": 3,
+                "channels": 6,
+                "language": "English",
+                "languageCode": "eng",
+                "audioChannelLayout": "5.1(side)",
+                "profile": "dolby digital plus + dolby atmos",
+                "displayTitle": "English (EAC3 5.1 + Atmos)",
+                "extendedDisplayTitle": "English (EAC3 5.1 + Atmos)",
+                "id": 4
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "aac_atmosphere_filename": {
+    "Media": [
+      {
+        "bitrate": 2230,
+        "width": 1920,
+        "height": 816,
+        "audioChannels": 6,
+        "audioCodec": "aac",
+        "videoCodec": "hevc",
+        "videoResolution": "1080",
+        "container": "mp4",
+        "audioProfile": "lc",
+        "videoProfile": "main 10",
+        "Part": [
+          {
+            "Stream": [
+              {
+                "streamType": 1,
+                "default": true,
+                "codec": "hevc",
+                "index": 0,
+                "bitDepth": 10,
+                "chromaSubsampling": "4:2:0",
+                "height": 816,
+                "profile": "main 10",
+                "width": 1920,
+                "displayTitle": "1080p",
+                "extendedDisplayTitle": "1080p (HEVC Main 10)",
+                "id": 1
+              },
+              {
+                "streamType": 2,
+                "selected": true,
+                "default": true,
+                "codec": "aac",
+                "index": 1,
+                "channels": 6,
+                "language": "English",
+                "languageCode": "eng",
+                "audioChannelLayout": "5.1",
+                "profile": "lc",
+                "displayTitle": "English (AAC 5.1)",
+                "extendedDisplayTitle": "English (AAC 5.1)",
+                "id": 2
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

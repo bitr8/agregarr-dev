@@ -48,11 +48,18 @@ export class EpisodeMediaCache {
   @Column({ type: 'integer', nullable: true })
   public dolbyVisionProfile?: number;
 
+  @Column({ type: 'boolean', default: false })
+  public hdr10Plus: boolean;
+
   @Column()
   public videoCodec: string;
 
   @Column()
   public audioCodec: string;
+
+  // Explicit null for none, same reason as addedAt below.
+  @Column({ type: 'varchar', nullable: true })
+  public audioProfile: string | null;
 
   @Column()
   public audioChannels: number;

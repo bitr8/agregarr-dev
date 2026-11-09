@@ -3580,7 +3580,15 @@ export const PRESET_TEMPLATES: {
     applicationCondition: {
       sections: [
         {
-          rules: [{ field: 'audioProfile', operator: 'exists', value: true }],
+          rules: [
+            { field: 'audioProfile', operator: 'exists', value: true },
+            {
+              ruleOperator: 'and',
+              field: 'mediaType',
+              operator: 'neq',
+              value: 'show',
+            },
+          ],
         },
       ],
     },

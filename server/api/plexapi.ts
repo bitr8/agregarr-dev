@@ -122,6 +122,7 @@ export interface PlexStream {
   DOVIELPresent?: boolean;
   DOVIRPUPresent?: boolean;
   DOVIBLCompatID?: number;
+  HDR10PlusPresent?: boolean;
   height?: number;
   width?: number;
   colorPrimaries?: string;

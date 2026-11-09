@@ -16,10 +16,26 @@ describe('Audio Codec preset', () => {
     ).toHaveLength(1);
   });
 
-  it('only applies when an audio profile was detected', () => {
+  it('only applies to non-show items with a detected audio profile', () => {
     expect(preset?.applicationCondition?.sections?.[0]?.rules).toEqual([
       { field: 'audioProfile', operator: 'exists', value: true },
+      {
+        ruleOperator: 'and',
+        field: 'mediaType',
+        operator: 'neq',
+        value: 'show',
+      },
     ]);
+  });
+
+  it('does not apply to shows even when episodes roll up a profile', () => {
+    expect(
+      evaluateCondition(preset?.applicationCondition, {
+        isPlaceholder: false,
+        mediaType: 'show',
+        audioProfile: 'truehd_atmos',
+      })
+    ).toBe(false);
   });
 
   it('skips items with no detectable audio and applies when detected', () => {
@@ -33,11 +49,13 @@ describe('Audio Codec preset', () => {
     ).toBe(true);
   });
 
-  it('previews only for movies — the show path never sets audioProfile', () => {
+  it('previews for movies and shows (shows roll it up from episodes)', () => {
     expect(createSampleOverlayContext('movie').audioProfile).toBe(
       'truehd_atmos'
     );
-    expect(createSampleOverlayContext('show').audioProfile).toBeUndefined();
+    expect(createSampleOverlayContext('show').audioProfile).toBe(
+      'truehd_atmos'
+    );
   });
 
   it('participates in the overlay input hash via usedFields', () => {

@@ -113,6 +113,7 @@ const BOOLEAN_FIELDS = [
   'downloaded',
   'hdr',
   'dolbyVision',
+  'hdr10Plus',
   'isImdbTop250',
   'rtCertifiedFresh',
   'rtVerifiedHot',

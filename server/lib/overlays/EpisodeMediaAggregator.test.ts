@@ -18,6 +18,7 @@ function makeEpisode(
     resolution: '1080',
     hdr: false,
     dolbyVision: false,
+    hdr10Plus: false,
     videoCodec: 'h264',
     audioCodec: 'aac',
     audioChannels: 6,

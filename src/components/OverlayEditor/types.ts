@@ -234,6 +234,7 @@ export interface OverlayRenderContext {
   hdr?: boolean; // HDR10/HDR10+
   dolbyVision?: boolean; // Dolby Vision
   dolbyVisionProfile?: number; // Dolby Vision Profile (5, 7, 8, etc.)
+  hdr10Plus?: boolean; // HDR10+ dynamic metadata
   colorTrc?: string; // Color transfer characteristic (e.g., 'smpte2084' for HDR10, 'arib' for HLG)
 
   // Audio specs
@@ -742,6 +743,7 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'bitDepth', label: 'Bit Depth', example: '10' },
     { field: 'hdr', label: 'HDR', example: 'true' },
     { field: 'dolbyVision', label: 'Dolby Vision', example: 'true' },
+    { field: 'hdr10Plus', label: 'HDR10+', example: 'true' },
     {
       field: 'dolbyVisionProfile',
       label: 'Dolby Vision Profile',
@@ -1077,6 +1079,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     hdr: true,
     dolbyVision: true,
     dolbyVisionProfile: 7,
+    hdr10Plus: true,
     colorTrc: 'smpte2084',
     audioFormat: 'English (Dolby TrueHD Atmos 7.1)',
     audioCodec: 'truehd',
@@ -1158,6 +1161,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     videoProfile: 'high',
     videoFrameRate: '23.976',
     bitDepth: 8,
+    hdr10Plus: true,
     audioFormat: 'English (DTS-HD MA 5.1)',
     audioCodec: 'dts',
     audioProfile: 'ma',
