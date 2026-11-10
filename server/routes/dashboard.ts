@@ -1,7 +1,13 @@
 import TautulliAPI from '@server/api/tautulli';
+import { clampTracearrDays } from '@server/api/tracearr';
 import { getRepository } from '@server/datasource';
 import { JobRunHistory } from '@server/entity/JobRunHistory';
 import { getSettings } from '@server/lib/settings';
+import { getStatisticsProvider } from '@server/lib/statistics/provider';
+import {
+  getTracearrCollectionStats,
+  getTracearrDashboardInputs,
+} from '@server/lib/statistics/tracearrDashboard';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -20,8 +26,13 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
     let collectionStatsData = null;
     let weeklyStats = null;
 
+    const tracearrActive = getStatisticsProvider() === 'tracearr';
+
     // Get Tautulli stats if configured
-    if (settings.tautulli.hostname && settings.tautulli.apiKey) {
+    if (
+      tracearrActive ||
+      (settings.tautulli.hostname && settings.tautulli.apiKey)
+    ) {
       try {
         const tautulli = new TautulliAPI(settings.tautulli);
 
@@ -51,19 +62,23 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
         }
 
         // Get collection stats and weekly activity stats
-        const [collectionStats, weeklyMovies, weeklyTV] = await Promise.all([
-          tautulli
-            .getTopCollections(50, 'plays', 7, collectionRatingKeys)
-            .catch((err) => {
-              logger.warn('Failed to get collection stats from Tautulli', {
-                label: 'Dashboard API',
-                error: err.message,
-              });
-              return [];
-            }),
-          tautulli.getHomeStats(7, 'plays', 'top_movies', 10).catch(() => []),
-          tautulli.getHomeStats(7, 'plays', 'top_tv', 10).catch(() => []),
-        ]);
+        const [collectionStats, weeklyMovies, weeklyTV] = tracearrActive
+          ? await getTracearrDashboardInputs(collectionRatingKeys)
+          : await Promise.all([
+              tautulli
+                .getTopCollections(50, 'plays', 7, collectionRatingKeys)
+                .catch((err) => {
+                  logger.warn('Failed to get collection stats from Tautulli', {
+                    label: 'Dashboard API',
+                    error: err.message,
+                  });
+                  return [];
+                }),
+              tautulli
+                .getHomeStats(7, 'plays', 'top_movies', 10)
+                .catch(() => []),
+              tautulli.getHomeStats(7, 'plays', 'top_tv', 10).catch(() => []),
+            ]);
 
         // Calculate weekly plays from server totals
         let moviePlaysCount = 0;
@@ -167,6 +182,7 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
       },
       activity: weeklyStats,
       tautulli: tautulliStats,
+      ...(tracearrActive && { statisticsProvider: 'tracearr' }),
       timestamp: new Date().toISOString(),
     };
 
@@ -192,8 +208,12 @@ dashboardRoutes.get('/collections', isAuthenticated(), async (req, res) => {
   try {
     const settings = getSettings();
     const { limit = 10, statType = 'plays', days = 30 } = req.query;
+    const tracearrActive = getStatisticsProvider() === 'tracearr';
 
-    if (!settings.tautulli.hostname || !settings.tautulli.apiKey) {
+    if (
+      !tracearrActive &&
+      (!settings.tautulli.hostname || !settings.tautulli.apiKey)
+    ) {
       return res.status(400).json({
         error: 'Tautulli not configured',
         message:
@@ -241,6 +261,26 @@ dashboardRoutes.get('/collections', isAuthenticated(), async (req, res) => {
           limit: Number(limit),
           statType,
           days: Number(days),
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    if (tracearrActive) {
+      const clampedDays = clampTracearrDays(Number(days));
+      const collections = await getTracearrCollectionStats({
+        limit: Number(limit),
+        statType: statType as 'plays' | 'duration',
+        days: clampedDays,
+        collectionRatingKeys,
+      });
+      return res.status(200).json({
+        collections,
+        metadata: {
+          limit: Number(limit),
+          statType,
+          days: clampedDays,
+          statisticsProvider: 'tracearr',
           timestamp: new Date().toISOString(),
         },
       });
