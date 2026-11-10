@@ -171,7 +171,9 @@ const CollectionStatsGrid: React.FC = () => {
                 value={days}
                 onChange={(e) => {
                   const value = Number(e.target.value) || 30;
-                  setDays(tracearrActive ? Math.min(365, value) : value);
+                  setDays(
+                    tracearrActive ? Math.max(1, Math.min(365, value)) : value
+                  );
                 }}
                 min={tracearrActive ? '1' : '0'}
                 max={tracearrActive ? '365' : '9999'}

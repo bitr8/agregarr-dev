@@ -70,6 +70,7 @@ vi.mock('@server/lib/settings', () => ({
   }),
 }));
 
+import { TracearrHttpError } from '@server/api/tracearr';
 import { TautulliCollectionSync } from './tautulli';
 import { TracearrStatsCollectionSync } from './tracearrStats';
 
@@ -164,18 +165,27 @@ describe('TracearrStatsCollectionSync.fetchSourceData', () => {
     expect(rows.map((r) => r.title)).toEqual(['a', 'b', 'd', 'c']);
   });
 
-  it('stops popular paging once viewers fall below minimumPlays', async () => {
+  it('passes minimumPlays as the viewer floor for popular only', async () => {
     mocks.getTopMedia.mockResolvedValue(topMediaResult([]));
     await new TracearrStatsCollectionSync().fetchSourceData(
       config({ subtype: 'most_popular_plays', minimumPlays: 3 })
     );
-    const { shouldStop } = mocks.getTopMedia.mock.calls[0][0];
-    expect(shouldStop({ unique_users: 2 })).toBe(true);
-    expect(shouldStop({ unique_users: 3 })).toBe(false);
+    expect(mocks.getTopMedia.mock.calls[0][0].minViewers).toBe(3);
 
     mocks.getTopMedia.mockClear();
     await new TracearrStatsCollectionSync().fetchSourceData(config());
-    expect(mocks.getTopMedia.mock.calls[0][0].shouldStop).toBeUndefined();
+    expect(mocks.getTopMedia.mock.calls[0][0].minViewers).toBeUndefined();
+  });
+
+  it('bypasses the client cache only for an explicit refresh', async () => {
+    mocks.getTopMedia.mockResolvedValue(topMediaResult([]));
+    const sync = new TracearrStatsCollectionSync();
+    await sync.fetchSourceData(config(), { useCache: false });
+    await sync.fetchSourceData(config(), { useCache: true });
+    await sync.fetchSourceData(config());
+    expect(
+      mocks.getTopMedia.mock.calls.map((call) => call[0].bypassCache)
+    ).toEqual([true, false, false]);
   });
 
   it('propagates Tracearr failures instead of returning an empty list', async () => {
@@ -193,6 +203,7 @@ describe('TracearrStatsCollectionSync.mapSourceDataToItems', () => {
     mocks.getMedia.mockReset();
     mocks.getByExternalId.mockReset();
     mocks.findPlexItemsByTmdbIds.mockReset();
+    mocks.getMedia.mockResolvedValue({ availability: [] });
     (plex.getMetadata as ReturnType<typeof vi.fn>).mockReset();
   });
 
@@ -376,6 +387,110 @@ describe('TracearrStatsCollectionSync.mapSourceDataToItems', () => {
         );
       expect(result.items).toEqual([]);
       expect(plex.getMetadata).not.toHaveBeenCalled();
+    });
+
+    const availabilityEntry = (ratingKey: string, extra = {}) => ({
+      server_id: 'srv-1',
+      server_type: 'plex',
+      rating_key: ratingKey,
+      removed_at: null,
+      ...extra,
+    });
+    const plexMeta = {
+      ratingKey: '77',
+      title: 'Obscure Show',
+      year: 2020,
+      librarySectionID: 5,
+      Guid: [],
+    };
+    const run = (rows: unknown[]) =>
+      new TracearrStatsCollectionSync().mapSourceDataToItems(
+        rows as never,
+        showConfig,
+        plex
+      );
+
+    it('aborts when the media lookup fails with auth, network or 5xx errors', async () => {
+      mocks.getByExternalId.mockResolvedValue({ tv_results: [] });
+      mocks.findPlexItemsByTmdbIds.mockResolvedValue(new Map());
+      for (const error of [
+        new TracearrHttpError(401, '[Tracearr] 401'),
+        new TracearrHttpError(503, '[Tracearr] 503'),
+        new Error('connect ECONNREFUSED'),
+      ]) {
+        mocks.getMedia.mockRejectedValueOnce(error);
+        await expect(run([noTmdb])).rejects.toThrow(error.message);
+      }
+    });
+
+    it('treats a 404 media lookup as not found', async () => {
+      mocks.getByExternalId.mockResolvedValue({ tv_results: [] });
+      mocks.findPlexItemsByTmdbIds.mockResolvedValue(new Map());
+      mocks.getMedia.mockRejectedValue(new TracearrHttpError(404, 'gone'));
+      expect((await run([noTmdb])).items).toEqual([]);
+    });
+
+    it('skips an entry Plex does not have and tries the next one', async () => {
+      mocks.getByExternalId.mockResolvedValue({ tv_results: [] });
+      mocks.findPlexItemsByTmdbIds.mockResolvedValue(new Map());
+      mocks.getMedia.mockResolvedValue({
+        availability: [availabilityEntry('11'), availabilityEntry('77')],
+      });
+      (plex.getMetadata as ReturnType<typeof vi.fn>).mockImplementation(
+        async (key: string) => {
+          if (key === '11') {
+            throw new Error(
+              'Plex Server didnt respond with a valid 2xx status code, response code: 404'
+            );
+          }
+          return plexMeta;
+        }
+      );
+      expect((await run([noTmdb])).items.map((i) => i.ratingKey)).toEqual([
+        '77',
+      ]);
+    });
+
+    it('propagates non-404 Plex errors from the availability lookup', async () => {
+      mocks.getByExternalId.mockResolvedValue({ tv_results: [] });
+      mocks.findPlexItemsByTmdbIds.mockResolvedValue(new Map());
+      mocks.getMedia.mockResolvedValue({
+        availability: [availabilityEntry('11')],
+      });
+      (plex.getMetadata as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error(
+          'Plex Server didnt respond with a valid 2xx status code, response code: 500'
+        )
+      );
+      await expect(run([noTmdb])).rejects.toThrow('500');
+    });
+
+    it('ignores entries that Tracearr marks as removed', async () => {
+      mocks.getByExternalId.mockResolvedValue({ tv_results: [] });
+      mocks.findPlexItemsByTmdbIds.mockResolvedValue(new Map());
+      mocks.getMedia.mockResolvedValue({
+        availability: [
+          availabilityEntry('77', { removed_at: '2025-01-01T00:00:00Z' }),
+        ],
+      });
+      expect((await run([noTmdb])).items).toEqual([]);
+      expect(plex.getMetadata).not.toHaveBeenCalled();
+    });
+
+    it('also tries the availability lookup for rows that have a tmdb id but missed the library', async () => {
+      mocks.findPlexItemsByTmdbIds.mockResolvedValue(new Map());
+      mocks.getMedia.mockResolvedValue({
+        availability: [availabilityEntry('77')],
+      });
+      (plex.getMetadata as ReturnType<typeof vi.fn>).mockResolvedValue(
+        plexMeta
+      );
+      const withTmdb = { ...noTmdb, tmdb_id: 4242 };
+      const result = await run([withTmdb]);
+      expect(mocks.getMedia).toHaveBeenCalledWith('media-1');
+      expect(result.items.map((i) => [i.ratingKey, i.tmdbId])).toEqual([
+        ['77', 4242],
+      ]);
     });
   });
 });

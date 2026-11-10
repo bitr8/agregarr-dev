@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getTopMedia: vi.fn(),
+  failingKey: '',
   collections: {} as Record<
     string,
     { title: string; children: { type: string; Guid: { id: string }[] }[] }
@@ -24,8 +25,10 @@ vi.mock('@server/api/plexapi', () => ({
         ? { title: c.title, librarySectionID: 4, librarySectionTitle: 'Movies' }
         : null;
     };
-    getCollectionItemsWithMetadata = async (key: string) =>
-      mocks.collections[key]?.children ?? [];
+    getCollectionItemsWithMetadata = async (key: string) => {
+      if (key === mocks.failingKey) throw new Error('plex children failed');
+      return mocks.collections[key]?.children ?? [];
+    };
   },
 }));
 vi.mock('@server/api/tracearr', async () => ({
@@ -148,6 +151,22 @@ describe('Tracearr dashboard collection stats', () => {
     expect(movies[0]).toEqual({ total_plays: moana.plays });
     expect(shows[0]).toEqual({ total_plays: office.plays });
     expect(collections.map((c) => c.rating_key)).toEqual(['10']);
+  });
+
+  it('skips a collection whose members cannot be read instead of failing the map', async () => {
+    mocks.collections['13'] = {
+      title: 'Broken',
+      children: [{ type: 'movie', Guid: [{ id: `tmdb://${moana.tmdb_id}` }] }],
+    };
+    mocks.failingKey = '13';
+    const stats = await getTracearrCollectionStats({
+      limit: 10,
+      statType: 'plays',
+      days: 30,
+      collectionRatingKeys: ['13', '10'],
+    });
+    mocks.failingKey = '';
+    expect(stats.map((s) => s.rating_key)).toEqual(['10']);
   });
 
   it('propagates Tracearr failures', async () => {

@@ -9,6 +9,7 @@ import {
   getAdminUser,
 } from '@server/lib/collections/core/CollectionUtilities';
 import { getSettings } from '@server/lib/settings';
+import logger from '@server/logger';
 import { mapWithConcurrency } from '@server/utils/mapWithConcurrency';
 
 const MEMBERS_TTL_MS = 5 * 60 * 1000;
@@ -166,7 +167,16 @@ export async function getTracearrCollectionStats(options: {
     options.collectionRatingKeys,
     PLEX_CONCURRENCY,
     async (ratingKey) => {
-      const members = await loadMembers(plex, ratingKey);
+      let members: CollectionMembers | null;
+      try {
+        members = await loadMembers(plex, ratingKey);
+      } catch (error) {
+        logger.warn(`Failed to read members of collection ${ratingKey}`, {
+          label: 'Tracearr Dashboard',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
       if (!members) return;
       let plays = 0;
       let watchTimeMs = 0;

@@ -2,6 +2,7 @@ import type { TracearrSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import type { AxiosInstance } from 'axios';
 import axios from 'axios';
+import { createHash } from 'crypto';
 
 export const TRACEARR_MAX_DAYS = 365;
 const PAGE_SIZE = 1000;
@@ -38,12 +39,17 @@ export interface TracearrMediaAvailability {
   server_type: string;
   library_id: string | null;
   rating_key: string | null;
+  removed_at?: string | null;
 }
 
 export interface TracearrMedia {
-  media_id: string;
+  id: string;
+  media_type: string;
   title: string;
   year: number | null;
+  imdb_id: string | null;
+  tmdb_id: number | null;
+  tvdb_id: number | null;
   availability: TracearrMediaAvailability[];
 }
 
@@ -57,7 +63,14 @@ interface TopMediaOptions {
   days: number;
   sort: TracearrSort;
   maxPages?: number;
-  shouldStop?: (lastRow: TracearrTopMediaRow) => boolean;
+  minViewers?: number;
+  bypassCache?: boolean;
+}
+
+export class TracearrHttpError extends Error {
+  constructor(public status: number | undefined, message: string) {
+    super(message);
+  }
 }
 
 const topMediaCache = new Map<
@@ -65,13 +78,17 @@ const topMediaCache = new Map<
   { expires: number; promise: Promise<TracearrTopMediaResult> }
 >();
 
-export const clampTracearrDays = (days: number): number =>
-  Math.min(TRACEARR_MAX_DAYS, Math.max(1, Math.floor(days) || 30));
+export const clampTracearrDays = (days: number): number => {
+  if (!Number.isFinite(days)) return 30;
+  if (days <= 0) return TRACEARR_MAX_DAYS;
+  return Math.min(TRACEARR_MAX_DAYS, Math.max(1, Math.floor(days)));
+};
 
 class TracearrAPI {
   private axios: AxiosInstance;
   private baseURL: string;
   private serverId?: string;
+  private keyHash: string;
   private sleep: (ms: number) => Promise<void>;
 
   constructor(
@@ -86,6 +103,10 @@ class TracearrAPI {
     this.baseURL = `${protocol}://${settings.hostname}${port}${urlBase}`;
     this.serverId = settings.serverId || undefined;
     this.sleep = sleep;
+    this.keyHash = createHash('sha256')
+      .update(settings.apiKey ?? '')
+      .digest('hex')
+      .slice(0, 12);
     this.axios = axios.create({
       baseURL: `${this.baseURL}/api/v2/public`,
       headers: { Authorization: `Bearer ${settings.apiKey}` },
@@ -118,7 +139,8 @@ class TracearrAPI {
           await this.sleep(waitMs);
           continue;
         }
-        throw new Error(
+        throw new TracearrHttpError(
+          status,
           `[Tracearr] ${path} failed${status ? ` (HTTP ${status})` : ''}: ${
             e.message
           }`
@@ -139,10 +161,7 @@ class TracearrAPI {
   }
 
   public async getMedia(ref: string): Promise<TracearrMedia> {
-    const body = await this.get<{ data: TracearrMedia } | TracearrMedia>(
-      `/media/${encodeURIComponent(ref)}`
-    );
-    return 'data' in body ? body.data : body;
+    return this.get<TracearrMedia>(`/media/${encodeURIComponent(ref)}`);
   }
 
   public getTopMedia(
@@ -152,16 +171,18 @@ class TracearrAPI {
     const maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;
     const key = [
       this.baseURL,
+      this.keyHash,
       this.serverId ?? '',
       options.mediaType,
       days,
       options.sort,
       maxPages,
+      options.minViewers ?? '',
     ].join('|');
 
     const now = Date.now();
     const hit = topMediaCache.get(key);
-    if (hit && hit.expires > now) {
+    if (!options.bypassCache && hit && hit.expires > now) {
       return hit.promise;
     }
     for (const [k, v] of topMediaCache) {
@@ -205,7 +226,12 @@ class TracearrAPI {
       rows.push(...body.data);
       cursor = body.meta?.nextCursor ?? null;
       if (!cursor || body.data.length === 0) break;
-      if (options.shouldStop?.(body.data[body.data.length - 1])) break;
+      if (
+        options.minViewers !== undefined &&
+        body.data[body.data.length - 1].unique_users < options.minViewers
+      ) {
+        break;
+      }
       if (page === maxPages - 1) truncated = true;
     }
 

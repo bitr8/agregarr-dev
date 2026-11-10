@@ -1,7 +1,9 @@
 import type PlexAPI from '@server/api/plexapi';
+import { isPlexNotFoundError } from '@server/api/plexMetadataClassify';
 import TheMovieDb from '@server/api/themoviedb';
 import TracearrAPI, {
   clampTracearrDays,
+  TracearrHttpError,
   type TracearrSort,
   type TracearrTopMediaRow,
 } from '@server/api/tracearr';
@@ -12,6 +14,7 @@ import {
   type LibraryItemsCache,
 } from '@server/lib/collections/core/CollectionUtilities';
 import type {
+  CollectionSyncOptions,
   PlexLookupResult,
   TautulliSourceData,
 } from '@server/lib/collections/core/types';
@@ -57,8 +60,7 @@ export class TracearrStatsCollectionSync extends TautulliCollectionSync {
 
   public async fetchSourceData(
     config: CollectionConfig,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature parity with the base class
-    options?: unknown,
+    options?: CollectionSyncOptions & { useCache?: boolean },
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature parity with the base class
     libraryCache?: LibraryItemsCache
   ): Promise<TautulliSourceData[]> {
@@ -80,9 +82,8 @@ export class TracearrStatsCollectionSync extends TautulliCollectionSync {
       mediaType: mediaType === 'tv' ? 'show' : 'movie',
       days,
       sort,
-      shouldStop: popular
-        ? (last) => last.unique_users < minimumPlays
-        : undefined,
+      minViewers: popular ? minimumPlays : undefined,
+      bypassCache: options?.useCache === false,
     });
 
     const ordered = popular
@@ -145,8 +146,11 @@ export class TracearrStatsCollectionSync extends TautulliCollectionSync {
     for (const row of rows) {
       if (row.tmdb_id) tmdbByRow.set(row, row.tmdb_id);
     }
-    const unresolved = rows.filter((row) => !row.tmdb_id);
-    await this.resolveTmdbIds(unresolved, mediaType, tmdbByRow);
+    await this.resolveTmdbIds(
+      rows.filter((row) => !row.tmdb_id),
+      mediaType,
+      tmdbByRow
+    );
 
     const lookups = [...new Set(tmdbByRow.values())].map((tmdbId) => ({
       tmdbId,
@@ -171,7 +175,7 @@ export class TracearrStatsCollectionSync extends TautulliCollectionSync {
       const hit = tmdbId ? plexLookup.get(`${tmdbId}-${mediaType}`) : undefined;
       if (hit) {
         matched.set(row, hit);
-      } else if (!row.tmdb_id) {
+      } else if (row.tracearr_media_id) {
         stillUnmatched.push(row);
       }
     }
@@ -283,54 +287,64 @@ export class TracearrStatsCollectionSync extends TautulliCollectionSync {
     plexClient: PlexAPI,
     out: Map<TautulliSourceData, PlexLookupResult>
   ): Promise<void> {
-    const candidates = rows.filter((row) => row.tracearr_media_id);
-    if (candidates.length === 0) return;
+    if (rows.length === 0) return;
     const { tracearr } = getSettings();
     const api = new TracearrAPI(tracearr);
 
     await mapWithConcurrency(
-      candidates.slice(0, FALLBACK_CAP),
+      rows.slice(0, FALLBACK_CAP),
       FALLBACK_CONCURRENCY,
       async (row) => {
+        let media;
         try {
-          const media = await api.getMedia(row.tracearr_media_id as string);
-          for (const entry of media.availability ?? []) {
-            if (
-              entry.server_type !== 'plex' ||
-              !entry.rating_key ||
-              (tracearr.serverId && entry.server_id !== tracearr.serverId)
-            ) {
+          media = await api.getMedia(row.tracearr_media_id as string);
+        } catch (error) {
+          if (error instanceof TracearrHttpError && error.status === 404) {
+            return;
+          }
+          throw error;
+        }
+
+        for (const entry of media.availability ?? []) {
+          if (
+            entry.server_type !== 'plex' ||
+            !entry.rating_key ||
+            entry.removed_at ||
+            (tracearr.serverId && entry.server_id !== tracearr.serverId)
+          ) {
+            continue;
+          }
+          let meta;
+          try {
+            meta = await plexClient.getMetadata(entry.rating_key);
+          } catch (error) {
+            if (error instanceof Error && isPlexNotFoundError(error.message)) {
               continue;
             }
-            const meta = await plexClient.getMetadata(entry.rating_key);
-            const plexYear = (meta as { year?: number }).year;
-            const sameLibrary =
-              meta.librarySectionID === undefined ||
-              String(meta.librarySectionID) === String(config.libraryId);
-            const sameYear =
-              plexYear === undefined ||
-              row.year === undefined ||
-              plexYear === row.year;
-            if (
-              sameLibrary &&
-              sameYear &&
-              normaliseTitle(meta.title) === normaliseTitle(row.title ?? '')
-            ) {
-              out.set(row, {
-                ratingKey: meta.ratingKey,
-                title: meta.title,
-                libraryKey: config.libraryId,
-                addedAt: meta.addedAt,
-                tvdbId: extractTvdbIdFromGuids(meta.Guid),
-              });
-              return;
-            }
+            throw error;
           }
-        } catch (error) {
-          logger.debug(`Tracearr availability lookup failed for ${row.title}`, {
-            label: LABEL,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          const plexYear = (meta as { year?: number }).year;
+          const sameLibrary =
+            meta.librarySectionID === undefined ||
+            String(meta.librarySectionID) === String(config.libraryId);
+          const sameYear =
+            plexYear === undefined ||
+            row.year === undefined ||
+            plexYear === row.year;
+          if (
+            sameLibrary &&
+            sameYear &&
+            normaliseTitle(meta.title) === normaliseTitle(row.title ?? '')
+          ) {
+            out.set(row, {
+              ratingKey: meta.ratingKey,
+              title: meta.title,
+              libraryKey: config.libraryId,
+              addedAt: meta.addedAt,
+              tvdbId: extractTvdbIdFromGuids(meta.Guid),
+            });
+            return;
+          }
         }
       }
     );
