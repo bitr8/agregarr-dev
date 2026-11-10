@@ -20,6 +20,7 @@ import type {
   CollectionSortOrder,
 } from '@server/lib/settings';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
+import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -285,9 +286,9 @@ function getSourceDisplayName(source: {
         most_watched_plays: 'Most Watched (Plays)',
         most_watched_duration: 'Most Watched (Duration)',
       };
-      const baseName = `Tautulli ${
-        subtypeNames[subtype || ''] || subtype || 'Stats'
-      }`;
+      const baseName = `${
+        getStatisticsProvider() === 'tracearr' ? 'Tracearr' : 'Tautulli'
+      } ${subtypeNames[subtype || ''] || subtype || 'Stats'}`;
       if (timePeriod === 'custom' && customDays) {
         return `${baseName} (${customDays} days)`;
       }

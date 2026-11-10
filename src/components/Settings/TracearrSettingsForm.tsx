@@ -24,16 +24,16 @@ const messages = defineMessages({
   tracearrAllServers: 'All servers',
   tracearrServerHelp:
     'Run the connection test to load your servers. Leave on all servers to count plays from every server Tracearr tracks.',
-  testConnection: 'Test Connection',
+  tracearrTestConnection: 'Test Connection',
   testing: 'Testing...',
   save: 'Save Changes',
   saving: 'Saving…',
-  toastSuccess: 'Tracearr settings saved successfully!',
-  toastFailure: 'Something went wrong while saving Tracearr settings.',
-  connectionSuccess: 'Connected to Tracearr successfully!',
-  connectionFailure: 'Failed to connect to Tracearr',
-  validationHostname: 'You must provide a valid hostname or IP address',
-  validationPort: 'You must provide a valid port number',
+  tracearrToastSuccess: 'Tracearr settings saved successfully!',
+  tracearrToastFailure: 'Something went wrong while saving Tracearr settings.',
+  tracearrConnectionSuccess: 'Connected to Tracearr successfully!',
+  tracearrConnectionFailure: 'Failed to connect to Tracearr',
+  tracearrValidationHostname: 'You must provide a valid hostname or IP address',
+  tracearrValidationPort: 'You must provide a valid port number',
   validationUrlBaseLeadingSlash: 'URL base must have a leading slash',
   validationUrlBaseTrailingSlash: 'URL base must not end in a trailing slash',
 });
@@ -56,9 +56,12 @@ const TracearrSettingsForm = () => {
   const schema = Yup.object().shape({
     hostname: Yup.string()
       .nullable()
-      .matches(/^[^\s/:@]+$/, intl.formatMessage(messages.validationHostname)),
+      .matches(
+        /^[^\s/:@]+$/,
+        intl.formatMessage(messages.tracearrValidationHostname)
+      ),
     port: Yup.number()
-      .typeError(intl.formatMessage(messages.validationPort))
+      .typeError(intl.formatMessage(messages.tracearrValidationPort))
       .nullable(),
     urlBase: Yup.string()
       .test(
@@ -103,12 +106,12 @@ const TracearrSettingsForm = () => {
               ...values,
               port: Number(values.port),
             });
-            addToast(intl.formatMessage(messages.toastSuccess), {
+            addToast(intl.formatMessage(messages.tracearrToastSuccess), {
               appearance: 'success',
               autoDismiss: true,
             });
           } catch (e) {
-            addToast(intl.formatMessage(messages.toastFailure), {
+            addToast(intl.formatMessage(messages.tracearrToastFailure), {
               appearance: 'error',
               autoDismiss: true,
             });
@@ -140,14 +143,14 @@ const TracearrSettingsForm = () => {
                 }
               );
               setServers(response.data.servers ?? []);
-              addToast(intl.formatMessage(messages.connectionSuccess), {
+              addToast(intl.formatMessage(messages.tracearrConnectionSuccess), {
                 autoDismiss: true,
                 appearance: 'success',
               });
             } catch (error) {
               addToast(
                 error.response?.data?.message ||
-                  intl.formatMessage(messages.connectionFailure),
+                  intl.formatMessage(messages.tracearrConnectionFailure),
                 { autoDismiss: true, appearance: 'error' }
               );
             } finally {
@@ -304,7 +307,7 @@ const TracearrSettingsForm = () => {
                     >
                       {isTesting
                         ? intl.formatMessage(messages.testing)
-                        : intl.formatMessage(messages.testConnection)}
+                        : intl.formatMessage(messages.tracearrTestConnection)}
                     </Button>
                   </span>
                   <span className="ml-3 inline-flex rounded-md shadow-sm">
