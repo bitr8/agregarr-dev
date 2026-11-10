@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "server_id": "cf5457bf-b36a-599e-b448-5705669bd2d6",
+      "server_name": "Plex Main",
+      "status": "up",
+      "reason": null,
+      "server_type": "plex",
+      "historical": false,
+      "active_streams": 2,
+      "version": "1.0.0"
+    }
+  ],
+  "tracearr_version": "v3.1.7"
+}

@@ -541,6 +541,16 @@ export interface TautulliSettings {
   externalUrl?: string;
 }
 
+export interface TracearrSettings {
+  enabled?: boolean;
+  hostname?: string;
+  port?: number;
+  useSsl?: boolean;
+  urlBase?: string;
+  apiKey?: string;
+  serverId?: string;
+}
+
 export interface MaintainerrSettings {
   hostname?: string;
   port?: number;
@@ -781,6 +791,7 @@ interface AllSettings {
   main: MainSettings;
   plex: PlexSettings;
   tautulli: TautulliSettings;
+  tracearr: TracearrSettings;
   maintainerr: MaintainerrSettings;
   overseerr: OverseerrSettings;
   myanimelist: MyAnimeListSettings;
@@ -835,6 +846,7 @@ class Settings {
         preExistingCollectionConfigs: [],
       },
       tautulli: {},
+      tracearr: {},
       maintainerr: {},
       overseerr: {},
       myanimelist: {},
@@ -1113,6 +1125,14 @@ class Settings {
 
   set tautulli(data: TautulliSettings) {
     this.data.tautulli = data;
+  }
+
+  get tracearr(): TracearrSettings {
+    return this.data.tracearr;
+  }
+
+  set tracearr(data: TracearrSettings) {
+    this.data.tracearr = data;
   }
 
   get maintainerr(): MaintainerrSettings {

@@ -575,6 +575,9 @@ export interface TautulliSourceData {
   users_watched?: string | number; // Unique viewer count (string for most_watched, number for most_popular)
   year?: number;
   tmdb_id?: number;
+  tvdb_id?: number;
+  imdb_id?: string;
+  tracearr_media_id?: string;
   duration?: number;
   last_played?: number;
 }

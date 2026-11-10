@@ -4,6 +4,7 @@ import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import TracearrSettingsForm from '@app/components/Settings/TracearrSettingsForm';
 import globalMessages from '@app/i18n/globalMessages';
 import {
   closestCenter,
@@ -1608,6 +1609,8 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
           );
         }}
       </Formik>
+
+      <TracearrSettingsForm />
 
       {/* MyAnimeList Settings */}
       <div className="section">

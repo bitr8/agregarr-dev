@@ -7,6 +7,7 @@ import type {
   RadarrSettings,
   SonarrSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 
@@ -34,6 +35,7 @@ export function validateApiKeysForCollectionType(
     trakt?: TraktSettings;
     mdblist?: MDBListSettings;
     tautulli?: TautulliSettings;
+    tracearr?: TracearrSettings;
     overseerr?: OverseerrSettings;
     myanimelist?: MyAnimeListSettings;
     radarr?: RadarrSettings[];
@@ -83,14 +85,20 @@ export function validateApiKeysForCollectionType(
       });
       break;
 
-    case 'tautulli':
+    case 'tautulli': {
+      const tracearrActive = !!(
+        settings.tracearr?.enabled &&
+        settings.tracearr.hostname &&
+        settings.tracearr.apiKey
+      );
       requirements.push({
-        service: 'Tautulli',
+        service: tracearrActive ? 'Tracearr' : 'Tautulli',
         required: true,
-        configured: !!settings.tautulli?.apiKey,
+        configured: tracearrActive || !!settings.tautulli?.apiKey,
         settingsPath: '/settings/sources',
       });
       break;
+    }
 
     case 'overseerr':
       requirements.push({

@@ -15,6 +15,7 @@ import type {
   RadarrSettings,
   SonarrSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 import { Field } from 'formik';
@@ -68,6 +69,7 @@ const messages = defineMessages({
   remove: 'Remove',
   overseerrRequests: 'Seerr Requests',
   tautulliStatistics: 'Tautulli Statistics',
+  tracearrStatistics: 'Tracearr Statistics',
   traktLists: 'Trakt Lists',
   letterboxdLists: 'Letterboxd Lists',
   tmdbLists: 'TMDB Lists',
@@ -421,6 +423,9 @@ const MultiSourceConfigSection = ({
   );
   const { data: tautulliSettings } = useSWR<TautulliSettings>(
     '/api/v1/settings/tautulli'
+  );
+  const { data: tracearrSettings } = useSWR<TracearrSettings>(
+    '/api/v1/settings/tracearr'
   );
   const { data: overseerrSettings } = useSWR<OverseerrSettings>(
     '/api/v1/settings/overseerr'
@@ -1082,7 +1087,13 @@ const MultiSourceConfigSection = ({
                   {intl.formatMessage(messages.overseerrRequests)}
                 </option>
                 <option value="tautulli">
-                  {intl.formatMessage(messages.tautulliStatistics)}
+                  {intl.formatMessage(
+                    tracearrSettings?.enabled &&
+                      tracearrSettings.hostname &&
+                      tracearrSettings.apiKey
+                      ? messages.tracearrStatistics
+                      : messages.tautulliStatistics
+                  )}
                 </option>
                 <option value="trakt">
                   {intl.formatMessage(messages.traktLists)}
@@ -1138,6 +1149,7 @@ const MultiSourceConfigSection = ({
                       trakt: traktSettings,
                       mdblist: mdblistSettings,
                       tautulli: tautulliSettings,
+                      tracearr: tracearrSettings,
                       overseerr: overseerrSettings,
                       myanimelist: myanimelistSettings,
                       radarr: radarrSettings,

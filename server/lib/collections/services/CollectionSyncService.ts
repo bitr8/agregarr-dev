@@ -38,6 +38,7 @@ import type {
   MultiSourceType,
 } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
 import path from 'path';
 import { syncCacheService } from './SyncCacheService';
@@ -1601,6 +1602,12 @@ export class CollectionSyncService {
         return new ImdbCollectionSync();
       }
       case 'tautulli': {
+        if (getStatisticsProvider() === 'tracearr') {
+          const { TracearrStatsCollectionSync } = await import(
+            '../sources/tracearrStats'
+          );
+          return new TracearrStatsCollectionSync();
+        }
         const { TautulliCollectionSync } = await import('../sources/tautulli');
         return new TautulliCollectionSync();
       }

@@ -42,6 +42,7 @@ import RadarrTagCollectionSync from '@server/lib/collections/sources/radarr';
 import SonarrTagCollectionSync from '@server/lib/collections/sources/sonarr';
 import { TautulliCollectionSync } from '@server/lib/collections/sources/tautulli';
 import { TmdbCollectionSync } from '@server/lib/collections/sources/tmdb';
+import { TracearrStatsCollectionSync } from '@server/lib/collections/sources/tracearrStats';
 import { TraktCollectionSync } from '@server/lib/collections/sources/trakt';
 import { TvdbCollectionSync } from '@server/lib/collections/sources/tvdb';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
@@ -53,6 +54,7 @@ import type {
   SourceDefinition,
 } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
 import {
   buildTraktRedirectUri,
@@ -998,7 +1000,11 @@ export class MultiSourceOrchestrator {
   private getSyncService(
     sourceType: string
   ): BaseCollectionSync<CollectionSource> {
-    if (!this.syncServices.has(sourceType)) {
+    const cacheKey =
+      sourceType === 'tautulli'
+        ? `tautulli:${getStatisticsProvider()}`
+        : sourceType;
+    if (!this.syncServices.has(cacheKey)) {
       switch (sourceType) {
         case 'trakt':
           this.syncServices.set(sourceType, new TraktCollectionSync());
@@ -1019,7 +1025,12 @@ export class MultiSourceOrchestrator {
           this.syncServices.set(sourceType, new LetterboxdCollectionSync());
           break;
         case 'tautulli':
-          this.syncServices.set(sourceType, new TautulliCollectionSync());
+          this.syncServices.set(
+            cacheKey,
+            getStatisticsProvider() === 'tracearr'
+              ? new TracearrStatsCollectionSync()
+              : new TautulliCollectionSync()
+          );
           break;
         case 'overseerr':
           this.syncServices.set(sourceType, new OverseerrCollectionSync());
@@ -1049,7 +1060,7 @@ export class MultiSourceOrchestrator {
           throw new Error(`Unknown source type: ${sourceType}`);
       }
     }
-    const service = this.syncServices.get(sourceType);
+    const service = this.syncServices.get(cacheKey);
     if (!service) {
       throw new Error(`Failed to initialize sync service for ${sourceType}`);
     }
