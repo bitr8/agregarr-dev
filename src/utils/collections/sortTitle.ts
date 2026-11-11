@@ -57,14 +57,11 @@ export function normalizeArticleForDisplay(
 export function agregarrOwnsSortTitle(
   titleSort: string | undefined,
   name: string,
-  articleNormalized: boolean | undefined,
   everManaged: boolean | undefined
 ): boolean {
   const current = titleSort?.trim();
   if (!current) return true;
   if (current === name.trim()) return true;
-  if (/^!\d+_/.test(current)) return true;
-  if (articleNormalized === true) return true;
   if (everManaged === true) return true;
   return (['strip', 'moveToEnd'] as const).some(
     (m) => current === normalizeArticleForDisplay(name, m)

@@ -382,12 +382,7 @@ function plexSetSortTitle(
   const stored = target.titleSort?.trim();
   if (!stored) return undefined;
   if (
-    agregarrOwnsSortTitle(
-      stored,
-      target.name || '',
-      target.sortTitleArticleNormalized,
-      target.everLibraryPromoted
-    )
+    agregarrOwnsSortTitle(stored, target.name || '', target.everLibraryPromoted)
   ) {
     return undefined;
   }
@@ -437,12 +432,7 @@ function computeAgregarrSortTitle(
     const plexTitleSort = target.titleSort?.trim();
     if (
       plexTitleSort &&
-      !agregarrOwnsSortTitle(
-        plexTitleSort,
-        name,
-        target.sortTitleArticleNormalized,
-        target.everLibraryPromoted
-      )
+      !agregarrOwnsSortTitle(plexTitleSort, name, target.everLibraryPromoted)
     ) {
       return plexTitleSort;
     }

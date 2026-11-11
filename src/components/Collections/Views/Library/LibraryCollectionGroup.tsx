@@ -143,7 +143,6 @@ function getEffectiveDisplayTitle(
     !agregarrOwnsSortTitle(
       withOverrides.titleSort,
       name,
-      withOverrides.sortTitleArticleNormalized,
       withOverrides.everLibraryPromoted
     )
   ) {
