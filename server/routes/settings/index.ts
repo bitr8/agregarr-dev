@@ -241,6 +241,16 @@ settingsRoutes.post('/plex', async (req, res, next) => {
     'sortTitleArticleHandling',
   ]);
 
+  if (
+    candidate.sortTitleArticleHandling !== undefined &&
+    !['off', 'strip', 'moveToEnd'].includes(candidate.sortTitleArticleHandling)
+  ) {
+    return next({
+      status: 400,
+      message: 'Invalid sort title article handling.',
+    });
+  }
+
   logger.debug('Plex settings update requested', {
     label: 'Plex Settings',
     ip: candidate.ip,
