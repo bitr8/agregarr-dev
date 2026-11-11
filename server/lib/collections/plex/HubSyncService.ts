@@ -1771,7 +1771,6 @@ export class HubSyncService {
           !isAgregarrOwnedSortTitle(
             config.titleSort,
             config.name,
-            config.sortTitleArticleNormalized,
             config.everLibraryPromoted
           )
         ) {

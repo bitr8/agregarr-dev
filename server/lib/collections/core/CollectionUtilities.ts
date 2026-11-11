@@ -174,13 +174,14 @@ export function buildSortTitleFromOverride(
  * strip, and was still overwritten with the name).
  *
  * Agregarr owns the sort title when there is none, when it is just the
- * collection's name, when it is a positional rank left over from a demotion
- * (see buildPromotedSortTitle - that has to be cleaned up or Plex keeps
- * showing the collection in its promoted section), when Agregarr recorded
- * that it normalized this one, or when it matches what leading-article
- * handling would produce for that name under any mode.
+ * collection's name, when Agregarr promoted it (everManaged - which also
+ * covers the rank a demotion leaves behind), or when it matches what
+ * leading-article handling would produce for that name under any mode.
+ * Only the current value counts, so a sort title someone sets later in Plex,
+ * or a Kometa-style "!050_Name" on a collection Agregarr never promoted, is
+ * left alone.
  *
- * That last case is not redundant with the recorded marker. Plex generates a
+ * That last case also covers values Plex made itself. Plex generates a
  * sortTitle of its own for a new collection by stripping the leading article
  * (and leading punctuation), so "The Avengers" arrives already sorting as
  * "Avengers" with nothing of Agregarr's involved. Without this check that
@@ -206,14 +207,11 @@ export function buildSortTitleFromOverride(
 export function isAgregarrOwnedSortTitle(
   titleSort: string | undefined,
   collectionName: string,
-  articleNormalized?: boolean,
   everManaged?: boolean
 ): boolean {
   const current = titleSort?.trim();
   if (!current) return true;
   if (current === collectionName.trim()) return true;
-  if (/^!\d+_/.test(current)) return true;
-  if (articleNormalized === true) return true;
   if (everManaged === true) return true;
 
   return (['strip', 'moveToEnd'] as const).some(

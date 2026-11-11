@@ -2428,7 +2428,6 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           isAgregarrOwnedSortTitle(
             options.existingTitleSort,
             collectionName,
-            matchingConfig?.sortTitleArticleNormalized,
             matchingConfig?.everLibraryPromoted
           ))
       ) {

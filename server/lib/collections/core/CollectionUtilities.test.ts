@@ -1094,7 +1094,17 @@ describe('isAgregarrOwnedSortTitle', () => {
 
   it('owns a rank left behind by a demotion', async () => {
     const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
-    expect(isAgregarrOwnedSortTitle('!003_The Crow', 'The Crow')).toBe(true);
+    expect(isAgregarrOwnedSortTitle('!003_The Crow', 'The Crow', true)).toBe(
+      true
+    );
+  });
+
+  it('leaves a Kometa-style rank alone when Agregarr never promoted it', async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(isAgregarrOwnedSortTitle('!050_The Crow', 'The Crow')).toBe(false);
+    expect(isAgregarrOwnedSortTitle('!050_The Crow', 'The Crow', false)).toBe(
+      false
+    );
   });
 
   it('owns a value matching article handling under any mode', async () => {
@@ -1116,14 +1126,15 @@ describe('isAgregarrOwnedSortTitle', () => {
     // everLibraryPromoted covers the case the value checks cannot see: a
     // sort title written through an override that has since been cleared.
     const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
-    expect(
-      isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow', undefined, true)
-    ).toBe(true);
+    expect(isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow', true)).toBe(true);
   });
 
-  it('owns a value it recorded normalizing', async () => {
+  it('leaves a sort title set in Plex after Agregarr normalized it', async () => {
+    // Ownership follows the current value, not the history of having
+    // normalized the collection once.
     const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
-    expect(isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow', true)).toBe(true);
+    expect(isAgregarrOwnedSortTitle('Crow', 'The Crow', false)).toBe(true);
+    expect(isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow', false)).toBe(false);
   });
 });
 
