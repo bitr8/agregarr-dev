@@ -3001,7 +3001,8 @@ class OverlayLibraryService {
         // Plex calls). See getAggregatedMediaFromCache for the trade-offs.
         const aggregatedMedia =
           config.enableEpisodeScanning && mediaType === 'show'
-            ? await this.getAggregatedMediaFromCache(libraryId)
+            ? this.aggregatedMediaByLibrary.get(libraryId) ??
+              (await this.getAggregatedMediaFromCache(libraryId))
             : undefined;
 
         // Process each item
@@ -3484,14 +3485,18 @@ class OverlayLibraryService {
         const agg = aggregatedMap.get(item.ratingKey);
         if (agg) {
           episodeAggregation = {
-            showResolution: baseContext.resolution,
-            showHdr: baseContext.hdr,
-            showDolbyVision: baseContext.dolbyVision,
-            showDolbyVisionProfile: baseContext.dolbyVisionProfile,
-            showAudioCodec: baseContext.audioCodec,
-            showAudioChannels: baseContext.audioChannels,
-            showVideoCodec: baseContext.videoCodec,
-            showBitDepth: baseContext.bitDepth,
+            ...(item.type === 'show'
+              ? {
+                  showResolution: baseContext.resolution,
+                  showHdr: baseContext.hdr,
+                  showDolbyVision: baseContext.dolbyVision,
+                  showDolbyVisionProfile: baseContext.dolbyVisionProfile,
+                  showAudioCodec: baseContext.audioCodec,
+                  showAudioChannels: baseContext.audioChannels,
+                  showVideoCodec: baseContext.videoCodec,
+                  showBitDepth: baseContext.bitDepth,
+                }
+              : {}),
             resolution: agg.resolution,
             hdr: agg.hdr,
             dolbyVision: agg.dolbyVision,
@@ -4652,7 +4657,7 @@ class OverlayLibraryService {
       label: 'EpisodeScanner',
       libraryId,
       episodeCount: episodes.length,
-      showCount: aggregated.size,
+      entryCount: aggregated.size,
     });
   }
 
@@ -4718,7 +4723,7 @@ class OverlayLibraryService {
         label: 'OverlayLibrary',
         libraryId,
         episodeCount: episodes.length,
-        showCount: aggregated.size,
+        entryCount: aggregated.size,
       });
     }
 
