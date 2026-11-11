@@ -47,6 +47,7 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       .getConfigs()
       .find((c) => c.id === id);
     delete req.body.sortTitleOverrideIsFullTitle;
+    delete req.body.sortTitleResetRequested;
     const { isSortTitleOverrideEdit, isSortTitleResetRequest } = await import(
       '@server/lib/collections/core/CollectionUtilities'
     );
