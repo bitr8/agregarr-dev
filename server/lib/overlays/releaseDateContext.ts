@@ -1,6 +1,7 @@
 import {
   calculateDaysSince,
   determineReleaseDate,
+  extractReleaseDates,
   isAirDateUpcoming,
   isDateInFuture,
   toServerCalendarDate,
@@ -13,6 +14,46 @@ export interface RadarrReleaseDates {
   radarrPhysicalRelease?: string;
 }
 
+const dateOnly = (d: string | undefined) => d?.split('T')[0];
+
+function homeReleaseSource(
+  digital: string | undefined,
+  physical: string | undefined
+): ReleaseDateInfo['releaseSource'] {
+  if (digital && physical) {
+    return new Date(digital) < new Date(physical) ? 'digital' : 'physical';
+  }
+  return digital ? 'digital' : physical ? 'physical' : undefined;
+}
+
+/**
+ * Movie release info from TMDB's per-country release_dates block, with the
+ * per-type dates (region-preferred, global earliest as fallback) kept alongside
+ * the resolved releaseDate. Shared by the live and the prefetch producers.
+ */
+export function movieReleaseInfoFromTmdb(
+  results: Parameters<typeof extractReleaseDates>[0],
+  region: string
+): ReleaseDateInfo | undefined {
+  const extracted = extractReleaseDates(results, region);
+  const determined = determineReleaseDate(
+    extracted.digitalRelease,
+    extracted.physicalRelease,
+    extracted.inCinemas
+  );
+  if (!determined) return undefined;
+  return {
+    releaseDate: determined.releaseDate,
+    isEstimated: determined.isEstimated,
+    theatricalRelease: dateOnly(extracted.inCinemas),
+    digitalRelease: dateOnly(extracted.digitalRelease),
+    physicalRelease: dateOnly(extracted.physicalRelease),
+    releaseSource:
+      homeReleaseSource(extracted.digitalRelease, extracted.physicalRelease) ??
+      'estimate',
+  };
+}
+
 // Radarr is the source of truth for a placeholder's date: its digital or
 // physical date wins over TMDB's region-preferred guess.
 export function preferRadarrReleaseDate(
@@ -23,7 +64,17 @@ export function preferRadarrReleaseDate(
     radarr.radarrDigitalRelease,
     radarr.radarrPhysicalRelease
   );
-  return fromRadarr ? { ...info, ...fromRadarr } : info;
+  if (!fromRadarr) return info;
+  return {
+    ...info,
+    ...fromRadarr,
+    digitalRelease: dateOnly(radarr.radarrDigitalRelease),
+    physicalRelease: dateOnly(radarr.radarrPhysicalRelease),
+    releaseSource: homeReleaseSource(
+      radarr.radarrDigitalRelease,
+      radarr.radarrPhysicalRelease
+    ),
+  };
 }
 
 /** Latest aired season air_date; specials and unaired seasons ignored. */
@@ -129,8 +180,22 @@ export function deriveReleaseDateContext(
     );
   }
 
+  const daysSinceDate = (d: string | undefined) =>
+    d ? calculateDaysSince(toServerCalendarDate(d)) : undefined;
+  const homeDates = [info.digitalRelease, info.physicalRelease]
+    .filter((d): d is string => !!d)
+    .sort();
+
   return {
     releaseDate: info.releaseDate,
+    theatricalReleaseDate: info.theatricalRelease,
+    digitalReleaseDate: info.digitalRelease,
+    physicalReleaseDate: info.physicalRelease,
+    daysSinceTheatricalRelease: daysSinceDate(info.theatricalRelease),
+    daysSinceDigitalRelease: daysSinceDate(info.digitalRelease),
+    daysSincePhysicalRelease: daysSinceDate(info.physicalRelease),
+    daysSinceHomeRelease: daysSinceDate(homeDates[0]),
+    releaseDateSource: info.releaseSource,
     // Only alongside a date; an estimate flag with nothing to qualify would let
     // a template render "estimated" over an empty field.
     isEstimatedReleaseDate: info.releaseDate ? info.isEstimated : undefined,

@@ -4,6 +4,7 @@ import { getRankedAnime } from '@server/api/myanimelist';
 import PlexAPI from '@server/api/plexapi';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
+import TracearrAPI from '@server/api/tracearr';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -455,6 +456,83 @@ settingsRoutes.get('/tautulli', (_req, res) => {
   const settings = getSettings();
 
   res.status(200).json(settings.tautulli);
+});
+
+settingsRoutes.get('/tracearr', (_req, res) => {
+  res.status(200).json(getSettings().tracearr ?? {});
+});
+
+settingsRoutes.post('/tracearr', (req, res) => {
+  const settings = getSettings();
+  const next = {
+    ...settings.tracearr,
+    ...pick(req.body, [
+      'enabled',
+      'hostname',
+      'port',
+      'useSsl',
+      'urlBase',
+      'apiKey',
+      'serverId',
+    ]),
+  };
+  if (!next.serverId) {
+    delete next.serverId;
+  }
+  if (next.port !== undefined) {
+    next.port = Number(next.port);
+  }
+  settings.tracearr = next;
+  settings.save();
+
+  return res.status(200).json(settings.tracearr);
+});
+
+settingsRoutes.post('/tracearr/test', async (req, res, next) => {
+  const { hostname, port, apiKey, useSsl, urlBase } = req.body;
+
+  if (!hostname || !apiKey) {
+    return next({
+      status: 400,
+      message: 'Hostname and API key are required',
+    });
+  }
+
+  try {
+    const { servers, version } = await new TracearrAPI({
+      hostname,
+      port: port ? Number(port) : undefined,
+      useSsl: useSsl || false,
+      urlBase: urlBase || '',
+      apiKey,
+    }).getServers();
+
+    return res.status(200).json({
+      success: true,
+      version: version ?? null,
+      servers: servers.map((server) => ({
+        server_id: server.server_id,
+        server_name: server.server_name,
+        server_type: server.server_type,
+        status: server.status,
+      })),
+    });
+  } catch (e) {
+    const httpStatus = Number(/HTTP (\d+)/.exec(e.message)?.[1]);
+    const status = [401, 403].includes(httpStatus) ? 401 : 500;
+    const message =
+      status === 401
+        ? 'Invalid API key - Authentication failed'
+        : e.message || 'Unable to connect to Tracearr';
+
+    logger.error('Tracearr connection test failed', {
+      label: 'Tracearr Connection',
+      error: e.message,
+      httpStatus: httpStatus || undefined,
+    });
+
+    return next({ status, message });
+  }
 });
 
 // MyAnimeList settings

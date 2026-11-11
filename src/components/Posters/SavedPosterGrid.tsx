@@ -461,7 +461,7 @@ const SavedPosterGrid: React.FC<SavedPosterGridProps> = ({
 
               {/* Checkbox - show on hover or when any checkbox is selected */}
               <div
-                className={`absolute top-2 left-2 z-10 transition-opacity duration-200 ${
+                className={`absolute left-2 top-2 z-10 transition-opacity duration-200 ${
                   showCheckboxes
                     ? 'opacity-100'
                     : 'opacity-0 group-hover:opacity-100'
@@ -533,7 +533,7 @@ const SavedPosterGrid: React.FC<SavedPosterGridProps> = ({
               </div>
 
               {/* Status badges - show on image */}
-              <div className="absolute top-1 right-1">
+              <div className="absolute right-1 top-1">
                 {!poster.isEditable && (
                   <Badge badgeType="warning" className="text-xs">
                     {intl.formatMessage(messages.fileSource)}

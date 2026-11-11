@@ -13,8 +13,10 @@ export interface EpisodeMediaInfo {
   hdr: boolean;
   dolbyVision: boolean;
   dolbyVisionProfile?: number;
+  hdr10Plus: boolean;
   videoCodec: string;
   audioCodec: string;
+  audioProfile?: string;
   audioChannels: number;
   bitDepth: number;
   mediaHash: string; // hash of Plex Media[] for change detection
@@ -33,8 +35,10 @@ export interface AggregatedMediaInfo {
   hdr: boolean;
   dolbyVision: boolean;
   dolbyVisionProfile?: number;
+  hdr10Plus: boolean;
   videoCodec: string;
   audioCodec: string;
+  audioProfile?: string;
   audioChannels: number;
   bitDepth: number;
 

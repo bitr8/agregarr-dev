@@ -79,6 +79,10 @@ const NUMERIC_FIELDS = [
   'runtime',
   'daysUntilRelease',
   'daysAgo',
+  'daysSinceTheatricalRelease',
+  'daysSinceDigitalRelease',
+  'daysSincePhysicalRelease',
+  'daysSinceHomeRelease',
   'daysUntilNextSeason',
   'daysAgoNextSeason',
   'daysUntilNextEpisode',
@@ -109,6 +113,7 @@ const BOOLEAN_FIELDS = [
   'downloaded',
   'hdr',
   'dolbyVision',
+  'hdr10Plus',
   'isImdbTop250',
   'rtCertifiedFresh',
   'rtVerifiedHot',
@@ -165,32 +170,32 @@ const RuleItem: React.FC<RuleItemProps> = ({
   // Fetch all tags from all Radarr instances
   const { data: radarrTags } = useSWR<ArrTag[]>(
     isRadarrTags ? '/api/v1/settings/radarr/alltags' : null,
-    (url) => fetch(url).then((res) => res.json())
+    (url: string) => fetch(url).then((res) => res.json())
   );
 
   // Fetch all tags from all Sonarr instances
   const { data: sonarrTags } = useSWR<ArrTag[]>(
     isSonarrTags ? '/api/v1/settings/sonarr/alltags' : null,
-    (url) => fetch(url).then((res) => res.json())
+    (url: string) => fetch(url).then((res) => res.json())
   );
 
   // Fetch Plex labels for plexLabels field
   const { data: plexLabelsData } = useSWR<{
     labels: string[];
-  }>(isPlexLabels ? '/api/v1/plex/labels' : null, (url) =>
+  }>(isPlexLabels ? '/api/v1/plex/labels' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
   // Fetch collections for collection field (agregarr + pre-existing)
   const { data: agregarrCollections } = useSWR<{
     collectionConfigs: { id: string; name: string; libraryName: string }[];
-  }>(isCollectionField ? '/api/v1/collections' : null, (url) =>
+  }>(isCollectionField ? '/api/v1/collections' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
   const { data: preExistingCollections } = useSWR<
     { id: string; name: string; libraryName: string }[]
-  >(isCollectionField ? '/api/v1/preexisting' : null, (url) =>
+  >(isCollectionField ? '/api/v1/preexisting' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 

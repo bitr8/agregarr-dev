@@ -9,8 +9,8 @@ updates:
     cooldown:
       default-days: 7
     groups:
+      # Keep the two lists identical: Dependabot ranks a pattern-less group as more specific.
       dev-tooling:
-        dependency-type: development
         patterns:
           - 'eslint*'
           - '@typescript-eslint/*'
@@ -21,6 +21,13 @@ updates:
           - minor
           - patch
       everything-else:
+        patterns: ['*']
+        exclude-patterns:
+          - 'eslint*'
+          - '@typescript-eslint/*'
+          - 'prettier*'
+          - '@types/*'
+          - 'vitest*'
         update-types:
           - minor
           - patch
@@ -31,6 +38,12 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # Security updates skip the major rule above; the Next upgrade is its own workstream.
+      - dependency-name: 'next'
+        versions: ['>=13.0.0']
+      # 0.5+ needs prettier 3; move both together.
+      - dependency-name: 'prettier-plugin-tailwindcss'
+        versions: ['>=0.3.0']
   - package-ecosystem: docker
     directory: /
     schedule:

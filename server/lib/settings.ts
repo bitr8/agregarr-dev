@@ -37,7 +37,8 @@ export type CollectionSortOrder =
   | 'date_added_desc' // Most recently added to Plex
   | 'date_added_asc' // Least recently added to Plex
   | 'alphabetical_asc' // A-Z alphabetical order
-  | 'alphabetical_desc'; // Z-A alphabetical order
+  | 'alphabetical_desc' // Z-A alphabetical order
+  | 'source_rank'; // Source ranking (Trakt anticipated only)
 
 /**
  * Sonarr monitor types - determines which episodes are monitored when adding a series
@@ -79,6 +80,7 @@ export interface CollectionConfig {
     | 'imdb'
     | 'letterboxd'
     | 'mdblist'
+    | 'tvdb'
     | 'networks'
     | 'originals'
     | 'myanimelist'
@@ -230,6 +232,7 @@ export interface CollectionConfig {
   // Letterboxd custom list fields
   readonly letterboxdCustomListUrl?: string; // Custom Letterboxd list URL (e.g., https://letterboxd.com/username/list/list-name/)
   // MDBList custom list fields
+  readonly tvdbCustomListUrl?: string; // TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)
   readonly mdblistCustomListUrl?: string; // Custom MDBList list URL (e.g., https://mdblist.com/lists/123456 or https://mdblist.com/lists/username/list-name)
   // Networks (FlixPatrol) fields
   readonly networksCountry?: string; // Country/region for Networks collections (e.g., 'world', 'us', 'uk')
@@ -246,11 +249,14 @@ export interface CollectionConfig {
   readonly plexLabel?: string;
   // Unified person minimum items (applies to both actors and directors)
   readonly personMinimumItems?: number;
+  readonly franchiseMinimumItems?: number; // tmdb auto_franchise: minimum owned movies (default 2)
+  readonly franchiseCountReleasedOnly?: boolean; // tmdb auto_franchise: only released TMDB parts count towards franchise size
   // Plex Library separator settings for auto person collections
   readonly useSeparator?: boolean; // Create a separator collection for actors/directors multi-collections
   readonly separatorTitle?: string; // Custom title for the separator collection
   // Collection exclusion settings
   readonly excludeFromCollections?: string[]; // Array of collection IDs to exclude items from (mutual exclusion)
+  readonly excludeLabels?: string[]; // Plex item labels; items carrying any of them are kept out of the collection
   // Poster settings
   readonly customPoster?: string | Record<string, string>; // Path to custom poster image file, or per-library poster mapping
   readonly autoPoster?: boolean; // Auto-generate poster during sync (only available for Overseerr user collections)
@@ -305,6 +311,7 @@ export interface CollectionConfig {
   readonly comingSoonSonarrTagIds?: number[]; // Sonarr tag IDs to filter by
   readonly comingSoonRadarrRootFolder?: string; // Radarr root folder path to filter by
   readonly comingSoonSonarrRootFolder?: string; // Sonarr root folder path to filter by
+  readonly comingSoonIncludeMidSeason?: boolean; // TV monitored: also include shows whose next episode is mid-season
   // Overlay sync option
   readonly applyOverlaysDuringSync?: boolean; // If true, apply overlays to collection items immediately after sync (default: true for Coming Soon, false for others)
   // Time restriction settings
@@ -343,6 +350,7 @@ export interface CollectionConfig {
     readonly customDays?: number;
     readonly minimumPlays?: number;
     readonly networksCountry?: string; // Selected country for Networks collections
+    readonly tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters']; // Per-source TMDB discover filters (advanced_custom_tmdb)
     readonly radarrTagServerId?: number; // Radarr instance ID for radarrtag sources
     readonly radarrTagId?: number; // Radarr tag ID for radarrtag sources
     readonly radarrTagLabel?: string; // Radarr tag label for display
@@ -542,6 +550,16 @@ export interface TautulliSettings {
   externalUrl?: string;
 }
 
+export interface TracearrSettings {
+  enabled?: boolean;
+  hostname?: string;
+  port?: number;
+  useSsl?: boolean;
+  urlBase?: string;
+  apiKey?: string;
+  serverId?: string;
+}
+
 export interface MaintainerrSettings {
   hostname?: string;
   port?: number;
@@ -714,6 +732,7 @@ export interface MainSettings {
   placeholderMovieRootFolders?: Record<string, string>; // libraryKey -> movie placeholder path mapping
   placeholderTVRootFolders?: Record<string, string>; // libraryKey -> TV placeholder path mapping
   // Trailer download settings
+  placeholderFolderTvdbId?: boolean; // If true, new TV placeholder folders not in Sonarr are named 'Title (Year) {tvdb-ID}'
   placeholderFolderTmdbId?: boolean; // If true, new movie placeholder folders are named 'Title (Year) {tmdb-ID}'
   placeholderEditions?: boolean; // If true, new TV placeholders use a separate Plex edition folder '{edition-Trailer}'
   skipYoutubeTrailerDownloads?: boolean; // If true, skip YouTube trailer downloads and use hardcoded placeholder video only (speeds up sync)
@@ -781,6 +800,7 @@ interface AllSettings {
   main: MainSettings;
   plex: PlexSettings;
   tautulli: TautulliSettings;
+  tracearr: TracearrSettings;
   maintainerr: MaintainerrSettings;
   overseerr: OverseerrSettings;
   myanimelist: MyAnimeListSettings;
@@ -836,6 +856,7 @@ class Settings {
         sortTitleArticleHandling: 'off',
       },
       tautulli: {},
+      tracearr: {},
       maintainerr: {},
       overseerr: {},
       myanimelist: {},
@@ -1114,6 +1135,14 @@ class Settings {
 
   set tautulli(data: TautulliSettings) {
     this.data.tautulli = data;
+  }
+
+  get tracearr(): TracearrSettings {
+    return this.data.tracearr;
+  }
+
+  set tracearr(data: TracearrSettings) {
+    this.data.tracearr = data;
   }
 
   get maintainerr(): MaintainerrSettings {
@@ -2384,6 +2413,7 @@ export type MultiSourceType =
   | 'imdb'
   | 'letterboxd'
   | 'mdblist'
+  | 'tvdb'
   | 'tautulli'
   | 'overseerr'
   | 'networks'
@@ -2404,6 +2434,7 @@ export interface SourceDefinition {
   readonly minimumPlays?: number;
   readonly priority: number;
   readonly networksCountry?: string;
+  readonly tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
   readonly radarrTagServerId?: number;
   readonly radarrTagId?: number;
   readonly radarrTagLabel?: string;

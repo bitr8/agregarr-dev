@@ -3,6 +3,7 @@ import { isPlexNotFoundError } from '@server/api/plexMetadataClassify';
 import TautulliAPI from '@server/api/tautulli';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  applyLabelExclusions,
   extractErrorCause,
   extractTmdbIdFromGuids,
   extractTvdbIdFromGuids,
@@ -89,7 +90,8 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
       const mappedResult = await this.mapSourceDataToItems(
         sourceData,
         config,
-        plexClient
+        plexClient,
+        libraryCache
       );
       const { items, mappingStats, filteringStats } =
         await this.applyFilteringToMappedItems(mappedResult, config);
@@ -200,7 +202,9 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
   public async mapSourceDataToItems(
     sourceData: TautulliSourceData[],
     config: CollectionConfig,
-    plexClient?: PlexAPI
+    plexClient?: PlexAPI,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Tracearr subclass override uses it
+    libraryCache?: LibraryItemsCache
   ): Promise<{
     items: TautulliCollectionItem[];
     missingItems?: MissingItem[];
@@ -433,6 +437,13 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     missingItems?: MissingItem[]
   ): Promise<CollectionOperationResult> {
     try {
+      items = await applyLabelExclusions(
+        items,
+        config,
+        plexClient,
+        this.source
+      );
+
       // Use the new standardized approach via BaseCollectionSync
       const result = await this.createOrUpdateCollectionStandardized(
         items,
@@ -485,7 +496,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     );
   }
 
-  private getTimeRangeDays(config: CollectionConfig): number {
+  protected getTimeRangeDays(config: CollectionConfig): number {
     // New implementation only supports modern customDays config
     return config.customDays && config.customDays > 0 ? config.customDays : 30;
   }
@@ -494,7 +505,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     return config.subtype || 'most_popular';
   }
 
-  private getCollectionTypeFromSubtype(
+  protected getCollectionTypeFromSubtype(
     config: CollectionConfig
   ): 'most_popular' | 'most_watched' {
     if (config.subtype?.startsWith('most_watched')) {
@@ -503,7 +514,7 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
     return 'most_popular';
   }
 
-  private getStatTypeFromSubtype(
+  protected getStatTypeFromSubtype(
     config: CollectionConfig
   ): 'plays' | 'duration' {
     if (config.subtype?.endsWith('_duration')) {

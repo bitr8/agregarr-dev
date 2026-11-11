@@ -426,7 +426,7 @@ const SettingsJobs = () => {
                 <label className="text-label">
                   {intl.formatMessage(messages.editJobScheduleCurrent)}
                 </label>
-                <div className="form-input-area mt-2 mb-1">
+                <div className="form-input-area mb-1 mt-2">
                   <div>
                     {jobModalState.job &&
                       (() => {

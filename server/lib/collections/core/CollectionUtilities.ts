@@ -1657,6 +1657,162 @@ export function capPreviewItemsToMaxItems<
 }
 
 /**
+ * Drop items carrying any of the config's excludeLabels. When that empties a
+ * non-empty list, the existing Plex collection is emptied too so it does not
+ * keep the excluded items.
+ */
+export async function applyLabelExclusions(
+  items: CollectionItem[],
+  config: Pick<CollectionConfig, 'name'> &
+    Partial<
+      Pick<
+        CollectionConfig,
+        | 'id'
+        | 'excludeLabels'
+        | 'libraryId'
+        | 'collectionRatingKey'
+        | 'type'
+        | 'subtype'
+      >
+    >,
+  plexClient: PlexAPI,
+  source: CollectionSource
+): Promise<CollectionItem[]> {
+  const labels = (config.excludeLabels ?? [])
+    .map((label) => label.trim())
+    .filter(Boolean);
+  if (labels.length === 0 || items.length === 0 || !config.libraryId) {
+    return items;
+  }
+
+  let filteredItems: CollectionItem[];
+  try {
+    const libraryIds = Array.isArray(config.libraryId)
+      ? config.libraryId
+      : [config.libraryId];
+    const excludedRatingKeys = new Set<string>();
+
+    for (const libraryId of libraryIds) {
+      for (const label of labels) {
+        const keys = await plexClient.getRatingKeysWithLabel(libraryId, label);
+        for (const key of keys) {
+          excludedRatingKeys.add(key);
+        }
+      }
+    }
+
+    filteredItems = items.filter(
+      (item) => !excludedRatingKeys.has(item.ratingKey)
+    );
+    const excludedCount = items.length - filteredItems.length;
+
+    if (excludedCount > 0) {
+      logger.info(
+        `Excluded ${excludedCount} items from collection "${
+          config.name
+        }" carrying label ${labels.map((l) => `"${l}"`).join(', ')}`,
+        {
+          label: `${source} Collections`,
+          configName: config.name,
+          excludedCount,
+          excludeLabels: labels,
+        }
+      );
+    }
+  } catch (error) {
+    logger.error(
+      `Error applying label exclusions for ${config.name}: ${error}`,
+      {
+        label: `${source} Collections`,
+        configName: config.name,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+    return items;
+  }
+
+  if (filteredItems.length === 0) {
+    await emptyExistingCollection(config, plexClient, source);
+  }
+
+  return filteredItems;
+}
+
+async function emptyExistingCollection(
+  config: Pick<CollectionConfig, 'name'> &
+    Partial<
+      Pick<
+        CollectionConfig,
+        'id' | 'libraryId' | 'collectionRatingKey' | 'type' | 'subtype'
+      >
+    >,
+  plexClient: PlexAPI,
+  source: CollectionSource
+): Promise<void> {
+  if (
+    !config.collectionRatingKey ||
+    isMultiCollectionPattern(config as CollectionConfig)
+  ) {
+    return;
+  }
+
+  try {
+    const result = await plexClient.updateCollectionContents(
+      config.collectionRatingKey,
+      [],
+      config.name
+    );
+    for (const removedKey of result.removedKeys) {
+      try {
+        await plexClient.addLabelToItem(removedKey, 'agregarr-stale');
+      } catch (error) {
+        logger.warn(
+          `Failed to add agregarr-stale label to item ${removedKey}`,
+          {
+            label: `${source} Collections`,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+    }
+    if (result.removed > 0) {
+      logger.info(
+        `Removed ${result.removed} label-excluded items from existing collection "${config.name}"`,
+        { label: `${source} Collections`, configName: config.name }
+      );
+    }
+
+    // Plex drops a regular collection once it is empty; a kept stale key
+    // would make every later sync refuse the missing collection
+    let gone = result.removed > 0;
+    if (!gone) {
+      try {
+        gone = !(await plexClient.getCollectionMetadata(
+          config.collectionRatingKey
+        ));
+      } catch {
+        gone = false;
+      }
+    }
+    if (gone && config.id) {
+      const libraryId = Array.isArray(config.libraryId)
+        ? config.libraryId[0]
+        : config.libraryId;
+      clearConfigRatingKey(config.id, libraryId, config.collectionRatingKey);
+    }
+  } catch (error) {
+    logger.warn(
+      `Could not empty existing collection "${config.name}" after label exclusion`,
+      {
+        label: `${source} Collections`,
+        configName: config.name,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+  }
+}
+
+/**
  * Apply collection mutual exclusion - remove items that exist in excluded collections
  * This is a utility function used by both BaseCollectionSync and MultiSourceOrchestrator
  */
@@ -1841,6 +1997,7 @@ export async function processMissingItemsWithMode(
     | 'anilist'
     | 'myanimelist'
     | 'mdblist'
+    | 'tvdb'
     | 'networks'
     | 'originals'
     | 'multi-source'

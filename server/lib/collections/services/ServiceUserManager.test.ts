@@ -32,7 +32,10 @@ vi.mock('@server/lib/settings', () => ({ getSettings: () => settings }));
 
 import { getRepository } from '@server/datasource';
 import type { ServiceUserConfig } from './ServiceUserManager';
-import { ServiceUserManager } from './ServiceUserManager';
+import {
+  generateServiceUserConfig,
+  ServiceUserManager,
+} from './ServiceUserManager';
 
 const REQUEST = 32;
 const AUTO_APPROVE = 128;
@@ -237,6 +240,35 @@ describe('ServiceUserManager - Overseerr permission push', () => {
     expect(mockOverseerrAPI.updateUserPermissions).not.toHaveBeenCalledWith(
       42,
       expect.anything()
+    );
+  });
+});
+
+describe('tvdb service user', () => {
+  it.each(['single', 'per-service', 'granular'] as const)(
+    'builds a config in %s mode',
+    (mode) => {
+      const config = generateServiceUserConfig('tvdb', 'Matrix', mode);
+      expect(config.username).toMatch(/Agregarr$/);
+      if (mode !== 'single') expect(config.username).toContain('TVDB');
+    }
+  );
+
+  it('resolves a request service user for the tvdb source', async () => {
+    const manager = new ServiceUserManager();
+    const spy = vi
+      .spyOn(
+        manager as unknown as {
+          getOrCreateServiceUser: () => Promise<unknown>;
+        },
+        'getOrCreateServiceUser'
+      )
+      .mockResolvedValue({ id: 1 });
+
+    await manager.getOrCreateServiceUserForRequest('tvdb', 'Matrix', true);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ username: 'TVDBAgregarr', permissions: 928 })
     );
   });
 });

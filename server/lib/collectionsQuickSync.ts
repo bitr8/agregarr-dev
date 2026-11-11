@@ -3,6 +3,7 @@ import { getRepository } from '@server/datasource';
 import { CollectionMissingItems } from '@server/entity/CollectionMissingItems';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import type { GhostDeletion } from '@server/lib/placeholders/services/PlaceholderCleanup';
+import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 
@@ -761,33 +762,29 @@ class CollectionsQuickSync {
       if (this.cancelled) break;
 
       try {
-        // Filter out items excluded by excludeFromCollections
-        const filteredMatches = await this.filterExcludedItems(
-          collectionMatches,
-          plexClient,
-          excludedItemsCache
-        );
-
-        // Clean up DB records for excluded items so they aren't re-attempted
-        if (filteredMatches.length < collectionMatches.length) {
-          const excludedMatches = collectionMatches.filter(
-            (m) => !filteredMatches.includes(m)
+        // Filter out items excluded by excludeFromCollections / excludeLabels
+        const { kept: filteredMatches, collectionExcluded: excludedMatches } =
+          await this.filterExcludedItems(
+            collectionMatches,
+            plexClient,
+            excludedItemsCache
           );
-          if (excludedMatches.length > 0) {
-            try {
-              const repository = getRepository(CollectionMissingItems);
-              const excludedIds = excludedMatches.map((m) => m.missingItem.id);
-              await repository.delete(excludedIds);
-            } catch (cleanupError) {
-              logger.warn('Failed to clean up excluded missing item records', {
-                label: 'Collections Quick Sync',
-                collectionRatingKey,
-                error:
-                  cleanupError instanceof Error
-                    ? cleanupError.message
-                    : String(cleanupError),
-              });
-            }
+
+        // Clean up DB records for collection-excluded items so they aren't re-attempted
+        if (excludedMatches.length > 0) {
+          try {
+            const repository = getRepository(CollectionMissingItems);
+            const excludedIds = excludedMatches.map((m) => m.missingItem.id);
+            await repository.delete(excludedIds);
+          } catch (cleanupError) {
+            logger.warn('Failed to clean up excluded missing item records', {
+              label: 'Collections Quick Sync',
+              collectionRatingKey,
+              error:
+                cleanupError instanceof Error
+                  ? cleanupError.message
+                  : String(cleanupError),
+            });
           }
         }
 
@@ -921,17 +918,24 @@ class CollectionsQuickSync {
   }
 
   /**
-   * Filter out items that belong to excluded collections (excludeFromCollections)
+   * Drop matches excluded by excludeFromCollections or excludeLabels.
+   * Only collection-excluded matches are returned for DB cleanup: a label
+   * disappears when the real file replaces a placeholder, so label-excluded
+   * rows must stay.
    */
   private async filterExcludedItems(
     matches: MissingItemMatch[],
     plexClient: PlexAPI,
     cache: Map<string, Set<string>>
-  ): Promise<MissingItemMatch[]> {
-    if (matches.length === 0) return matches;
+  ): Promise<{
+    kept: MissingItemMatch[];
+    collectionExcluded: MissingItemMatch[];
+  }> {
+    const unchanged = { kept: matches, collectionExcluded: [] };
+    if (matches.length === 0) return unchanged;
 
     const firstMatch = matches[0]?.missingItem;
-    if (!firstMatch?.configId) return matches;
+    if (!firstMatch?.configId) return unchanged;
 
     // Warn if matches have mixed configIds (shouldn't happen, but surface it)
     const mixedConfigs = matches.some(
@@ -945,20 +949,57 @@ class CollectionsQuickSync {
       });
     }
 
+    const config = getSettings().plex.collectionConfigs?.find(
+      (c) => c.id === firstMatch.configId
+    );
+    if (!config) return unchanged;
+
+    const collectionExcludedKeys = await this.resolveCollectionExcludedKeys(
+      config,
+      plexClient,
+      cache
+    );
+    const labelExcludedKeys = await this.resolveLabelExcludedKeys(
+      config,
+      plexClient,
+      cache
+    );
+
+    const collectionExcluded = matches.filter((m) =>
+      collectionExcludedKeys.has(m.plexItem.ratingKey)
+    );
+    const kept = matches.filter(
+      (m) =>
+        !collectionExcludedKeys.has(m.plexItem.ratingKey) &&
+        !labelExcludedKeys.has(m.plexItem.ratingKey)
+    );
+
+    const excludedCount = matches.length - kept.length;
+    if (excludedCount > 0) {
+      logger.info(
+        `Excluded ${excludedCount} items from quick sync for "${config.name}"`,
+        {
+          label: 'Collections Quick Sync',
+          configName: config.name,
+          excludedCount,
+          remainingCount: kept.length,
+        }
+      );
+    }
+
+    return { kept, collectionExcluded };
+  }
+
+  private async resolveCollectionExcludedKeys(
+    config: CollectionConfig,
+    plexClient: PlexAPI,
+    cache: Map<string, Set<string>>
+  ): Promise<Set<string>> {
+    const excludedRatingKeys = new Set<string>();
+    if (!config.excludeFromCollections?.length) return excludedRatingKeys;
+
     try {
       const settings = getSettings();
-      const config = settings.plex.collectionConfigs?.find(
-        (c) => c.id === firstMatch.configId
-      );
-
-      if (
-        !config?.excludeFromCollections ||
-        config.excludeFromCollections.length === 0
-      ) {
-        return matches;
-      }
-
-      const excludedRatingKeys = new Set<string>();
 
       for (const excludedCollectionId of config.excludeFromCollections) {
         const excludedConfig = settings.plex.collectionConfigs?.find(
@@ -996,35 +1037,55 @@ class CollectionsQuickSync {
           );
         }
       }
-
-      if (excludedRatingKeys.size === 0) return matches;
-
-      const filtered = matches.filter(
-        (m) => !excludedRatingKeys.has(m.plexItem.ratingKey)
-      );
-
-      const excludedCount = matches.length - filtered.length;
-      if (excludedCount > 0) {
-        logger.info(
-          `Excluded ${excludedCount} items from quick sync for "${config.name}"`,
-          {
-            label: 'Collections Quick Sync',
-            configName: config.name,
-            excludedCount,
-            remainingCount: filtered.length,
-          }
-        );
-      }
-
-      return filtered;
     } catch (error) {
       logger.warn('Failed to apply collection exclusions in quick sync', {
         label: 'Collections Quick Sync',
-        configId: firstMatch.configId,
+        configId: config.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      return matches;
     }
+
+    return excludedRatingKeys;
+  }
+
+  private async resolveLabelExcludedKeys(
+    config: CollectionConfig,
+    plexClient: PlexAPI,
+    cache: Map<string, Set<string>>
+  ): Promise<Set<string>> {
+    const excludedRatingKeys = new Set<string>();
+    const labels = (config.excludeLabels ?? [])
+      .map((label) => label.trim())
+      .filter(Boolean);
+    if (labels.length === 0) return excludedRatingKeys;
+
+    try {
+      const libraryIds = Array.isArray(config.libraryId)
+        ? config.libraryId
+        : [config.libraryId];
+      for (const libraryId of libraryIds) {
+        for (const label of labels) {
+          const cacheKey = `label:${libraryId}:${label.toLowerCase()}`;
+          let keys = cache.get(cacheKey);
+          if (!keys) {
+            keys = await plexClient.getRatingKeysWithLabel(libraryId, label);
+            cache.set(cacheKey, keys);
+          }
+          for (const key of keys) {
+            excludedRatingKeys.add(key);
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to apply label exclusions in quick sync', {
+        label: 'Collections Quick Sync',
+        configId: config.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return new Set();
+    }
+
+    return excludedRatingKeys;
   }
 
   /**

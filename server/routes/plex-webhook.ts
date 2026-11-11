@@ -1,4 +1,7 @@
 import PlexAPI from '@server/api/plexapi';
+import PlexTvAPI from '@server/api/plextv';
+import { getRepository } from '@server/datasource';
+import { PlaceholderItem } from '@server/entity/PlaceholderItem';
 import { getAdminUser } from '@server/lib/collections/core/CollectionUtilities';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -63,6 +66,7 @@ function requireWebhookToken(
 
 interface PlexWebhookMetadata {
   ratingKey?: string;
+  grandparentRatingKey?: string;
   type?: string;
   title?: string;
   editionTitle?: string;
@@ -70,6 +74,7 @@ interface PlexWebhookMetadata {
 
 interface PlexWebhookPayload {
   event: string;
+  Account?: { id?: number };
   Metadata?: PlexWebhookMetadata;
 }
 
@@ -92,15 +97,23 @@ function isPlaceholderMetadata(metadata: PlexWebhookMetadata): boolean {
   return false;
 }
 
-async function getPlexClient(): Promise<PlexAPI | null> {
+async function getPlexClient(): Promise<{
+  client: PlexAPI;
+  adminToken: string;
+  adminPlexId?: number;
+} | null> {
   try {
     const adminUser = await getAdminUser();
     if (!adminUser?.plexToken) return null;
     const settings = getSettings();
-    return new PlexAPI({
-      plexToken: adminUser.plexToken,
-      plexSettings: settings.plex,
-    });
+    return {
+      client: new PlexAPI({
+        plexToken: adminUser.plexToken,
+        plexSettings: settings.plex,
+      }),
+      adminToken: adminUser.plexToken,
+      adminPlexId: adminUser.plexId,
+    };
   } catch {
     return null;
   }
@@ -108,18 +121,79 @@ async function getPlexClient(): Promise<PlexAPI | null> {
 
 async function unscrobblePlaceholder(
   ratingKey: string,
-  plexClient: PlexAPI
+  plexClient: PlexAPI,
+  who: string,
+  resetProgress: boolean
 ): Promise<void> {
   try {
     await plexClient.markItemAsUnplayed(ratingKey);
     logger.info('Unscrobbled placeholder item', {
       label: 'PlexWebhook',
       ratingKey,
+      who,
     });
   } catch (error) {
     logger.error('Failed to unscrobble placeholder item', {
       label: 'PlexWebhook',
       ratingKey,
+      who,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (!resetProgress) return;
+  try {
+    await plexClient.resetItemProgress(ratingKey);
+  } catch (error) {
+    logger.warn('Failed to reset placeholder resume progress', {
+      label: 'PlexWebhook',
+      ratingKey,
+      who,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function isConfirmedPlaceholder(
+  ratingKey: string,
+  plexClient: PlexAPI
+): Promise<boolean> {
+  try {
+    const row = await getRepository(PlaceholderItem).findOne({
+      where: { plexRatingKey: ratingKey },
+    });
+    if (row) return true;
+    const metadata = await plexClient.getMetadata(ratingKey);
+    return !!metadata?.Label?.some((l) => l.tag === 'trailer-placeholder');
+  } catch {
+    return false;
+  }
+}
+
+async function unscrobbleAsSharedUser(
+  ratingKey: string,
+  accountId: number,
+  adminToken: string,
+  resetProgress: boolean
+): Promise<void> {
+  try {
+    const settings = getSettings();
+    if (!settings.plex.machineId) return;
+    const userToken = await new PlexTvAPI(adminToken).getSharedUserToken(
+      settings.plex.machineId,
+      accountId
+    );
+    if (!userToken) return;
+    await unscrobblePlaceholder(
+      ratingKey,
+      new PlexAPI({ plexToken: userToken, plexSettings: settings.plex }),
+      'shared user',
+      resetProgress
+    );
+  } catch (error) {
+    logger.error('Failed to unscrobble placeholder as shared user', {
+      label: 'PlexWebhook',
+      ratingKey,
+      accountId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -159,7 +233,11 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
       return;
     }
 
-    const { event, Metadata: metadata } = payload as PlexWebhookPayload;
+    const {
+      event,
+      Metadata: metadata,
+      Account: account,
+    } = payload as PlexWebhookPayload;
 
     logger.info('Plex webhook received', {
       label: 'PlexWebhook',
@@ -200,9 +278,37 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
       editionTitle: metadata.editionTitle,
     });
 
-    const plexClient = await getPlexClient();
-    if (plexClient) {
-      await unscrobblePlaceholder(ratingKey, plexClient);
+    const admin = await getPlexClient();
+    if (!admin) return;
+    // TV placeholders are recorded and labelled on the show, not the episode
+    const grandparentKey = String(metadata.grandparentRatingKey ?? '');
+    const confirmKey =
+      metadata.type === 'episode' && /^\d+$/.test(grandparentKey)
+        ? grandparentKey
+        : ratingKey;
+    const confirmed = await isConfirmedPlaceholder(confirmKey, admin.client);
+    const resetProgress = confirmed && event !== 'media.play';
+    await unscrobblePlaceholder(
+      ratingKey,
+      admin.client,
+      'admin',
+      resetProgress
+    );
+    if (!confirmed) return;
+
+    const accountId = Number(account?.id);
+    // PMS reports the server owner as local account 1
+    if (
+      Number.isInteger(accountId) &&
+      accountId > 1 &&
+      accountId !== admin.adminPlexId
+    ) {
+      await unscrobbleAsSharedUser(
+        ratingKey,
+        accountId,
+        admin.adminToken,
+        resetProgress
+      );
     }
   } catch (error) {
     logger.error('Webhook processing failed after responding', {

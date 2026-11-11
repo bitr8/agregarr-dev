@@ -128,6 +128,21 @@ describe('buildExportPayload', () => {
   });
 });
 
+describe('comingSoonIncludeMidSeason round trip', () => {
+  it('survives export and import', () => {
+    const exported = buildExportPayload(
+      makeConfig({
+        type: 'comingsoon',
+        subtype: 'monitored',
+        comingSoonIncludeMidSeason: true,
+      })
+    );
+    expect(exported.comingSoonIncludeMidSeason).toBe(true);
+    const imported = buildConfigFromImport(exported, '10050', '2', 'TV Shows');
+    expect(imported.comingSoonIncludeMidSeason).toBe(true);
+  });
+});
+
 describe('buildConfigFromImport', () => {
   it('mints the provided ID, never adopts embedded', () => {
     const config = buildConfigFromImport(

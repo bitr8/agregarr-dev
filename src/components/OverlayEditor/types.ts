@@ -234,6 +234,7 @@ export interface OverlayRenderContext {
   hdr?: boolean; // HDR10/HDR10+
   dolbyVision?: boolean; // Dolby Vision
   dolbyVisionProfile?: number; // Dolby Vision Profile (5, 7, 8, etc.)
+  hdr10Plus?: boolean; // HDR10+ dynamic metadata
   colorTrc?: string; // Color transfer characteristic (e.g., 'smpte2084' for HDR10, 'arib' for HLG)
 
   // Audio specs
@@ -277,6 +278,14 @@ export interface OverlayRenderContext {
   isEstimatedReleaseDate?: boolean; // releaseDate is the theatrical+90 estimate, not a published date
   daysUntilRelease?: number; // Days until releaseDate
   daysAgo?: number; // Days since releaseDate
+  theatricalReleaseDate?: string; // Movies: published theatrical date
+  digitalReleaseDate?: string; // Movies: published digital date
+  physicalReleaseDate?: string; // Movies: published physical date
+  daysSinceTheatricalRelease?: number; // Negative before the date
+  daysSinceDigitalRelease?: number;
+  daysSincePhysicalRelease?: number;
+  daysSinceHomeRelease?: number; // Earliest of digital / physical
+  releaseDateSource?: string; // digital, physical, estimate (theatrical+90) or tmdb
 
   // TV SHOWS - Episode/Season countdowns (separate from releaseDate)
   nextEpisodeAirDate?: string; // Raw date for ANY next episode (including mid-season)
@@ -307,6 +316,8 @@ export interface OverlayRenderContext {
 
   // Collection membership (populated at runtime from Plex collection contents)
   collection?: string[]; // Array of collection IDs this item belongs to
+
+  edition?: string; // Plex edition, e.g. 'Extended Cut'
 
   // Plex Labels (item-level tags applied in Plex)
   plexLabels?: string[]; // Array of Plex label tags on this item
@@ -366,7 +377,13 @@ export const SINGLE_VALUE_FIELDS = [
   'audioLanguageCode',
   'streamingProvider',
   'streamingProviderId',
+  'edition',
 ];
+
+export const COLLECTION_RANK_PREFIX = 'collectionRank:';
+
+export const isCollectionRankField = (field?: string): boolean =>
+  !!field?.startsWith(COLLECTION_RANK_PREFIX);
 
 /**
  * Check if a field is a single-value field
@@ -496,6 +513,7 @@ export const AVAILABLE_VARIABLES = {
     { field: 'bitrate', label: 'Bitrate (kbps)', example: '15000' },
     { field: 'fileSize', label: 'File Size (bytes)', example: '4500000000' },
     { field: 'filePath', label: 'File Path', example: '/movies/Inception.mkv' },
+    { field: 'edition', label: 'Edition', example: 'Extended Cut' },
   ],
   playback: [
     { field: 'viewCount', label: 'View Count', example: '5' },
@@ -508,12 +526,56 @@ export const AVAILABLE_VARIABLES = {
       example: '7',
     },
   ],
+  collection: [
+    { field: 'collectionRank', label: 'Collection Rank', example: '3' },
+  ],
   'coming-soon': [
     { field: 'releaseDate', label: 'Release Date', example: 'JAN 15' },
     {
       field: 'isEstimatedReleaseDate',
       label: 'Release Date Is Estimated',
       example: 'false',
+    },
+    {
+      field: 'theatricalReleaseDate',
+      label: 'Theatrical Release Date (Movies)',
+      example: 'OCT 25',
+    },
+    {
+      field: 'digitalReleaseDate',
+      label: 'Digital Release Date (Movies)',
+      example: 'DEC 25',
+    },
+    {
+      field: 'physicalReleaseDate',
+      label: 'Physical Release Date (Movies)',
+      example: 'JAN 14',
+    },
+    {
+      field: 'daysSinceTheatricalRelease',
+      label: 'Days Since Theatrical Release (Movies, negative before the date)',
+      example: '61',
+    },
+    {
+      field: 'daysSinceDigitalRelease',
+      label: 'Days Since Digital Release (Movies, negative before the date)',
+      example: '0',
+    },
+    {
+      field: 'daysSincePhysicalRelease',
+      label: 'Days Since Physical Release (Movies, negative before the date)',
+      example: '-20',
+    },
+    {
+      field: 'daysSinceHomeRelease',
+      label:
+        'Days Since Home Release (Digital or Physical, negative before the date)',
+      example: '0',
+    },
+    {
+      field: 'releaseDateSource',
+      label: 'Release Date Source (digital/physical/estimate)',
+      example: 'digital',
     },
     { field: 'daysUntilRelease', label: 'Days Until Release', example: '14' },
     {
@@ -681,6 +743,7 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'bitDepth', label: 'Bit Depth', example: '10' },
     { field: 'hdr', label: 'HDR', example: 'true' },
     { field: 'dolbyVision', label: 'Dolby Vision', example: 'true' },
+    { field: 'hdr10Plus', label: 'HDR10+', example: 'true' },
     {
       field: 'dolbyVisionProfile',
       label: 'Dolby Vision Profile',
@@ -739,6 +802,7 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'bitrate', label: 'Bitrate (kbps)', example: '15000' },
     { field: 'fileSize', label: 'File Size (bytes)', example: '4500000000' },
     { field: 'filePath', label: 'File Path', example: '/movies/Inception.mkv' },
+    { field: 'edition', label: 'Edition', example: 'Extended Cut' },
     { field: 'viewCount', label: 'View Count', example: '5' },
     { field: 'lastPlayed', label: 'Last Played', example: '2024-01-15' },
     { field: 'dateAdded', label: 'Date Added', example: '2024-01-01' },
@@ -781,6 +845,47 @@ export const CONDITION_FIELD_CATEGORIES = {
       field: 'isEstimatedReleaseDate',
       label: 'Release Date Is Estimated',
       example: 'false',
+    },
+    {
+      field: 'theatricalReleaseDate',
+      label: 'Theatrical Release Date (Movies)',
+      example: 'OCT 25',
+    },
+    {
+      field: 'digitalReleaseDate',
+      label: 'Digital Release Date (Movies)',
+      example: 'DEC 25',
+    },
+    {
+      field: 'physicalReleaseDate',
+      label: 'Physical Release Date (Movies)',
+      example: 'JAN 14',
+    },
+    {
+      field: 'daysSinceTheatricalRelease',
+      label: 'Days Since Theatrical Release (Movies), negative before the date',
+      example: '61',
+    },
+    {
+      field: 'daysSinceDigitalRelease',
+      label: 'Days Since Digital Release (Movies), negative before the date',
+      example: '0',
+    },
+    {
+      field: 'daysSincePhysicalRelease',
+      label: 'Days Since Physical Release (Movies), negative before the date',
+      example: '-20',
+    },
+    {
+      field: 'daysSinceHomeRelease',
+      label:
+        'Days Since Home Release (Digital or Physical), negative before the date',
+      example: '0',
+    },
+    {
+      field: 'releaseDateSource',
+      label: 'Release Date Source (digital/physical/estimate)',
+      example: 'digital',
     },
     {
       field: 'daysAgo',
@@ -974,6 +1079,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     hdr: true,
     dolbyVision: true,
     dolbyVisionProfile: 7,
+    hdr10Plus: true,
     colorTrc: 'smpte2084',
     audioFormat: 'English (Dolby TrueHD Atmos 7.1)',
     audioCodec: 'truehd',
@@ -995,6 +1101,14 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysSinceLastPlayed: 3,
     releaseDate: '2025-02-15', // Primary release date (digital)
     isEstimatedReleaseDate: false,
+    theatricalReleaseDate: '2024-11-20',
+    digitalReleaseDate: '2025-02-15',
+    physicalReleaseDate: '2025-03-04',
+    daysSinceTheatricalRelease: 73,
+    daysSinceDigitalRelease: -14,
+    daysSincePhysicalRelease: -31,
+    daysSinceHomeRelease: -14,
+    releaseDateSource: 'digital',
     daysUntilRelease: 14,
     runtime: 136,
     runtimeHHMM: '2h 16m',
@@ -1004,6 +1118,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysUntilAction: 5,
     streamingProvider: 'Netflix',
     streamingProviderId: 8,
+    edition: 'Extended Cut',
     plexLabels: ['4K DV', 'HDR'],
     isPlaceholder: true,
     mediaType: 'movie',
@@ -1046,6 +1161,7 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     videoProfile: 'high',
     videoFrameRate: '23.976',
     bitDepth: 8,
+    hdr10Plus: true,
     audioFormat: 'English (DTS-HD MA 5.1)',
     audioCodec: 'dts',
     audioProfile: 'ma',

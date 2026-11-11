@@ -1,3 +1,4 @@
+import PlexClient from '@server/api/plexClient';
 import { fetchPlexMetadataBatches } from '@server/api/plexMetadataBatch';
 import type { PlexMetadataSafeResult } from '@server/api/plexMetadataClassify';
 import {
@@ -17,19 +18,11 @@ import type {
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { registerLogSecrets } from '@server/utils/logRedaction';
-import NodePlexAPI from 'plex-api';
 
 // Re-export so existing consumers can keep importing the result type from the
 // Plex client module; the classifiers themselves live in a dep-free sibling so
 // they stay unit-testable without the full client graph.
 export type { PlexMetadataSafeResult };
-
-// Extended interface for type-safe Plex API HTTP methods
-interface ExtendedPlexAPI extends NodePlexAPI {
-  postQuery?: (url: string) => Promise<unknown>;
-  putQuery?: (url: string) => Promise<void>;
-  deleteQuery?: (url: string) => Promise<void>;
-}
 
 export interface PlexLibraryItem {
   ratingKey: string;
@@ -129,6 +122,7 @@ export interface PlexStream {
   DOVIELPresent?: boolean;
   DOVIRPUPresent?: boolean;
   DOVIBLCompatID?: number;
+  HDR10PlusPresent?: boolean;
   height?: number;
   width?: number;
   colorPrimaries?: string;
@@ -221,7 +215,7 @@ interface PlexCollectionResponse {
 }
 
 class PlexAPI {
-  private plexClient: NodePlexAPI;
+  private plexClient: PlexClient;
   private plexToken?: string;
   private hubManager: PlexHubManager;
   private smartCollectionManager: PlexSmartCollectionManager;
@@ -311,38 +305,16 @@ class PlexAPI {
     ).join(', ');
   }
 
-  private getExtendedClient(): ExtendedPlexAPI {
-    return this.plexClient as ExtendedPlexAPI;
-  }
-
   private async safePostQuery(url: string): Promise<unknown> {
-    const client = this.getExtendedClient();
-    if (typeof client.postQuery !== 'function') {
-      throw new Error(
-        'POST operations are not supported by this Plex API version'
-      );
-    }
-    return client.postQuery(url);
+    return this.plexClient.postQuery(url);
   }
 
   private async safePutQuery(url: string): Promise<void> {
-    const client = this.getExtendedClient();
-    if (typeof client.putQuery !== 'function') {
-      throw new Error(
-        'PUT operations are not supported by this Plex API version'
-      );
-    }
-    return client.putQuery(url);
+    await this.plexClient.putQuery(url);
   }
 
   private async safeDeleteQuery(url: string): Promise<void> {
-    const client = this.getExtendedClient();
-    if (typeof client.deleteQuery !== 'function') {
-      throw new Error(
-        'DELETE operations are not supported by this Plex API version'
-      );
-    }
-    return client.deleteQuery(url);
+    return this.plexClient.deleteQuery(url);
   }
 
   constructor({
@@ -366,23 +338,12 @@ class PlexAPI {
     // responses, not settings.json - register here so logs redact them.
     registerLogSecrets([plexToken]);
 
-    this.plexClient = new NodePlexAPI({
+    this.plexClient = new PlexClient({
       hostname: settingsPlex.ip,
       port: settingsPlex.port,
       https: settingsPlex.useSsl,
       timeout: timeout,
       token: plexToken,
-      authenticator: {
-        authenticate: (
-          _plexApi,
-          cb: (err?: string, token?: string) => void
-        ) => {
-          if (!plexToken) {
-            return cb('Plex Token not found!');
-          }
-          cb(undefined, plexToken);
-        },
-      },
       options: {
         identifier: settings.clientId,
         product: 'Agregarr',
@@ -637,9 +598,8 @@ class PlexAPI {
    *   - 'error'     ambiguous (network/auth/5xx/non-Plex 2xx) — callers MUST
    *                 NOT delete on it
    *
-   * plex-api (v5.3.2) exposes NO structured status code (verified: statusCode /
-   * code / status are all undefined); the HTTP status is only in the Error
-   * message as "response code: <n>". We parse that exact number rather than
+   * Errors carry the HTTP status in the message as "response code: <n>" (and as
+   * statusCode). We parse that exact number rather than
    * substring-matching "404", so a ratingKey or URL that happens to contain the
    * digits 404 can never be misread as a deletion. Any other failure, and any
    * successful-but-non-Plex body (a reverse proxy / auth / captive-portal page
@@ -1408,14 +1368,7 @@ class PlexAPI {
     collectionRatingKey: string
   ): Promise<string[]> {
     try {
-      const response = await this.plexClient.query({
-        uri: `/library/collections/${collectionRatingKey}/children`,
-        extraHeaders: {
-          'X-Plex-Container-Size': `0`,
-        },
-      });
-      const items = response.MediaContainer?.Metadata || [];
-      return items.map((item: PlexCollectionItem) => item.ratingKey);
+      return await this.getCollectionItemsOrThrow(collectionRatingKey);
     } catch (error) {
       logger.error(
         `Error getting items from collection ${collectionRatingKey}`,
@@ -1426,6 +1379,23 @@ class PlexAPI {
       );
       return [];
     }
+  }
+
+  /**
+   * Same as getCollectionItems but lets a failed fetch propagate, so callers
+   * can tell "fetch failed" from "collection is empty".
+   */
+  public async getCollectionItemsOrThrow(
+    collectionRatingKey: string
+  ): Promise<string[]> {
+    const response = await this.plexClient.query({
+      uri: `/library/collections/${collectionRatingKey}/children`,
+      extraHeaders: {
+        'X-Plex-Container-Size': `0`,
+      },
+    });
+    const items = response.MediaContainer?.Metadata || [];
+    return items.map((item: PlexCollectionItem) => item.ratingKey);
   }
 
   /**
@@ -2016,6 +1986,46 @@ class PlexAPI {
       );
       return [];
     }
+  }
+
+  /**
+   * Rating keys of every item in a library carrying a label (Plex matches labels case-insensitively)
+   */
+  public async getRatingKeysWithLabel(
+    libraryKey: string,
+    label: string
+  ): Promise<Set<string>> {
+    const pageSize = 200;
+    const ratingKeys = new Set<string>();
+
+    for (let offset = 0; ; offset += pageSize) {
+      const response = await this.plexClient.query<{
+        MediaContainer?: {
+          totalSize?: number;
+          Metadata?: { ratingKey: string }[];
+        };
+      }>({
+        uri: `/library/sections/${libraryKey}/all?label=${encodeURIComponent(
+          label
+        )}`,
+        extraHeaders: {
+          'X-Plex-Container-Start': `${offset}`,
+          'X-Plex-Container-Size': `${pageSize}`,
+        },
+      });
+
+      const batch = response.MediaContainer?.Metadata || [];
+      for (const item of batch) {
+        ratingKeys.add(item.ratingKey);
+      }
+
+      const total = response.MediaContainer?.totalSize ?? 0;
+      if (batch.length < pageSize || ratingKeys.size >= total) {
+        break;
+      }
+    }
+
+    return ratingKeys;
   }
 
   public async updateCollectionSortTitle(
@@ -3720,6 +3730,16 @@ class PlexAPI {
       });
       throw error;
     }
+  }
+
+  /**
+   * Reset the resume position of a Plex item (same endpoint python-plexapi
+   * uses for updateProgress)
+   */
+  public async resetItemProgress(ratingKey: string): Promise<void> {
+    await this.plexClient.query(
+      `/:/progress?key=${ratingKey}&identifier=com.plexapp.plugins.library&time=0&state=stopped`
+    );
   }
 
   /**

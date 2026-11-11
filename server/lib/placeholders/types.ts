@@ -24,6 +24,8 @@ export interface PlaceholderOptions {
   sonarrFolderName?: string;
   /** Movies only: append Plex's {tmdb-ID} hint to the folder name */
   tmdbFolderHint?: boolean;
+  /** TV only, no Sonarr folder: append Plex's {tvdb-ID} hint to the show folder name */
+  tvdbFolderHint?: boolean;
 }
 
 /**

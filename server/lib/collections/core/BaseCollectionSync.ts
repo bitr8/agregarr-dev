@@ -22,6 +22,7 @@ import logger from '@server/logger';
 import path from 'path';
 import {
   applyCollectionExclusions,
+  applyLabelExclusions,
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
   clearConfigRatingKey,
@@ -3082,11 +3083,14 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     if (config.tmdbCustomCollectionUrl)
       parts.push(config.tmdbCustomCollectionUrl);
     if (config.mdblistCustomListUrl) parts.push(config.mdblistCustomListUrl);
+    if (config.tvdbCustomListUrl) parts.push(config.tvdbCustomListUrl);
     if (config.anilistCustomListUrl) parts.push(config.anilistCustomListUrl);
     if (config.timePeriod) parts.push(config.timePeriod);
     if (config.customDays) parts.push(String(config.customDays));
     if (config.minimumPlays) parts.push(String(config.minimumPlays));
     if (config.networksCountry) parts.push(config.networksCountry);
+    if (config.subtype === 'advanced_custom_tmdb' && config.tmdbAdvancedFilters)
+      parts.push(JSON.stringify(config.tmdbAdvancedFilters));
 
     return parts.join(':');
   }
@@ -3100,6 +3104,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     | 'letterboxd-list'
     | 'tmdb-list'
     | 'mdblist-list'
+    | 'tvdb-list'
     | 'tautulli-list'
     | 'overseerr-list'
     | 'networks-list'
@@ -3112,6 +3117,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       letterboxd: 'letterboxd-list',
       tmdb: 'tmdb-list',
       mdblist: 'mdblist-list',
+      tvdb: 'tvdb-list',
       tautulli: 'tautulli-list',
       overseerr: 'overseerr-list',
       networks: 'networks-list',
@@ -3127,6 +3133,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       | 'letterboxd-list'
       | 'tmdb-list'
       | 'mdblist-list'
+      | 'tvdb-list'
       | 'tautulli-list'
       | 'overseerr-list'
       | 'networks-list'
@@ -3900,11 +3907,17 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       plexClient,
       this.source
     );
+    filteredItems = await applyLabelExclusions(
+      filteredItems,
+      config,
+      plexClient,
+      this.source
+    );
 
     // Check again if we have items after exclusions
     if (filteredItems.length === 0) {
       logger.info(
-        `All ${mediaType} items were excluded from collection "${config.name}" based on mutual exclusion rules`,
+        `All ${mediaType} items were excluded from collection "${config.name}" by exclusion rules`,
         {
           label: `${this.source} Collections`,
           configName: config.name,

@@ -28,7 +28,7 @@ describe('createOverlayPreviewArtwork', () => {
       );
       const metadata = await sharp(output).metadata();
 
-      expect(metadata).toMatchObject({ format: 'jpeg', width, height });
+      expect(metadata).toMatchObject({ format: 'png', width, height });
     }
   );
 });

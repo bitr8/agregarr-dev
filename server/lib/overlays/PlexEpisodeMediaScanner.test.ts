@@ -15,6 +15,7 @@ function lightweightEpisode(
     resolution: '1080',
     hdr: false,
     dolbyVision: false,
+    hdr10Plus: false,
     videoCodec: '',
     audioCodec: '',
     audioChannels: 2,

@@ -39,6 +39,7 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   hdr: true,
   dolbyVision: true,
   dolbyVisionProfile: 8,
+  hdr10Plus: true,
   colorTrc: 'smpte2084',
 
   // Audio specs
@@ -73,6 +74,14 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   // Status fields
   releaseDate: '2024-12-25',
   isEstimatedReleaseDate: false,
+  theatricalReleaseDate: '2024-10-25',
+  digitalReleaseDate: '2024-12-25',
+  physicalReleaseDate: '2025-01-14',
+  daysSinceTheatricalRelease: 61,
+  daysSinceDigitalRelease: 0,
+  daysSincePhysicalRelease: -20,
+  daysSinceHomeRelease: 0,
+  releaseDateSource: 'digital',
   daysUntilRelease: 14,
   daysAgo: 3,
   nextEpisodeAirDate: '2025-01-15',
@@ -98,6 +107,9 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   // Streaming provider
   streamingProvider: 'Netflix',
   streamingProviderId: 8,
+
+  // Edition
+  edition: 'Extended Cut',
 
   // Plex labels
   plexLabels: ['4K DV', 'HDR'],
@@ -177,10 +189,15 @@ export function createSampleOverlayContext(
     // leaves this undefined for shows. Previewing it as false would let a
     // condition match here and never match live.
     context.isEstimatedReleaseDate = undefined;
-    // Stream-derived; the show path never sets it (episode aggregation only
-    // fills audioCodec), so previewing one would promise a badge live shows
-    // never get.
-    context.audioProfile = undefined;
+    context.theatricalReleaseDate = undefined;
+    context.digitalReleaseDate = undefined;
+    context.physicalReleaseDate = undefined;
+    context.daysSinceTheatricalRelease = undefined;
+    context.daysSinceDigitalRelease = undefined;
+    context.daysSincePhysicalRelease = undefined;
+    context.daysSinceHomeRelease = undefined;
+    context.releaseDateSource = undefined;
+    context.edition = undefined;
   }
 
   return context;

@@ -20,6 +20,7 @@ export type AvailableCacheIds =
   | 'letterboxd-list'
   | 'tmdb-list'
   | 'mdblist-list'
+  | 'tvdb-list'
   | 'tautulli-list'
   | 'overseerr-list'
   | 'networks-list'
@@ -136,6 +137,10 @@ class CacheManager {
       checkPeriod: 60 * 60,
     }),
     'mdblist-list': new Cache('mdblist-list', 'MDBList Lists', {
+      stdTtl: 86400 * 7, // 7 day cache
+      checkPeriod: 60 * 60,
+    }),
+    'tvdb-list': new Cache('tvdb-list', 'TVDB Lists', {
       stdTtl: 86400 * 7, // 7 day cache
       checkPeriod: 60 * 60,
     }),

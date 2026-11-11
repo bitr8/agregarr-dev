@@ -151,7 +151,7 @@ describe('isOnContainerRootFs', () => {
 
     it('probes fresh once the previous probe settled', async () => {
       const target = '/movies';
-      const statHook = vi.fn(() => undefined);
+      const statHook = vi.fn<(p: string) => undefined>(() => undefined);
       const fn = await load({
         container: true,
         mountinfo: CONTAINER,

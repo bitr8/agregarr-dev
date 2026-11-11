@@ -304,13 +304,13 @@ describe('mapSortOrderToPlexSort', () => {
     ['release_date_asc', 'originallyAvailableAt:asc'],
     ['alphabetical_asc', 'titleSort:asc'],
     ['alphabetical_desc', 'titleSort:desc'],
+    ['random', 'random'],
   ] as const)('maps %s to %s', (sortOrder, expected) => {
     expect(mapSortOrderToPlexSort(sortOrder)).toBe(expected);
   });
 
   it.each([
     'default',
-    'random',
     'reverse',
     'imdb_rating_desc',
     'imdb_rating_asc',
@@ -349,12 +349,29 @@ describe('PlexSmartCollectionManager.createAttributeCollection sort', () => {
       'genre',
       '101085',
       'trailer-placeholder',
-      'random'
+      'reverse'
     );
 
     const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
     const decodedUri = decodeURIComponent(createUrl);
     expect(decodedUri).not.toContain('sort=');
+  });
+
+  it('forwards random so Plex shuffles the genre collection', async () => {
+    const { manager, mockPlexApi } = createManager();
+
+    await manager.createAttributeCollection(
+      'Action',
+      '4',
+      'movie',
+      'genre',
+      '101085',
+      'trailer-placeholder',
+      'random'
+    );
+
+    const createUrl = mockPlexApi.safePostQuery.mock.calls[0][0] as string;
+    expect(decodeURIComponent(createUrl)).toContain('sort=random');
   });
 });
 

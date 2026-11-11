@@ -18,6 +18,7 @@ function makeEpisode(
     resolution: '1080',
     hdr: false,
     dolbyVision: false,
+    hdr10Plus: false,
     videoCodec: 'h264',
     audioCodec: 'aac',
     audioChannels: 6,
@@ -443,6 +444,48 @@ describe('EpisodeMediaAggregator', () => {
       expect(result.size).toBe(2);
       expect(result.get('s1')!.resolution).toBe('4k');
       expect(result.get('s2')!.resolution).toBe('1080');
+    });
+  });
+
+  describe('aggregateByShowAndSeason', () => {
+    it('keys each season by its own episodes, not the show majority', () => {
+      const episodes = [
+        makeEpisode({
+          showRatingKey: 'show-1',
+          seasonRatingKey: 's1',
+          resolution: '1080',
+          audioProfile: 'plus',
+        }),
+        makeEpisode({
+          showRatingKey: 'show-1',
+          seasonRatingKey: 's2',
+          resolution: '4k',
+          audioProfile: 'truehd_atmos',
+          hdr10Plus: true,
+        }),
+        makeEpisode({
+          showRatingKey: 'show-1',
+          seasonRatingKey: 's2',
+          resolution: '4k',
+          audioProfile: 'truehd_atmos',
+          hdr10Plus: true,
+        }),
+      ];
+      const result = aggregator.aggregateByShowAndSeason(episodes);
+      expect([...result.keys()].sort()).toEqual(['s1', 's2', 'show-1']);
+      expect(result.get('show-1')!.resolution).toBe('4k');
+      expect(result.get('s1')).toMatchObject({
+        resolution: '1080',
+        audioProfile: 'plus',
+        hdr10Plus: false,
+        episodeCount: 1,
+      });
+      expect(result.get('s2')).toMatchObject({
+        resolution: '4k',
+        audioProfile: 'truehd_atmos',
+        hdr10Plus: true,
+        episodeCount: 2,
+      });
     });
   });
 });

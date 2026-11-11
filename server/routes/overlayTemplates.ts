@@ -8,6 +8,7 @@ import type {
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import { sampleCollectionRankContext } from '@server/lib/overlays/collectionRank';
 import { extractStreamingProvider } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayOutputFormat } from '@server/lib/overlays/overlayOutputQuality';
 import { createOverlayPreviewArtwork } from '@server/lib/overlays/overlayPreviewArtwork';
@@ -18,6 +19,10 @@ import {
 } from '@server/lib/overlays/overlayTargets';
 import { overlayTemplateRenderer } from '@server/lib/overlays/OverlayTemplateRenderer';
 import { presetTemplateService } from '@server/lib/overlays/PresetTemplates';
+import {
+  deriveReleaseDateContext,
+  movieReleaseInfoFromTmdb,
+} from '@server/lib/overlays/releaseDateContext';
 import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
 import { toTmdbRatingContext } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
@@ -200,11 +205,42 @@ interface PreviewPosterMetadata {
   audioFormat: string;
   audioProfile?: string;
   videoCodec: string;
+  edition?: string;
   status: string;
   daysUntilRelease?: number;
   releaseDate?: string;
+  theatricalReleaseDate?: string;
+  digitalReleaseDate?: string;
+  physicalReleaseDate?: string;
+  daysSinceTheatricalRelease?: number;
+  daysSinceDigitalRelease?: number;
+  daysSincePhysicalRelease?: number;
+  daysSinceHomeRelease?: number;
+  releaseDateSource?: string;
   runtime?: number;
   daysUntilAction?: number;
+}
+
+function previewMovieReleaseStates(
+  results: Parameters<typeof movieReleaseInfoFromTmdb>[0] | undefined
+): Partial<PreviewPosterMetadata> {
+  if (!results) return {};
+  const info = movieReleaseInfoFromTmdb(
+    results,
+    getSettings().overlays?.watchProviderRegion || 'US'
+  );
+  if (!info) return {};
+  const ctx = deriveReleaseDateContext(info);
+  return {
+    theatricalReleaseDate: ctx.theatricalReleaseDate,
+    digitalReleaseDate: ctx.digitalReleaseDate,
+    physicalReleaseDate: ctx.physicalReleaseDate,
+    daysSinceTheatricalRelease: ctx.daysSinceTheatricalRelease,
+    daysSinceDigitalRelease: ctx.daysSinceDigitalRelease,
+    daysSincePhysicalRelease: ctx.daysSincePhysicalRelease,
+    daysSinceHomeRelease: ctx.daysSinceHomeRelease,
+    releaseDateSource: ctx.releaseDateSource,
+  };
 }
 
 // Apply authentication to all routes
@@ -357,8 +393,10 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         audioFormat: 'Dolby Atmos',
         audioProfile: 'truehd_atmos',
         videoCodec: 'HEVC',
+        edition: 'Extended Cut',
         status: 'Available',
         releaseDate: movieDetails.release_date,
+        ...previewMovieReleaseStates(movieDetails.release_dates?.results),
         runtime: movieDetails.runtime,
         daysUntilAction: 5, // Simulated Maintainerr data for preview
       };
@@ -825,6 +863,7 @@ router.get('/:id/preview', fileRouteLimiter, async (req, res, next) => {
 
     // Render the overlay on the poster
     const templateData = template.getTemplateData();
+    Object.assign(sampleContext, sampleCollectionRankContext([templateData]));
     const renderedBuffer = await overlayTemplateRenderer.renderOverlay(
       posterBuffer,
       templateData,
@@ -997,6 +1036,7 @@ router.post('/combined-preview', fileRouteLimiter, async (req, res, next) => {
       }
 
       const templateData = template.getTemplateData();
+      Object.assign(sampleContext, sampleCollectionRankContext([templateData]));
       const templateOverlays =
         await overlayTemplateRenderer.renderOverlayElements(
           posterWidth,

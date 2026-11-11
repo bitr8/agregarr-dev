@@ -1,5 +1,6 @@
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
+import { getOverlayLibraryType } from '@server/lib/overlays/overlayLibraryType';
 import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
 import posterizarrTriggerJob from '@server/lib/posterizarrTrigger';
 import logger from '@server/logger';
@@ -201,8 +202,10 @@ class OverlayApplication {
         (config) =>
           config.enabledOverlays &&
           config.enabledOverlays.some((o) => o.enabled) &&
-          normalizeOverlaySyncTargets(config.fullSyncTargets, config.mediaType)
-            .length > 0
+          normalizeOverlaySyncTargets(
+            config.fullSyncTargets,
+            getOverlayLibraryType(config.libraryId, config.mediaType)
+          ).length > 0
       );
 
       // A library whose config was deleted, or whose overlays were all switched

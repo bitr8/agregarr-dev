@@ -2,6 +2,7 @@ import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import {
+  applyLabelExclusions,
   capPreviewItemsToMaxItems,
   combinePreviewMissingItems,
   extractErrorMessage,
@@ -9,6 +10,7 @@ import {
 } from '@server/lib/collections/core/CollectionUtilities';
 import type {
   CollectionItem,
+  CollectionSource,
   ItemProducingSource,
   MissingItem,
 } from '@server/lib/collections/core/types';
@@ -18,6 +20,7 @@ import type {
   CollectionSortOrder,
 } from '@server/lib/settings';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
+import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -194,6 +197,7 @@ function getSourceDisplayName(source: {
       imdb: 'IMDb',
       letterboxd: 'Letterboxd',
       mdblist: 'MDBList',
+      tvdb: 'TVDB',
       anilist: 'AniList',
     };
     return `${sourceNames[type] || type} Custom List`;
@@ -251,6 +255,9 @@ function getSourceDisplayName(source: {
     case 'mdblist':
       return 'MDBList';
 
+    case 'tvdb':
+      return 'TVDB List';
+
     case 'networks': {
       // Extract network name from subtype (e.g., "netflix_top_10" -> "Netflix")
       const networkName =
@@ -279,9 +286,9 @@ function getSourceDisplayName(source: {
         most_watched_plays: 'Most Watched (Plays)',
         most_watched_duration: 'Most Watched (Duration)',
       };
-      const baseName = `Tautulli ${
-        subtypeNames[subtype || ''] || subtype || 'Stats'
-      }`;
+      const baseName = `${
+        getStatisticsProvider() === 'tracearr' ? 'Tracearr' : 'Tautulli'
+      } ${subtypeNames[subtype || ''] || subtype || 'Stats'}`;
       if (timePeriod === 'custom' && customDays) {
         return `${baseName} (${customDays} days)`;
       }
@@ -335,6 +342,7 @@ export async function processMultiSourcePreview(
     customDays?: number;
     minimumPlays?: number;
     networksCountry?: string;
+    tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
     radarrTagId?: number;
     radarrTagServerId?: number;
     sonarrTagId?: number;
@@ -349,7 +357,8 @@ export async function processMultiSourcePreview(
   plexClient: PlexAPI,
   libraryCache: LibraryItemsCache,
   cycleIndex: number,
-  forceRefresh = false
+  forceRefresh = false,
+  excludeLabels?: string[]
 ): Promise<void> {
   const { collectionSyncService } = await import(
     '@server/lib/collections/services/CollectionSyncService'
@@ -426,6 +435,8 @@ export async function processMultiSourcePreview(
           sourceConfigRecord.letterboxdCustomListUrl = source.customUrl;
         else if (source.type === 'mdblist')
           sourceConfigRecord.mdblistCustomListUrl = source.customUrl;
+        else if (source.type === 'tvdb')
+          sourceConfigRecord.tvdbCustomListUrl = source.customUrl;
         else if (source.type === 'anilist')
           sourceConfigRecord.anilistCustomListUrl = source.customUrl;
       }
@@ -436,6 +447,13 @@ export async function processMultiSourcePreview(
         if (source.timePeriod === 'custom') {
           sourceConfigRecord.customDays = source.customDays;
         }
+      }
+
+      if (source.type === 'tmdb' && source.subtype === 'advanced_custom_tmdb') {
+        sourceConfigRecord.tmdbAdvancedFilters = source.tmdbAdvancedFilters;
+        sourceConfigRecord.maxItems = maxItems;
+        sourceConfigRecord.tmdbMovieSortBy = undefined;
+        sourceConfigRecord.tmdbTvSortBy = undefined;
       }
 
       if (source.type === 'networks') {
@@ -612,9 +630,16 @@ export async function processMultiSourcePreview(
     maxItems
   );
 
+  const labelFilteredItems = await applyLabelExclusions(
+    uniqueItems,
+    { name: 'Preview', libraryId, excludeLabels },
+    plexClient,
+    'multi-source'
+  );
+
   // Apply maxItems limit to combined items
   const { items: limitedItems, missingItems: limitedMissingItems } =
-    capPreviewItemsToMaxItems(uniqueItems, uniqueMissingItems, maxItems);
+    capPreviewItemsToMaxItems(labelFilteredItems, uniqueMissingItems, maxItems);
 
   // Now process the combined items for preview display (enrich with TMDB data)
   // This is the same logic as single-source preview
@@ -951,6 +976,7 @@ async function processPreviewAsync(
     comingSoonSonarrServerId?: number;
     comingSoonRadarrRootFolder?: string;
     comingSoonSonarrRootFolder?: string;
+    comingSoonIncludeMidSeason?: boolean;
     forceRefresh?: boolean; // If true, bypass cache and fetch fresh data
     // Multi-source specific fields
     isMultiSource?: boolean;
@@ -964,6 +990,7 @@ async function processPreviewAsync(
       customDays?: number;
       minimumPlays?: number;
       networksCountry?: string;
+      tmdbAdvancedFilters?: CollectionConfig['tmdbAdvancedFilters'];
       radarrTagId?: number;
       radarrTagServerId?: number;
       sonarrTagId?: number;
@@ -972,6 +999,7 @@ async function processPreviewAsync(
     combineMode?: 'interleaved' | 'list_order' | 'randomised' | 'cycle_lists';
     sortOrder?: CollectionSortOrder;
     cycleIndex?: number; // For cycle_lists mode, which source to show
+    excludeLabels?: string[];
   }
 ): Promise<void> {
   try {
@@ -999,12 +1027,14 @@ async function processPreviewAsync(
       comingSoonSonarrServerId,
       comingSoonRadarrRootFolder,
       comingSoonSonarrRootFolder,
+      comingSoonIncludeMidSeason,
       forceRefresh,
       isMultiSource,
       sources,
       combineMode,
       sortOrder,
       cycleIndex,
+      excludeLabels,
     } = requestBody;
 
     logger.info(
@@ -1086,6 +1116,8 @@ async function processPreviewAsync(
         previewConfigRecord.letterboxdCustomListUrl = customUrl;
       else if (type === 'mdblist')
         previewConfigRecord.mdblistCustomListUrl = customUrl;
+      else if (type === 'tvdb')
+        previewConfigRecord.tvdbCustomListUrl = customUrl;
       else if (type === 'anilist')
         previewConfigRecord.anilistCustomListUrl = customUrl;
       else if (type === 'myanimelist')
@@ -1141,6 +1173,8 @@ async function processPreviewAsync(
         comingSoonRadarrRootFolder;
       previewConfigRecord.comingSoonSonarrRootFolder =
         comingSoonSonarrRootFolder;
+      previewConfigRecord.comingSoonIncludeMidSeason =
+        comingSoonIncludeMidSeason;
     }
 
     const previewConfig = previewConfigRecord as unknown as CollectionConfig;
@@ -1178,7 +1212,8 @@ async function processPreviewAsync(
         plexClient,
         libraryCache,
         cycleIndex || 0,
-        forceRefresh || false
+        forceRefresh || false,
+        excludeLabels
       );
     }
 
@@ -1247,11 +1282,18 @@ async function processPreviewAsync(
       previewConfig
     );
 
+    const labelFilteredItems = await applyLabelExclusions(
+      filteredResult.items,
+      { name: 'Preview', libraryId, excludeLabels },
+      plexClient,
+      type as CollectionSource
+    );
+
     // matched + missing are filtered independently (count vs position) and can
     // together exceed maxItems - couple them here, same as the multi-source path
     const { items: cappedItems, missingItems: cappedMissingItems } =
       capPreviewItemsToMaxItems(
-        filteredResult.items,
+        labelFilteredItems,
         filteredResult.missingItems || [],
         previewConfig.maxItems
       );

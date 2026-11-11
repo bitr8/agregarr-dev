@@ -13,6 +13,7 @@ import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
+  applyLabelExclusions,
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
   createCollectionLabel,
@@ -41,7 +42,9 @@ import RadarrTagCollectionSync from '@server/lib/collections/sources/radarr';
 import SonarrTagCollectionSync from '@server/lib/collections/sources/sonarr';
 import { TautulliCollectionSync } from '@server/lib/collections/sources/tautulli';
 import { TmdbCollectionSync } from '@server/lib/collections/sources/tmdb';
+import { TracearrStatsCollectionSync } from '@server/lib/collections/sources/tracearrStats';
 import { TraktCollectionSync } from '@server/lib/collections/sources/trakt';
+import { TvdbCollectionSync } from '@server/lib/collections/sources/tvdb';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import { generatePoster } from '@server/lib/posterStorage';
@@ -51,6 +54,7 @@ import type {
   SourceDefinition,
 } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
 import {
   buildTraktRedirectUri,
@@ -427,8 +431,13 @@ export class MultiSourceOrchestrator {
       }
 
       // Apply collection mutual exclusion if configured
-      const itemsAfterExclusion = await applyCollectionExclusions(
-        validItems,
+      const itemsAfterExclusion = await applyLabelExclusions(
+        await applyCollectionExclusions(
+          validItems,
+          configForSync,
+          plexClient,
+          'multi-source'
+        ),
         configForSync,
         plexClient,
         'multi-source'
@@ -500,67 +509,74 @@ export class MultiSourceOrchestrator {
       // Handle placeholder cleanup for multi-source collection
       // If createPlaceholdersForMissing enabled: cleans up released/orphaned/stale items
       // If createPlaceholdersForMissing disabled: deletes all placeholder records
-      try {
-        // Collect all tmdbIds from ALL sources (both items that exist in Plex and missing items)
-        const allSourceTmdbIds = new Set<number>();
+      if (failedError) {
+        logger.warn(
+          `Skipping placeholder cleanup for ${collectionNameForSync}: ${failedError}`,
+          { label: 'Multi-Source Orchestrator', configId: config.id }
+        );
+      } else {
+        try {
+          // Collect all tmdbIds from ALL sources (both items that exist in Plex and missing items)
+          const allSourceTmdbIds = new Set<number>();
 
-        // Add tmdbIds from items that exist in Plex
-        for (const item of combinedItems) {
-          if (item.tmdbId !== undefined) {
-            allSourceTmdbIds.add(item.tmdbId);
+          // Add tmdbIds from items that exist in Plex
+          for (const item of combinedItems) {
+            if (item.tmdbId !== undefined) {
+              allSourceTmdbIds.add(item.tmdbId);
+            }
           }
+
+          // Add tmdbIds from missing items across all sources
+          for (const missingGroup of missingItemGroups) {
+            for (const missingItem of missingGroup) {
+              allSourceTmdbIds.add(missingItem.tmdbId);
+            }
+          }
+
+          logger.debug(
+            `Running placeholder handling for multi-source collection: ${collectionNameForSync}`,
+            {
+              label: 'Multi-Source Orchestrator',
+              configId: config.id,
+              sourceTmdbIdCount: allSourceTmdbIds.size,
+              createPlaceholdersForMissing: config.createPlaceholdersForMissing,
+            }
+          );
+
+          // Import helper function that handles both enabled/disabled cases
+          const { handlePlaceholderCleanup } = await import(
+            '@server/lib/placeholders/services/PlaceholderCleanup'
+          );
+
+          // Run cleanup or deletion based on setting
+          await handlePlaceholderCleanup(
+            configForSync as unknown as CollectionConfig,
+            plexClient,
+            libraryCache,
+            allSourceTmdbIds
+          );
+
+          logger.debug(
+            'Placeholder handling completed for multi-source collection',
+            {
+              label: 'Multi-Source Orchestrator',
+              configId: config.id,
+            }
+          );
+        } catch (cleanupError) {
+          logger.error(
+            `Failed to handle placeholders for multi-source collection: ${collectionNameForSync}`,
+            {
+              label: 'Multi-Source Orchestrator',
+              configId: config.id,
+              error:
+                cleanupError instanceof Error
+                  ? cleanupError.message
+                  : String(cleanupError),
+            }
+          );
+          // Don't throw - cleanup failure shouldn't break collection sync
         }
-
-        // Add tmdbIds from missing items across all sources
-        for (const missingGroup of missingItemGroups) {
-          for (const missingItem of missingGroup) {
-            allSourceTmdbIds.add(missingItem.tmdbId);
-          }
-        }
-
-        logger.debug(
-          `Running placeholder handling for multi-source collection: ${collectionNameForSync}`,
-          {
-            label: 'Multi-Source Orchestrator',
-            configId: config.id,
-            sourceTmdbIdCount: allSourceTmdbIds.size,
-            createPlaceholdersForMissing: config.createPlaceholdersForMissing,
-          }
-        );
-
-        // Import helper function that handles both enabled/disabled cases
-        const { handlePlaceholderCleanup } = await import(
-          '@server/lib/placeholders/services/PlaceholderCleanup'
-        );
-
-        // Run cleanup or deletion based on setting
-        await handlePlaceholderCleanup(
-          configForSync as unknown as CollectionConfig,
-          plexClient,
-          libraryCache,
-          allSourceTmdbIds
-        );
-
-        logger.debug(
-          'Placeholder handling completed for multi-source collection',
-          {
-            label: 'Multi-Source Orchestrator',
-            configId: config.id,
-          }
-        );
-      } catch (cleanupError) {
-        logger.error(
-          `Failed to handle placeholders for multi-source collection: ${collectionNameForSync}`,
-          {
-            label: 'Multi-Source Orchestrator',
-            configId: config.id,
-            error:
-              cleanupError instanceof Error
-                ? cleanupError.message
-                : String(cleanupError),
-          }
-        );
-        // Don't throw - cleanup failure shouldn't break collection sync
       }
 
       // Create/update collection directly in Plex
@@ -918,6 +934,15 @@ export class MultiSourceOrchestrator {
         source.customUrl && {
           tmdbCustomCollectionUrl: source.customUrl,
         }),
+      tmdbAdvancedFilters:
+        source.type === 'tmdb' && source.subtype === 'advanced_custom_tmdb'
+          ? source.tmdbAdvancedFilters
+          : undefined,
+      ...(source.type === 'tmdb' &&
+        source.subtype === 'advanced_custom_tmdb' && {
+          tmdbMovieSortBy: undefined,
+          tmdbTvSortBy: undefined,
+        }),
       ...(source.type === 'imdb' &&
         source.customUrl && {
           imdbCustomListUrl: source.customUrl,
@@ -929,6 +954,10 @@ export class MultiSourceOrchestrator {
       ...(source.type === 'mdblist' &&
         source.customUrl && {
           mdblistCustomListUrl: source.customUrl,
+        }),
+      ...(source.type === 'tvdb' &&
+        source.customUrl && {
+          tvdbCustomListUrl: source.customUrl,
         }),
       ...(source.type === 'anilist' &&
         source.customUrl && {
@@ -971,13 +1000,20 @@ export class MultiSourceOrchestrator {
   private getSyncService(
     sourceType: string
   ): BaseCollectionSync<CollectionSource> {
-    if (!this.syncServices.has(sourceType)) {
+    const cacheKey =
+      sourceType === 'tautulli'
+        ? `tautulli:${getStatisticsProvider()}`
+        : sourceType;
+    if (!this.syncServices.has(cacheKey)) {
       switch (sourceType) {
         case 'trakt':
           this.syncServices.set(sourceType, new TraktCollectionSync());
           break;
         case 'mdblist':
           this.syncServices.set(sourceType, new MDBListCollectionSync());
+          break;
+        case 'tvdb':
+          this.syncServices.set(sourceType, new TvdbCollectionSync());
           break;
         case 'tmdb':
           this.syncServices.set(sourceType, new TmdbCollectionSync());
@@ -989,7 +1025,12 @@ export class MultiSourceOrchestrator {
           this.syncServices.set(sourceType, new LetterboxdCollectionSync());
           break;
         case 'tautulli':
-          this.syncServices.set(sourceType, new TautulliCollectionSync());
+          this.syncServices.set(
+            cacheKey,
+            getStatisticsProvider() === 'tracearr'
+              ? new TracearrStatsCollectionSync()
+              : new TautulliCollectionSync()
+          );
           break;
         case 'overseerr':
           this.syncServices.set(sourceType, new OverseerrCollectionSync());
@@ -1019,7 +1060,7 @@ export class MultiSourceOrchestrator {
           throw new Error(`Unknown source type: ${sourceType}`);
       }
     }
-    const service = this.syncServices.get(sourceType);
+    const service = this.syncServices.get(cacheKey);
     if (!service) {
       throw new Error(`Failed to initialize sync service for ${sourceType}`);
     }
@@ -2809,6 +2850,7 @@ export class MultiSourceOrchestrator {
             | 'anilist'
             | 'myanimelist'
             | 'mdblist'
+            | 'tvdb'
             | 'networks'
             | 'originals'
             | 'multi-source',
@@ -3293,6 +3335,15 @@ export class MultiSourceOrchestrator {
           return 'AniList List';
         }
 
+        case 'tvdb': {
+          const { default: TvdbAPI, parseTvdbListInput } = await import(
+            '@server/api/tvdb'
+          );
+          const ref = parseTvdbListInput(source.customUrl);
+          if (!ref) return 'TVDB List';
+          return (await new TvdbAPI().getList(ref)).name;
+        }
+
         case 'mdblist': {
           const MDBListAPI = (await import('@server/api/mdblist')).default;
           const settings = getSettings();
@@ -3406,6 +3457,7 @@ export class MultiSourceOrchestrator {
         trending_week: 'Trending This Week',
         popular: 'Popular',
         top_rated: 'Top Rated',
+        advanced_custom_tmdb: 'Custom Advanced Filters',
       },
       imdb: {
         top_250: 'Top 250',

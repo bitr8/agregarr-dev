@@ -5,6 +5,32 @@ import {
 } from './plexMetadataBatch';
 
 describe('resilient Plex metadata batching', () => {
+  it.each([0, -1, 99, 600, 401.5, 'invalid', null])(
+    'ignores invalid HTTP status %j when retrying a connection reset',
+    async (statusCode) => {
+      const query = vi
+        .fn()
+        .mockRejectedValueOnce({ statusCode, code: 'ECONNRESET' })
+        .mockResolvedValue([{ ratingKey: '1' }]);
+      expect(
+        (await fetchPlexMetadataBatches(['1'], query, { retryDelayMs: 0 })).size
+      ).toBe(1);
+      expect(query).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it('falls through invalid fields to an explicit authorization response', async () => {
+    const query = vi.fn().mockRejectedValue({
+      status: 0,
+      response: { status: 401 },
+      code: 'ECONNRESET',
+    });
+    await fetchPlexMetadataBatches(['1', '2'], query, {
+      retryDelayMs: 0,
+      minChunkSize: 1,
+    });
+    expect(query).toHaveBeenCalledOnce();
+  });
   it.each([401, 403])(
     'does not retry HTTP %i because a URL contains 500',
     async (status) => {

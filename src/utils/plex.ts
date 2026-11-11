@@ -63,7 +63,7 @@ class PlexOAuth {
       'X-Plex-Client-Identifier': clientId,
       'X-Plex-Model': 'Plex OAuth',
       'X-Plex-Platform': browser.getBrowserName(),
-      'X-Plex-Platform-Version': browser.getBrowserVersion(),
+      'X-Plex-Platform-Version': browser.getBrowserVersion() ?? '',
       'X-Plex-Device': browser.getOSName(),
       'X-Plex-Device-Name': `${browser.getBrowserName()} (Agregarr)`,
       'X-Plex-Device-Screen-Resolution':

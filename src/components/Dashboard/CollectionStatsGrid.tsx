@@ -7,6 +7,7 @@ import {
   RectangleStackIcon as CollectionIcon,
 } from '@heroicons/react/24/outline';
 import { ClockIcon, PlayIcon } from '@heroicons/react/24/solid';
+import type { TracearrSettings } from '@server/lib/settings';
 import Link from 'next/link';
 import type React from 'react';
 import { useState } from 'react';
@@ -81,6 +82,14 @@ const CollectionStatsGrid: React.FC = () => {
   } = useSWR<CollectionStatsResponse>(
     `/api/v1/dashboard/collections?limit=${limit}&statType=${statType}&days=${days}`
   );
+  const { data: tracearrSettings } = useSWR<TracearrSettings>(
+    '/api/v1/settings/tracearr'
+  );
+  const tracearrActive = !!(
+    tracearrSettings?.enabled &&
+    tracearrSettings.hostname &&
+    tracearrSettings.apiKey
+  );
 
   const formatDuration = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -90,10 +99,8 @@ const CollectionStatsGrid: React.FC = () => {
   };
 
   if (error) {
-    // Check if it's a Tautulli configuration error
     const isTautulliError =
-      error.message.includes('Tautulli not configured') ||
-      error.message.includes('Tautulli settings');
+      error.response?.data?.error === 'Tautulli not configured';
 
     if (isTautulliError) {
       return (
@@ -113,7 +120,7 @@ const CollectionStatsGrid: React.FC = () => {
               <p className="mb-6 max-w-md text-gray-400">
                 {intl.formatMessage(messages.tautulliDescriptionCollections)}
               </p>
-              <Link href="/settings/sources" passHref>
+              <Link href="/settings/sources" passHref legacyBehavior>
                 <Button as="a" buttonType="primary">
                   <CogIcon className="mr-2 h-5 w-5" />
                   {intl.formatMessage(messages.configureTautulli)}
@@ -162,9 +169,14 @@ const CollectionStatsGrid: React.FC = () => {
                 id="days-input"
                 type="number"
                 value={days}
-                onChange={(e) => setDays(Number(e.target.value) || 30)}
-                min="0"
-                max="9999"
+                onChange={(e) => {
+                  const value = Number(e.target.value) || 30;
+                  setDays(
+                    tracearrActive ? Math.max(1, Math.min(365, value)) : value
+                  );
+                }}
+                min={tracearrActive ? '1' : '0'}
+                max={tracearrActive ? '365' : '9999'}
                 className="w-16 rounded border border-stone-500 bg-stone-700 px-2 py-1 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 placeholder="30"
               />

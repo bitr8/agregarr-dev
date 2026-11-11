@@ -161,6 +161,7 @@ export type CollectionSource =
   | 'imdb'
   | 'letterboxd'
   | 'mdblist'
+  | 'tvdb'
   | 'networks'
   | 'originals'
   | 'anilist'
@@ -184,6 +185,7 @@ export type ItemProducingSource =
   | 'imdb'
   | 'letterboxd'
   | 'mdblist'
+  | 'tvdb'
   | 'anilist'
   | 'myanimelist'
   | 'networks'
@@ -552,6 +554,15 @@ export interface MDBListSourceData {
   mediaType: 'movie' | 'tv';
 }
 
+export interface TvdbSourceData {
+  tvdbId: number;
+  tmdbId?: number;
+  title: string;
+  year?: number;
+  mediaType: 'movie' | 'tv';
+  position: number;
+}
+
 export interface TautulliSourceData {
   rating_key?: string;
   guid?: string;
@@ -564,6 +575,9 @@ export interface TautulliSourceData {
   users_watched?: string | number; // Unique viewer count (string for most_watched, number for most_popular)
   year?: number;
   tmdb_id?: number;
+  tvdb_id?: number;
+  imdb_id?: string;
+  tracearr_media_id?: string;
   duration?: number;
   last_played?: number;
 }
@@ -746,6 +760,7 @@ export interface RecentlyAddedSourceData {
 export type CollectionSourceData =
   | TraktSourceData
   | MDBListSourceData
+  | TvdbSourceData
   | TautulliSourceData
   | OverseerrSourceData
   | TmdbSourceData

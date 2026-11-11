@@ -15,12 +15,12 @@ describe('preferRadarrReleaseDate', () => {
         radarrDigitalRelease: '2026-11-11T00:00:00Z',
         radarrPhysicalRelease: '2026-11-25T00:00:00Z',
       })
-    ).toEqual({ releaseDate: '2026-11-11', isEstimated: false });
+    ).toMatchObject({ releaseDate: '2026-11-11', isEstimated: false });
     expect(
       preferRadarrReleaseDate(tmdb, {
         radarrPhysicalRelease: '2026-11-25T00:00:00Z',
       })
-    ).toEqual({ releaseDate: '2026-11-25', isEstimated: false });
+    ).toMatchObject({ releaseDate: '2026-11-25', isEstimated: false });
   });
 
   it('keeps the TMDB result when Radarr has no digital or physical date', () => {
@@ -33,7 +33,7 @@ describe('preferRadarrReleaseDate', () => {
       preferRadarrReleaseDate(undefined, {
         radarrDigitalRelease: '2026-11-11T00:00:00Z',
       })
-    ).toEqual({ releaseDate: '2026-11-11', isEstimated: false });
+    ).toMatchObject({ releaseDate: '2026-11-11', isEstimated: false });
   });
 });
 

@@ -531,6 +531,7 @@ export async function createPlaceholderFile(
     createPlaceholder,
     resolvePlaceholderPaths,
     wantsTmdbFolderHint,
+    wantsTvdbFolderHint,
     readPlaceholderMarker,
     clearMarkerOrphaned,
   } = await import('@server/lib/placeholders/placeholderManager');
@@ -551,9 +552,11 @@ export async function createPlaceholderFile(
     sonarrFolderName,
   };
   const tmdbFolderHint = await wantsTmdbFolderHint(pathOptions);
+  const tvdbFolderHint = await wantsTvdbFolderHint(pathOptions);
   const { destinationPath } = resolvePlaceholderPaths({
     ...pathOptions,
     tmdbFolderHint,
+    tvdbFolderHint,
   });
   const markerDir = path.dirname(destinationPath);
   const relativePath = path.relative(libraryPath, destinationPath);
@@ -654,6 +657,7 @@ export async function createPlaceholderFile(
     trailerPath,
     sonarrFolderName,
     tmdbFolderHint,
+    tvdbFolderHint,
   });
 
   markPlaceholderWanted(libraryKey, sourceItem.mediaType, relativePath);

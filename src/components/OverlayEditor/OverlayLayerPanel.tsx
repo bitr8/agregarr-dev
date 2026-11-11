@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
+import CollectionRankPicker from './CollectionRankPicker';
 import MappedIconMappingModal from './MappedIconMappingModal';
 import type {
   ColorScale,
@@ -33,7 +34,12 @@ import type {
   OverlayVariableElementProps,
   OverlayVariableSegment,
 } from './types';
-import { AVAILABLE_VARIABLES, isSingleValueField } from './types';
+import {
+  AVAILABLE_VARIABLES,
+  COLLECTION_RANK_PREFIX,
+  isCollectionRankField,
+  isSingleValueField,
+} from './types';
 
 const messages = defineMessages({
   layers: 'Layers',
@@ -450,7 +456,11 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
         if (seg.type === 'text') {
           return seg.value || '';
         } else if (seg.type === 'variable' && seg.field) {
-          const varInfo = allVars.find((v) => v.field === seg.field);
+          const varInfo = allVars.find(
+            (v) =>
+              v.field ===
+              (isCollectionRankField(seg.field) ? 'collectionRank' : seg.field)
+          );
           return varInfo?.example || `{${seg.field}}`;
         }
         return '';
@@ -1262,9 +1272,18 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                 ) : (
                   <>
                     <select
-                      value={segment.field || ''}
+                      value={
+                        isCollectionRankField(segment.field)
+                          ? 'collectionRank'
+                          : segment.field || ''
+                      }
                       onChange={(e) =>
-                        handleUpdateSegment(index, { field: e.target.value })
+                        handleUpdateSegment(index, {
+                          field:
+                            e.target.value === 'collectionRank'
+                              ? COLLECTION_RANK_PREFIX
+                              : e.target.value,
+                        })
                       }
                       className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
                     >
@@ -1320,6 +1339,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                           </option>
                         ))}
                       </optgroup>
+                      <optgroup label="Collection">
+                        {AVAILABLE_VARIABLES.collection.map((v) => (
+                          <option key={v.field} value={v.field}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </optgroup>
                       <optgroup label="Coming Soon">
                         {AVAILABLE_VARIABLES['coming-soon'].map((v) => (
                           <option key={v.field} value={v.field}>
@@ -1350,10 +1376,22 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                       </optgroup>
                     </select>
 
+                    {isCollectionRankField(segment.field) && (
+                      <CollectionRankPicker
+                        value={segment.field ?? ''}
+                        onChange={(field) =>
+                          handleUpdateSegment(index, { field })
+                        }
+                      />
+                    )}
+
                     {/* Date format dropdown - show for date fields */}
                     {segment.field &&
                       [
                         'releaseDate',
+                        'theatricalReleaseDate',
+                        'digitalReleaseDate',
+                        'physicalReleaseDate',
                         'nextEpisodeAirDate',
                         'nextSeasonAirDate',
                         'lastPlayed',
@@ -1809,6 +1847,10 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           { field: 'productionCountry', label: 'Production Country' },
           { field: 'productionCountries', label: 'Production Countries' },
         ],
+      },
+      edition: {
+        label: 'Edition',
+        fields: [{ field: 'edition', label: 'Edition' }],
       },
       contentRating: {
         label: 'Content Rating',

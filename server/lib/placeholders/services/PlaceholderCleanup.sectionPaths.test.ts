@@ -1,6 +1,6 @@
 import section2 from '@server/api/__fixtures__/plexLibrarySection2.json';
 import sections from '@server/api/__fixtures__/plexLibrarySections.json';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/lib/settings', () => ({
   getSettings: () => ({
@@ -13,6 +13,10 @@ vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+
+beforeAll(async () => {
+  await import('@server/api/plexapi');
+}, 60_000);
 
 async function setup() {
   const { default: PlexAPI } = await import('@server/api/plexapi');

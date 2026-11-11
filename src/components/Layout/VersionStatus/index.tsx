@@ -43,7 +43,7 @@ const VersionStatus = ({
       : intl.formatMessage(messages.streamstable);
 
   return (
-    <Link href="/settings/about">
+    <Link href="/settings/about" legacyBehavior>
       <a
         onClick={isFirstTimeSetup ? undefined : onClick}
         onKeyDown={(e) => {

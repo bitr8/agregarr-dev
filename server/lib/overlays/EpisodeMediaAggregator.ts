@@ -1,3 +1,4 @@
+import { AUDIO_PROFILE_RANK } from '@server/utils/mediaCapabilities';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -13,6 +14,12 @@ const RESOLUTION_RANK: Record<string, number> = {
 
 function resolutionRank(res: string): number {
   return RESOLUTION_RANK[res.toLowerCase()] ?? 0;
+}
+
+// Higher is better; a tie goes to the better format, not episode order.
+function audioProfileRank(token: string): number {
+  const index = (AUDIO_PROFILE_RANK as readonly string[]).indexOf(token);
+  return index === -1 ? -1 : AUDIO_PROFILE_RANK.length - index;
 }
 
 function majorityVote<T>(
@@ -137,6 +144,16 @@ export class EpisodeMediaAggregator {
     return result;
   }
 
+  // Show and season rating keys never collide, so one map serves both targets.
+  aggregateByShowAndSeason(
+    episodes: EpisodeMediaInfo[]
+  ): Map<string, AggregatedMediaInfo> {
+    return new Map([
+      ...this.aggregateByShow(episodes),
+      ...this.aggregateBySeason(episodes),
+    ]);
+  }
+
   aggregateBySeason(
     episodes: EpisodeMediaInfo[]
   ): Map<string, AggregatedMediaInfo> {
@@ -162,6 +179,7 @@ export class EpisodeMediaAggregator {
         resolution: 'sd',
         hdr: false,
         dolbyVision: false,
+        hdr10Plus: false,
         videoCodec: '',
         audioCodec: '',
         audioChannels: 2,
@@ -198,8 +216,15 @@ export class EpisodeMediaAggregator {
       hdr: booleanMajority(episodes.map((ep) => ep.hdr)),
       dolbyVision: booleanMajority(episodes.map((ep) => ep.dolbyVision)),
       dolbyVisionProfile: majorityVote(dvProfiles),
+      hdr10Plus: booleanMajority(episodes.map((ep) => ep.hdr10Plus)),
       videoCodec: majorityVote(episodes.map((ep) => ep.videoCodec)) || '',
       audioCodec: majorityVote(episodes.map((ep) => ep.audioCodec)) || '',
+      audioProfile: majorityVote(
+        episodes
+          .map((ep) => ep.audioProfile)
+          .filter((p): p is string => p != null),
+        audioProfileRank
+      ),
       audioChannels: majorityVote(episodes.map((ep) => ep.audioChannels)) || 2,
       bitDepth: majorityVote(episodes.map((ep) => ep.bitDepth)) || 8,
       episodeCount: count,

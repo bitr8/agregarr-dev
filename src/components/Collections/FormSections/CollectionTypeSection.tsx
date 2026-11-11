@@ -14,6 +14,7 @@ import type {
   RadarrSettings,
   SonarrSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 import { Field, type FormikErrors, type FormikTouched } from 'formik';
@@ -43,6 +44,12 @@ const messages = defineMessages({
   minimumItems: 'Minimum Items',
   minimumItemsHelp:
     'Only create if this person has at least this many items (default: 5, minimum allowed: 2)',
+  franchiseMinimumItems: 'Minimum movies in library',
+  franchiseMinimumItemsHelp:
+    'Franchises with fewer movies in your library get no collection, and an existing one is removed on the next sync. Missing items are only grabbed for franchises that meet this, so a minimum of 1 with Grab Missing Items on can send many more requests. Your year and rating filters still apply.',
+  franchiseCountReleasedOnly: 'Count only released movies',
+  franchiseCountReleasedOnlyHelp:
+    "Unreleased or undated TMDB entries don't count towards the franchise size.",
   useSeparator: 'Use Separator',
   useSeparatorHelp:
     'Create a simple separator collection to group your auto {type} collections.',
@@ -170,6 +177,9 @@ const CollectionTypeSection = ({
   const { data: tautulliSettings } = useSWR<TautulliSettings>(
     '/api/v1/settings/tautulli'
   );
+  const { data: tracearrSettings } = useSWR<TracearrSettings>(
+    '/api/v1/settings/tracearr'
+  );
   const { data: overseerrSettings } = useSWR<OverseerrSettings>(
     '/api/v1/settings/overseerr'
   );
@@ -192,6 +202,7 @@ const CollectionTypeSection = ({
       trakt: traktSettings,
       mdblist: mdblistSettings,
       tautulli: tautulliSettings,
+      tracearr: tracearrSettings,
       overseerr: overseerrSettings,
       myanimelist: myanimelistSettings,
       radarr: radarrSettings,
@@ -200,15 +211,25 @@ const CollectionTypeSection = ({
     values.subtype
   );
 
+  const tracearrActive = !!(
+    tracearrSettings?.enabled &&
+    tracearrSettings.hostname &&
+    tracearrSettings.apiKey
+  );
+
   const collectionTypes = [
     { value: 'overseerr', label: 'Seerr Requests' },
-    { value: 'tautulli', label: 'Tautulli Statistics' },
+    {
+      value: 'tautulli',
+      label: tracearrActive ? 'Tracearr Statistics' : 'Tautulli Statistics',
+    },
     { value: 'trakt', label: 'Trakt Lists' },
     { value: 'plex', label: 'Plex Library' },
     { value: 'letterboxd', label: 'Letterboxd Lists' },
     { value: 'tmdb', label: 'TMDB Lists' },
     { value: 'imdb', label: 'IMDb Lists' },
     { value: 'mdblist', label: 'MDBList Lists' },
+    { value: 'tvdb', label: 'TVDB Lists' },
     { value: 'networks', label: 'Networks Top 10' },
     { value: 'originals', label: 'Networks Originals' },
     { value: 'anilist', label: 'AniList' },
@@ -316,6 +337,14 @@ const CollectionTypeSection = ({
             value: 'custom',
             label: 'Custom List',
             description: 'Import a custom MDBList by URL',
+          },
+        ];
+      case 'tvdb':
+        return [
+          {
+            value: 'custom',
+            label: 'Custom List',
+            description: 'Import a TVDB list by URL',
           },
         ];
       case 'tmdb':
@@ -612,6 +641,9 @@ const CollectionTypeSection = ({
               if (newType === 'comingsoon') {
                 setFieldValue('createPlaceholdersForMissing', true);
               }
+
+              setFieldValue('franchiseMinimumItems', undefined);
+              setFieldValue('franchiseCountReleasedOnly', undefined);
             }
 
             // Auto-set media type based on collection type
@@ -647,6 +679,12 @@ const CollectionTypeSection = ({
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
               const newSubtype = e.target.value;
               setFieldValue('subtype', newSubtype);
+              setFieldValue(
+                'franchiseMinimumItems',
+                values.type === 'tmdb' && newSubtype === 'auto_franchise'
+                  ? values.franchiseMinimumItems ?? 2
+                  : undefined
+              );
 
               // Clear subtype-specific state when switching
               if (newSubtype === 'separator') {
@@ -817,6 +855,49 @@ const CollectionTypeSection = ({
             />
           </div>
         )}
+
+      {values.type === 'tmdb' && values.subtype === 'auto_franchise' && (
+        <div>
+          <label
+            htmlFor="franchiseMinimumItems"
+            className="mb-2 block text-sm text-gray-300"
+          >
+            {intl.formatMessage(messages.franchiseMinimumItems)}
+          </label>
+          <Field
+            type="number"
+            id="franchiseMinimumItems"
+            name="franchiseMinimumItems"
+            placeholder="2"
+            min="1"
+            step="1"
+            className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            {intl.formatMessage(messages.franchiseMinimumItemsHelp)}
+          </p>
+          <div className="mt-4 flex items-center">
+            <input
+              type="checkbox"
+              id="franchiseCountReleasedOnly"
+              checked={values.franchiseCountReleasedOnly ?? false}
+              onChange={(e) =>
+                setFieldValue('franchiseCountReleasedOnly', e.target.checked)
+              }
+              className="form-checkbox"
+            />
+            <label
+              htmlFor="franchiseCountReleasedOnly"
+              className="ml-2 text-sm text-gray-300"
+            >
+              {intl.formatMessage(messages.franchiseCountReleasedOnly)}
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-gray-400">
+            {intl.formatMessage(messages.franchiseCountReleasedOnlyHelp)}
+          </p>
+        </div>
+      )}
 
       {/* Separator option for library essentials */}
       {isLibraryEssentialsPattern(values.type, values.subtype) && (

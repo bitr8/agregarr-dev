@@ -20,6 +20,7 @@ export type TagSource =
   | 'anilist'
   | 'myanimelist'
   | 'mdblist'
+  | 'tvdb'
   | 'networks'
   | 'originals'
   | 'multi-source'
@@ -36,6 +37,7 @@ const SOURCE_LABELS: Record<TagSource, string> = {
   anilist: 'Anilist',
   myanimelist: 'MyAnimeList',
   mdblist: 'Mdblist',
+  tvdb: 'Tvdb',
   networks: 'Networks',
   originals: 'Originals',
   'multi-source': 'MultiSource',

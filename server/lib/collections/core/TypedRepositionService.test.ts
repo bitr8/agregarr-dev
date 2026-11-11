@@ -1,10 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Covers the write path - the pure rank arithmetic is tested in
  * CollectionUtilities.test.ts, but nothing reached the part that persists the
  * result and marks the peers it moved as needing sync.
  */
+
+beforeAll(async () => {
+  await import('./TypedRepositionService');
+}, 60_000);
 
 const markCollectionModified = vi.fn();
 const save = vi.fn();

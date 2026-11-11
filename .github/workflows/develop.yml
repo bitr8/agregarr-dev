@@ -30,6 +30,7 @@ jobs:
   test:
     name: Lint, Typecheck & Test
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     container: node:22.23.4-alpine
     steps:
       # Without git, checkout falls back to a REST tarball, which honours

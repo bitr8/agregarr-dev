@@ -24,6 +24,12 @@ import {
   getAdaptiveTtl,
   getNullRatingTtl,
 } from './adaptiveTtl';
+import {
+  buildItemRankContext,
+  extractRankCollectionIds,
+  refreshRankCache,
+  type RankCollectionConfig,
+} from './collectionRank';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -46,6 +52,7 @@ import {
   fetchReleaseDateInfo,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
+import { getOverlayLibraryType } from './overlayLibraryType';
 import {
   normalizeOverlayJpegQuality,
   overlayOutputFormat,
@@ -70,10 +77,11 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
-import { resolveBasePosterSource } from './PlexBasePosterManager';
+import { resolveBasePosterSourceWithTrail } from './PlexBasePosterManager';
 import {
   deriveReleaseDateContext,
   latestAiredSeasonDate,
+  movieReleaseInfoFromTmdb,
   preferRadarrReleaseDate,
   type RadarrReleaseDates,
 } from './releaseDateContext';
@@ -128,6 +136,7 @@ export interface OverlayLibraryOutcomeDetails {
 
 export interface OverlayBatchOptions {
   checkCancelled?: () => boolean;
+  skipRankRefresh?: boolean;
   onItemStart?: (item: OverlayItemInput) => void;
   onItemComplete?: (
     outcome: OverlayItemOutcome,
@@ -266,6 +275,7 @@ class OverlayLibraryService {
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
   // Maps item ratingKey → array of collection IDs the item belongs to
   private collectionMembershipCache?: Map<string, string[]>;
+  private collectionRankCache = new Map<string, Map<string, number>>();
 
   // Aggregated episode media info for show libraries (per-library, keyed by show ratingKey)
   private aggregatedMediaByLibrary = new Map<
@@ -1257,30 +1267,18 @@ class OverlayLibraryService {
 
                 // Extract release date using the same logic as fetchReleaseDateInfo
                 if (movieDetails.release_dates?.results) {
-                  const { extractReleaseDates, determineReleaseDate } =
-                    await import('@server/utils/dateHelpers');
-                  const extracted = extractReleaseDates(
+                  const determined = movieReleaseInfoFromTmdb(
                     movieDetails.release_dates.results,
                     region
                   );
-                  const determined = determineReleaseDate(
-                    extracted.digitalRelease,
-                    extracted.physicalRelease,
-                    extracted.inCinemas
-                  );
                   if (determined) {
-                    releaseDateInfo = {
-                      releaseDate: determined.releaseDate,
-                      isEstimated: determined.isEstimated,
-                    };
+                    releaseDateInfo = determined;
                     logger.debug('Prefetch: determined release date', {
                       label: 'OverlayLibrary',
                       tmdbId,
                       releaseDate: determined.releaseDate,
                       isEstimated: determined.isEstimated,
-                      digitalRelease: extracted.digitalRelease,
-                      physicalRelease: extracted.physicalRelease,
-                      inCinemas: extracted.inCinemas,
+                      releaseSource: determined.releaseSource,
                     });
                   }
                 }
@@ -1290,6 +1288,7 @@ class OverlayLibraryService {
                   releaseDateInfo = {
                     releaseDate: movieDetails.release_date,
                     isEstimated: false,
+                    releaseSource: 'tmdb',
                   };
                 }
               } else {
@@ -1590,6 +1589,47 @@ class OverlayLibraryService {
   }
 
   /**
+   * Refresh rank lookups for the collections that enabled templates reference
+   * through a Collection Rank variable. Per-collection replacement keeps
+   * concurrent library jobs from wiping each other's entries.
+   */
+  private async refreshCollectionRanks(
+    plexApi: PlexAPI,
+    templates: OverlayTemplate[]
+  ): Promise<void> {
+    const ids = extractRankCollectionIds(
+      templates.map((template) => template.getTemplateData()),
+      templates.map((template) => template.getApplicationCondition())
+    );
+    if (ids.size === 0) return;
+
+    const settings = getSettings();
+    const { preExistingCollectionConfigService } = await import(
+      '@server/lib/collections/services/PreExistingCollectionConfigService'
+    );
+    const configs: RankCollectionConfig[] = [
+      ...(settings.plex.collectionConfigs || []),
+      ...preExistingCollectionConfigService.getConfigs(),
+    ];
+
+    await refreshRankCache(
+      this.collectionRankCache,
+      ids,
+      configs,
+      (ratingKey) => plexApi.getCollectionItemsOrThrow(ratingKey),
+      (collectionId, error) =>
+        logger.warn(
+          'Failed to fetch collection order for rank; keeping last known ranks',
+          {
+            label: 'OverlayLibrary',
+            collectionId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        )
+    );
+  }
+
+  /**
    * Apply overlays to all items in a library
    * Uses mutex-like behavior to prevent concurrent processing of the same library
    */
@@ -1805,9 +1845,10 @@ class OverlayLibraryService {
         return;
       }
 
+      const mediaType = getOverlayLibraryType(libraryId, config.mediaType);
       const fullSyncTargets = normalizeOverlaySyncTargets(
         config.fullSyncTargets,
-        config.mediaType
+        mediaType
       );
       if (fullSyncTargets.length === 0) {
         logger.info('Full overlay sync disabled for library', {
@@ -1871,13 +1912,13 @@ class OverlayLibraryService {
           )
         : [];
       const syncSeasons =
-        config.mediaType === 'show' &&
+        mediaType === 'show' &&
         fullSyncTargets.includes('season') &&
         sortedTemplates.some((template) =>
           targetsArtwork(template.getTags(), 'season')
         );
       const syncEpisodes =
-        config.mediaType === 'show' &&
+        mediaType === 'show' &&
         fullSyncTargets.includes('episode') &&
         sortedTemplates.some((template) =>
           targetsArtwork(template.getTags(), 'episode')
@@ -1974,6 +2015,8 @@ class OverlayLibraryService {
         this.collectionMembershipCache =
           await this.buildCollectionMembershipMap(plexApi);
       }
+
+      await this.refreshCollectionRanks(plexApi, sortedTemplates);
 
       // Fetch all items (handle pagination)
       let allItems: PlexLibraryItem[] = [];
@@ -2121,8 +2164,25 @@ class OverlayLibraryService {
           : new Map<string, PlexMetadata>();
 
       // Episode media scanning: aggregate episode-level resolution/HDR/DV to show posters
-      if (config.enableEpisodeScanning && config.mediaType === 'show') {
-        await this.runEpisodeScan(plexApi, libraryId, requiredContextFields);
+      if (config.enableEpisodeScanning && mediaType === 'show') {
+        // Every show-poster template, not just this run's: quick sync renders
+        // show posters from the cache this scan writes.
+        const showPosterTemplates = sortedTemplates.filter(
+          (template) =>
+            targetsArtwork(template.getTags(), 'main') ||
+            targetsArtwork(template.getTags(), 'season')
+        );
+        await this.runEpisodeScan(
+          plexApi,
+          libraryId,
+          requiredContextFields,
+          extractUsedContextFields(
+            showPosterTemplates.map((template) => template.getTemplateData()),
+            showPosterTemplates.map((template) =>
+              template.getApplicationCondition()
+            )
+          )
+        );
       }
 
       // Process each item (concurrency-limited)
@@ -2154,7 +2214,7 @@ class OverlayLibraryService {
             plexApi,
             itemWithFullMetadata,
             mainTemplates,
-            config.mediaType,
+            mediaType,
             libraryId,
             config.libraryName,
             maintainerrCollections,
@@ -2235,13 +2295,14 @@ class OverlayLibraryService {
         return;
       }
 
-      if (config.mediaType === 'show') {
+      if (mediaType === 'show') {
         if (childItems.length > 0 && !checkCancelled?.()) {
           const completedChildItems = new Set<string>();
           const childItemKey = (item: OverlayItemInput) =>
             `${item.target || 'main'}:${item.ratingKey}`;
           const childBatchOptions: OverlayBatchOptions = {
             checkCancelled,
+            skipRankRefresh: true,
             onItemStart: (item) => {
               this.updateProgress(libraryId, (p) => {
                 p.currentTarget = item.target || 'main';
@@ -2320,10 +2381,7 @@ class OverlayLibraryService {
 
       // Seasons never appear in the library listing above; Maintainerr nominates
       // them by ratingKey. Opt-in, show libraries only.
-      if (
-        config.mediaType === 'show' &&
-        config.enableMaintainerrSeasonOverlays
-      ) {
+      if (mediaType === 'show' && config.enableMaintainerrSeasonOverlays) {
         const seasonResult = await this.applyMaintainerrSeasonOverlays(
           plexApi,
           libraryId,
@@ -2430,14 +2488,30 @@ class OverlayLibraryService {
     const config = await getRepository(OverlayLibraryConfig).findOne({
       where: { libraryId },
     });
-    if (!config?.enabledOverlays.some((overlay) => overlay.enabled)) return;
+    if (!config?.enabledOverlays.some((overlay) => overlay.enabled)) {
+      logger.debug(
+        'Skipping Posterizarr overlays: no enabled library overlays',
+        {
+          label: 'Posterizarr Trigger',
+          libraryId,
+        }
+      );
+      return;
+    }
 
     // Item callbacks share the quick-sync opt-in, not the full-library scope.
+    const mediaType = getOverlayLibraryType(libraryId, config.mediaType);
     const targets = normalizeOverlaySyncTargets(
       config.quickSyncTargets,
-      config.mediaType
+      mediaType
     );
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      logger.debug('Skipping Posterizarr overlays: Quick sync scope is empty', {
+        label: 'Posterizarr Trigger',
+        libraryId,
+      });
+      return;
+    }
 
     const items: OverlayItemInput[] = targets.includes('main')
       ? [{ ratingKey: input.ratingKey, target: 'main' }]
@@ -2446,7 +2520,7 @@ class OverlayLibraryService {
     const syncEpisodes = targets.includes('episode');
 
     if (
-      config.mediaType === 'show' &&
+      mediaType === 'show' &&
       input.seasonNumber !== undefined &&
       (syncSeasons || (syncEpisodes && input.episodeNumber !== undefined))
     ) {
@@ -2509,9 +2583,19 @@ class OverlayLibraryService {
       }
     }
 
-    if (items.length > 0) {
-      await this.applyOverlaysToCollectionItems(items, libraryId);
+    if (items.length === 0) {
+      logger.debug(
+        'Skipping Posterizarr overlays: no items match Quick sync scope',
+        {
+          label: 'Posterizarr Trigger',
+          libraryId,
+          ratingKey: input.ratingKey,
+          targets,
+        }
+      );
+      return;
     }
+    await this.applyOverlaysToCollectionItems(items, libraryId);
   }
 
   /**
@@ -2633,8 +2717,11 @@ class OverlayLibraryService {
           await this.buildCollectionMembershipMap(plexApi);
       }
 
-      // Determine media type from library config
-      const mediaType = config.mediaType || 'movie';
+      if (!options.skipRankRefresh) {
+        await this.refreshCollectionRanks(plexApi, sortedTemplates);
+      }
+
+      const mediaType = getOverlayLibraryType(libraryId, config.mediaType);
 
       // Batch-fetch metadata for all items in a single Plex call
       const itemRatingKeys = [
@@ -2914,7 +3001,8 @@ class OverlayLibraryService {
         // Plex calls). See getAggregatedMediaFromCache for the trade-offs.
         const aggregatedMedia =
           config.enableEpisodeScanning && mediaType === 'show'
-            ? await this.getAggregatedMediaFromCache(libraryId)
+            ? this.aggregatedMediaByLibrary.get(libraryId) ??
+              (await this.getAggregatedMediaFromCache(libraryId))
             : undefined;
 
         // Process each item
@@ -3393,24 +3481,30 @@ class OverlayLibraryService {
       if (item.type === 'show') {
         episodeAggregation.episodeMediaSource = 'show';
       }
-      if (aggregatedMap && item.type === 'show') {
+      if (aggregatedMap && (item.type === 'show' || item.type === 'season')) {
         const agg = aggregatedMap.get(item.ratingKey);
         if (agg) {
           episodeAggregation = {
-            showResolution: baseContext.resolution,
-            showHdr: baseContext.hdr,
-            showDolbyVision: baseContext.dolbyVision,
-            showDolbyVisionProfile: baseContext.dolbyVisionProfile,
-            showAudioCodec: baseContext.audioCodec,
-            showAudioChannels: baseContext.audioChannels,
-            showVideoCodec: baseContext.videoCodec,
-            showBitDepth: baseContext.bitDepth,
+            ...(item.type === 'show'
+              ? {
+                  showResolution: baseContext.resolution,
+                  showHdr: baseContext.hdr,
+                  showDolbyVision: baseContext.dolbyVision,
+                  showDolbyVisionProfile: baseContext.dolbyVisionProfile,
+                  showAudioCodec: baseContext.audioCodec,
+                  showAudioChannels: baseContext.audioChannels,
+                  showVideoCodec: baseContext.videoCodec,
+                  showBitDepth: baseContext.bitDepth,
+                }
+              : {}),
             resolution: agg.resolution,
             hdr: agg.hdr,
             dolbyVision: agg.dolbyVision,
             dolbyVisionProfile: agg.dolbyVisionProfile,
+            hdr10Plus: agg.hdr10Plus,
             videoCodec: agg.videoCodec,
             audioCodec: agg.audioCodec,
+            audioProfile: agg.audioProfile,
             audioChannels: agg.audioChannels,
             bitDepth: agg.bitDepth,
             episodeCount: agg.episodeCount,
@@ -3446,6 +3540,7 @@ class OverlayLibraryService {
         ...releaseDateContext,
         ...monitoringContext,
         ...(collection ? { collection } : {}),
+        ...buildItemRankContext(item.ratingKey, this.collectionRankCache),
       };
 
       // Filter templates by conditions to get only templates that will actually be applied
@@ -3551,7 +3646,8 @@ class OverlayLibraryService {
 
       // Resolved once so the change gate and the fetch below agree.
       const settings = getSettings();
-      const posterSource = resolveBasePosterSource(item, settings);
+      const { source: posterSource, tried: posterSourceTrail } =
+        resolveBasePosterSourceWithTrail(item, settings);
 
       // OPTIMIZATION: Check if overlay inputs changed BEFORE downloading poster
       // This prevents expensive poster downloads when nothing has changed
@@ -3673,7 +3769,8 @@ class OverlayLibraryService {
             basePosterFilename: metadata?.basePosterFilename,
             localPosterModifiedTime: metadata?.localPosterModifiedTime,
           },
-          tmdbId
+          tmdbId,
+          posterSourceTrail
         );
       } catch (error) {
         // Re-throw to let caller track this as a failure
@@ -3729,11 +3826,12 @@ class OverlayLibraryService {
         return { skipped: true };
       }
 
-      // Single composite + JPEG encode for all templates
+      // Use the same format snapshot for the hash, encode, and upload filename.
       const currentBuffer = await overlayTemplateRenderer.compositeOverlays(
         posterBuffer,
         allOverlays,
-        jpegQuality
+        jpegQuality,
+        outputFormat
       );
 
       // Save to temporary file
@@ -4007,7 +4105,7 @@ class OverlayLibraryService {
     );
     const includeFullSeasonTemplates = normalizeOverlaySyncTargets(
       config.fullSyncTargets,
-      config.mediaType
+      getOverlayLibraryType(libraryId, config.mediaType)
     ).includes('season');
     const seasonTemplates = sortedTemplates.filter(
       (template) =>
@@ -4040,10 +4138,12 @@ class OverlayLibraryService {
     );
     const seasonImdbRatings = seasonRequiredContextFields.has('imdbRating')
       ? fullSyncSeasonImdbRatings ??
-        (await this.fetchSeasonImdbRatings(
-          plexApi,
-          activeSeasons.map((season) => season.ratingKey)
-        ))
+        (getSettings().overlays?.posterizarrIntegrationEnabled
+          ? await this.fetchSeasonImdbRatings(
+              plexApi,
+              activeSeasons.map((season) => season.ratingKey)
+            )
+          : undefined)
       : undefined;
     const seasonTmdbRatings = usesTmdbRatingFields(seasonRequiredContextFields)
       ? await this.fetchTmdbChildRatingContexts(
@@ -4161,7 +4261,7 @@ class OverlayLibraryService {
               ? seasonTmdbRatings.contexts.get(meta.ratingKey)
               : {}),
           },
-          // Seasons carry no Media, so there is no episode aggregation to apply.
+          // Falls back to this full sync's per-season episode aggregation.
           undefined,
           // Maintainerr nominated this season; if no template condition matches it,
           // leave its poster alone.
@@ -4402,7 +4502,8 @@ class OverlayLibraryService {
   private async runEpisodeScan(
     plexApi: PlexAPI,
     libraryId: string,
-    requiredContextFields: Set<string>
+    requiredContextFields: Set<string>,
+    showPosterContextFields: Set<string>
   ): Promise<void> {
     const { PlexEpisodeMediaScanner, resolveFetchedEpisodeDetail } =
       await import('./PlexEpisodeMediaScanner');
@@ -4421,7 +4522,11 @@ class OverlayLibraryService {
       requiredContextFields.has('episodeHdrCount') ||
       requiredContextFields.has('episodeHdrPercent') ||
       requiredContextFields.has('episodeDvCount') ||
-      requiredContextFields.has('episodeDvPercent');
+      requiredContextFields.has('episodeDvPercent') ||
+      // Show posters only: episode templates read their own streams, so an
+      // episode Audio Codec badge must not pull stream detail library-wide.
+      showPosterContextFields.has('audioProfile') ||
+      showPosterContextFields.has('hdr10Plus');
 
     const settings = getSettings();
     const serverId = settings.plex?.machineId || 'default';
@@ -4435,8 +4540,10 @@ class OverlayLibraryService {
       false
     );
 
-    const { episodes: cachedEpisodes, hasStreamDetail: cachedHasStreamDetail } =
-      await cacheService.getCachedEpisodes(serverId, libraryId);
+    const { episodes: cachedEpisodes } = await cacheService.getCachedEpisodes(
+      serverId,
+      libraryId
+    );
 
     // Compare against cache to find stale/missing entries
     const staleKeys = cacheService.getStaleRatingKeys(
@@ -4446,9 +4553,12 @@ class OverlayLibraryService {
     const cachedByKey = new Map(cachedEpisodes.map((c) => [c.ratingKey, c]));
     const currentKeys = new Set(freshLightweight.map((e) => e.ratingKey));
 
-    // If templates now need stream detail but cache was saved without it,
-    // treat all entries as stale so stream detail gets fetched
-    const needsDetailUpgrade = needsStreamDetail && !cachedHasStreamDetail;
+    const detailKeys = needsStreamDetail
+      ? cacheService.getKeysNeedingStreamDetail(
+          cachedEpisodes,
+          freshLightweight
+        )
+      : new Set<string>();
 
     // Previous value comes from the cached row, so an omitted fresh addedAt keeps it.
     const freshAddedAtByKey = new Map(
@@ -4468,7 +4578,7 @@ class OverlayLibraryService {
 
     if (
       staleKeys.size === 0 &&
-      !needsDetailUpgrade &&
+      detailKeys.size === 0 &&
       cachedEpisodes.length >= freshLightweight.length
     ) {
       // All episodes are cached and fresh — filter to current episodes only
@@ -4496,15 +4606,17 @@ class OverlayLibraryService {
           count: episodes.length,
         });
       }
-    } else if (
-      needsStreamDetail &&
-      (staleKeys.size > 0 || needsDetailUpgrade)
-    ) {
-      // Fetch stream detail for stale or detail-upgrade episodes
-      const keysToFetch = needsDetailUpgrade
-        ? freshLightweight.map((e) => e.ratingKey)
-        : [...staleKeys];
+    } else if (detailKeys.size > 0) {
+      const keysToFetch = [...detailKeys];
+      const batchStartTime = Date.now();
       const batchMetadata = await plexApi.getMetadataBatch(keysToFetch);
+      logger.info('Batch metadata fetch complete', {
+        label: 'EpisodeScanner',
+        libraryId,
+        requested: keysToFetch.length,
+        batchSize: batchMetadata.size,
+        durationMs: Date.now() - batchStartTime,
+      });
 
       // Merge: reuse cached rows for fresh entries, and apply the freshly
       // fetched stream detail (or lack of it) for stale / detail-upgrade
@@ -4512,11 +4624,7 @@ class OverlayLibraryService {
       // decision so an empty or missing stream can't masquerade as detailed.
       episodes = withFreshAddedAt(
         freshLightweight.map((ep) => {
-          if (
-            !needsDetailUpgrade &&
-            !staleKeys.has(ep.ratingKey) &&
-            cachedByKey.has(ep.ratingKey)
-          ) {
+          if (!detailKeys.has(ep.ratingKey) && cachedByKey.has(ep.ratingKey)) {
             return cachedByKey.get(ep.ratingKey)!;
           }
           return resolveFetchedEpisodeDetail(
@@ -4538,7 +4646,7 @@ class OverlayLibraryService {
     await cacheService.cleanExpired(serverId, libraryId);
 
     const aggregator = new EpisodeMediaAggregator();
-    const aggregated = aggregator.aggregateByShow(episodes);
+    const aggregated = aggregator.aggregateByShowAndSeason(episodes);
 
     this.aggregatedMediaByLibrary.set(libraryId, aggregated);
     // Fresh authoritative data written; drop the collection-path memo so it
@@ -4549,7 +4657,7 @@ class OverlayLibraryService {
       label: 'EpisodeScanner',
       libraryId,
       episodeCount: episodes.length,
-      showCount: aggregated.size,
+      entryCount: aggregated.size,
     });
   }
 
@@ -4603,7 +4711,7 @@ class OverlayLibraryService {
     const aggregated =
       episodes.length === 0
         ? undefined
-        : new EpisodeMediaAggregator().aggregateByShow(episodes);
+        : new EpisodeMediaAggregator().aggregateByShowAndSeason(episodes);
 
     this.aggregatedMediaCacheMemo.set(libraryId, {
       at: Date.now(),
@@ -4615,7 +4723,7 @@ class OverlayLibraryService {
         label: 'OverlayLibrary',
         libraryId,
         episodeCount: episodes.length,
-        showCount: aggregated.size,
+        entryCount: aggregated.size,
       });
     }
 

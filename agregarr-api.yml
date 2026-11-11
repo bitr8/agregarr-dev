@@ -300,6 +300,10 @@ components:
           type: boolean
           description: If true, new movie placeholder folders are named "Title (Year) {tmdb-ID}" so same-title movies get separate folders. Existing folders are not renamed.
           example: false
+        placeholderFolderTvdbId:
+          type: boolean
+          description: If true, new TV placeholder folders for shows not in Sonarr are named "Title (Year) {tvdb-ID}". Existing folders are not renamed.
+          example: false
         skipYoutubeTrailerDownloads:
           type: boolean
           description: If true, skip YouTube trailer downloads and use hardcoded placeholder video only (speeds up sync)
@@ -373,6 +377,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'networks',
               'originals',
@@ -700,6 +705,11 @@ components:
           enum: ['include', 'exclude']
           description: 'Tag filter mode for coming soon monitored subtype'
           nullable: true
+        comingSoonIncludeMidSeason:
+          type: boolean
+          description: 'Also include TV shows whose next episode is mid-season (default false: season premieres only)'
+          default: false
+          nullable: true
         comingSoonRadarrTagIds:
           type: array
           items:
@@ -920,6 +930,11 @@ components:
           description: 'Custom MDBList list URL (e.g., https://mdblist.com/lists/username/listname)'
           example: 'https://mdblist.com/lists/garycrawfordgc/netflix-shows'
           nullable: true
+        tvdbCustomListUrl:
+          type: string
+          description: 'Custom TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)'
+          example: 'https://thetvdb.com/lists/matrix'
+          nullable: true
         sortOrder:
           type: string
           enum:
@@ -934,6 +949,7 @@ components:
             - date_added_asc
             - alphabetical_asc
             - alphabetical_desc
+            - source_rank
           description: 'Sort order for collection items'
           example: 'default'
           default: 'default'
@@ -942,6 +958,17 @@ components:
           type: number
           description: 'Unified minimum items required to create actor/director collections'
           example: 3
+          nullable: true
+        franchiseMinimumItems:
+          type: integer
+          minimum: 1
+          description: 'Minimum movies in the library for an auto franchise collection (default 2)'
+          example: 2
+          nullable: true
+        franchiseCountReleasedOnly:
+          type: boolean
+          description: 'Auto franchise collections: only released TMDB entries count towards franchise size (default false)'
+          example: false
           nullable: true
         useSeparator:
           type: boolean
@@ -959,6 +986,13 @@ components:
             type: string
           description: 'Array of collection IDs to exclude items from (mutual exclusion)'
           example: ['10001', '10002']
+          nullable: true
+        excludeLabels:
+          type: array
+          items:
+            type: string
+          description: 'Plex item labels; items carrying any of them are kept out of the collection'
+          example: ['trailer-placeholder']
           nullable: true
         timeRestriction:
           type: object
@@ -1133,6 +1167,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'networks',
               'originals',
@@ -1442,6 +1477,11 @@ components:
           enum: ['include', 'exclude']
           description: 'Tag filter mode for coming soon monitored subtype'
           nullable: true
+        comingSoonIncludeMidSeason:
+          type: boolean
+          description: 'Also include TV shows whose next episode is mid-season (default false: season premieres only)'
+          default: false
+          nullable: true
         comingSoonRadarrTagIds:
           type: array
           items:
@@ -1662,6 +1702,11 @@ components:
           description: 'Custom MDBList list URL (e.g., https://mdblist.com/lists/username/listname)'
           example: 'https://mdblist.com/lists/garycrawfordgc/netflix-shows'
           nullable: true
+        tvdbCustomListUrl:
+          type: string
+          description: 'Custom TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)'
+          example: 'https://thetvdb.com/lists/matrix'
+          nullable: true
         anilistCustomListUrl:
           type: string
           description: 'Custom AniList list URL (e.g., https://anilist.co/animelist/{listname} or https://anilist.co/user/{username}/animelist/{listname})'
@@ -1681,6 +1726,7 @@ components:
             - date_added_asc
             - alphabetical_asc
             - alphabetical_desc
+            - source_rank
           description: 'Sort order for collection items'
           example: 'default'
           default: 'default'
@@ -1689,6 +1735,17 @@ components:
           type: number
           description: 'Unified minimum items required to create actor/director collections'
           example: 3
+          nullable: true
+        franchiseMinimumItems:
+          type: integer
+          minimum: 1
+          description: 'Minimum movies in the library for an auto franchise collection (default 2)'
+          example: 2
+          nullable: true
+        franchiseCountReleasedOnly:
+          type: boolean
+          description: 'Auto franchise collections: only released TMDB entries count towards franchise size (default false)'
+          example: false
           nullable: true
         useSeparator:
           type: boolean
@@ -1706,6 +1763,13 @@ components:
             type: string
           description: 'Array of collection IDs to exclude items from (mutual exclusion)'
           example: ['10001', '10002']
+          nullable: true
+        excludeLabels:
+          type: array
+          items:
+            type: string
+          description: 'Plex item labels; items carrying any of them are kept out of the collection'
+          example: ['trailer-placeholder']
           nullable: true
         timeRestriction:
           type: object
@@ -2038,6 +2102,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'networks',
               'originals',
@@ -2353,6 +2418,11 @@ components:
           enum: ['include', 'exclude']
           description: 'Tag filter mode for coming soon monitored subtype'
           nullable: true
+        comingSoonIncludeMidSeason:
+          type: boolean
+          description: 'Also include TV shows whose next episode is mid-season (default false: season premieres only)'
+          default: false
+          nullable: true
         comingSoonRadarrTagIds:
           type: array
           items:
@@ -2536,6 +2606,11 @@ components:
           description: 'Custom MDBList list URL (e.g., https://mdblist.com/lists/username/listname)'
           example: 'https://mdblist.com/lists/garycrawfordgc/netflix-shows'
           nullable: true
+        tvdbCustomListUrl:
+          type: string
+          description: 'Custom TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)'
+          example: 'https://thetvdb.com/lists/matrix'
+          nullable: true
         letterboxdCustomListUrl:
           type: string
           description: 'Custom Letterboxd list URL (e.g., https://letterboxd.com/user/list/list-name/)'
@@ -2565,6 +2640,7 @@ components:
             - date_added_asc
             - alphabetical_asc
             - alphabetical_desc
+            - source_rank
           description: 'Sort order for collection items'
           example: 'default'
           default: 'default'
@@ -2573,6 +2649,17 @@ components:
           type: number
           description: 'Unified minimum items required to create actor/director collections'
           example: 3
+          nullable: true
+        franchiseMinimumItems:
+          type: integer
+          minimum: 1
+          description: 'Minimum movies in the library for an auto franchise collection (default 2)'
+          example: 2
+          nullable: true
+        franchiseCountReleasedOnly:
+          type: boolean
+          description: 'Auto franchise collections: only released TMDB entries count towards franchise size (default false)'
+          example: false
           nullable: true
         useSeparator:
           type: boolean
@@ -2590,6 +2677,13 @@ components:
             type: string
           description: 'Array of collection IDs to exclude items from (mutual exclusion)'
           example: ['10001', '10002']
+          nullable: true
+        excludeLabels:
+          type: array
+          items:
+            type: string
+          description: 'Plex item labels; items carrying any of them are kept out of the collection'
+          example: ['trailer-placeholder']
           nullable: true
         timeRestriction:
           type: object
@@ -2930,6 +3024,7 @@ components:
               'tmdb',
               'imdb',
               'mdblist',
+              'tvdb',
               'letterboxd',
               'tautulli',
               'overseerr',
@@ -2989,6 +3084,11 @@ components:
           type: string
           description: 'Selected country for Networks collections'
           example: 'united-states'
+          nullable: true
+        tmdbAdvancedFilters:
+          type: object
+          description: 'TMDB discover filters for a source with subtype advanced_custom_tmdb'
+          additionalProperties: true
           nullable: true
       required:
         - id
@@ -4323,6 +4423,35 @@ components:
         externalUrl:
           type: string
           nullable: true
+    TracearrSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          nullable: true
+          description: 'Use Tracearr instead of Tautulli for statistics collections and the dashboard'
+        hostname:
+          type: string
+          nullable: true
+          example: 'tracearr.example.com'
+        port:
+          type: number
+          nullable: true
+          example: 3000
+        useSsl:
+          type: boolean
+          nullable: true
+        urlBase:
+          type: string
+          nullable: true
+          example: ''
+        apiKey:
+          type: string
+          nullable: true
+        serverId:
+          type: string
+          nullable: true
+          description: 'Tracearr server id to count plays from. Empty counts all servers.'
     MaintainerrSettings:
       type: object
       properties:
@@ -5582,6 +5711,7 @@ components:
               imdb,
               letterboxd,
               mdblist,
+              tvdb,
               tautulli,
               networks,
               originals,
@@ -5755,6 +5885,10 @@ components:
             tvPlays:
               type: integer
               example: 67
+        statisticsProvider:
+          type: string
+          enum: [tautulli, tracearr]
+          description: 'Which statistics provider produced the play numbers'
         tautulli:
           type: object
           nullable: true
@@ -7790,7 +7924,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [trakt, tmdb, imdb, letterboxd, mdblist, anilist]
+            enum: [trakt, tmdb, imdb, letterboxd, mdblist, tvdb, anilist]
           example: 'imdb'
           description: Collection source type
       responses:
@@ -8330,6 +8464,7 @@ paths:
                       imdb,
                       letterboxd,
                       mdblist,
+                      tvdb,
                       tautulli,
                       networks,
                       originals,
@@ -8360,6 +8495,12 @@ paths:
                   type: number
                   description: Maximum number of items to fetch
                   example: 50
+                excludeLabels:
+                  type: array
+                  items:
+                    type: string
+                  description: Plex item labels; matching items are left out of the preview
+                  example: ['trailer-placeholder']
                 timePeriod:
                   type: string
                   description: Time period for Tautulli collections
@@ -8455,6 +8596,7 @@ paths:
                             imdb,
                             letterboxd,
                             mdblist,
+                            tvdb,
                             tautulli,
                             networks,
                             originals,
@@ -10209,6 +10351,99 @@ paths:
           description: 'Tautulli API not found at specified URL'
         '500':
           description: 'Connection test failed - Server error or network issue'
+  /settings/tracearr:
+    get:
+      summary: Get Tracearr settings
+      description: Retrieves current Tracearr settings.
+      tags:
+        - settings-integrations
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TracearrSettings'
+    post:
+      summary: Update Tracearr settings
+      description: Updates Tracearr settings with the provided values. An empty serverId clears the server selection.
+      tags:
+        - settings-integrations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TracearrSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TracearrSettings'
+  /settings/tracearr/test:
+    post:
+      summary: Test Tracearr connection
+      description: Tests connection to a Tracearr instance and lists its servers.
+      tags:
+        - settings-integrations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: 'tracearr.example.com'
+                port:
+                  type: number
+                  example: 3000
+                apiKey:
+                  type: string
+                  example: 'your-api-key-here'
+                useSsl:
+                  type: boolean
+                  example: false
+                urlBase:
+                  type: string
+                  example: ''
+              required:
+                - hostname
+                - apiKey
+      responses:
+        '200':
+          description: 'Connection test successful'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  version:
+                    type: string
+                    nullable: true
+                  servers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        server_id:
+                          type: string
+                        server_name:
+                          type: string
+                        server_type:
+                          type: string
+                        status:
+                          type: string
+        '401':
+          description: 'Invalid API key - Authentication failed'
+        '500':
+          description: 'Connection test failed - Server error or network issue'
   /settings/maintainerr:
     get:
       summary: Get Maintainerr settings
@@ -11153,6 +11388,7 @@ paths:
               - anilist
               - myanimelist
               - mdblist
+              - tvdb
               - networks
               - originals
               - multi-source
@@ -11454,6 +11690,7 @@ paths:
               - anilist
               - myanimelist
               - mdblist
+              - tvdb
               - networks
               - originals
               - multi-source
@@ -12992,6 +13229,7 @@ paths:
                 imdb,
                 letterboxd,
                 mdblist,
+                tvdb,
                 tautulli,
                 networks,
                 originals,
@@ -15619,6 +15857,9 @@ paths:
                   audioProfile:
                     type: string
                     example: 'truehd_atmos'
+                  edition:
+                    type: string
+                    example: 'Extended Cut'
                   videoCodec:
                     type: string
                     example: 'HEVC'
@@ -15628,6 +15869,38 @@ paths:
                   releaseDate:
                     type: string
                     example: '1999-10-15'
+                  theatricalReleaseDate:
+                    type: string
+                    example: '1999-10-15'
+                    description: 'Movies only: theatrical date, region-preferred'
+                  digitalReleaseDate:
+                    type: string
+                    example: '2000-03-21'
+                    description: 'Movies only: digital date, region-preferred'
+                  physicalReleaseDate:
+                    type: string
+                    example: '2000-03-21'
+                    description: 'Movies only: physical date, region-preferred'
+                  daysSinceTheatricalRelease:
+                    type: integer
+                    example: 9000
+                    description: 'Movies only: days since the theatrical date (negative before it)'
+                  daysSinceDigitalRelease:
+                    type: integer
+                    example: 8900
+                    description: 'Movies only: days since the digital date (negative before it)'
+                  daysSincePhysicalRelease:
+                    type: integer
+                    example: 8900
+                    description: 'Movies only: days since the physical date (negative before it)'
+                  daysSinceHomeRelease:
+                    type: integer
+                    example: 8900
+                    description: 'Movies only: days since the earliest of digital or physical (negative before it)'
+                  releaseDateSource:
+                    type: string
+                    enum: [digital, physical, estimate, tmdb]
+                    description: 'Movies only: where releaseDate came from; estimate is theatrical plus 90 days'
                   runtime:
                     type: integer
                     example: 139

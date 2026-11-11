@@ -16,9 +16,15 @@ import { SMART_COLLECTION_SORT_OPTIONS } from '@app/types/collections';
 import { Transition } from '@headlessui/react';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
-import { Field, Formik, type FormikErrors, type FormikTouched } from 'formik';
+import {
+  Field,
+  Formik,
+  useFormikContext,
+  type FormikErrors,
+  type FormikTouched,
+} from 'formik';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { defineMessages, FormattedMessage, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
@@ -34,6 +40,7 @@ import ComingSoonServerSection from '@app/components/Collections/FormSections/Co
 import CustomUrlSection from '@app/components/Collections/FormSections/CustomUrlSection';
 import FilterWithMode from '@app/components/Collections/FormSections/FilterWithMode';
 import KeywordFilterWithMode from '@app/components/Collections/FormSections/KeywordFilterWithMode';
+import LabelExclusionSection from '@app/components/Collections/FormSections/LabelExclusionSection';
 import LibraryEssentialsPreview from '@app/components/Collections/FormSections/LibraryEssentialsPreview';
 import LibrarySelectionSection from '@app/components/Collections/FormSections/LibrarySelectionSection';
 import MultiSourceConfigSection from '@app/components/Collections/FormSections/MultiSourceConfigSection';
@@ -60,6 +67,18 @@ import {
   buildPromotedSortTitle,
   normalizeArticleForDisplay,
 } from '@app/utils/collections/sortTitle';
+
+const SourceRankResetGuard = () => {
+  const { values, setFieldValue } = useFormikContext<CollectionFormConfig>();
+  const isTraktAnticipated =
+    values.type === 'comingsoon' && values.subtype === 'trakt_anticipated';
+  useEffect(() => {
+    if (!isTraktAnticipated && values.sortOrder === 'source_rank') {
+      setFieldValue('sortOrder', 'default');
+    }
+  }, [isTraktAnticipated, values.sortOrder, setFieldValue]);
+  return null;
+};
 
 const messages = defineMessages({
   editCollection: 'Edit Collection Configuration',
@@ -135,6 +154,9 @@ const messages = defineMessages({
   validationCollectionSubtypeRequired: 'Collection sub-type is required',
   validationPersonMinimumItemsRequired: 'Minimum items is required',
   validationPersonMinimumItemsMin: 'Minimum items must be at least 2',
+  validationFranchiseMinimumItemsRequired: 'Minimum movies is required',
+  validationFranchiseMinimumItemsMin:
+    'Minimum movies must be a whole number of at least 1',
   validationSeparatorTitleRequired: 'Separator title is required',
   validationSeparatorTitleMin: 'Separator title must be at least 2 characters',
   validationPlexLabelRequired: 'Please select a Plex label',
@@ -223,6 +245,7 @@ const messages = defineMessages({
   dateAddedAsc: 'Date Added to Plex (Least Recent)',
   alphabeticalAsc: 'Alphabetical (A-Z)',
   alphabeticalDesc: 'Alphabetical (Z-A)',
+  sourceRankOrder: 'Trakt ranking',
   shufflePositionLabel: 'Shuffle position on Home/Recommended screens',
   shufflePositionHelp:
     "When enabled, this collection's position will be randomly shuffled with other collections that have this option enabled during each sync. Custom scheduling for shuffling can be set on the Jobs page.",
@@ -244,6 +267,9 @@ const messages = defineMessages({
   daysAhead: 'Days Ahead',
   daysAheadHelp:
     'Create placeholders for items releasing within this many days',
+  includeMidSeason: 'Include mid-season episodes (TV)',
+  includeMidSeasonHelp:
+    'Also list shows whose next episode airs inside the Days Ahead window, not just season premieres. These shows only appear if they are already in Plex, and no placeholder is created for them.',
   releasedItems: 'Released Items',
   includeAllReleasedItems: 'Include all released items',
   includeAllReleasedItemsHelp:
@@ -289,6 +315,7 @@ const messages = defineMessages({
   failedFetchImdbTitle: 'Failed to fetch IMDb list title',
   failedFetchLetterboxdTitle: 'Failed to fetch Letterboxd list title',
   failedFetchMdblistTitle: 'Failed to fetch MDBList title',
+  failedFetchTvdbTitle: 'Failed to fetch TVDB list title',
   failedFetchAnilistTitle: 'Failed to fetch AniList title',
   failedParseResponse: 'Failed to parse server response',
   connectionErrorTrakt:
@@ -301,6 +328,8 @@ const messages = defineMessages({
     'Connection error while fetching Letterboxd list title. Please check your connection and try again.',
   connectionErrorMdblist:
     'Connection error while fetching MDBList title. Please check your connection and try again.',
+  connectionErrorTvdb:
+    'Connection error while fetching TVDB list title. Please check your connection and try again.',
   connectionErrorAnilist:
     'Connection error while fetching AniList title. Please check your connection and try again.',
   connectionError: 'Connection error',
@@ -498,6 +527,7 @@ const CollectionFormConfigForm = ({
     imdb?: string;
     letterboxd?: string;
     mdblist?: string;
+    tvdb?: string;
     anilist?: string;
   }>({});
 
@@ -507,6 +537,7 @@ const CollectionFormConfigForm = ({
     imdb?: 'movie' | 'tv' | 'both' | 'mixed';
     letterboxd?: 'movie' | 'tv' | 'both' | 'mixed';
     mdblist?: 'movie' | 'tv' | 'both' | 'mixed';
+    tvdb?: 'movie' | 'tv' | 'both' | 'mixed';
     anilist?: 'movie' | 'tv' | 'both' | 'mixed';
   }>({});
 
@@ -516,6 +547,7 @@ const CollectionFormConfigForm = ({
     imdb?: boolean;
     letterboxd?: boolean;
     mdblist?: boolean;
+    tvdb?: boolean;
     anilist?: boolean;
   }>({});
 
@@ -525,6 +557,7 @@ const CollectionFormConfigForm = ({
     imdb?: string;
     letterboxd?: string;
     mdblist?: string;
+    tvdb?: string;
     anilist?: string;
   }>({});
 
@@ -710,6 +743,36 @@ const CollectionFormConfigForm = ({
             .min(
               2,
               intl.formatMessage(messages.validationPersonMinimumItemsMin)
+            ),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+    franchiseMinimumItems: Yup.number()
+      .transform((value, originalValue) => {
+        if (
+          originalValue === null ||
+          originalValue === undefined ||
+          originalValue === ''
+        ) {
+          return undefined;
+        }
+        return Number.isNaN(value) ? undefined : value;
+      })
+      .when(['type', 'subtype'], {
+        is: (type?: string, subtype?: string) =>
+          type === 'tmdb' && subtype === 'auto_franchise',
+        then: (schema) =>
+          schema
+            .required(
+              intl.formatMessage(
+                messages.validationFranchiseMinimumItemsRequired
+              )
+            )
+            .integer(
+              intl.formatMessage(messages.validationFranchiseMinimumItemsMin)
+            )
+            .min(
+              1,
+              intl.formatMessage(messages.validationFranchiseMinimumItemsMin)
             ),
         otherwise: (schema) => schema.notRequired(),
       }),
@@ -1682,6 +1745,88 @@ const CollectionFormConfigForm = ({
     });
   };
 
+  const fetchTvdbTitle = async (
+    url: string,
+    setFieldValue?: (field: string, value: string) => void
+  ) => {
+    setFetchingTitle((prev) => ({ ...prev, tvdb: true }));
+    setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+
+    return new Promise<void>((resolve, reject) => {
+      const eventSource = new EventSource(
+        `/api/v1/collections/fetch-title?url=${encodeURIComponent(
+          url
+        )}&type=tvdb`
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.status === 'success') {
+            if (data.title) {
+              setFetchedTitles((prev) => ({ ...prev, tvdb: data.title }));
+              if (data.mediaType) {
+                setDetectedMediaTypes((prev) => ({
+                  ...prev,
+                  tvdb: data.mediaType,
+                }));
+              }
+
+              if (setFieldValue) {
+                setTimeout(() => {
+                  setFieldValue('template', data.title);
+                }, 100);
+              }
+            }
+
+            eventSource.close();
+            setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+            setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+            resolve();
+          } else if (data.status === 'error') {
+            addToast(
+              data.message || intl.formatMessage(messages.failedFetchTvdbTitle),
+              {
+                appearance: 'error',
+                autoDismiss: true,
+              }
+            );
+            eventSource.close();
+            setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+            setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+            reject(new Error(data.message));
+          } else {
+            setTitleFetchProgress((prev) => ({
+              ...prev,
+              tvdb: data.message,
+            }));
+          }
+        } catch (parseError) {
+          addToast(intl.formatMessage(messages.failedParseResponse), {
+            appearance: 'error',
+            autoDismiss: true,
+          });
+          eventSource.close();
+          setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+          setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+          reject(parseError);
+        }
+      };
+
+      eventSource.onerror = () => {
+        addToast(intl.formatMessage(messages.connectionErrorTvdb), {
+          appearance: 'error',
+          autoDismiss: true,
+        });
+        eventSource.close();
+        setFetchingTitle((prev) => ({ ...prev, tvdb: false }));
+        setTitleFetchProgress((prev) => ({ ...prev, tvdb: undefined }));
+        reject(new Error(intl.formatMessage(messages.connectionError)));
+      };
+    });
+  };
+
   const fetchAnilistTitle = async (
     url: string,
     setFieldValue?: (field: string, value: string) => void
@@ -1862,6 +2007,15 @@ const CollectionFormConfigForm = ({
               (config as CollectionFormConfig).subtype === 'directors')
               ? 5
               : undefined),
+          franchiseMinimumItems:
+            (config as CollectionFormConfig).franchiseMinimumItems ??
+            ((config as CollectionFormConfig).type === 'tmdb' &&
+            (config as CollectionFormConfig).subtype === 'auto_franchise'
+              ? 2
+              : undefined),
+          franchiseCountReleasedOnly:
+            (config as CollectionFormConfig).franchiseCountReleasedOnly ??
+            false,
           useSeparator: (config as CollectionFormConfig).useSeparator ?? false,
           separatorTitle:
             (config as CollectionFormConfig).separatorTitle ||
@@ -1935,6 +2089,7 @@ const CollectionFormConfigForm = ({
             .placeholderFilterSettings,
           excludeFromCollections:
             (config as CollectionFormConfig).excludeFromCollections || [],
+          excludeLabels: (config as CollectionFormConfig).excludeLabels || [],
           // Radarr/Sonarr tag configuration
           radarrInstanceId:
             (config as CollectionFormConfig).radarrInstanceId ?? undefined,
@@ -1966,6 +2121,9 @@ const CollectionFormConfigForm = ({
           comingSoonSonarrRootFolder:
             (config as CollectionFormConfig).comingSoonSonarrRootFolder ??
             undefined,
+          comingSoonIncludeMidSeason:
+            (config as CollectionFormConfig).comingSoonIncludeMidSeason ??
+            false,
           // Direct download server selection
           directDownloadRadarrServerId:
             (config as CollectionFormConfig).directDownloadRadarrServerId ??
@@ -2057,6 +2215,8 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).letterboxdCustomListUrl || '',
           mdblistCustomListUrl:
             (config as CollectionFormConfig).mdblistCustomListUrl || '',
+          tvdbCustomListUrl:
+            (config as CollectionFormConfig).tvdbCustomListUrl || '',
           anilistCustomListUrl:
             (config as CollectionFormConfig).anilistCustomListUrl || '',
           // Enable flags for custom features (default to false)
@@ -2128,6 +2288,9 @@ const CollectionFormConfigForm = ({
                   customDays: existingConfig.customDays,
                   minimumPlays: existingConfig.minimumPlays,
                   networksCountry: existingConfig.networksCountry,
+                  ...(existingConfig.subtype === 'advanced_custom_tmdb' && {
+                    tmdbAdvancedFilters: existingConfig.tmdbAdvancedFilters,
+                  }),
                   priority: 0,
                   isExpanded: true,
                 },
@@ -2515,6 +2678,16 @@ const CollectionFormConfigForm = ({
                 (config as CollectionFormConfig).personMinimumItems ??
                 5
               : undefined,
+            franchiseMinimumItems:
+              values.type === 'tmdb' && values.subtype === 'auto_franchise'
+                ? optionalNumber(values.franchiseMinimumItems) ??
+                  (config as CollectionFormConfig).franchiseMinimumItems ??
+                  2
+                : undefined,
+            franchiseCountReleasedOnly:
+              values.type === 'tmdb' && values.subtype === 'auto_franchise'
+                ? values.franchiseCountReleasedOnly ?? false
+                : undefined,
             filterSettings:
               values.enableGrabMissingItems && values.filterSettings
                 ? values.filterSettings
@@ -2618,6 +2791,10 @@ const CollectionFormConfigForm = ({
               values.type === 'comingsoon' && values.subtype === 'monitored'
                 ? values.comingSoonSonarrRootFolder
                 : undefined,
+            comingSoonIncludeMidSeason:
+              values.type === 'comingsoon' && values.subtype === 'monitored'
+                ? values.comingSoonIncludeMidSeason
+                : undefined,
             selectionMode: isEssentials
               ? values.selectionMode || 'exclude'
               : undefined,
@@ -2663,6 +2840,9 @@ const CollectionFormConfigForm = ({
             excludeFromCollections: isPersonCollection
               ? undefined
               : values.excludeFromCollections,
+            excludeLabels: isPersonCollection
+              ? undefined
+              : values.excludeLabels,
             // Target user restriction
             targetUserId: optionalString(values.targetUserId),
             targetUserLabel: optionalString(values.targetUserLabel),
@@ -2793,7 +2973,7 @@ const CollectionFormConfigForm = ({
                         <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                           <div className="flex">
                             <svg
-                              className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                              className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                               fill="currentColor"
                               viewBox="0 0 20 20"
                             >
@@ -2993,6 +3173,8 @@ const CollectionFormConfigForm = ({
                                     minimumPlays: source.minimumPlays,
                                     priority: source.priority,
                                     networksCountry: source.networksCountry,
+                                    tmdbAdvancedFilters:
+                                      source.tmdbAdvancedFilters,
                                     radarrTagServerId: source.radarrTagServerId,
                                     radarrTagId: source.radarrTagId,
                                     sonarrTagServerId: source.sonarrTagServerId,
@@ -3013,7 +3195,7 @@ const CollectionFormConfigForm = ({
                           <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                             <div className="flex">
                               <svg
-                                className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                                className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                               >
@@ -3041,7 +3223,7 @@ const CollectionFormConfigForm = ({
                           <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                             <div className="flex">
                               <svg
-                                className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                                className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                               >
@@ -3084,7 +3266,7 @@ const CollectionFormConfigForm = ({
                           <div className="rounded-md border border-gray-500/20 bg-transparent p-4">
                             <div className="flex">
                               <svg
-                                className="mt-0.5 mr-3 h-5 w-5 flex-shrink-0 text-gray-400"
+                                className="mr-3 mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                               >
@@ -3143,6 +3325,7 @@ const CollectionFormConfigForm = ({
                           fetchImdbTitle={fetchImdbTitle}
                           fetchLetterboxdTitle={fetchLetterboxdTitle}
                           fetchMdblistTitle={fetchMdblistTitle}
+                          fetchTvdbTitle={fetchTvdbTitle}
                           fetchAnilistTitle={fetchAnilistTitle}
                           titleFetchProgress={titleFetchProgress}
                         />
@@ -3211,6 +3394,9 @@ const CollectionFormConfigForm = ({
                                 (values.type === 'mdblist' &&
                                   values.subtype === 'custom' &&
                                   (fetchedTitles.mdblist || config?.name)) ||
+                                (values.type === 'tvdb' &&
+                                  values.subtype === 'custom' &&
+                                  (fetchedTitles.tvdb || config?.name)) ||
                                 (values.type === 'anilist' &&
                                   values.subtype === 'custom' &&
                                   (fetchedTitles.anilist || config?.name)))
@@ -3360,6 +3546,7 @@ const CollectionFormConfigForm = ({
                                       </label>
                                       <div className="form-input-area">
                                         <div className="form-input-field">
+                                          <SourceRankResetGuard />
                                           <Field
                                             as="select"
                                             id="sortOrder"
@@ -3433,6 +3620,16 @@ const CollectionFormConfigForm = ({
                                                   messages.alphabeticalDesc
                                                 )}
                                               </option>
+                                              {typedValues.type ===
+                                                'comingsoon' &&
+                                                typedValues.subtype ===
+                                                  'trakt_anticipated' && (
+                                                  <option value="source_rank">
+                                                    {intl.formatMessage(
+                                                      messages.sourceRankOrder
+                                                    )}
+                                                  </option>
+                                                )}
                                             </>
                                           </Field>
                                         </div>
@@ -4215,6 +4412,19 @@ const CollectionFormConfigForm = ({
                               />
                             )}
 
+                            {isCollection &&
+                              typedValues.type !== 'filtered_hub' &&
+                              !(
+                                typedValues.type === 'plex' &&
+                                (typedValues.subtype === 'directors' ||
+                                  typedValues.subtype === 'actors')
+                              ) && (
+                                <LabelExclusionSection
+                                  values={typedValues as CollectionFormConfig}
+                                  setFieldValue={setFieldValue}
+                                />
+                              )}
+
                             {/* Coming Soon Monitored Server/Tag Settings */}
                             {typedValues.type === 'comingsoon' &&
                               typedValues.subtype === 'monitored' && (
@@ -4231,6 +4441,34 @@ const CollectionFormConfigForm = ({
                                       }
                                       setFieldValue={setFieldValue}
                                     />
+                                  </div>
+                                </div>
+                              )}
+
+                            {/* Coming Soon Monitored mid-season episodes */}
+                            {typedValues.type === 'comingsoon' &&
+                              typedValues.subtype === 'monitored' && (
+                                <div className="form-row">
+                                  <label
+                                    htmlFor="comingSoonIncludeMidSeason"
+                                    className="text-label"
+                                  >
+                                    {intl.formatMessage(
+                                      messages.includeMidSeason
+                                    )}
+                                  </label>
+                                  <div className="form-input-area">
+                                    <Field
+                                      type="checkbox"
+                                      id="comingSoonIncludeMidSeason"
+                                      name="comingSoonIncludeMidSeason"
+                                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-400">
+                                      {intl.formatMessage(
+                                        messages.includeMidSeasonHelp
+                                      )}
+                                    </p>
                                   </div>
                                 </div>
                               )}
@@ -4440,7 +4678,7 @@ const CollectionFormConfigForm = ({
                                                   messages.youtubeCookiesWarningMessage,
                                                   {
                                                     cookiesPath: (
-                                                      <code className="bg-yellow-950 rounded px-1 py-0.5 font-mono">
+                                                      <code className="rounded bg-yellow-950 px-1 py-0.5 font-mono">
                                                         youtube-cookies.txt
                                                       </code>
                                                     ),
@@ -5603,12 +5841,17 @@ const CollectionFormConfigForm = ({
                             ? (valuesRecord.mdblistCustomListUrl as
                                 | string
                                 | undefined)
+                            : values.type === 'tvdb'
+                            ? (valuesRecord.tvdbCustomListUrl as
+                                | string
+                                | undefined)
                             : values.type === 'anilist'
                             ? (valuesRecord.anilistCustomListUrl as
                                 | string
                                 | undefined)
                             : undefined,
                         maxItems: values.maxItems,
+                        excludeLabels: values.excludeLabels,
                         // TMDB streaming service + advanced discover fields
                         tmdbAdvancedFilters:
                           valuesRecord.tmdbAdvancedFilters as
@@ -5643,6 +5886,8 @@ const CollectionFormConfigForm = ({
                           values.comingSoonRadarrRootFolder,
                         comingSoonSonarrRootFolder:
                           values.comingSoonSonarrRootFolder,
+                        comingSoonIncludeMidSeason:
+                          values.comingSoonIncludeMidSeason,
                         // Multi-source specific fields
                         isMultiSource: values.isMultiSource,
                         sources: values.sources as
@@ -5656,6 +5901,7 @@ const CollectionFormConfigForm = ({
                               customDays?: number;
                               minimumPlays?: number;
                               networksCountry?: string;
+                              tmdbAdvancedFilters?: Record<string, unknown>;
                             }[]
                           | undefined,
                         combineMode: values.combineMode,

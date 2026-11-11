@@ -142,6 +142,19 @@ const customUrlValidations = {
       }),
   }),
 
+  tvdbCustomListUrl: Yup.string().when(['type', 'subtype'], {
+    is: (type: string, subtype: string) =>
+      type === 'tvdb' && subtype === 'custom',
+    then: (schema) =>
+      schema
+        .required('TVDB list URL is required')
+        .matches(
+          /thetvdb\.com\/lists\/[A-Za-z0-9_-]+/,
+          'Please enter a valid TVDB list URL (e.g., https://thetvdb.com/lists/matrix or https://thetvdb.com/lists/7149)'
+        ),
+    otherwise: (schema) => schema,
+  }),
+
   anilistCustomListUrl: Yup.string().when(['type', 'subtype'], {
     is: (type: string, subtype: string) =>
       type === 'anilist' && subtype === 'custom',
@@ -425,6 +438,7 @@ export const ValidationHelpers = {
       tmdb: 'tmdbCustomCollectionUrl',
       imdb: 'imdbCustomListUrl',
       letterboxd: 'letterboxdCustomListUrl',
+      tvdb: 'tvdbCustomListUrl',
       anilist: 'anilistCustomListUrl',
       myanimelist: 'myanilistCustomListUrl',
     };
@@ -552,6 +566,7 @@ export const ValidationHelpers = {
         tmdb: 'tmdbCustomCollectionUrl',
         imdb: 'imdbCustomListUrl',
         letterboxd: 'letterboxdCustomListUrl',
+        tvdb: 'tvdbCustomListUrl',
         anilist: 'anilistCustomListUrl',
         myanimelist: 'myanilistCustomListUrl',
       };

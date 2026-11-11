@@ -4,6 +4,7 @@ import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
+  applyLabelExclusions,
   extractErrorCause,
   findPlexItemsByTmdbIds,
   getCollectionMediaType,
@@ -146,6 +147,14 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         libraryCache
       );
 
+      const useSourceRank = this.usesSourceRank(config);
+      if (useSourceRank) {
+        mappedResult.items = this.sortBySourceRank(
+          mappedResult.items,
+          sourceData
+        );
+      }
+
       // Apply filtering (placeholderItems in mappedResult are ignored - overlays handled by overlay sync job)
       const { items, missingItems, mappingStats } =
         await this.applyFilteringToMappedItems(mappedResult, config);
@@ -171,7 +180,11 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
       // So there's no need to fetch or add released items
 
       // Sort items by release date (closest first)
-      const sortedItems = await this.sortByReleaseDate(items, sourceData);
+      const sortedItems = await this.sortByReleaseDate(
+        items,
+        sourceData,
+        useSourceRank
+      );
 
       if (sortedItems.length === 0) {
         // Distinguish "no placeholders materialised" from a generic empty
@@ -222,10 +235,16 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         plexClient,
         this.source
       );
+      filteredItems = await applyLabelExclusions(
+        filteredItems,
+        config,
+        plexClient,
+        this.source
+      );
 
       if (filteredItems.length === 0) {
         logger.info(
-          `All ${mediaType} items were excluded from collection "${config.name}" based on mutual exclusion rules`,
+          `All ${mediaType} items were excluded from collection "${config.name}" by exclusion rules`,
           {
             label: 'Coming Soon Collections',
             configName: config.name,
@@ -820,6 +839,14 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     // Add missing items (not yet in Plex at all)
     for (const sourceItem of sourceData) {
       if (sourceItem.tmdbId > 0 && !matchedTmdbIds.has(sourceItem.tmdbId)) {
+        // Mid-season shows are already underway, so they never get a placeholder
+        if (
+          sourceItem.mediaType === 'tv' &&
+          config.comingSoonIncludeMidSeason &&
+          (sourceItem.episodeNumber ?? 1) > 1
+        ) {
+          continue;
+        }
         // isReturning was already set in fetchMonitoredShows based on season number
         missingItems.push({
           tmdbId: sourceItem.tmdbId,
@@ -932,6 +959,29 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     return filteredData;
   }
 
+  private usesSourceRank(config: CollectionConfig): boolean {
+    return (
+      config.subtype === 'trakt_anticipated' &&
+      config.sortOrder === 'source_rank'
+    );
+  }
+
+  public sortBySourceRank<T extends { tmdbId?: number }>(
+    items: T[],
+    sourceData: ComingSoonSourceData[]
+  ): T[] {
+    const rank = new Map<number, number>();
+    sourceData.forEach((source, index) => {
+      if (source.tmdbId && !rank.has(source.tmdbId)) {
+        rank.set(source.tmdbId, index);
+      }
+    });
+    const rankOf = (item: T) =>
+      (item.tmdbId !== undefined ? rank.get(item.tmdbId) : undefined) ??
+      Number.MAX_SAFE_INTEGER;
+    return [...items].sort((a, b) => rankOf(a) - rankOf(b));
+  }
+
   /**
    * Sort collection items by release date (closest first)
    * Items without release dates are placed at the end
@@ -939,7 +989,8 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
    */
   private async sortByReleaseDate(
     items: CollectionItem[],
-    sourceData: ComingSoonSourceData[]
+    sourceData: ComingSoonSourceData[],
+    bySourceRank = false
   ): Promise<CollectionItem[]> {
     // Create a map of tmdbId to release date
     const releaseDateMap = new Map<number, Date | null>();
@@ -993,6 +1044,9 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     });
 
     // Sort items by release date
+    if (bySourceRank) {
+      return this.sortBySourceRank(itemsWithMetadata, sourceData);
+    }
     const sortedItems = [...itemsWithMetadata].sort((a, b) => {
       const dateA = a.releaseDateSortValue
         ? new Date(a.releaseDateSortValue)

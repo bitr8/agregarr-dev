@@ -3,6 +3,7 @@ import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import { rankContextFromOrderedKeys } from '@server/lib/overlays/collectionRank';
 import { seasonFallbackFor } from '@server/lib/overlays/maintainerrCountdown';
 import {
   buildRenderContext,
@@ -416,6 +417,7 @@ overlayTestRouter.post('/', async (req, res) => {
         !!cfg.collectionRatingKey
     );
     const collectionIds: string[] = [];
+    const rankContext: Record<string, number> = {};
     const concurrency = 10;
 
     for (let i = 0; i < collectionsWithKeys.length; i += concurrency) {
@@ -425,6 +427,10 @@ overlayTestRouter.post('/', async (req, res) => {
           try {
             const itemKeys = await plexApi.getCollectionItems(
               cfg.collectionRatingKey
+            );
+            Object.assign(
+              rankContext,
+              rankContextFromOrderedKeys(cfg.id, ratingKey, itemKeys)
             );
             return itemKeys.includes(ratingKey) ? cfg.id : null;
           } catch {
@@ -452,6 +458,7 @@ overlayTestRouter.post('/', async (req, res) => {
       ...releaseDateContext,
       ...monitoringContext,
       collection: collectionIds,
+      ...rankContext,
     };
 
     // Evaluate all templates with detailed results
@@ -471,11 +478,11 @@ overlayTestRouter.post('/', async (req, res) => {
     });
 
     // Fetch base poster
-    const { plexBasePosterManager, resolveBasePosterSource } = await import(
-      '@server/lib/overlays/PlexBasePosterManager'
-    );
+    const { plexBasePosterManager, resolveBasePosterSourceWithTrail } =
+      await import('@server/lib/overlays/PlexBasePosterManager');
 
-    const posterSource = resolveBasePosterSource(item, settings);
+    const { source: posterSource, tried: posterSourceTrail } =
+      resolveBasePosterSourceWithTrail(item, settings);
 
     // Real metadata, or a preview treats an overlaid poster as the original.
     const metadataService = (
@@ -506,7 +513,8 @@ overlayTestRouter.post('/', async (req, res) => {
           basePosterFilename: metadata?.basePosterFilename,
           localPosterModifiedTime: metadata?.localPosterModifiedTime,
         },
-        tmdbId
+        tmdbId,
+        posterSourceTrail
       );
     } catch (error) {
       logger.error('Failed to get base poster', {
@@ -550,10 +558,12 @@ overlayTestRouter.post('/', async (req, res) => {
     const jpegQuality = normalizeOverlayJpegQuality(
       settings.overlays?.jpegQuality
     );
+    const outputFormat = overlayOutputFormat();
     posterBuffer = await overlayTemplateRenderer.compositeOverlays(
       posterBuffer,
       allOverlays,
-      jpegQuality
+      jpegQuality,
+      outputFormat
     );
 
     // Return all context variables as a flat list (no grouping)
@@ -585,7 +595,7 @@ overlayTestRouter.post('/', async (req, res) => {
       output: {
         width: posterWidth,
         height: posterHeight,
-        format: overlayOutputFormat(),
+        format: outputFormat,
         jpegQuality,
         bytes: posterBuffer.length,
       },

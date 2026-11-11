@@ -2,6 +2,7 @@ import { getRepository } from '@server/datasource';
 import { CollectionMetadata } from '@server/entity/CollectionMetadata';
 import { MediaItemMetadata } from '@server/entity/MediaItemMetadata';
 import logger from '@server/logger';
+import { In, IsNull, Not } from 'typeorm';
 
 /**
  * Service for managing collection and media item metadata tracking
@@ -309,39 +310,6 @@ class MetadataTrackingService {
     return false;
   }
 
-  async recordOverlayApplication(
-    itemRatingKey: string,
-    libraryKey: string,
-    inputHash: string,
-    uploadUrl: string
-  ): Promise<void> {
-    const repo = getRepository(MediaItemMetadata);
-
-    let metadata = await repo.findOne({
-      where: { plexItemRatingKey: itemRatingKey },
-    });
-
-    if (!metadata) {
-      metadata = new MediaItemMetadata({
-        plexItemRatingKey: itemRatingKey,
-        libraryKey: libraryKey,
-      });
-    }
-
-    metadata.lastOverlayInputHash = inputHash;
-    metadata.lastPosterUploadUrl = uploadUrl;
-    metadata.lastOverlayAppliedAt = new Date();
-
-    await repo.save(metadata);
-
-    logger.info('Recorded overlay application', {
-      label: 'MetadataTracking',
-      itemRatingKey,
-      inputHash: inputHash.substring(0, 8),
-      uploadUrl,
-    });
-  }
-
   async recordOverlayApplicationWithBasePoster(
     itemRatingKey: string,
     libraryKey: string,
@@ -475,10 +443,13 @@ class MetadataTrackingService {
     libraryKey: string
   ): Promise<MediaItemMetadata[]> {
     const repo = getRepository(MediaItemMetadata);
-    const rows = await repo.find({ where: { libraryKey } });
-    return rows.filter(
-      (row) => row.itemType === 'season' || row.itemType === 'episode'
-    );
+    return repo.find({
+      where: {
+        libraryKey,
+        itemType: In(['season', 'episode']),
+        ourOverlayPosterUrl: Not(IsNull()),
+      },
+    });
   }
 
   /**

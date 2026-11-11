@@ -2,13 +2,15 @@
 
 [![Latest release](https://img.shields.io/github/v/release/bitr8/agregarr-dev?label=release&color=blue)](https://github.com/bitr8/agregarr-dev/releases/latest) [![Docker pulls](https://img.shields.io/docker/pulls/bitr8/agregarr)](https://hub.docker.com/r/bitr8/agregarr) [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-Active fork of [Agregarr](https://github.com/agregarr/agregarr) with performance fixes, placeholder lifecycle improvements, FlareSolverr support, and open upstream PRs bundled into a single Docker image. Available as `bitr8/agregarr` on Docker Hub.
+Agregarr builds Plex collections from lists (TMDB, IMDb, Letterboxd, MDBList, Trakt, AniList, and your own Plex labels), draws overlays onto posters, and creates Coming Soon placeholders for titles you don't have yet.
 
-> [!TIP]
+Upstream [Agregarr](https://github.com/agregarr/agregarr) has been quiet since April 2026. This fork continues the work, with fixes, new features, and a release every few weeks. It's maintained by an upstream contributor with [46 merged PRs](https://github.com/agregarr/agregarr/pulls?q=is%3Apr+is%3Amerged+author%3Abitr8) there. Docker releases ship as `bitr8/agregarr`.
+
+Each version's changes are in the [release notes](https://github.com/bitr8/agregarr-dev/releases).
+
+> [!WARNING]
 >
-> **Latest release: [v2.12.1](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.1).** This security patch moves the image to Node 22.23.4, which should stop it trusting the compromised eMudhra certificates. A new health check also warns if your Plex Media Server has vulnerabilities under active exploitation.
->
-> The previous release, [v2.12.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.0), was mostly fixes for collections that could fail quietly. It also added Item Order for multi-source collections, a Recently Released Episodes (Individual) hub, an optional TMDB ID in movie placeholder folder names, a Minimum IMDb votes filter, and a Placeholder Folders health check.
+> **Still running `agregarr/agregarr`? Switch to this image.** Upstream's `:latest` (v2.4.2, March 2026) includes `youtube-search-without-api-key`, a package npm pulled and flagged as malicious ([MAL-2026-18270](https://osv.dev/vulnerability/MAL-2026-18270)), and runs on Node 20. Releases from this fork remove that package and include the Node, Express, axios, sharp, and Next.js security updates. See [v2.12.1](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.1) and [v2.12.3](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.3).
 
 > [!IMPORTANT]
 >
@@ -16,17 +18,15 @@ Active fork of [Agregarr](https://github.com/agregarr/agregarr) with performance
 
 ## Docker
 
-Available on Docker Hub as [`bitr8/agregarr`](https://hub.docker.com/r/bitr8/agregarr).
+| Tag              | What it tracks                                             |
+| ---------------- | ---------------------------------------------------------- |
+| `:latest`        | Stable releases. Recommended for most users.               |
+| `:2.12.3` (etc.) | Pinned to a specific release.                              |
+| `:develop`       | Bleeding edge. Builds on every push to develop, may break. |
 
-| Tag             | What it tracks                                             |
-| --------------- | ---------------------------------------------------------- |
-| `:latest`       | Stable releases. Recommended for most users.               |
-| `:2.12.1` (etc.) | Pinned to a specific release. |
-| `:develop`      | Bleeding edge. Builds on every push to develop, may break. |
+Release tags support amd64 and arm64 (Apple Silicon, RPi 4+). The `:develop` tag is amd64 only.
 
-**Multi-arch** release tags ship amd64 and arm64 (Apple Silicon, RPi 4+). The `:develop` tag builds amd64 only.
-
-**Switching from upstream?** Replace the image line in your existing compose file. Config volumes are compatible.
+**Switching from upstream?** Stop Agregarr and back up your config folder first. Then change the image line in your compose file. The fork reads upstream's config but adds its own database migrations, so going back means restoring that backup.
 
 ```diff
 -    image: agregarr/agregarr:latest
@@ -54,15 +54,19 @@ services:
     restart: unless-stopped
 ```
 
+Swap in your own paths, run `docker compose up -d`, then open `http://YOUR_HOST:7171` and sign in with Plex.
+
 > [!WARNING]
 >
-> **File permissions:** Set `PUID` and `PGID` to match the user that owns your media directories. Without these, the container runs as root and creates directories with restrictive permissions that break imports in Sonarr, Radarr, and other apps. On Unraid, use `PUID=99` and `PGID=100`.
+> **File permissions:** Set `PUID` and `PGID` to the user that owns your media directories. Without them, the container runs as root and may create directories with restrictive permissions, which can break imports in Sonarr, Radarr, and other apps. On Unraid, use `PUID=99` and `PGID=100`.
 
-For general Agregarr configuration (services, collections, overlays etc.), see the [upstream docs](https://agregarr.org/docs/installation).
+The [upstream docs](https://agregarr.org/docs/installation) still apply for general configuration, including services, collections, and overlays.
 
-### Cloudflare solvers
+### Cloudflare solver
 
-FlixPatrol sits behind Cloudflare and blocks automated requests at the TLS layer. If you use FlixPatrol collections (Networks Top 10, streaming charts), you need a Cloudflare solver: FlareSolverr, [Byparr](https://github.com/ThePhaseless/Byparr), or both. The Docker image bundles headless Chromium as a fallback, but a dedicated solver is far more reliable.
+FlixPatrol sits behind Cloudflare, so its collections (Networks Top 10 and streaming charts) need a solver. You can use FlareSolverr, [Byparr](https://github.com/ThePhaseless/Byparr), or both.
+
+The image includes headless Chromium as a fallback, but a dedicated solver tends to be far more reliable.
 
 ```yaml
   flaresolverr:
@@ -73,125 +77,98 @@ FlixPatrol sits behind Cloudflare and blocks automated requests at the TLS layer
     restart: unless-stopped
 ```
 
-Add your instances under **Settings > Sources > Cloudflare Solvers** (e.g. `http://flaresolverr:8191`). You can run more than one: fetches try them in priority order, and a failing instance gets backed off per domain instead of blocking the rest.
+Add the solver under **Settings > Sources > Cloudflare Solvers**, for example `http://flaresolverr:8191`. More than one can be listed. Fetches try them in priority order, and an instance that breaks is backed off for that domain rather than blocking the rest.
 
-If Cloudflare appears to be blocking your server's IP (FlareSolverr reports "Cloudflare has blocked this request", or the log shows `solver loaded flixpatrol.com but the site returned HTTP 403`), route a solver through a different connection.
+If the log shows `solver loaded flixpatrol.com but the site returned HTTP 403`, it looks like Cloudflare has blocked your IP. Run a second solver through a proxy or VPN container, then add it below the main one. FlareSolverr reads `PROXY_URL`, while Byparr reads `PROXY_SERVER`.
 
-Both solvers read proxy settings from their own container environment:
-
-- FlareSolverr: `PROXY_URL`, including the scheme, for example `socks5://gluetun:1080`
-- Byparr: `PROXY_SERVER`
-- Authentication: `PROXY_USERNAME` and `PROXY_PASSWORD`
-
-Keep one solver on your normal connection and run a second through the proxy. Fetches fall through to the second solver when the first is refused.
-
-Running the solver inside a VPN container's network works too. Point Agregarr at the VPN container's address.
-
-## Relationship to upstream
-
-This fork tracks upstream Agregarr and stays GPL-3.0. Changes that fit upstream go back as PRs (46 merged, 13 open). Fork-only features rely on behaviour or trade-offs upstream may not want to adopt.
-
-## What's different
-
-Detail for each feature is in the [release notes](https://github.com/bitr8/agregarr-dev/releases) for the version that shipped it. Entries marked `:develop` are on the develop image and not yet in a tagged release.
+## What it does
 
 ### Collections
 
-- **Ownership by label**: Agregarr only touches collections carrying its own label, so your own collections with matching names are left alone. ([v2.8.1](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.1))
-- **Library essentials**: one config generates a smart collection per genre, decade, resolution, or content rating in a library. Include/exclude mode, auto-posters. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
-- **Collection presets**: twelve starter configs (TMDB, IMDb, Trakt, Coming Soon, Netflix Top 10) that fill the form for you. ([v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0))
-- **Separators**: empty collections that carry a title card, breaking a long row into labelled groups. ([v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0))
-- **Per-user targeting**: restrict a collection to a single Plex user via label filtering. ([v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0), cherry-pick from upstream [#555](https://github.com/agregarr/agregarr/pull/555))
-- **Label collections**: build a collection from a Plex label. (Contributed by [Damienlee69](https://github.com/Damienlee69), [v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
-- **Export/import**: back up collection configs as JSON and restore them on the same or a different instance. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
-- **Dynamic title prefix**: prepend your own text to rotating random/cycle collection titles. (Contributed by [gh0st-runner](https://github.com/gh0st-runner), [v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Ordering exclusion label**: collections carrying a label you list under **Settings > General > Exclude from Ordering (Plex Label)** are left out of hub ordering, visibility enforcement, and sort title management. Built for running Shortlist or Kometa alongside Agregarr. ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Episode-level filtered hubs**: a `recently_added_episodes` subtype that filters by episode rather than show, so a "New Episodes Today" row only shows what actually dropped today. ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Sort title override**: per-collection sort title prefix that pins a collection's place in Plex's alphabetical order without touching hub ordering. ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **IMDb Bottom 100** as a collection source, same shape as the Top 250. ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Item Order for multi-source collections**: sorts each source before Max Items cuts it, so the cut keeps the best of each list. It then sorts the combined list again. The default leaves the order as it was. ([v2.12.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.0))
-- **Recently Released Episodes (Individual) hub**: lists individual episodes by original air date, newest first, so an old episode imported today doesn't look new. TV libraries only. ([v2.12.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.0))
-- **Minimum IMDb votes**: auto-download skips titles with a high rating based on only a handful of votes. `0`, the default, turns it off. ([v2.12.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.0))
-- **Last Episode Added sort** for smart collections. ([v2.8.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.8.0))
+Pick a source and a library, then Agregarr keeps the Plex collection in step with it. Presets fill out the form for the common ones.
+
+Beyond list sources:
+
+- **Library essentials** uses one config to generate a smart collection for each genre, decade, resolution, or content rating. An optional separator collection can group them.
+- The **Plex Label** source builds a collection from items carrying a label. **Target User** hides that collection from everyone except one Plex user.
+- **Filtered Plex hubs** replace Recently Added, Recently Released, and Recently Released Episodes with versions that leave placeholders out.
+- **Sort Title** pins a collection's place in Plex's alphabetical order. **Exclude from Ordering (Plex Label)** under Settings > General leaves collections managed by Shortlist or Kometa alone.
+- Multi-source collections get an **Item Order**, so the Max Items cut keeps the best of each list. **Minimum IMDb votes** stops auto-download chasing a high rating based on a handful of votes.
+- IMDb charts include the Top 250 and Bottom 100.
+- Collection configs export to JSON and can be imported on the same instance or another one.
+
+Agregarr recognises its own collections by label, so a hand-made collection with the same name isn't mistaken for one of them.
 
 ### Overlays
 
-- **Posterizarr integration** (off by default): writes an ownership marker Posterizarr can read into the overlay output, accepts authenticated callbacks after Sonarr or Radarr imports, and lets show libraries pick main, season and episode artwork per sync. Contributed by [Marcus Isdahl](https://github.com/marcusisdahl). See the [Posterizarr integration guide](POSTERIZARR.md). ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Dashboard sync progress cards**: live progress, stats, ETA, start/stop for both collection and overlay syncs. ![Collection Sync Dashboard](public/images/collection-sync-dashboard.png)
-- **Maintainerr season deletion countdown**: reads Maintainerr's collection data and draws the countdown on season posters using your templates. ([v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0)) A per-library option also puts the countdown on the show poster once every season is scheduled to leave. (Contributed by [Rubeanie](https://github.com/Rubeanie), [v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0)) ![Season deletion countdown](public/images/maintainerr-season-countdown.png)
-- **Parallel overlay processing**: **Settings > General > Parallel Items** runs 1 to 10 items at once (default 1, so nothing changes until you raise it). The stop button now cancels per-library jobs mid-run instead of waiting for the batch. ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Conditional elements and colour scaling**: template elements can render only when a context condition holds (resolution, media type, whether a release date exists), and `colorScale` on tile elements interpolates between two colours over a numeric range, previewed live in the editor. ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Episode media scanning**: aggregates actual episode files for resolution/HDR/DV badges instead of trusting show-level metadata. Per-library toggle. ([v2.5.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.5.0))
-- **Audio codec badges**: opt-in "Audio Codec" preset reads the audio streams Plex scanned and badges each movie with its best track: TrueHD Atmos, DD+ Atmos, DTS-HD MA, DTS:X, down through DD/DTS/AAC. Nothing depends on how files are named. DTS:X comes from the track title, so it only shows where the rip is tagged. Movies only for now. ([v2.10.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.10.0))
-- **Next-episode countdowns** sourced from Sonarr (no gap when episodes air). ([v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0))
-- **Estimated release date flag**: templates can distinguish fabricated dates from published ones. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
-- **Canvas size** configurable in the overlay editor (was locked to 1000x1500). ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
-- **Total seasons / seasons available** template variables. (Contributed by [Bergasha](https://github.com/Bergasha))
+The template editor supports per-element conditions, so an element only renders when a field matches. It also has colour scaling on tiles and a configurable canvas size.
 
-### Performance
+Presets cover the usual badges. There's also an opt-in **Audio Codec** preset that reads the streams Plex scanned, including TrueHD Atmos, DD+ Atmos, DTS-HD MA, and others. Movies only for now.
 
-Upstream makes individual API calls per item, per rating source, per cache miss. With 40+ collections and 10k+ items, syncs take hours. This fork batches IMDb prefetch, caches adaptively by content age, batches Plex metadata in groups of 200, caches TMDB resolution in SQLite, and uses plain HTTP for Letterboxd (280ms vs 10.5s per page). Syncs that took hours complete in minutes.
+Per-library **episode media scanning** reads the actual episode files for resolution and HDR badges instead of relying on show-level metadata.
 
-### Placeholders
+![Episode scanning toggle](public/images/episode-scanning-toggle.png)
 
-Retroactive filter application, self-healing for stuck DB records, direct Plex deletion for stale items, TV episode cleanup, Sonarr folder naming, `.plexmatch` for movies, download status awareness, post-sync hub verification, and TV label cleanup. Detail in the release notes for [v2.3.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.3.0) through [v2.7.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.7.0).
+Next-episode countdowns come from Sonarr, and templates can distinguish an estimated release date from a published one.
 
-An optional TMDB ID in movie placeholder folder names (`Title (Year) {tmdb-12345}`) stops two films with the same title and year from sharing a folder. It's off by default, and existing folders are never renamed. ([v2.12.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.12.0))
+With Maintainerr connected, season posters show a deletion countdown drawn with your own template. A per-library option also puts the countdown on the show poster once every season is scheduled to go.
 
-### Running Seerr with placeholders
+![Season deletion countdown](public/images/maintainerr-season-countdown.png)
 
-Seerr reads Plex for availability. A trailer placeholder looks like the real film, so Seerr marks requests for it as available.
+**Parallel Items** under Settings > General can run up to 10 overlay items at once. The default is 1. The dashboard shows live progress and stats for collection and overlay syncs, with a stop button that cancels a run midway through.
 
-[Rubeanie](https://github.com/Rubeanie) maintains a Seerr build that skips files matching a regex. Use image `rubeanie/seerr:ignore-media-regex`. See upstream PR [seerr-team/seerr#2606](https://github.com/seerr-team/seerr/pull/2606).
+![Collection Sync Dashboard](public/images/collection-sync-dashboard.png)
 
-Under **Settings > General > Ignored Path Patterns**, add:
+Posterizarr can hand items back to Agregarr after an \*arr import, which updates overlays and collection membership without a full sync. It's off by default. See the [Posterizarr integration guide](POSTERIZARR.md).
 
-- Movies: `\{edition-(Trailer|Placeholder|Coming Soon)\}\.mp4$` (the last two are what older Agregarr builds wrote)
-- TV: `Season 00/S00E00\.Trailer\.mp4$`
+### Coming Soon placeholders
 
-Or let Agregarr do it. Since [v2.11.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.11.0), the Seerr settings modal has a **Keep placeholder ignore patterns in Seerr** checkbox. Tick it and Agregarr adds those two patterns to Seerr through its API, straight away and again at the start of every collections sync if they go missing. Anything added by hand stays, with Agregarr's patterns appended. The Health panel warns when the patterns are missing. Once the box is ticked, it also warns when the connected Seerr build has no such setting.
+Placeholders are small video files that put upcoming titles into Plex before you have them.
+
+Trailers come from TMDB first, then a yt-dlp YouTube search. You can also skip the download and use the static placeholder video. Before creating one, Agregarr checks the Sonarr and Radarr download status and names folders to match.
+
+Movie folders can include the TMDB ID (`Title (Year) {tmdb-12345}`), which keeps two films with the same title and year apart. Cleanup is self-healing: filters apply retroactively, and stuck records are cleared so the next sync can recreate them.
+
+**Running Seerr too?** Seerr reads Plex for availability, and a placeholder looks like the real film, so requests get marked available.
+
+[Rubeanie](https://github.com/Rubeanie) maintains a Seerr build (`rubeanie/seerr:ignore-media-regex`, upstream PR [seerr-team/seerr#2606](https://github.com/seerr-team/seerr/pull/2606)) that skips files matching a regex. Tick **Keep placeholder ignore patterns in Seerr** in Agregarr's Seerr settings. Agregarr writes the two patterns and checks them again at the start of every sync. The Health panel warns if they go missing.
 
 ### Health checks
 
-Eighteen diagnostic checks run on a schedule and surface results in **Settings > About**. Transient failures get a grace window, checks can be muted individually, and job runs are persisted with per-job detail. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
+Eighteen checks run on a schedule and appear under **Settings > About**. They cover service connections, the Plex version, Cloudflare solver, Seerr patterns, orphaned collection keys, template references, appdata and placeholder volumes, timezone, and job freshness.
 
-### Security
+External checks get a grace window. One transient failure shows as a warning rather than an error. Any check can be muted when it doesn't apply to your setup.
 
-Session authentication on all settings routes, path containment on file operations, ZIP import limits, URL validation, download destination checks. ([v2.9.0](https://github.com/bitr8/agregarr-dev/releases/tag/v2.9.0))
+### Speed on big libraries
 
-## Upstream PRs
+IMDb ratings are prefetched in batches. Caches expire based on the age of the content, TMDB lookups persist in SQLite, and Letterboxd pages are fetched over plain HTTP instead of through a headless browser.
 
-### Open
+## Relationship to upstream
 
-| PR                                                    | Description                                                 |
-| ----------------------------------------------------- | ----------------------------------------------------------- |
-| [#613](https://github.com/agregarr/agregarr/pull/613) | Don't dismiss modals when clicking portaled children        |
-| [#607](https://github.com/agregarr/agregarr/pull/607) | Sort TMDB franchise parts by release date                   |
-| [#606](https://github.com/agregarr/agregarr/pull/606) | Self-heal stale collectionRatingKey during label fallback   |
-| [#605](https://github.com/agregarr/agregarr/pull/605) | Invalidate stale AWS WAF tokens and add solve backoff       |
-| [#604](https://github.com/agregarr/agregarr/pull/604) | Quick sync exclusion bypass fix                             |
-| [#599](https://github.com/agregarr/agregarr/pull/599) | Apply mutual exclusion to filtered hub collections          |
-| [#596](https://github.com/agregarr/agregarr/pull/596) | Detect real content in TV placeholder cleanup via Plex      |
-| [#595](https://github.com/agregarr/agregarr/pull/595) | Fix jobs page crash on unparseable cron expressions         |
-| [#594](https://github.com/agregarr/agregarr/pull/594) | Sanitise poster filenames to match validation allowlist     |
-| [#526](https://github.com/agregarr/agregarr/pull/526) | Retroactive placeholder filter evaluation during cleanup    |
-| [#516](https://github.com/agregarr/agregarr/pull/516) | Check \*arr download status + Sonarr folder naming          |
-| [#498](https://github.com/agregarr/agregarr/pull/498) | Deduplicate hub identifiers to prevent convergence failures |
-| [#492](https://github.com/agregarr/agregarr/pull/492) | Title fallback for TV placeholders without TMDB GUID        |
+This fork wouldn't exist without upstream [Agregarr](https://github.com/agregarr/agregarr).
 
-[46 merged](https://github.com/agregarr/agregarr/pulls?q=is%3Apr+is%3Amerged+author%3Abitr8).
+It remains GPL-3.0 and reads upstream's config, so switching over is an image swap (see the backup note under Docker).
 
-### Fork-Only (No Upstream PR Planned)
+Fixes that fit upstream have been [offered back as PRs](https://github.com/agregarr/agregarr/pulls?q=is%3Apr+author%3Abitr8).
 
-| Feature                                         | Why Fork-Only                               |
-| ----------------------------------------------- | ------------------------------------------- |
-| Direct Plex API deletion for stale placeholders | Requires "Allow media deletion" in Plex     |
-| Post-sync hub verification for label leaks      | Safety net for fork's label-based filtering |
+## Support
 
-## License
+Bugs, feature requests, and new source requests go through [GitHub issues](https://github.com/bitr8/agregarr-dev/issues/new/choose).
+
+Include the version shown under Settings > About and the relevant lines from `config/logs/agregarr-YYYY-MM-DD.log`. Fixes land on `develop` and ship in the next release. Older releases don't get backports.
+
+Found something exploitable? Use the private route in [SECURITY.md](SECURITY.md), not a public issue.
+
+## Contributing
+
+PRs are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: agree on scope in an issue, keep the PR to one concern, and run it against a real Plex.
+
+## Licence
 
 GPL-3.0, same as upstream.
 
 ## Credits
 
 Built on [Agregarr](https://github.com/agregarr/agregarr).
+
+Thanks to [Damienlee69](https://github.com/Damienlee69) (label collections), [Bergasha](https://github.com/Bergasha) (season count template variables), [Marcus Isdahl](https://github.com/marcusisdahl) (Posterizarr integration), [Rubeanie](https://github.com/Rubeanie) (show-poster countdown and the Seerr build), [gh0st-runner](https://github.com/gh0st-runner) (dynamic title prefix), and [diblaze](https://github.com/diblaze) (the yt-dlp trailer search approach).

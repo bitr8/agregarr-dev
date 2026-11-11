@@ -25,6 +25,10 @@ const messages = defineMessages({
   tautulliDescriptionPlayStats:
     'Configure Tautulli in your settings to view play statistics from your Plex server.',
   configureTautulli: 'Configure Tautulli',
+  tracearrConnectionFailed: 'Tracearr Connection Failed',
+  tracearrConnectionFailedDescription:
+    'Agregarr could not read statistics from Tracearr. Check that Tracearr is running and the connection settings are correct.',
+  configureTracearr: 'Check Tracearr Settings',
   failedToLoadDashboardStats: 'Failed to load dashboard statistics',
 });
 
@@ -59,6 +63,7 @@ interface DashboardData {
       collectionPlays: number;
     };
   };
+  statisticsProvider?: 'tautulli' | 'tracearr';
   timestamp: string;
 }
 
@@ -121,6 +126,36 @@ const DashboardStats: React.FC = () => {
     dashboardData.tautulli?.isConnected === true ||
     dashboardData.activity !== null;
 
+  if (
+    !isTautulliConfigured &&
+    dashboardData.statisticsProvider === 'tracearr'
+  ) {
+    return (
+      <div className="rounded-lg bg-stone-800 p-6 shadow-sm">
+        <div className="flex flex-col items-center py-8 text-center">
+          <ExclamationCircleIcon className="mb-4 h-12 w-12 text-orange-400" />
+          <h4 className="mb-2 text-lg font-semibold text-white">
+            {intl.formatMessage(messages.tracearrConnectionFailed)}
+          </h4>
+          <p className="mb-2 max-w-md text-gray-400">
+            {intl.formatMessage(messages.tracearrConnectionFailedDescription)}
+          </p>
+          {dashboardData.tautulli?.error && (
+            <p className="mb-6 max-w-md text-sm text-red-400">
+              {dashboardData.tautulli.error}
+            </p>
+          )}
+          <Link href="/settings/sources" passHref legacyBehavior>
+            <Button as="a" buttonType="primary">
+              <CogIcon className="mr-2 h-5 w-5" />
+              {intl.formatMessage(messages.configureTracearr)}
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // If Tautulli is not configured, show setup message
   if (!isTautulliConfigured) {
     return (
@@ -133,7 +168,7 @@ const DashboardStats: React.FC = () => {
           <p className="mb-6 max-w-md text-gray-400">
             {intl.formatMessage(messages.tautulliDescriptionPlayStats)}
           </p>
-          <Link href="/settings/sources" passHref>
+          <Link href="/settings/sources" passHref legacyBehavior>
             <Button as="a" buttonType="primary">
               <CogIcon className="mr-2 h-5 w-5" />
               {intl.formatMessage(messages.configureTautulli)}

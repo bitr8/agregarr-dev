@@ -1,6 +1,7 @@
 import type PlexAPI from '@server/api/plexapi';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  applyLabelExclusions,
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
   extractErrorCause,
@@ -569,6 +570,13 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
     missingItems?: MissingItem[]
   ): Promise<CollectionOperationResult> {
     try {
+      items = await applyLabelExclusions(
+        items,
+        config,
+        plexClient,
+        this.source
+      );
+
       // Use userOverride for user collections, otherwise create context based on subtype
       const userContext =
         userOverride || (await this.createUserContextForSubtype(config));

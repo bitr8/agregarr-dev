@@ -243,6 +243,7 @@ sonarrRoutes.get<
     'anilist',
     'myanimelist',
     'mdblist',
+    'tvdb',
     'networks',
     'originals',
     'multi-source',

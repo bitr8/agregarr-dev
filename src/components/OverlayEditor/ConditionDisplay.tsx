@@ -40,13 +40,13 @@ const useCollectionName = (
 
   const { data: agregarrCollections } = useSWR<{
     collectionConfigs: { id: string; name: string }[];
-  }>(hasCollectionRules ? '/api/v1/collections' : null, (url) =>
+  }>(hasCollectionRules ? '/api/v1/collections' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
   const { data: preExistingCollections } = useSWR<
     { id: string; name: string }[]
-  >(hasCollectionRules ? '/api/v1/preexisting' : null, (url) =>
+  >(hasCollectionRules ? '/api/v1/preexisting' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 

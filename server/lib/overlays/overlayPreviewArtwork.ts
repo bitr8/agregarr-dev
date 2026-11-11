@@ -21,6 +21,6 @@ export async function createOverlayPreviewArtwork(
       fit: 'cover',
       position: sharp.strategy.attention,
     })
-    .jpeg({ quality: 88 })
+    .png()
     .toBuffer();
 }

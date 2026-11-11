@@ -4,8 +4,8 @@ import logger from '@server/logger';
 
 /**
  * Maps the UI's sort order to a Plex smart-filter `sort=` value.
- * Returns undefined for orders Plex can't express server-side (random,
- * reverse, IMDb rating) so callers omit the param and keep Plex's default.
+ * Returns undefined for orders Plex can't express server-side (reverse,
+ * IMDb rating) so callers omit the param and keep Plex's default.
  */
 export function mapSortOrderToPlexSort(
   sortOrder?: CollectionSortOrder
@@ -23,6 +23,8 @@ export function mapSortOrderToPlexSort(
       return 'titleSort:asc';
     case 'alphabetical_desc':
       return 'titleSort:desc';
+    case 'random':
+      return 'random';
     default:
       return undefined;
   }

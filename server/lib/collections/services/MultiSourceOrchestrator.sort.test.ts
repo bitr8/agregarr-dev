@@ -42,10 +42,22 @@ class TestSync extends BaseCollectionSync<'tmdb'> {
   constructor() {
     super('tmdb');
   }
-  async fetchSourceData(): Promise<unknown[]> {
+  protected async validateConfiguration(): Promise<void> {
+    return;
+  }
+  protected async processConfiguration(): Promise<never> {
+    throw new Error('unused');
+  }
+  protected async createTemplateContext(): Promise<never> {
+    throw new Error('unused');
+  }
+  protected async createCollection(): Promise<never> {
+    throw new Error('unused');
+  }
+  async fetchSourceData(): Promise<never[]> {
     return [];
   }
-  mapSourceDataToItems(_d: unknown, c: { id: string }) {
+  async mapSourceDataToItems(_d: unknown, c: { id: string }) {
     const dates = c.id.endsWith('s1') ? [10, 20, 100] : [30];
     return {
       items: dates.map((d, i) => ({

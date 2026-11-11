@@ -153,7 +153,7 @@ const Sidebar = ({
                   </div>
                   <div
                     ref={navRef}
-                    className="flex flex-1 flex-col overflow-y-auto pt-8 pb-8 sm:pb-4"
+                    className="flex flex-1 flex-col overflow-y-auto pb-8 pt-8 sm:pb-4"
                   >
                     <div className="flex flex-shrink-0 items-center px-2">
                       <span className="px-4 text-xl text-gray-50">
@@ -169,6 +169,7 @@ const Sidebar = ({
                             key={`mobile-${sidebarLink.messagesKey}`}
                             href={sidebarLink.href}
                             as={sidebarLink.as}
+                            legacyBehavior
                           >
                             <a
                               onClick={() =>
@@ -237,10 +238,10 @@ const Sidebar = ({
         </Transition>
       </div>
 
-      <div className="fixed top-0 bottom-0 left-0 z-30 hidden lg:flex lg:flex-shrink-0">
+      <div className="fixed bottom-0 left-0 top-0 z-30 hidden lg:flex lg:flex-shrink-0">
         <div className="sidebar flex w-64 flex-col">
           <div className="flex h-0 flex-1 flex-col">
-            <div className="flex flex-1 flex-col overflow-y-auto pt-8 pb-4">
+            <div className="flex flex-1 flex-col overflow-y-auto pb-4 pt-8">
               <div className="flex flex-shrink-0 items-center">
                 <span className="px-4 text-2xl text-gray-50">
                   <a href="/">
@@ -255,6 +256,7 @@ const Sidebar = ({
                       key={`desktop-${sidebarLink.messagesKey}`}
                       href={sidebarLink.href}
                       as={sidebarLink.as}
+                      legacyBehavior
                     >
                       <a
                         tabIndex={

@@ -44,10 +44,25 @@ class TestSync extends BaseCollectionSync<'tmdb'> {
   constructor() {
     super('tmdb');
   }
-  async fetchSourceDataWithCache(): Promise<unknown[]> {
-    return [{}];
+  protected async validateConfiguration(): Promise<void> {
+    return;
   }
-  mapSourceDataToItems(_d: unknown, c: { id: string }) {
+  protected async processConfiguration(): Promise<never> {
+    throw new Error('unused');
+  }
+  protected async createTemplateContext(): Promise<never> {
+    throw new Error('unused');
+  }
+  protected async createCollection(): Promise<never> {
+    throw new Error('unused');
+  }
+  async fetchSourceData(): Promise<never[]> {
+    return [];
+  }
+  async fetchSourceDataWithCache(): Promise<never[]> {
+    return [{}] as never[];
+  }
+  async mapSourceDataToItems(_d: unknown, c: { id: string }) {
     return {
       items:
         c.id === 'preview-s1'

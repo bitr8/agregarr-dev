@@ -8,7 +8,7 @@ import type {
   OverlayRenderContext,
   OverlayVariableElementProps,
 } from './types';
-import { AVAILABLE_VARIABLES } from './types';
+import { AVAILABLE_VARIABLES, isCollectionRankField } from './types';
 
 interface VariableElementComponentProps {
   element: OverlayElement;
@@ -186,6 +186,9 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
             // Check if this is a date field with custom format
             const isDateField = [
               'releaseDate',
+              'theatricalReleaseDate',
+              'digitalReleaseDate',
+              'physicalReleaseDate',
               'lastPlayed',
               'dateAdded',
               'lastEpisodeAddedDate',
@@ -218,12 +221,24 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
             }
           } else {
             // Fallback to example value if available
-            const varInfo = allVars.find((v) => v.field === segment.field);
+            const varInfo = allVars.find(
+              (v) =>
+                v.field ===
+                (isCollectionRankField(segment.field)
+                  ? 'collectionRank'
+                  : segment.field)
+            );
             text += varInfo?.example || `{${segment.field}}`;
           }
         } else {
           // No context - show example value instead of raw variable
-          const varInfo = allVars.find((v) => v.field === segment.field);
+          const varInfo = allVars.find(
+            (v) =>
+              v.field ===
+              (isCollectionRankField(segment.field)
+                ? 'collectionRank'
+                : segment.field)
+          );
           text += varInfo?.example || `{${segment.field}}`;
         }
       }

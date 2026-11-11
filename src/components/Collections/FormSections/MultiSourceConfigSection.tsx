@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import type {
+  CollectionFormConfig,
   MultiSourceCollectionConfig,
   MultiSourceCombineMode,
   MultiSourceType,
@@ -14,6 +15,7 @@ import type {
   RadarrSettings,
   SonarrSettings,
   TautulliSettings,
+  TracearrSettings,
   TraktSettings,
 } from '@server/lib/settings';
 import { Field } from 'formik';
@@ -22,6 +24,7 @@ import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 import ApiKeyWarning from './ApiKeyWarning';
+import TmdbAdvancedFiltersSection from './TmdbAdvancedFiltersSection';
 
 const messages = defineMessages({
   sourceType: 'Source Type',
@@ -66,11 +69,13 @@ const messages = defineMessages({
   remove: 'Remove',
   overseerrRequests: 'Seerr Requests',
   tautulliStatistics: 'Tautulli Statistics',
+  tracearrStatistics: 'Tracearr Statistics',
   traktLists: 'Trakt Lists',
   letterboxdLists: 'Letterboxd Lists',
   tmdbLists: 'TMDB Lists',
   imdbLists: 'IMDb Lists',
   mdblistLists: 'MDBList Lists',
+  tvdbLists: 'TVDB Lists',
   networks: 'Networks',
   streamingOriginals: 'Streaming Originals',
   radarrTags: 'Radarr Tags',
@@ -129,7 +134,7 @@ const NetworksPlatformSelect = ({
     { value: string; label: string }[]
   >(
     platformsUrl,
-    platformsUrl ? (url) => fetch(url).then((res) => res.json()) : null
+    platformsUrl ? (url: string) => fetch(url).then((res) => res.json()) : null
   );
 
   const isLoadingPlatforms = country && !platforms && !platformsError;
@@ -225,13 +230,13 @@ const ArrTagSelect = ({
   // Fetch instances
   const { data: radarrInstances, error: radarrError } = useSWR<
     RadarrSettings[]
-  >(isRadarr ? '/api/v1/settings/radarr' : null, (url) =>
+  >(isRadarr ? '/api/v1/settings/radarr' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
   const { data: sonarrInstances, error: sonarrError } = useSWR<
     SonarrSettings[]
-  >(isSonarr ? '/api/v1/settings/sonarr' : null, (url) =>
+  >(isSonarr ? '/api/v1/settings/sonarr' : null, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
@@ -248,12 +253,12 @@ const ArrTagSelect = ({
 
   const { data: radarrTags, error: radarrTagsError } = useSWR<ArrTag[]>(
     radarrTagsUrl,
-    radarrTagsUrl ? (url) => fetch(url).then((res) => res.json()) : null
+    radarrTagsUrl ? (url: string) => fetch(url).then((res) => res.json()) : null
   );
 
   const { data: sonarrTags, error: sonarrTagsError } = useSWR<ArrTag[]>(
     sonarrTagsUrl,
-    sonarrTagsUrl ? (url) => fetch(url).then((res) => res.json()) : null
+    sonarrTagsUrl ? (url: string) => fetch(url).then((res) => res.json()) : null
   );
 
   const isLoadingInstances = isRadarr
@@ -404,7 +409,7 @@ const MultiSourceConfigSection = ({
   // Fetch available countries for networks (must be before early return)
   const { data: countries } = useSWR<{ value: string; label: string }[]>(
     '/api/v1/collections/networks/countries',
-    (url) => fetch(url).then((res) => res.json())
+    (url: string) => fetch(url).then((res) => res.json())
   );
 
   // Fetch API settings for validation
@@ -418,6 +423,9 @@ const MultiSourceConfigSection = ({
   );
   const { data: tautulliSettings } = useSWR<TautulliSettings>(
     '/api/v1/settings/tautulli'
+  );
+  const { data: tracearrSettings } = useSWR<TracearrSettings>(
+    '/api/v1/settings/tracearr'
   );
   const { data: overseerrSettings } = useSWR<OverseerrSettings>(
     '/api/v1/settings/overseerr'
@@ -814,12 +822,26 @@ const MultiSourceConfigSection = ({
             description: 'Import a custom MDBList by URL',
           },
         ];
+      case 'tvdb':
+        return [
+          {
+            value: 'custom',
+            label: 'Custom List',
+            description: 'Import a TVDB list by URL',
+          },
+        ];
       case 'tmdb':
         return [
           { value: 'trending_day', label: 'Trending Today' },
           { value: 'trending_week', label: 'Trending This Week' },
           { value: 'popular', label: 'Popular' },
           { value: 'top_rated', label: 'Top Rated' },
+          {
+            value: 'advanced_custom_tmdb',
+            label: 'Custom Advanced Filters',
+            description:
+              'Build your own filter based on https://developer.themoviedb.org/reference/discover-movies and https://developer.themoviedb.org/reference/discover-tv-shows',
+          },
           { value: 'custom', label: 'Custom Collection' },
           {
             value: 'random',
@@ -1065,7 +1087,13 @@ const MultiSourceConfigSection = ({
                   {intl.formatMessage(messages.overseerrRequests)}
                 </option>
                 <option value="tautulli">
-                  {intl.formatMessage(messages.tautulliStatistics)}
+                  {intl.formatMessage(
+                    tracearrSettings?.enabled &&
+                      tracearrSettings.hostname &&
+                      tracearrSettings.apiKey
+                      ? messages.tracearrStatistics
+                      : messages.tautulliStatistics
+                  )}
                 </option>
                 <option value="trakt">
                   {intl.formatMessage(messages.traktLists)}
@@ -1081,6 +1109,9 @@ const MultiSourceConfigSection = ({
                 </option>
                 <option value="mdblist">
                   {intl.formatMessage(messages.mdblistLists)}
+                </option>
+                <option value="tvdb">
+                  {intl.formatMessage(messages.tvdbLists)}
                 </option>
                 <option value="networks">
                   {intl.formatMessage(messages.networks)}
@@ -1118,6 +1149,7 @@ const MultiSourceConfigSection = ({
                       trakt: traktSettings,
                       mdblist: mdblistSettings,
                       tautulli: tautulliSettings,
+                      tracearr: tracearrSettings,
                       overseerr: overseerrSettings,
                       myanimelist: myanimelistSettings,
                       radarr: radarrSettings,
@@ -1147,6 +1179,12 @@ const MultiSourceConfigSection = ({
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                       const newSubtype = e.target.value;
                       setFieldValue(`sources[${index}].subtype`, newSubtype);
+                      if (newSubtype !== 'advanced_custom_tmdb') {
+                        setFieldValue(
+                          `sources[${index}].tmdbAdvancedFilters`,
+                          undefined
+                        );
+                      }
                     }}
                   >
                     <option value="">
@@ -1306,6 +1344,24 @@ const MultiSourceConfigSection = ({
                 })()}
               </div>
             )}
+
+            {values.sources?.[index]?.type === 'tmdb' &&
+              values.sources[index].subtype === 'advanced_custom_tmdb' && (
+                <TmdbAdvancedFiltersSection
+                  values={
+                    {
+                      tmdbAdvancedFilters:
+                        values.sources[index].tmdbAdvancedFilters,
+                    } as CollectionFormConfig
+                  }
+                  setFieldValue={(field, value) =>
+                    setFieldValue(`sources[${index}].${field}`, value)
+                  }
+                  errors={{}}
+                  touched={{}}
+                  isVisible={true}
+                />
+              )}
 
             {/* Radarr/Sonarr Tag Selection */}
             {(values.sources?.[index]?.type === 'radarrtag' ||

@@ -25,6 +25,8 @@ interface TextElementComponentProps {
   ) => void;
 }
 
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
 // Text width calculation (mirrors server-side logic)
 export function getTextWidth(
   text: string,
@@ -33,8 +35,10 @@ export function getTextWidth(
   fontWeight = 'normal'
 ): number {
   try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    if (measureContext === undefined) {
+      measureContext = document.createElement('canvas').getContext('2d');
+    }
+    const ctx = measureContext;
 
     if (ctx) {
       const quotedFontFamily = fontFamily.includes(' ')

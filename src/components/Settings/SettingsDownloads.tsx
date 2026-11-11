@@ -67,6 +67,9 @@ const messages = defineMessages({
   placeholderFolderTmdbId: 'Add TMDB ID to movie placeholder folders',
   placeholderFolderTmdbIdDescription:
     "Name new movie placeholder folders like Title (Year) '{'tmdb-12345'}' so different movies with the same title and year get separate folders. Existing folders are not renamed.",
+  placeholderFolderTvdbId: 'Add TVDB ID to TV placeholder folders',
+  placeholderFolderTvdbIdDescription:
+    "Name new TV placeholder folders for shows that are not in Sonarr like Title (Year) '{'tvdb-12345'}'. Shows already in Sonarr keep Sonarr's folder name. Existing folders are not renamed.",
   browse: 'Browse',
   toastPlaceholderSettingsSuccess: 'Placeholder settings saved successfully!',
   toastPlaceholderSettingsFailure:
@@ -563,7 +566,7 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
       </div>
 
       {/* Sonarr Settings */}
-      <div className="mt-10 mb-6">
+      <div className="mb-6 mt-10">
         <h3 className="heading flex items-center">
           <img src="/services/sonarr.svg" alt="" className="mr-2 h-7 w-7" />
           {intl.formatMessage(messages.sonarrsettings)}
@@ -666,6 +669,7 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
               dataMain?.placeholderMovieRootFolders || {},
             placeholderTVRootFolders: dataMain?.placeholderTVRootFolders || {},
             placeholderFolderTmdbId: dataMain?.placeholderFolderTmdbId || false,
+            placeholderFolderTvdbId: dataMain?.placeholderFolderTvdbId || false,
           }}
           enableReinitialize
           onSubmit={async (values) => {
@@ -693,6 +697,7 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
                   values.placeholderTVRootFolders
                 ),
                 placeholderFolderTmdbId: values.placeholderFolderTmdbId,
+                placeholderFolderTvdbId: values.placeholderFolderTvdbId,
               });
 
               addToast(
@@ -875,6 +880,36 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setFieldValue(
                         'placeholderFolderTmdbId',
+                        e.target.checked
+                      );
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <label
+                  htmlFor="placeholderFolderTvdbId"
+                  className="checkbox-label"
+                >
+                  <span className="mr-2">
+                    {intl.formatMessage(messages.placeholderFolderTvdbId)}
+                  </span>
+                  <span className="label-tip">
+                    {intl.formatMessage(
+                      messages.placeholderFolderTvdbIdDescription
+                    )}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="checkbox"
+                    id="placeholderFolderTvdbId"
+                    name="placeholderFolderTvdbId"
+                    checked={values.placeholderFolderTvdbId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFieldValue(
+                        'placeholderFolderTvdbId',
                         e.target.checked
                       );
                     }}

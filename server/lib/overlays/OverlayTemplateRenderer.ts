@@ -391,6 +391,7 @@ export interface OverlayRenderContext {
   hdr?: boolean; // HDR10/HDR10+
   dolbyVision?: boolean; // Dolby Vision
   dolbyVisionProfile?: number; // Dolby Vision Profile (5, 7, 8, etc.)
+  hdr10Plus?: boolean; // HDR10+ dynamic metadata (Plex HDR10PlusPresent)
   colorTrc?: string; // Color transfer characteristic (e.g., 'smpte2084' for HDR10, 'arib' for HLG)
 
   // Audio specs
@@ -432,6 +433,15 @@ export interface OverlayRenderContext {
   isEstimatedReleaseDate?: boolean; // releaseDate is the theatrical+90 estimate, not a published date
   daysUntilRelease?: number; // Days until releaseDate
   daysAgo?: number; // Days since releaseDate
+  // MOVIES: published per-type dates (region-preferred); negative daysSince = still in the future
+  theatricalReleaseDate?: string;
+  digitalReleaseDate?: string;
+  physicalReleaseDate?: string;
+  daysSinceTheatricalRelease?: number;
+  daysSinceDigitalRelease?: number;
+  daysSincePhysicalRelease?: number;
+  daysSinceHomeRelease?: number; // earliest of digital / physical
+  releaseDateSource?: string; // 'digital' | 'physical' | 'estimate' (theatrical+90) | 'tmdb'
 
   // TV SHOWS - Episode/Season countdowns (separate from releaseDate)
   nextEpisodeAirDate?: string; // Raw date for ANY next episode (including mid-season)
@@ -467,6 +477,9 @@ export interface OverlayRenderContext {
 
   // Plex Labels (item-level tags applied in Plex)
   plexLabels?: string[]; // Array of Plex label tags on this item
+
+  // Plex edition (editionTitle, else {edition-...} filename tag)
+  edition?: string;
 
   // Streaming provider (from TMDB watch/providers, flatrate only)
   streamingProvider?: string; // Top flatrate provider name by display_priority
@@ -724,7 +737,8 @@ class OverlayTemplateRendererService {
   async compositeOverlays(
     posterBuffer: Buffer,
     overlays: OverlayOptions[],
-    jpegQuality = DEFAULT_OVERLAY_JPEG_QUALITY
+    jpegQuality = DEFAULT_OVERLAY_JPEG_QUALITY,
+    outputFormat = overlayOutputFormat()
   ): Promise<Buffer> {
     let composite = sharp(posterBuffer);
 
@@ -732,7 +746,7 @@ class OverlayTemplateRendererService {
       composite = composite.composite(overlays);
     }
 
-    if (overlayOutputFormat() === 'webp') {
+    if (outputFormat === 'webp') {
       return await composite.webp({ quality: 92 }).toBuffer();
     }
 
@@ -1120,6 +1134,9 @@ class OverlayTemplateRendererService {
         // Check if this is a date field with custom format
         const isDateField = [
           'releaseDate',
+          'theatricalReleaseDate',
+          'digitalReleaseDate',
+          'physicalReleaseDate',
           'nextEpisodeAirDate',
           'nextSeasonAirDate',
           'lastPlayed',

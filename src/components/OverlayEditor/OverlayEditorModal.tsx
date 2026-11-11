@@ -1,4 +1,5 @@
 import Modal from '@app/components/Common/Modal';
+import { getTextWidth } from '@app/components/PosterEditor/TextElement';
 import { Dialog, Transition } from '@headlessui/react';
 import { PencilIcon, Squares2X2Icon } from '@heroicons/react/24/outline';
 import {
@@ -15,11 +16,19 @@ import {
   type OverlayArtworkTarget,
 } from '@server/lib/overlays/overlayTargets';
 import type React from 'react';
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
 import { ConditionDisplay } from './ConditionDisplay';
 import { ConditionEditorModal } from './ConditionEditorModal';
+import { computeLayoutWarnings, type LayoutWarning } from './layoutWarnings';
 import type { OverlayCanvasRef } from './OverlayCanvas';
 import { OverlayCanvas } from './OverlayCanvas';
 import { OverlayLayerPanel } from './OverlayLayerPanel';
@@ -56,6 +65,15 @@ const messages = defineMessages({
   selectOverlaysForPreview: 'Select Overlays for Preview',
   noOtherOverlays: 'No other overlay templates available',
   selectedCount: '{count} selected',
+  layoutCheck: 'Check Layout',
+  layoutCheckHelp:
+    'Advisory only. Shows how the text will sit on the final poster, using estimated text widths.',
+  layoutNoIssues: 'No layout issues found',
+  layoutOutOfBounds: '{element} extends beyond the poster',
+  layoutTextClipped: '{element} text will be clipped',
+  layoutTextOutsideBadge: '{element} text extends beyond its badge',
+  layoutTextOverlap: '{element} text overlaps {other}',
+  layoutOtherOverlay: '"{label}"',
   // Tags
   tags: 'Tags',
   tagsPlaceholder: 'Add tags...',
@@ -107,6 +125,7 @@ interface PreviewPostersResponse {
 interface AvailableOverlayTemplate {
   id: number;
   name: string;
+  applicationCondition?: ApplicationCondition;
   templateData: OverlayTemplateData;
 }
 
@@ -238,14 +257,78 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
   }>(isOpen ? '/api/v1/overlay-templates' : null);
 
   // Filter out current template being edited (by ID)
-  const availableTemplates = (templatesData?.templates || []).filter(
-    (t) => t.id !== templateId
+  const availableTemplates = useMemo(
+    () => (templatesData?.templates || []).filter((t) => t.id !== templateId),
+    [templatesData, templateId]
   );
 
   // Get selected preview overlay data
   const selectedPreviewOverlays = selectedPreviewIds
     .map((id) => availableTemplates.find((t) => t.id === id)?.templateData)
     .filter((data): data is OverlayTemplateData => data !== undefined);
+
+  const [layoutCheckEnabled, setLayoutCheckEnabled] = useState(false);
+  const layoutWarnings = useMemo<LayoutWarning[]>(
+    () =>
+      layoutCheckEnabled
+        ? computeLayoutWarnings({
+            width: overlayData.width,
+            height: overlayData.height,
+            elements: overlayData.elements,
+            condition,
+            measureText: getTextWidth,
+            others: selectedPreviewIds.flatMap((id) => {
+              const t = availableTemplates.find((a) => a.id === id);
+              return t
+                ? [
+                    {
+                      label: t.name,
+                      condition: t.applicationCondition,
+                      elements: t.templateData.elements,
+                    },
+                  ]
+                : [];
+            }),
+          })
+        : [],
+    [
+      layoutCheckEnabled,
+      overlayData,
+      condition,
+      selectedPreviewIds,
+      availableTemplates,
+    ]
+  );
+
+  const describeElement = (id: string): string => {
+    const el = overlayData.elements.find((e) => e.id === id);
+    if (!el) return id;
+    const props = el.properties as { text?: string };
+    return props.text ? `"${props.text}"` : el.type;
+  };
+
+  const describeWarning = (w: LayoutWarning): string => {
+    const element = describeElement(w.elementId);
+    switch (w.kind) {
+      case 'out-of-bounds':
+        return intl.formatMessage(messages.layoutOutOfBounds, { element });
+      case 'text-clipped':
+        return intl.formatMessage(messages.layoutTextClipped, { element });
+      case 'text-outside-badge':
+        return intl.formatMessage(messages.layoutTextOutsideBadge, {
+          element,
+        });
+      default:
+        return intl.formatMessage(messages.layoutTextOverlap, {
+          element,
+          other: w.otherLabel
+            ? intl.formatMessage(messages.layoutOtherOverlay, {
+                label: w.otherLabel,
+              })
+            : describeElement(w.otherElementId ?? ''),
+        });
+    }
+  };
 
   // History state for undo/redo
   const [history, setHistory] = useState<OverlayTemplateData[]>([initialData]);
@@ -629,6 +712,43 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                                 )}
                           </span>
                         </button>
+                      </div>
+
+                      {/* Layout warnings */}
+                      <div className="border-t border-stone-700 pt-4">
+                        <label className="flex items-center space-x-2 text-sm font-medium text-stone-300">
+                          <input
+                            type="checkbox"
+                            checked={layoutCheckEnabled}
+                            onChange={(e) =>
+                              setLayoutCheckEnabled(e.target.checked)
+                            }
+                          />
+                          <span>
+                            {intl.formatMessage(messages.layoutCheck)}
+                          </span>
+                        </label>
+                        {layoutCheckEnabled && (
+                          <div className="mt-2 space-y-1 text-xs">
+                            {layoutWarnings.length === 0 ? (
+                              <p className="text-green-400">
+                                {intl.formatMessage(messages.layoutNoIssues)}
+                              </p>
+                            ) : (
+                              layoutWarnings.map((w, i) => (
+                                <p
+                                  key={`${w.kind}-${w.elementId}-${i}`}
+                                  className="text-orange-400"
+                                >
+                                  {describeWarning(w)}
+                                </p>
+                              ))
+                            )}
+                            <p className="text-stone-500">
+                              {intl.formatMessage(messages.layoutCheckHelp)}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Application Condition */}

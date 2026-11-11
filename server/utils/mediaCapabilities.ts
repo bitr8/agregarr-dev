@@ -12,8 +12,10 @@ export interface MediaCapabilities {
   hdr: boolean;
   dolbyVision: boolean;
   dolbyVisionProfile?: number;
+  hdr10Plus: boolean;
   videoCodec: string;
   audioCodec: string;
+  audioProfile?: string;
   audioChannels: number;
   bitDepth: number;
 }
@@ -26,6 +28,7 @@ export function extractMediaCapabilities(
     resolution: media.videoResolution || 'sd',
     hdr: false,
     dolbyVision: false,
+    hdr10Plus: false,
     videoCodec: media.videoCodec || '',
     audioCodec: media.audioCodec || '',
     audioChannels: media.audioChannels || 2,
@@ -39,6 +42,7 @@ export function extractMediaCapabilities(
   const videoStream = streams.find((s) => s.streamType === 1);
   if (videoStream) {
     result.dolbyVision = videoStream.DOVIPresent || false;
+    result.hdr10Plus = videoStream.HDR10PlusPresent || false;
 
     if (videoStream.DOVIProfile !== undefined) {
       result.dolbyVisionProfile = videoStream.DOVIProfile;
@@ -57,6 +61,11 @@ export function extractMediaCapabilities(
   const primaryAudio = streams.find((s) => s.streamType === 2);
   if (primaryAudio?.channels) {
     result.audioChannels = primaryAudio.channels;
+  }
+
+  const audioProfile = detectAudioProfile(streams);
+  if (audioProfile) {
+    result.audioProfile = audioProfile;
   }
 
   return result;

@@ -6,6 +6,7 @@ import RadarrOptionsModal from '@app/components/Collections/RadarrOptionsModal';
 import SeasonSelectionModal from '@app/components/Collections/SeasonSelectionModal';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import Modal from '@app/components/Common/Modal';
+import imageLoader from '@app/utils/imageLoader';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import Image from 'next/image';
@@ -87,6 +88,7 @@ interface PreviewCollectionModalProps {
     libraries: Library[];
     customUrl?: string;
     maxItems?: number;
+    excludeLabels?: string[];
     // TMDB advanced discover filters
     tmdbAdvancedFilters?: Record<string, unknown>;
     tmdbMovieSortBy?: string;
@@ -108,6 +110,7 @@ interface PreviewCollectionModalProps {
     comingSoonSonarrServerId?: number;
     comingSoonRadarrRootFolder?: string;
     comingSoonSonarrRootFolder?: string;
+    comingSoonIncludeMidSeason?: boolean;
     // Multi-source specific fields
     isMultiSource?: boolean;
     sources?: {
@@ -120,6 +123,7 @@ interface PreviewCollectionModalProps {
       customDays?: number;
       minimumPlays?: number;
       networksCountry?: string;
+      tmdbAdvancedFilters?: Record<string, unknown>;
     }[];
     combineMode?: 'interleaved' | 'list_order' | 'randomised' | 'cycle_lists';
     sortOrder?: string;
@@ -217,6 +221,7 @@ const PreviewCollectionModal = ({
     maxItems: previewConfig.maxItems
       ? Number(previewConfig.maxItems)
       : undefined,
+    excludeLabels: previewConfig.excludeLabels,
     timePeriod: previewConfig.timePeriod,
     minimumPlays: previewConfig.minimumPlays
       ? Number(previewConfig.minimumPlays)
@@ -236,6 +241,7 @@ const PreviewCollectionModal = ({
     comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
     comingSoonRadarrRootFolder: previewConfig.comingSoonRadarrRootFolder,
     comingSoonSonarrRootFolder: previewConfig.comingSoonSonarrRootFolder,
+    comingSoonIncludeMidSeason: previewConfig.comingSoonIncludeMidSeason,
     isMultiSource: previewConfig.isMultiSource,
     sources: previewConfig.sources,
     combineMode: previewConfig.combineMode,
@@ -304,6 +310,7 @@ const PreviewCollectionModal = ({
           maxItems: previewConfig.maxItems
             ? Number(previewConfig.maxItems)
             : undefined,
+          excludeLabels: previewConfig.excludeLabels,
           timePeriod: previewConfig.timePeriod,
           minimumPlays: previewConfig.minimumPlays
             ? Number(previewConfig.minimumPlays)
@@ -325,6 +332,7 @@ const PreviewCollectionModal = ({
           comingSoonSonarrServerId: previewConfig.comingSoonSonarrServerId,
           comingSoonRadarrRootFolder: previewConfig.comingSoonRadarrRootFolder,
           comingSoonSonarrRootFolder: previewConfig.comingSoonSonarrRootFolder,
+          comingSoonIncludeMidSeason: previewConfig.comingSoonIncludeMidSeason,
           forceRefresh: forceRefresh,
           // Multi-source specific fields
           isMultiSource: previewConfig.isMultiSource,
@@ -787,6 +795,7 @@ const PreviewCollectionModal = ({
                       <div className="absolute inset-0 overflow-hidden rounded-lg">
                         {item.posterUrl ? (
                           <Image
+                            loader={imageLoader}
                             src={item.posterUrl}
                             alt={item.title}
                             layout="fill"

@@ -4,6 +4,7 @@ import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import TracearrSettingsForm from '@app/components/Settings/TracearrSettingsForm';
 import globalMessages from '@app/i18n/globalMessages';
 import {
   closestCenter,
@@ -812,7 +813,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
 
       {/* OAuth Setup - subsection within Trakt Settings */}
       <div className="section">
-        <div className="mt-6 mb-4">
+        <div className="mb-4 mt-6">
           <h4 className="mb-2 text-lg font-semibold text-white">
             {intl.formatMessage(messages.traktOAuthSetup)}
           </h4>
@@ -1136,7 +1137,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
 
       {/* MDBList Settings */}
       <div className="section">
-        <div className="mt-10 mb-6">
+        <div className="mb-6 mt-10">
           <h3 className="heading flex items-center">
             <img src="/services/mdblist.svg" alt="" className="mr-2 h-7 w-7" />
             {intl.formatMessage(messages.mdblistSettings)}
@@ -1312,7 +1313,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
 
       {/* Tautulli Settings */}
       <div className="section">
-        <div className="mt-10 mb-6">
+        <div className="mb-6 mt-10">
           <h3 className="heading flex items-center">
             <img src="/services/tautulli.svg" alt="" className="mr-2 h-7 w-7" />
             {intl.formatMessage(messages.tautulliSettings)}
@@ -1609,9 +1610,11 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
         }}
       </Formik>
 
+      <TracearrSettingsForm />
+
       {/* MyAnimeList Settings */}
       <div className="section">
-        <div className="mt-10 mb-6">
+        <div className="mb-6 mt-10">
           <h3 className="heading flex items-center">
             <img
               src="/services/myanimelist.svg"
@@ -1800,7 +1803,7 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
 
       {/* Maintainerr Settings */}
       <div className="section">
-        <div className="mt-10 mb-6">
+        <div className="mb-6 mt-10">
           <h3 className="heading flex items-center">
             <img
               src="/services/maintainerr.svg"

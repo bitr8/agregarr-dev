@@ -339,6 +339,14 @@ export class TemplateEngine {
     };
   }
 
+  public createTvdbContext(mediaType: 'movie' | 'tv'): TemplateContext {
+    return {
+      ...this.getDefaultContext(),
+      mediaType,
+      subtype: 'Custom List',
+    };
+  }
+
   /**
    * Create context for MDBList collections
    */

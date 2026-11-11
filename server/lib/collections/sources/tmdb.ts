@@ -2,6 +2,7 @@ import type PlexAPI from '@server/api/plexapi';
 import TmdbAPI from '@server/api/themoviedb';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
+  applyLabelExclusions,
   findPlexItemsByTmdbIds,
   getCollectionMediaType,
   processMissingItemsWithMode,
@@ -20,6 +21,14 @@ import type {
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import { syncCacheService } from '@server/lib/collections/services/SyncCacheService';
+import {
+  countFranchiseParts,
+  franchisesWithTooFewReleased,
+} from '@server/lib/collections/utils/franchiseParts';
+import {
+  pickFranchisePoster,
+  toImageLanguage,
+} from '@server/lib/collections/utils/franchisePoster';
 import { RandomListManager } from '@server/lib/collections/utils/RandomListManager';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getTmdbLanguage } from '@server/lib/settings';
@@ -1474,24 +1483,68 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       label: 'TMDB Franchise',
     });
 
-    // 4. Filter franchises (min 2 movies in library)
-    const validFranchises = this.filterFranchisesByMinItems(franchiseMap, 2);
+    // 4. Pre-filter on TMDB parts; the library-count gate follows
+    const libraryOwned = new Set(tmdbIds.map(Number));
+    const validFranchises = this.filterFranchisesByMinItems(
+      franchiseMap,
+      2,
+      !!config.franchiseCountReleasedOnly,
+      libraryOwned
+    );
 
     logger.info(
-      `${validFranchises.size} franchises have 2+ movies in library`,
+      `${validFranchises.size} franchises have 2+ movies in TMDB parts`,
       {
         label: 'TMDB Franchise',
       }
     );
 
-    // 5. Placeholder cleanup: one call for the whole config (MultiSourceOrchestrator
+    // 5. Library-count gate. A franchise is only treated as below the minimum when a
+    // fresh, complete library read confirms it; otherwise the per-franchise lookup decides.
+    const minimumItems = this.getFranchiseMinimumItems(config);
+    const countOwned = (
+      franchiseData: TmdbFranchiseSourceData,
+      owned: Set<number>
+    ) =>
+      franchiseData.movies.filter((movie) => owned.has(Number(movie.tmdbId)))
+        .length;
+
+    const candidates = [...validFranchises].filter(
+      ([, franchiseData]) =>
+        countOwned(franchiseData, libraryOwned) < minimumItems
+    );
+
+    const belowMin = new Map<number, number>();
+    if (candidates.length > 0 && failedCount === 0) {
+      const freshOwned = await this.readOwnedTmdbIdsTwice(
+        plexClient,
+        config.libraryId
+      );
+      if (freshOwned) {
+        for (const [franchiseId, franchiseData] of candidates) {
+          const ownedCount = countOwned(franchiseData, freshOwned);
+          if (ownedCount < minimumItems) belowMin.set(franchiseId, ownedCount);
+        }
+      }
+    }
+
+    const qualifying = new Map(
+      [...validFranchises].filter(([franchiseId]) => !belowMin.has(franchiseId))
+    );
+
+    logger.info(
+      `${qualifying.size} franchises kept, ${belowMin.size} below the minimum of ${minimumItems}`,
+      {
+        label: 'TMDB Franchise',
+        unconfirmed: candidates.length - belowMin.size,
+      }
+    );
+
+    // 6. Placeholder cleanup: one call for the whole config (MultiSourceOrchestrator
     // shape), not once per franchise - every franchise shares one configId, so the
-    // membership set must cover every valid franchise's movies or a later franchise's
-    // pass would treat an earlier franchise's placeholders as orphaned. This check
-    // (and its warn) sits ABOVE the "no valid franchises" early return below, so a
-    // fully-failed discovery still gets reported even when zero franchises survive
-    // filtering - orphan cleanup being skipped is not the same as no deletions ever
-    // happening (placeholder creation for cleanly-discovered franchises still runs).
+    // membership set must cover every kept franchise's movies or a later franchise's
+    // pass would treat an earlier franchise's placeholders as orphaned. Below-minimum
+    // franchises drop out only when their counts were confirmed.
     let allFranchiseTmdbIds: Set<number> | undefined;
 
     if (failedCount > 0) {
@@ -1504,9 +1557,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
         `Skipping franchise orphan cleanup this sync: ${failedCount} TMDB lookup(s) failed during discovery, franchise membership may be incomplete`,
         { label: 'TMDB Franchise', configId: config.id, failedCount }
       );
-    } else if (validFranchises.size > 0) {
+    } else if (qualifying.size > 0) {
       allFranchiseTmdbIds = new Set<number>();
-      for (const franchiseData of validFranchises.values()) {
+      for (const franchiseData of qualifying.values()) {
         for (const movie of franchiseData.movies) {
           // Placeholders are keyed by the numeric id they had at creation; coerce so
           // a string-typed id from upstream still matches instead of getting dropped.
@@ -1528,18 +1581,52 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       );
     }
 
-    if (validFranchises.size === 0) {
-      logger.info('No franchises with 2+ movies found', {
-        label: 'TMDB Franchise',
-      });
-      return { created: 0, updated: 0 };
+    // 7. Remove collections for franchises now below the minimum (positive evidence only)
+    let deleted = 0;
+    if (belowMin.size > 0) {
+      deleted = await this.removeBelowMinimumFranchiseCollections(
+        config,
+        plexClient,
+        allCollections,
+        belowMin,
+        minimumItems
+      );
+    }
+    if (config.franchiseCountReleasedOnly && failedCount === 0) {
+      const tooFewReleased = franchisesWithTooFewReleased(
+        franchiseMap,
+        validFranchises,
+        2,
+        libraryOwned
+      );
+      if (tooFewReleased.size > 0) {
+        deleted += await this.removeBelowMinimumFranchiseCollections(
+          config,
+          plexClient,
+          allCollections,
+          tooFewReleased,
+          2,
+          'released in TMDB',
+          2
+        );
+      }
     }
 
-    // 6. Create Plex collection for each franchise
+    if (qualifying.size === 0) {
+      logger.info(
+        `No franchises with ${minimumItems}+ movies in library found`,
+        { label: 'TMDB Franchise' }
+      );
+      return deleted > 0
+        ? { created: 0, updated: 0, mutated: true }
+        : { created: 0, updated: 0 };
+    }
+
+    // 8. Create Plex collection for each franchise
     let created = 0;
     let updated = 0;
 
-    for (const [franchiseId, franchiseData] of validFranchises) {
+    for (const [franchiseId, franchiseData] of qualifying) {
       try {
         const result = await this.processSingleFranchise(
           franchiseData,
@@ -1564,13 +1651,175 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     }
 
     logger.info(
-      `TMDB Auto Franchise Collections complete: ${created} created, ${updated} updated`,
+      `TMDB Auto Franchise Collections complete: ${created} created, ${updated} updated, ${deleted} removed`,
       {
         label: 'TMDB Franchise',
       }
     );
 
-    return { created, updated };
+    return deleted > 0
+      ? { created, updated, mutated: true }
+      : { created, updated };
+  }
+
+  // Two matching reads rule out a library change landing between page requests
+  private async readOwnedTmdbIdsTwice(
+    plexClient: PlexAPI,
+    libraryId: string
+  ): Promise<Set<number> | undefined> {
+    const first = await this.readOwnedTmdbIds(plexClient, libraryId);
+    if (!first) return undefined;
+    const second = await this.readOwnedTmdbIds(plexClient, libraryId);
+    if (!second) return undefined;
+    if (
+      first.size !== second.size ||
+      [...first].some((id) => !second.has(id))
+    ) {
+      logger.info(
+        'Franchise collections are not removed this sync: library changed between reads',
+        { label: 'TMDB Franchise', libraryId }
+      );
+      return undefined;
+    }
+    return first;
+  }
+
+  /**
+   * Undefined unless every page was read, the total held steady, each page overlapped
+   * the previous one on the same item, and every item carried a TMDB id.
+   */
+  private async readOwnedTmdbIds(
+    plexClient: PlexAPI,
+    libraryId: string
+  ): Promise<Set<number> | undefined> {
+    const owned = new Set<number>();
+    const pageSize = 500;
+    let expectedTotal: number | undefined;
+    let read = 0;
+    let lastRatingKey: string | undefined;
+    let unidentified = 0;
+    let problem: string | undefined;
+
+    try {
+      do {
+        const overlap = read > 0 ? 1 : 0;
+        const { totalSize, items } = await plexClient.getLibraryContents(
+          libraryId,
+          { offset: read - overlap, size: pageSize + overlap }
+        );
+        if (expectedTotal === undefined) expectedTotal = totalSize;
+        if (totalSize !== expectedTotal) {
+          problem = 'library size changed';
+          break;
+        }
+        if (overlap && items[0]?.ratingKey !== lastRatingKey) {
+          problem = 'library shifted';
+          break;
+        }
+        const fresh = items.slice(overlap);
+        if (fresh.length === 0) {
+          problem = 'page came back empty';
+          break;
+        }
+        for (const item of fresh) {
+          const tmdbId = this.extractTmdbIdFromGuid(item.Guid);
+          if (tmdbId) owned.add(tmdbId);
+          else unidentified++;
+        }
+        read += fresh.length;
+        lastRatingKey = fresh[fresh.length - 1].ratingKey;
+      } while (read < expectedTotal);
+    } catch (error) {
+      problem = error instanceof Error ? error.message : String(error);
+    }
+
+    if (!problem && read !== expectedTotal) problem = 'incomplete read';
+    if (!problem && unidentified > 0) {
+      problem = `${unidentified} items without a TMDB id`;
+    }
+    if (problem) {
+      logger.info(
+        `Franchise collections are not removed this sync: ${problem}`,
+        { label: 'TMDB Franchise', libraryId, read, expectedTotal }
+      );
+      return undefined;
+    }
+    return owned;
+  }
+
+  private getFranchiseMinimumItems(config: CollectionConfig): number {
+    const value = Number(config.franchiseMinimumItems);
+    return Number.isInteger(value) && value >= 1 ? value : 2;
+  }
+
+  private async removeBelowMinimumFranchiseCollections(
+    config: CollectionConfig,
+    plexClient: PlexAPI,
+    allCollections: PlexCollection[],
+    belowMin: Map<number, number>,
+    minimumItems: number,
+    countedAs = 'in library',
+    onlyBelowItems?: number
+  ): Promise<number> {
+    let deleted = 0;
+
+    for (const [franchiseId, realCount] of belowMin) {
+      const label =
+        `AgregarrAutoFranchise-${config.id}-${franchiseId}`.toLowerCase();
+
+      for (const collection of allCollections) {
+        if (collection.libraryKey !== config.libraryId) continue;
+        const labels = Array.isArray(collection.labels)
+          ? collection.labels
+          : [];
+        const hasLabel = labels.some((entry) => {
+          const text = typeof entry === 'string' ? entry : entry?.tag;
+          return !!text && text.toLowerCase() === label;
+        });
+        if (!hasLabel) continue;
+        if (onlyBelowItems !== undefined) {
+          const childCount = Number(
+            (await plexClient.getCollectionMetadataSafe(collection.ratingKey))
+              ?.childCount
+          );
+          if (!Number.isFinite(childCount) || childCount >= onlyBelowItems) {
+            logger.info(
+              `Keeping franchise collection "${collection.title}": Plex reports ${childCount} items`,
+              {
+                label: 'TMDB Franchise',
+                ratingKey: collection.ratingKey,
+                franchiseId,
+              }
+            );
+            continue;
+          }
+        }
+
+        try {
+          await plexClient.deleteCollection(collection.ratingKey);
+          deleted++;
+          logger.info(
+            `Removed franchise collection below minimum (${realCount} ${countedAs}, minimum ${minimumItems}): ${collection.title}`,
+            {
+              label: 'TMDB Franchise',
+              ratingKey: collection.ratingKey,
+              franchiseId,
+            }
+          );
+        } catch (error) {
+          logger.warn(
+            `Failed to remove franchise collection "${collection.title}"`,
+            {
+              label: 'TMDB Franchise',
+              ratingKey: collection.ratingKey,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+        }
+      }
+    }
+
+    return deleted;
   }
 
   /**
@@ -1594,8 +1843,8 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     }
 
     // Fetch from Plex if cache not available
-    const library = await plexClient.getLibraryContents(libraryId);
-    const movies = library.items
+    const items = await plexClient.getAllLibraryContents(libraryId);
+    const movies = items
       .filter((item) => item.type === 'movie')
       .map((item) => ({
         ratingKey: item.ratingKey,
@@ -1789,17 +2038,53 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
    */
   private filterFranchisesByMinItems(
     franchiseMap: Map<number, TmdbFranchiseSourceData>,
-    minItems: number
+    minItems: number,
+    releasedOnly = false,
+    owned: ReadonlySet<number> = new Set()
   ): Map<number, TmdbFranchiseSourceData> {
     const filtered = new Map<number, TmdbFranchiseSourceData>();
 
     for (const [franchiseId, franchiseData] of franchiseMap) {
-      if (franchiseData.movies.length >= minItems) {
+      if (
+        countFranchiseParts(
+          franchiseData.movies,
+          releasedOnly,
+          undefined,
+          owned
+        ) >= minItems
+      ) {
         filtered.set(franchiseId, franchiseData);
       }
     }
 
     return filtered;
+  }
+
+  // /collection/{id}?language= falls back to TMDB's primary poster in any language
+  private async resolveFranchisePosterPath(
+    franchiseData: TmdbFranchiseSourceData,
+    libraryId: string
+  ): Promise<string | undefined> {
+    try {
+      const language = await getTmdbLanguage(libraryId);
+      const images = await this.tmdbClient.getCollectionImages({
+        collectionId: franchiseData.franchiseId,
+        languages: [...new Set([toImageLanguage(language), 'en', 'null'])].join(
+          ','
+        ),
+      });
+      const picked = pickFranchisePoster(images.posters ?? [], language);
+      if (picked) return picked;
+    } catch (error) {
+      logger.debug(
+        `Franchise poster language lookup failed for ${franchiseData.franchiseName}, using TMDB default`,
+        {
+          label: 'TMDB Franchise',
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+    }
+    return franchiseData.franchisePosterPath;
   }
 
   /**
@@ -1842,7 +2127,6 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       customLabel,
     });
 
-    // Map franchise movies to Plex items
     const plexItems = await this.findPlexItemsForFranchise(
       franchiseData,
       config.libraryId,
@@ -1850,13 +2134,12 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       libraryCache
     );
 
-    if (plexItems.length < 2) {
+    // Also catches the lookup's swallowed Plex errors, which come back empty
+    const minimumItems = this.getFranchiseMinimumItems(config);
+    if (plexItems.length < minimumItems) {
       logger.debug(
-        `Franchise ${collectionName} has fewer than 2 items in Plex library, skipping`,
-        {
-          label: 'TMDB Franchise',
-          foundItems: plexItems.length,
-        }
+        `Franchise ${collectionName} has ${plexItems.length} of ${minimumItems} required items in Plex, skipping`,
+        { label: 'TMDB Franchise' }
       );
       return { created: 0, updated: 0 };
     }
@@ -1965,11 +2248,21 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     } else {
       finalItems = plexItems;
     }
+    finalItems = await applyLabelExclusions(
+      finalItems,
+      config,
+      plexClient,
+      this.source
+    );
+
+    const franchisePosterPath = config.useTmdbFranchisePoster
+      ? await this.resolveFranchisePosterPath(franchiseData, config.libraryId)
+      : franchiseData.franchisePosterPath;
 
     // Check if we should skip auto-poster generation
     // Only skip if useTmdbFranchisePoster is enabled AND the poster is actually available
     const shouldSkipAutoPoster =
-      config.useTmdbFranchisePoster && !!franchiseData.franchisePosterPath;
+      config.useTmdbFranchisePoster && !!franchisePosterPath;
 
     const configForProcessing = shouldSkipAutoPoster
       ? { ...config, autoPoster: false }
@@ -2021,9 +2314,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
       if (config.useTmdbFranchisePoster) {
         let tmdbPosterSuccess = false;
 
-        if (franchiseData.franchisePosterPath) {
+        if (franchisePosterPath) {
           try {
-            const tmdbPosterUrl = `https://image.tmdb.org/t/p/original${franchiseData.franchisePosterPath}`;
+            const tmdbPosterUrl = `https://image.tmdb.org/t/p/original${franchisePosterPath}`;
             const posterManager = plexClient['posterManager'];
 
             logger.debug(
