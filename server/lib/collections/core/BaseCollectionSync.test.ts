@@ -571,16 +571,16 @@ describe('updateCollectionMetadata: sort title PUTs', () => {
         libraries: [],
       },
     });
-    vi.spyOn(api, 'addLabelToCollection').mockResolvedValue(undefined);
+    vi.spyOn(api, 'addLabelToCollection').mockResolvedValue(true);
     vi.spyOn(api, 'updateCollectionTitle').mockResolvedValue(undefined);
     const put = vi
       .spyOn(
-        api as unknown as { safePutQuery: unknown },
-        'safePutQuery' as never
+        api as unknown as { safePutQuery: (url: string) => Promise<void> },
+        'safePutQuery'
       )
-      .mockResolvedValue(undefined as never);
+      .mockResolvedValue(undefined);
     const sortTitlePuts = () =>
-      put.mock.calls.filter(([url]) => String(url).includes('titleSort'));
+      put.mock.calls.filter(([url]) => url.includes('titleSort'));
     return { api, sortTitlePuts };
   };
 
