@@ -1671,6 +1671,18 @@ export class HubSyncService {
       for (const config of preExistingConfigs) {
         if (this.cancelled) return;
 
+        // A reset applies to this sync only, so clear it on the paths that skip the write.
+        if (
+          config.sortTitleResetRequested &&
+          (!config.collectionRatingKey ||
+            config.excludeFromOrdering ||
+            config.sortTitleOverride)
+        ) {
+          this.updatePreExistingConfigField(config.id, {
+            sortTitleResetRequested: false,
+          });
+        }
+
         // Skip configs without rating keys
         if (!config.collectionRatingKey) {
           continue;
@@ -1747,7 +1759,6 @@ export class HubSyncService {
         if (
           !config.sortTitleResetRequested &&
           config.everLibraryPromoted === false &&
-          !config.isLibraryPromoted &&
           !articleHandlingEnabled &&
           !needsArticleReset
         ) {
