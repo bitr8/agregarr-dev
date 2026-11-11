@@ -107,8 +107,7 @@ function getEffectiveDisplayTitle(
   //    going stale at first discovery the way it used to; changing it in
   //    Plex needs a re-discover to show up here, which is the intended
   //    flow.
-  // 3. Otherwise the name, under the same leading-article normalization the
-  //    server writes to Plex, so "The Godfather" files under G in both.
+  // 3. Otherwise the name, article-normalized as the server writes it.
   const withOverrides = collection as {
     sortTitleOverride?: string;
     titleSort?: string;
@@ -121,12 +120,7 @@ function getEffectiveDisplayTitle(
 
   if (withOverrides.sortTitleOverride) return withOverrides.sortTitleOverride;
 
-  // A pending reset outranks the stored value: clearing the Sort Title is a
-  // request to hand it back, so the collection belongs where its own name puts
-  // it straight away. Sorting by the value being discarded would leave it
-  // parked under a letter it no longer has anything to do with until a sync
-  // caught up - the field beside it already shows the new value, so the list
-  // disagreeing with it reads as the edit not having registered.
+  // A pending reset sorts by the name straight away, matching the field.
   if (withOverrides.sortTitleResetRequested) {
     return normalizeArticleForDisplay(name, articleMode);
   }
@@ -680,9 +674,7 @@ const LibraryCollectionGroup = ({
   // SWR revalidation hook for refreshing collection data after sync
   const { mutate: revalidateCollections } = useSWR('/api/v1/collections');
 
-  // The A-Z list has to sort the way Plex will actually display it, which
-  // means applying the same leading-article normalization the sync writes
-  // (see normalizeSortTitleArticle server-side).
+  // Sort the way Plex will, with the server's article normalization.
   const { data: plexSettings } = useSWR<{
     sortTitleArticleHandling?: 'strip' | 'moveToEnd' | 'off';
   }>('/api/v1/settings/plex');

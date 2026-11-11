@@ -412,9 +412,7 @@ function computeAgregarrSortTitle(
 ): string {
   const name = target.name || '';
   const sortOrderLibrary = target.sortOrderLibrary;
-  // The same key the server sorts by. Without the article normalization the
-  // field claimed "The Crow" while Plex sorted the collection as "Crow" -
-  // the field has to state what the next sync will actually write.
+  // Same key the server writes, so the field shows what the next sync will write.
   const sortKey = normalizeArticleForDisplay(name, articleMode);
 
   // Shows the sort title the collection actually has, including one set by

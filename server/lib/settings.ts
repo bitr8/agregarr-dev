@@ -515,11 +515,7 @@ export interface PlexSettings {
   hubConfigs?: PlexHubConfig[]; // Plex built-in hub configurations
   preExistingCollectionConfigs?: PreExistingCollectionConfig[]; // Pre-existing Plex collections discovered by hub discovery
   autoEmptyTrash?: boolean; // Auto-empty Plex trash after placeholder cleanup (default: true)
-  // Leading-article handling ("The"/"A"/"An") when computing a collection's
-  // default (non-override) sortTitle for the A-Z section - never affects
-  // promoted collections, which are always positional. 'strip' removes the
-  // article ("The Accountant" sorts as "Accountant"), 'moveToEnd' reorders
-  // it ("Accountant, The"), 'off' leaves titles untouched. Default: 'off'
+  // A-Z sort titles only; promoted collections are always positional. Default 'off'.
   sortTitleArticleHandling?: 'strip' | 'moveToEnd' | 'off';
 }
 

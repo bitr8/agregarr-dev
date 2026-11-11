@@ -247,9 +247,7 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
           selectedPreset: undefined,
           webAppUrl: data?.webAppUrl,
           autoEmptyTrash: data?.autoEmptyTrash !== false,
-          // Default 'off': this runs on every existing install at upgrade,
-          // and anything else would silently rewrite sort titles nobody asked
-          // to change. Opt in, never opt out.
+          // Default 'off' so upgrading never rewrites sort titles unasked.
           sortTitleArticleHandling: data?.sortTitleArticleHandling ?? 'off',
         }}
         validationSchema={PlexSettingsSchema}

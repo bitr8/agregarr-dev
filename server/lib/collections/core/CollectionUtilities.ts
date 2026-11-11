@@ -122,15 +122,7 @@ export function isSortTitleOverrideEdit(
   );
 }
 
-/**
- * Whether this save is the user clearing the Sort Title field - the documented
- * way to hand the sort title back to Agregarr.
- *
- * An empty submitted value cannot say that on its own, because a collection
- * that never had an override submits the very same empty string. A value that
- * CHANGED and is now empty can only be a clear, so the intent is derived from
- * the stored value rather than trusted from a client-sent flag.
- */
+/** Clearing a filled Sort Title field is a reset, derived from the stored value rather than a client flag. */
 export function isSortTitleResetRequest(
   submitted: unknown,
   stored: string | undefined
@@ -164,50 +156,7 @@ export function buildSortTitleFromOverride(
   return isBarePrefix ? `${override}${collectionName}` : override;
 }
 
-/**
- * Whether Plex's current sortTitle for a collection is one Agregarr produced,
- * and may therefore rewrite - as opposed to one the user typed in Plex, which
- * must be left alone.
- *
- * The A-Z sort title is always recomputed from the collection's name, because
- * the name is the only place a leading article reliably survives - strip "The"
- * once and moving it to the end later becomes impossible. Recomputing from the
- * name is also what would flatten a sort title the user set in Plex, since the
- * write replaces whatever is there even when article handling itself changes
- * nothing ("Cameras" on a collection named "...Cameras" has no article to
- * strip, and was still overwritten with the name).
- *
- * Agregarr owns the sort title when there is none, when it is just the
- * collection's name, when Agregarr promoted it (everManaged - which also
- * covers the rank a demotion leaves behind), or when it matches what
- * leading-article handling would produce for that name under any mode.
- * Only the current value counts, so a sort title someone sets later in Plex,
- * or a Kometa-style "!050_Name" on a collection Agregarr never promoted, is
- * left alone.
- *
- * That last case also covers values Plex made itself. Plex generates a
- * sortTitle of its own for a new collection by stripping the leading article
- * (and leading punctuation), so "The Avengers" arrives already sorting as
- * "Avengers" with nothing of Agregarr's involved. Without this check that
- * reads as a human's doing and Agregarr never touches it - meaning
- * 'moveToEnd' would silently never produce "Avengers, The", and 'off' would
- * never restore "The Avengers". Checking every mode rather than the
- * configured one is also what lets Agregarr recognise its own output after
- * the setting changes.
- *
- * everManaged (everLibraryPromoted) also counts as ownership, and covers the
- * case the other checks cannot see: a value Agregarr wrote through a Sort
- * Title override that has since been cleared. Nothing records what that
- * override produced, so "ZZZ_Video Games" looks indistinguishable from a
- * human's edit - and the collection would stay pinned to it forever, because
- * clearing the override is precisely the request to stop using it. Agregarr
- * has demonstrably written this collection's sort title before, so it may
- * write it again. This is the same signal upstream already uses to decide
- * whether the sort title is Agregarr's to manage.
- *
- * Anything else was typed by a human and is picked up through discovery
- * rather than owned.
- */
+/** True when Plex's current sort title is one Agregarr (or Plex itself) produced; anything typed by hand is left alone. */
 export function isAgregarrOwnedSortTitle(
   titleSort: string | undefined,
   collectionName: string,
@@ -3070,22 +3019,12 @@ export function isMultiCollectionPattern(config?: {
 
 export type SortTitleArticleHandling = 'strip' | 'moveToEnd' | 'off';
 
-/**
- * Normalizes a leading English article ("The"/"A"/"An") for sorting
- * purposes only - never touches the actual displayed title, just the
- * computed default sortTitle written for A-Z (non-promoted) collections.
- * Plex's own sortTitle defaults are inconsistent about this, so this exists
- * to make Agregarr-managed collections sort predictably regardless of
- * whatever the source metadata happened to produce.
- */
+/** The sort key for a name under the given leading-article mode; the displayed title is never changed. */
 export function normalizeSortTitleArticle(
   title: string,
   mode: SortTitleArticleHandling = 'strip'
 ): string {
-  // 'off' is the restore: the name exactly as it is, punctuation and article
-  // both intact. Every other mode mirrors what Plex does to a sort title of
-  // its own - drop the leading punctuation first, then handle the article -
-  // so Agregarr writes what Plex would have written rather than fighting it.
+  // Other modes match Plex: drop leading punctuation, then handle the article.
   if (mode === 'off') return title;
 
   const trimmed = title.replace(LEADING_PUNCTUATION_PATTERN, '') || title;

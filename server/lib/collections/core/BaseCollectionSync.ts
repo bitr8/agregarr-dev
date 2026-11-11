@@ -2338,10 +2338,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       const effectiveOverride =
         options.config?.sortTitleOverride || matchingConfig?.sortTitleOverride;
 
-      // Whether leading-article handling is in play for this collection at
-      // all: the setting is on, or it was on and this collection still holds a
-      // normalized value that switching to 'off' has to restore. Everything
-      // that depends on the feature keys off this one answer.
+      // On, or was on and this collection still holds a value 'off' must restore.
       const articleHandlingEngaged =
         (!!settings.plex.sortTitleArticleHandling &&
           settings.plex.sortTitleArticleHandling !== 'off') ||
@@ -2401,28 +2398,11 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         );
       } else if (
         effectiveSortOrderLibrary !== undefined &&
-        // Previously-touched collections always qualify, same as before. A
-        // collection Agregarr has never promoted/demoted also qualifies now
-        // when leading-article normalization is enabled - a lightweight
-        // cosmetic sort fix, not a claim of ownership over the collection's
-        // position the way positional (promoted) sortTitle is, which stays
-        // gated behind promotion history inside the branch below.
-        // articleHandlingEngaged covers the switch to 'off' too, which still
-        // has to restore anything previously normalized - otherwise "off"
-        // would strand the last enabled mode's value in place forever.
+        // Article handling also reaches never-promoted collections; position stays gated on promotion below.
         (matchingConfig?.everLibraryPromoted !== false ||
           effectiveIsLibraryPromoted ||
           articleHandlingEngaged) &&
-        // A sort title the user set in Plex outranks article handling:
-        // normalization is the rule for collections without a deliberate one,
-        // not a licence to replace one that exists.
-        //
-        // Two exemptions. Promoted collections: their position is Agregarr's to
-        // own and the positional scheme below is the only thing that can express
-        // it. Dynamic-title collections: they are renamed on every sync, so the
-        // sort title left over from the previous name can never match the
-        // current one and would read as a human's edit, stopping Agregarr from
-        // maintaining the sort title from the first rename onward.
+        // A user-set sort title wins, except on promoted and dynamic-title (renamed every sync) collections.
         (effectiveIsLibraryPromoted ||
           matchingConfig?.template === 'DYNAMIC_RANDOM_TITLE' ||
           matchingConfig?.template === 'DYNAMIC_CYCLE_TITLE' ||
@@ -2445,17 +2425,12 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             effectiveSortOrderLibrary
           );
         } else {
-          // A-Z: reset/normalize to the natural title (normalized per the
-          // configured leading-article handling - see
-          // normalizeSortTitleArticle). Applies even to collections
-          // Agregarr has never promoted/demoted before, as long as article
-          // handling is actually enabled (checked above).
+          // A-Z: the name, per leading-article handling.
           sortTitle = normalizeSortTitleArticle(
             collectionName,
             settings.plex.sortTitleArticleHandling
           );
-          // Track whether what we just wrote is actually a normalized value,
-          // so a later switch to 'off' knows to restore this one.
+          // Recorded so a later switch to 'off' restores it.
           const isNormalized = sortTitle !== collectionName;
           if (
             isNormalized !==
@@ -2474,22 +2449,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           options.existingTitleSort ?? options.existingTitle
         );
 
-        // The two fields have different lifetimes, so a group drops them
-        // separately rather than skipping the save outright.
-        //
-        // everLibraryPromoted is the "settled in A-Z, stop writing" latch, and
-        // groups never flip it: one config generates many collections, so
-        // latching on the first member would stop the reset ever reaching the
-        // rest.
-        //
-        // sortTitleArticleNormalized records what was written, so switching to
-        // 'off' can restore it instead of stranding it - group members persist
-        // it too, but only ever set it. A single per-config flag cannot
-        // describe members that differ ("The Matrix Collection" normalizes,
-        // "1980s Movies" does not), and true is the useful direction: it keeps
-        // the gate above open so 'off' still reaches the members that were
-        // normalized. Rewriting an unchanged value there costs nothing - the
-        // unchanged-value skip in updateCollectionSortTitle drops it.
+        // Groups never latch everLibraryPromoted (one config, many members) and only ever set the normalized flag.
         if (matchingConfig && isMultiCollectionPattern(matchingConfig)) {
           delete updateConfig.everLibraryPromoted;
           if (updateConfig.sortTitleArticleNormalized === false) {

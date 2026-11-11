@@ -1481,10 +1481,7 @@ export class DiscoveryService {
               settings.save();
             }
 
-            // Refresh what Plex actually holds, on every pass rather than only
-            // at first discovery: the ownership check reads this, and on stale
-            // data it would overwrite a sort title someone typed in Plex - see
-            // isAgregarrOwnedSortTitle.
+            // Refreshed every pass because the ownership check reads it.
             const discoveredTitleSort =
               typeof collection.titleSort === 'string'
                 ? collection.titleSort

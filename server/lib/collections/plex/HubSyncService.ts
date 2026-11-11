@@ -1741,20 +1741,11 @@ export class HubSyncService {
           continue;
         }
 
-        // Only fully skip when the collection has never been promoted AND
-        // leading-article normalization is disabled - a collection
-        // Agregarr has never promoted/demoted still gets article
-        // normalization applied when that setting is enabled, since it's
-        // a lightweight cosmetic sort fix, not a claim of ownership over
-        // the collection's position the way positional (promoted)
-        // sortTitle is, which stays gated behind promotion history below.
+        // Skip only when never promoted and article handling has nothing to apply or restore.
         const articleHandlingEnabled =
           !!settings.plex.sortTitleArticleHandling &&
           settings.plex.sortTitleArticleHandling !== 'off';
-        // Switching to 'off' has to actively restore the natural title on
-        // anything previously normalized - otherwise "off" just stops
-        // touching them, stranding whatever the last enabled mode wrote
-        // (e.g. leaving "Fast and the Furious, The" in place forever).
+        // 'off' still has to restore anything previously normalized.
         const needsArticleReset = config.sortTitleArticleNormalized === true;
         if (
           !config.sortTitleResetRequested &&
@@ -1775,9 +1766,7 @@ export class HubSyncService {
             config.sortOrderLibrary
           );
         } else if (
-          // A reset is the user asking for exactly this: take the sort title
-          // back. Without the bypass the ownership check refuses, because the
-          // value in Plex is precisely the hand-set one they want gone.
+          // A reset bypasses ownership: the hand-set value is the one being cleared.
           !config.sortTitleResetRequested &&
           !isAgregarrOwnedSortTitle(
             config.titleSort,
@@ -1785,18 +1774,10 @@ export class HubSyncService {
             config.everLibraryPromoted
           )
         ) {
-          // A sort title the user set in Plex outranks article handling:
-          // normalization is the rule for collections without a deliberate
-          // one, not a licence to replace one that exists. Leave Plex's
-          // value exactly as it is - discovery keeps the stored copy current
-          // (see DiscoveryService), so it is picked up rather than owned.
+          // A user-set sort title wins; discovery keeps the stored copy current.
           continue;
         } else {
-          // A-Z: reset/normalize to the natural title (normalized per the
-          // configured leading-article handling - see
-          // normalizeSortTitleArticle). Applies even to collections
-          // Agregarr has never promoted/demoted before, as long as
-          // article handling is actually enabled (checked above).
+          // A-Z: the name, per leading-article handling.
           sortTitle = normalizeSortTitleArticle(
             config.name,
             settings.plex.sortTitleArticleHandling
@@ -1839,16 +1820,11 @@ export class HubSyncService {
             updateConfig.titleSort = sortTitle;
           }
 
-          // A reset is one-shot: consumed here, or it would keep
-          // overriding the ownership check on every future sync and the
-          // collection could never hold a hand-set Plex value again.
+          // One-shot, or it would override ownership on every future sync.
           if (config.sortTitleResetRequested) {
             updateConfig.sortTitleResetRequested = false;
           }
 
-          // Persist whatever changed - everLibraryPromoted being reset,
-          // the article-normalization marker flipping, the reset flag being
-          // consumed, or any combination.
           if (Object.keys(updateConfig).length > 0) {
             this.updatePreExistingConfigField(config.id, updateConfig);
           }

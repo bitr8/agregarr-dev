@@ -1,8 +1,6 @@
 /**
  * Client-side mirror of the server's sort title rules
- * (server/lib/collections/core/CollectionUtilities.ts). The patterns come from
- * the dependency-free server/constants/sortTitle.ts; the rest is mirrored to
- * avoid pulling server code across the client bundle boundary.
+ * (server/lib/collections/core/CollectionUtilities.ts); the patterns are shared via server/constants/sortTitle.ts.
  *
  * It lives in one module because it was previously hand-copied into each
  * component that needed it, and the copies drifted: the library list learned
@@ -24,10 +22,7 @@ export const PROMOTED_SORT_TITLE_RANK_WIDTH = 3;
 
 export type SortTitleArticleMode = 'strip' | 'moveToEnd' | 'off';
 
-/**
- * The name as article handling would file it, mirroring what the server
- * writes to Plex so a list built here cannot disagree with Plex.
- */
+/** The name as the server's article handling files it. */
 export function normalizeArticleForDisplay(
   title: string,
   mode: SortTitleArticleMode | undefined
@@ -41,9 +36,9 @@ export function normalizeArticleForDisplay(
 }
 
 /**
- * Mirrors isAgregarrOwnedSortTitle in CollectionUtilities.ts: true where the
- * value in Plex is one Agregarr wrote (and may therefore replace), false
- * where a human typed it in Plex and it has to be left alone.
+ * True where the value in Plex is one Agregarr wrote (and may therefore
+ * replace), false where a human typed it in Plex and it has to be left
+ * alone.
  *
  * everManaged (everLibraryPromoted) covers the case the other checks cannot
  * see: a value written through a Sort Title override that has since been
