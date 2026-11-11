@@ -1,8 +1,8 @@
 /**
  * Client-side mirror of the server's sort title rules
- * (server/lib/collections/core/CollectionUtilities.ts), kept here rather
- * than imported to avoid pulling server code across the client bundle
- * boundary.
+ * (server/lib/collections/core/CollectionUtilities.ts). The patterns come from
+ * the dependency-free server/constants/sortTitle.ts; the rest is mirrored to
+ * avoid pulling server code across the client bundle boundary.
  *
  * It lives in one module because it was previously hand-copied into each
  * component that needed it, and the copies drifted: the library list learned
@@ -12,14 +12,10 @@
  * server change has exactly one place to land on the client.
  */
 
-// Must match LEADING_ARTICLE_PATTERN / normalizeSortTitleArticle in
-// CollectionUtilities.ts.
-const LEADING_ARTICLE_PATTERN = /^(The|A|An)\s+(.+)$/i;
-
-// Must stay identical to the copy in CollectionUtilities.ts - see the note
-// there on why these are explicit ranges rather than \p{P}.
-const LEADING_PUNCTUATION_PATTERN =
-  /^[\s\u0021-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u007E\u00A1\u00BF\u2010-\u2027]+/;
+import {
+  LEADING_ARTICLE_PATTERN,
+  LEADING_PUNCTUATION_PATTERN,
+} from '@server/constants/sortTitle';
 
 // Must match PROMOTED_SORT_TITLE_RANK_WIDTH in CollectionUtilities.ts. 3
 // digits matches Kometa's !010_/!020_ convention; see that constant for why

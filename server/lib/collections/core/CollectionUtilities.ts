@@ -1,4 +1,8 @@
 import type PlexAPI from '@server/api/plexapi';
+import {
+  LEADING_ARTICLE_PATTERN,
+  LEADING_PUNCTUATION_PATTERN,
+} from '@server/constants/sortTitle';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { templateEngine } from '@server/lib/collections/utils/TemplateEngine';
@@ -3065,21 +3069,6 @@ export function isMultiCollectionPattern(config?: {
 }
 
 export type SortTitleArticleHandling = 'strip' | 'moveToEnd' | 'off';
-
-const LEADING_ARTICLE_PATTERN = /^(The|A|An)\s+(.+)$/i;
-
-// Leading punctuation Plex itself drops when it generates a sort title, so
-// "... Cameras" files under C rather than at the very top.
-//
-// Spelled out as explicit ranges rather than \p{P} with the /u flag: the
-// client bundle's babel/webpack toolchain cannot parse Unicode property
-// escapes and fails the build outright. Listing the characters also keeps
-// this to ASCII punctuation plus a few common Unicode quotes and dashes, so
-// a name opening with an emoji keeps it - there is no evidence Plex strips
-// those, and guessing wrong would fight Plex on every emoji-prefixed
-// collection. Must stay identical to the copy in utils/collections/sortTitle.ts.
-const LEADING_PUNCTUATION_PATTERN =
-  /^[\s\u0021-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u007E\u00A1\u00BF\u2010-\u2027]+/;
 
 /**
  * Normalizes a leading English article ("The"/"A"/"An") for sorting
