@@ -144,6 +144,16 @@ export class EpisodeMediaAggregator {
     return result;
   }
 
+  // Show and season rating keys never collide, so one map serves both targets.
+  aggregateByShowAndSeason(
+    episodes: EpisodeMediaInfo[]
+  ): Map<string, AggregatedMediaInfo> {
+    return new Map([
+      ...this.aggregateByShow(episodes),
+      ...this.aggregateBySeason(episodes),
+    ]);
+  }
+
   aggregateBySeason(
     episodes: EpisodeMediaInfo[]
   ): Map<string, AggregatedMediaInfo> {

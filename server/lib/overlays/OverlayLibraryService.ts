@@ -2167,8 +2167,10 @@ class OverlayLibraryService {
       if (config.enableEpisodeScanning && mediaType === 'show') {
         // Every show-poster template, not just this run's: quick sync renders
         // show posters from the cache this scan writes.
-        const showPosterTemplates = sortedTemplates.filter((template) =>
-          targetsArtwork(template.getTags(), 'main')
+        const showPosterTemplates = sortedTemplates.filter(
+          (template) =>
+            targetsArtwork(template.getTags(), 'main') ||
+            targetsArtwork(template.getTags(), 'season')
         );
         await this.runEpisodeScan(
           plexApi,
@@ -3478,7 +3480,7 @@ class OverlayLibraryService {
       if (item.type === 'show') {
         episodeAggregation.episodeMediaSource = 'show';
       }
-      if (aggregatedMap && item.type === 'show') {
+      if (aggregatedMap && (item.type === 'show' || item.type === 'season')) {
         const agg = aggregatedMap.get(item.ratingKey);
         if (agg) {
           episodeAggregation = {
@@ -4254,7 +4256,7 @@ class OverlayLibraryService {
               ? seasonTmdbRatings.contexts.get(meta.ratingKey)
               : {}),
           },
-          // Seasons carry no Media, so there is no episode aggregation to apply.
+          // Falls back to this full sync's per-season episode aggregation.
           undefined,
           // Maintainerr nominated this season; if no template condition matches it,
           // leave its poster alone.
@@ -4639,7 +4641,7 @@ class OverlayLibraryService {
     await cacheService.cleanExpired(serverId, libraryId);
 
     const aggregator = new EpisodeMediaAggregator();
-    const aggregated = aggregator.aggregateByShow(episodes);
+    const aggregated = aggregator.aggregateByShowAndSeason(episodes);
 
     this.aggregatedMediaByLibrary.set(libraryId, aggregated);
     // Fresh authoritative data written; drop the collection-path memo so it
@@ -4704,7 +4706,7 @@ class OverlayLibraryService {
     const aggregated =
       episodes.length === 0
         ? undefined
-        : new EpisodeMediaAggregator().aggregateByShow(episodes);
+        : new EpisodeMediaAggregator().aggregateByShowAndSeason(episodes);
 
     this.aggregatedMediaCacheMemo.set(libraryId, {
       at: Date.now(),
