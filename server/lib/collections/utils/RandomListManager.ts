@@ -8,6 +8,24 @@ import {
 import fs from 'fs';
 import path from 'path';
 
+export function normalizeListUrl(url: string): string {
+  const bare = url
+    .trim()
+    .toLowerCase()
+    .replace(/[?#].*$/, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/^(www|app|m)\./, '')
+    .replace(/\/+$/, '');
+  const canonical =
+    bare.match(/^themoviedb\.org\/collection\/\d+/) ??
+    bare
+      .replace(/^imdb\.com\/[a-z]{2}(-[a-z]{2})?\//, 'imdb.com/')
+      .match(/^imdb\.com\/list\/ls\d+/) ??
+    bare.match(/^letterboxd\.com\/[^/]+\/list\/[^/]+/) ??
+    bare.match(/^trakt\.tv\/users\/[^/]+\/lists\/[^/]+/);
+  return canonical ? canonical[0] : bare;
+}
+
 /**
  * RandomListManager - Manages random list configuration files with built-in defaults
  *
@@ -23,7 +41,7 @@ export class RandomListManager {
   private static configDir: string;
   private static cache: Map<
     string,
-    { enabled: boolean; urls: string[]; lastRead: number }
+    { enabled: boolean; urls: string[]; excludes: string[]; lastRead: number }
   > = new Map();
   private static readonly CACHE_TTL = 60000; // 1 minute cache
 
@@ -135,6 +153,7 @@ export class RandomListManager {
 #
 # Add one Trakt list URL per line below to override the default true random search
 # Set enabled=true and add custom URLs below to use your own lists instead
+# Add exclude=URL lines to keep specific lists out of the random rotation
 
 enabled=false
 
@@ -150,6 +169,7 @@ https://trakt.tv/users/movistapp/lists/oscar-winners
 #
 # Add one TMDB collection URL per line below to override the default true random search
 # Set enabled=true and add custom URLs below to use your own collections instead
+# Add exclude=URL lines to keep specific lists out of the random rotation
 
 enabled=false
 
@@ -165,6 +185,7 @@ https://www.themoviedb.org/collection/131295
 #
 # Add one IMDb list URL per line below to override the default true random search
 # Set enabled=true and add custom URLs below to use your own lists instead
+# Add exclude=URL lines to keep specific lists out of the random rotation
 
 enabled=false
 
@@ -180,6 +201,7 @@ https://www.imdb.com/list/ls056092300/
 #
 # Add one Letterboxd list URL per line below to override the default true random search
 # Set enabled=true and add custom URLs below to use your own lists instead
+# Add exclude=URL lines to keep specific lists out of the random rotation
 
 enabled=false
 
@@ -233,21 +255,23 @@ https://letterboxd.com/dave/list/imdb-top-250/
     targetMediaType?: 'movie' | 'tv'
   ): Promise<string[]> {
     const config = this.readConfig(sourceType);
+    const filter = (urls: string[]) =>
+      this.applyExclusions(sourceType, urls, config.excludes);
 
     // Priority 1: If user has configured URLs and enabled random lists, use those
-    if (config.enabled && config.urls.length > 0) {
+    const userUrls = config.enabled ? filter(config.urls) : [];
+    if (userUrls.length > 0) {
       logger.debug(`Using user-configured random lists for ${sourceType}`, {
         label: 'RandomListManager',
         sourceType,
-        count: config.urls.length,
+        count: userUrls.length,
       });
-      return config.urls;
+      return userUrls;
     }
 
     // Priority 2: Dynamically discover lists
-    const discoveredUrls = await this.getDiscoveredUrls(
-      sourceType,
-      targetMediaType
+    const discoveredUrls = filter(
+      await this.getDiscoveredUrls(sourceType, targetMediaType)
     );
     if (discoveredUrls.length > 0) {
       logger.info(
@@ -263,8 +287,8 @@ https://letterboxd.com/dave/list/imdb-top-250/
 
     // Priority 3: Built-in fallback lists (movie-only — TV has no curated fallbacks)
     if (targetMediaType !== 'tv') {
-      const fallbackUrls = this.FALLBACK_LISTS[sourceType];
-      if (fallbackUrls && fallbackUrls.length > 0) {
+      const fallbackUrls = filter(this.FALLBACK_LISTS[sourceType] ?? []);
+      if (fallbackUrls.length > 0) {
         logger.warn(
           `Discovery failed for ${sourceType}, using ${fallbackUrls.length} built-in fallback lists`,
           {
@@ -282,6 +306,25 @@ https://letterboxd.com/dave/list/imdb-top-250/
       sourceType,
     });
     return [];
+  }
+
+  private static applyExclusions(
+    sourceType: 'trakt' | 'tmdb' | 'imdb' | 'letterboxd',
+    pool: string[],
+    excludes: string[] = this.readConfig(sourceType).excludes
+  ): string[] {
+    if (excludes.length === 0) return pool;
+
+    const excluded = new Set(excludes.map(normalizeListUrl));
+    const kept = pool.filter((url) => !excluded.has(normalizeListUrl(url)));
+    if (kept.length < pool.length) {
+      logger.debug(`Excluded ${pool.length - kept.length} random lists`, {
+        label: 'RandomListManager',
+        sourceType,
+        poolSize: pool.length,
+      });
+    }
+    return kept;
   }
 
   /**
@@ -584,11 +627,15 @@ https://letterboxd.com/dave/list/imdb-top-250/
     configId?: string
   ): Promise<string | null> {
     const urls = await this.getRandomUrls(sourceType, targetMediaType);
-    if (urls.length === 0) {
+    const usesLibraryPool =
+      sourceType === 'tmdb' && !!libraryCache && targetMediaType === 'movie';
+    const warnNoUrls = () =>
       logger.warn(`No random URLs available for source type: ${sourceType}`, {
         label: 'RandomListManager',
         sourceType,
       });
+    if (urls.length === 0 && !usesLibraryPool) {
+      warnNoUrls();
       return null;
     }
 
@@ -640,9 +687,10 @@ https://letterboxd.com/dave/list/imdb-top-250/
     }
 
     // For TMDB with library cache: use pre-filtered collections from user's library
-    if (sourceType === 'tmdb' && libraryCache && targetMediaType === 'movie') {
-      const libraryUrls = await this.getTmdbCollectionsFromLibrary(
-        libraryCache
+    if (usesLibraryPool && libraryCache) {
+      const libraryUrls = this.applyExclusions(
+        'tmdb',
+        await this.getTmdbCollectionsFromLibrary(libraryCache)
       );
       if (libraryUrls.length > 0) {
         let available = libraryUrls.filter(
@@ -669,6 +717,11 @@ https://letterboxd.com/dave/list/imdb-top-250/
         );
         return selectedUrl;
       }
+    }
+
+    if (urls.length === 0) {
+      warnNoUrls();
+      return null;
     }
 
     // Try up to 500 random URLs to find one suitable for target media type
@@ -1611,13 +1664,17 @@ https://letterboxd.com/dave/list/imdb-top-250/
    */
   private static readConfig(
     sourceType: 'trakt' | 'tmdb' | 'imdb' | 'letterboxd'
-  ): { enabled: boolean; urls: string[] } {
+  ): { enabled: boolean; urls: string[]; excludes: string[] } {
     const now = Date.now();
     const cached = this.cache.get(sourceType);
 
     // Return cached result if still valid
     if (cached && now - cached.lastRead < this.CACHE_TTL) {
-      return { enabled: cached.enabled, urls: cached.urls };
+      return {
+        enabled: cached.enabled,
+        urls: cached.urls,
+        excludes: cached.excludes,
+      };
     }
 
     const configPath = path.join(this.configDir, `${sourceType}.txt`);
@@ -1629,7 +1686,7 @@ https://letterboxd.com/dave/list/imdb-top-250/
         sourceType,
       });
 
-      const result = { enabled: false, urls: [] };
+      const result = { enabled: false, urls: [], excludes: [] };
       this.cache.set(sourceType, { ...result, lastRead: now });
       return result;
     }
@@ -1659,7 +1716,7 @@ https://letterboxd.com/dave/list/imdb-top-250/
         }
       );
 
-      const result = { enabled: false, urls: [] };
+      const result = { enabled: false, urls: [], excludes: [] };
       this.cache.set(sourceType, { ...result, lastRead: now });
       return result;
     }
@@ -1676,11 +1733,13 @@ https://letterboxd.com/dave/list/imdb-top-250/
   private static parseConfig(content: string): {
     enabled: boolean;
     urls: string[];
+    excludes: string[];
   } {
     const lines = content.split('\n').map((line) => line.trim());
 
     let enabled = false;
     const urls: string[] = [];
+    const excludes: string[] = [];
 
     for (const line of lines) {
       // Skip empty lines and comments
@@ -1695,13 +1754,19 @@ https://letterboxd.com/dave/list/imdb-top-250/
         continue;
       }
 
+      const exclude = line.match(/^exclude\s*=\s*(\S+)/i);
+      if (exclude) {
+        excludes.push(exclude[1]);
+        continue;
+      }
+
       // Parse URLs - basic validation
       if (line.startsWith('http://') || line.startsWith('https://')) {
         urls.push(line);
       }
     }
 
-    return { enabled, urls };
+    return { enabled, urls, excludes };
   }
 
   /**
