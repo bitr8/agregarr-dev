@@ -72,7 +72,6 @@ function evaluateRule(
         typeof value === 'number' && typeof cond === 'number' && value <= cond
       );
     case 'in': {
-      if (typeof value !== 'string' && typeof value !== 'number') return false;
       if (Array.isArray(cond)) {
         return typeof value === 'string'
           ? cond.some(
@@ -82,6 +81,7 @@ function evaluateRule(
           : cond.includes(value);
       }
       if (typeof cond !== 'string' && typeof cond !== 'number') return false;
+      if (typeof value !== 'string' && typeof value !== 'number') return false;
       const actual = String(value).toLowerCase();
       return String(cond)
         .split(',')

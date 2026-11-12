@@ -34,6 +34,7 @@ describe("preview 'in' operator", () => {
       } as ApplicationCondition);
     expect(evaluateCondition(yearIn([2024]), { year: 2024 })).toBe(true);
     expect(evaluateCondition(yearIn(['2024']), { year: 2024 })).toBe(false);
+    expect(evaluateCondition(yearIn([true]), { year: true })).toBe(true);
   });
 
   it('hides the element when the value is not in the list', () => {
