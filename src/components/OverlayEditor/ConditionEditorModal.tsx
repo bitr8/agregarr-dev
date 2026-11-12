@@ -597,14 +597,17 @@ const RuleItem: React.FC<RuleItemProps> = ({
         />
       ) : (
         <input
-          type={isNumeric ? 'number' : 'text'}
+          type={isNumeric && operator !== 'in' ? 'number' : 'text'}
           value={String(value)}
           onChange={(e) => {
             const val = e.target.value;
             const numVal = Number(val);
             onChange({
               ...rule,
-              value: isNumeric && !isNaN(numVal) && val !== '' ? numVal : val,
+              value:
+                isNumeric && operator !== 'in' && !isNaN(numVal) && val !== ''
+                  ? numVal
+                  : val,
             });
           }}
           placeholder={placeholder}

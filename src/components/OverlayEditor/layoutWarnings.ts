@@ -161,8 +161,16 @@ const textExtent = (element: OverlayElement, layout: TextLayout): Rect => {
 const looseEqual = (a: unknown, b: unknown): boolean =>
   String(a).toLowerCase() === String(b).toLowerCase();
 
-const asList = (value: ConditionRule['value']): unknown[] =>
-  Array.isArray(value) ? value : [value];
+const asList = (rule: ConditionRule): unknown[] => {
+  if (Array.isArray(rule.value)) return rule.value;
+  if (rule.operator === 'in' && typeof rule.value === 'string') {
+    return rule.value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [rule.value];
+};
 
 interface NumericRange {
   lo: number;
@@ -237,15 +245,13 @@ const rulesContradict = (a: ConditionRule, b: ConditionRule): boolean => {
     r.operator === 'eq' || r.operator === 'in';
   if (isEqLike(a) && isEqLike(b)) {
     if (!SCALAR_STRING_FIELDS.has(a.field)) return false;
-    const bValues = asList(b.value);
-    return !asList(a.value).some((va) =>
-      bValues.some((vb) => looseEqual(va, vb))
-    );
+    const bValues = asList(b);
+    return !asList(a).some((va) => bValues.some((vb) => looseEqual(va, vb)));
   }
   const eqVsNeq = (eq: ConditionRule, neq: ConditionRule) =>
     isEqLike(eq) &&
     neq.operator === 'neq' &&
-    asList(eq.value).every((v) => looseEqual(v, neq.value));
+    asList(eq).every((v) => looseEqual(v, neq.value));
   return eqVsNeq(a, b) || eqVsNeq(b, a);
 };
 

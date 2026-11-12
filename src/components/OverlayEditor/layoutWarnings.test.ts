@@ -233,6 +233,21 @@ describe('conditionsMutuallyExclusive', () => {
     ).toBe(true);
   });
 
+  it('reads comma-separated in values as a list', () => {
+    expect(
+      conditionsMutuallyExclusive(
+        cond('resolution', 'in', '4k, 1080'),
+        cond('resolution', 'eq', '4k')
+      )
+    ).toBe(false);
+    expect(
+      conditionsMutuallyExclusive(
+        cond('resolution', 'in', '4k,2160'),
+        cond('resolution', 'eq', '1080')
+      )
+    ).toBe(true);
+  });
+
   it('stays conservative when it cannot prove exclusivity', () => {
     expect(
       conditionsMutuallyExclusive(

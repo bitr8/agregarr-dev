@@ -267,6 +267,20 @@ function evaluateRule(
         value <= conditionValue
       );
     case 'in':
+      // The condition editor saves `in` values as comma-separated text
+      if (
+        typeof conditionValue === 'string' ||
+        typeof conditionValue === 'number'
+      ) {
+        if (typeof value !== 'string' && typeof value !== 'number') {
+          return false;
+        }
+        const actual = String(value).toLowerCase();
+        return String(conditionValue)
+          .split(',')
+          .map((item) => item.trim().toLowerCase())
+          .some((item) => item !== '' && item === actual);
+      }
       // Case-insensitive comparison for string arrays
       if (typeof value === 'string' && Array.isArray(conditionValue)) {
         return conditionValue.some(

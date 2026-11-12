@@ -71,6 +71,20 @@ function evaluateRule(
       return (
         typeof value === 'number' && typeof cond === 'number' && value <= cond
       );
+    case 'in': {
+      if (typeof value !== 'string' && typeof value !== 'number') return false;
+      const candidates = Array.isArray(cond)
+        ? cond
+        : typeof cond === 'string' || typeof cond === 'number'
+        ? String(cond).split(',')
+        : [];
+      const actual = String(value).toLowerCase();
+      return candidates.some(
+        (item) =>
+          String(item).trim() !== '' &&
+          String(item).trim().toLowerCase() === actual
+      );
+    }
     case 'contains':
       return (
         typeof value === 'string' &&
