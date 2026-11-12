@@ -1117,6 +1117,27 @@ describe('isAgregarrOwnedSortTitle', () => {
     expect(isAgregarrOwnedSortTitle('Crow, The', 'The Crow')).toBe(true);
   });
 
+  it("owns the previous name's article form after a rename", async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(
+      isAgregarrOwnedSortTitle('Crow', 'The Raven', false, 'The Crow')
+    ).toBe(true);
+    expect(
+      isAgregarrOwnedSortTitle('Crow, The', 'The Raven', false, 'The Crow')
+    ).toBe(true);
+    expect(isAgregarrOwnedSortTitle('Crow', 'The Raven', false)).toBe(false);
+  });
+
+  it('does not own a sort title just because it matches the old Plex title', async () => {
+    const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
+    expect(
+      isAgregarrOwnedSortTitle('Kometa', 'The Matrix', false, 'Kometa')
+    ).toBe(false);
+    expect(
+      isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Raven', false, 'The Crow')
+    ).toBe(false);
+  });
+
   it('leaves a sort title a human typed in Plex alone', async () => {
     const { isAgregarrOwnedSortTitle } = await import('./CollectionUtilities');
     expect(isAgregarrOwnedSortTitle('ZZZ_Crow', 'The Crow')).toBe(false);

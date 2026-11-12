@@ -774,6 +774,7 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
         sortOrderLibrary: configToUpdate.sortOrderLibrary, // Library tab position is library-specific
         isLibraryPromoted: configToUpdate.isLibraryPromoted, // Library promotion status is library-specific
         everLibraryPromoted: configToUpdate.everLibraryPromoted, // Library promotion history is library-specific
+        sortTitleArticleNormalized: configToUpdate.sortTitleArticleNormalized, // Written by sync, never by the form
         isPromotedToHub: configToUpdate.isPromotedToHub, // Hub promotion status is library-specific
         // Preserve library-specific sync tracking fields (each library syncs independently)
         lastSyncedAt: configToUpdate.lastSyncedAt, // Last sync timestamp is per-library

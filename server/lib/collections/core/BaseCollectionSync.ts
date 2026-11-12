@@ -2409,7 +2409,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           isAgregarrOwnedSortTitle(
             options.existingTitleSort,
             collectionName,
-            matchingConfig?.everLibraryPromoted
+            matchingConfig?.everLibraryPromoted,
+            options.existingTitle
           ))
       ) {
         let sortTitle: string;

@@ -160,15 +160,25 @@ export function buildSortTitleFromOverride(
 export function isAgregarrOwnedSortTitle(
   titleSort: string | undefined,
   collectionName: string,
-  everManaged?: boolean
+  everManaged?: boolean,
+  previousName?: string
 ): boolean {
   const current = titleSort?.trim();
   if (!current) return true;
   if (current === collectionName.trim()) return true;
   if (everManaged === true) return true;
 
-  return (['strip', 'moveToEnd'] as const).some(
-    (mode) => current === normalizeSortTitleArticle(collectionName, mode)
+  const articleForms = (name: string) =>
+    (['strip', 'moveToEnd'] as const).map((mode) =>
+      normalizeSortTitleArticle(name, mode)
+    );
+  if (articleForms(collectionName).includes(current)) return true;
+  // After a rename, the old name's article form is still Agregarr's to replace.
+  return (
+    !!previousName &&
+    articleForms(previousName).some(
+      (form) => form !== previousName && form === current
+    )
   );
 }
 
