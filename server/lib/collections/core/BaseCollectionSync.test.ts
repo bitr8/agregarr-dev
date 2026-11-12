@@ -27,7 +27,12 @@ vi.mock('@server/logger', () => ({
 
 const save = vi.fn();
 const settings = {
-  plex: { collectionConfigs: [] as CollectionConfig[] },
+  clientId: 'test-client',
+  main: {},
+  plex: {
+    collectionConfigs: [] as CollectionConfig[],
+    sortTitleArticleHandling: undefined as string | undefined,
+  },
   save,
 };
 vi.mock('@server/lib/settings', () => ({ getSettings: () => settings }));
@@ -550,5 +555,108 @@ describe('createOrUpdateCollectionStandardized: target user label', () => {
       typeof vi.fn
     >;
     expect(createMock.mock.calls[0][5]).toBe('AgregarrTargetUser_10_1001');
+  });
+});
+
+describe('updateCollectionMetadata: sort title PUTs', () => {
+  // Real PlexAPI, so the unchanged-value skip runs; only the PUT is stubbed.
+  const setup = async () => {
+    const { default: PlexAPI } = await import('@server/api/plexapi');
+    const api = new PlexAPI({
+      plexToken: 'test-token',
+      plexSettings: {
+        name: 'test',
+        ip: '127.0.0.1',
+        port: 32400,
+        libraries: [],
+      },
+    });
+    vi.spyOn(api, 'addLabelToCollection').mockResolvedValue(true);
+    vi.spyOn(api, 'updateCollectionTitle').mockResolvedValue(undefined);
+    const put = vi
+      .spyOn(
+        api as unknown as { safePutQuery: (url: string) => Promise<void> },
+        'safePutQuery'
+      )
+      .mockResolvedValue(undefined);
+    const sortTitlePuts = () =>
+      put.mock.calls.filter(([url]) => url.includes('titleSort'));
+    return { api, sortTitlePuts };
+  };
+
+  // Plex omits titleSort when it equals the title, so it arrives undefined.
+  const sync = (api: PlexAPI, cfg: CollectionConfig, title: string) =>
+    (
+      new TestSync() as unknown as {
+        updateCollectionMetadata: (
+          plexClient: PlexAPI,
+          ratingKey: string,
+          options: Record<string, unknown>
+        ) => Promise<unknown>;
+      }
+    ).updateCollectionMetadata(api, '900', {
+      collectionName: title,
+      mediaType: 'movie',
+      customLabel: 'Agregarr',
+      libraryKey: '4',
+      config: cfg,
+      existingTitle: title,
+      existingTitleSort: undefined,
+    });
+
+  afterEach(() => {
+    settings.plex.sortTitleArticleHandling = undefined;
+  });
+
+  it('does not rewrite an unchanged sort title on a second sync under strip', async () => {
+    settings.plex.sortTitleArticleHandling = 'strip';
+    const cfg = config({
+      everLibraryPromoted: false,
+      isLibraryPromoted: false,
+      sortOrderLibrary: 0,
+    });
+    settings.plex.collectionConfigs = [cfg];
+    const { api, sortTitlePuts } = await setup();
+
+    await sync(api, cfg, 'Neon Noir');
+
+    expect(sortTitlePuts()).toHaveLength(0);
+  });
+
+  it('does not rewrite a restored group member on repeated off syncs', async () => {
+    settings.plex.sortTitleArticleHandling = 'off';
+    const cfg = config({
+      type: 'plex',
+      subtype: 'genre',
+      everLibraryPromoted: false,
+      isLibraryPromoted: false,
+      sortOrderLibrary: 0,
+      sortTitleArticleNormalized: true,
+    });
+    settings.plex.collectionConfigs = [cfg];
+    const { api, sortTitlePuts } = await setup();
+
+    await sync(api, cfg, 'The Matrix Collection');
+    await sync(api, cfg, 'The Matrix Collection');
+
+    expect(sortTitlePuts()).toHaveLength(0);
+  });
+
+  it('still writes when the normalized value differs from the title', async () => {
+    settings.plex.sortTitleArticleHandling = 'strip';
+    const cfg = config({
+      everLibraryPromoted: false,
+      isLibraryPromoted: false,
+      sortOrderLibrary: 0,
+    });
+    settings.plex.collectionConfigs = [cfg];
+    const { api, sortTitlePuts } = await setup();
+
+    await sync(api, cfg, 'The Matrix Collection');
+
+    expect(sortTitlePuts()).toHaveLength(1);
+    expect(String(sortTitlePuts()[0][0])).toContain(
+      encodeURIComponent('Matrix Collection')
+    );
   });
 });

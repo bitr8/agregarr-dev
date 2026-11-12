@@ -3,6 +3,8 @@ import {
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
   extractErrorMessage,
+  isAgregarrOwnedSortTitle,
+  normalizeSortTitleArticle,
 } from '@server/lib/collections/core/CollectionUtilities';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
@@ -1669,6 +1671,18 @@ export class HubSyncService {
       for (const config of preExistingConfigs) {
         if (this.cancelled) return;
 
+        // A reset applies to this sync only, so clear it on the paths that skip the write.
+        if (
+          config.sortTitleResetRequested &&
+          (!config.collectionRatingKey ||
+            config.excludeFromOrdering ||
+            config.sortTitleOverride)
+        ) {
+          this.updatePreExistingConfigField(config.id, {
+            sortTitleResetRequested: false,
+          });
+        }
+
         // Skip configs without rating keys
         if (!config.collectionRatingKey) {
           continue;
@@ -1727,9 +1741,18 @@ export class HubSyncService {
           continue;
         }
 
-        // Only update sortTitle if everLibraryPromoted is not explicitly false
-        if (config.everLibraryPromoted === false) {
-          // If everLibraryPromoted is explicitly false: DO NOT touch sortTitle at all
+        // Skip only when never promoted and article handling has nothing to apply or restore.
+        const articleHandlingEnabled =
+          !!settings.plex.sortTitleArticleHandling &&
+          settings.plex.sortTitleArticleHandling !== 'off';
+        // 'off' still has to restore anything previously normalized.
+        const needsArticleReset = config.sortTitleArticleNormalized === true;
+        if (
+          !config.sortTitleResetRequested &&
+          config.everLibraryPromoted === false &&
+          !articleHandlingEnabled &&
+          !needsArticleReset
+        ) {
           continue;
         }
 
@@ -1742,11 +1765,31 @@ export class HubSyncService {
             config.name,
             config.sortOrderLibrary
           );
+        } else if (
+          // A reset bypasses ownership: the hand-set value is the one being cleared.
+          !config.sortTitleResetRequested &&
+          !isAgregarrOwnedSortTitle(
+            config.titleSort,
+            config.name,
+            config.everLibraryPromoted
+          )
+        ) {
+          // A user-set sort title wins; discovery keeps the stored copy current.
+          continue;
         } else {
-          // Demoted: Reset to natural title and mark as cleaned
-          sortTitle = config.name;
-          // After reset, set everLibraryPromoted back to false
-          updateConfig.everLibraryPromoted = false;
+          // A-Z: the name, per leading-article handling.
+          sortTitle = normalizeSortTitleArticle(
+            config.name,
+            settings.plex.sortTitleArticleHandling
+          );
+          const isNormalized = sortTitle !== config.name;
+          if (isNormalized !== (config.sortTitleArticleNormalized === true)) {
+            updateConfig.sortTitleArticleNormalized = isNormalized;
+          }
+          if (config.everLibraryPromoted !== false) {
+            // Was previously promoted at some point - mark cleaned
+            updateConfig.everLibraryPromoted = false;
+          }
         }
 
         try {
@@ -1777,7 +1820,11 @@ export class HubSyncService {
             updateConfig.titleSort = sortTitle;
           }
 
-          // Persist whatever changed.
+          // One-shot, or it would override ownership on every future sync.
+          if (config.sortTitleResetRequested) {
+            updateConfig.sortTitleResetRequested = false;
+          }
+
           if (Object.keys(updateConfig).length > 0) {
             this.updatePreExistingConfigField(config.id, updateConfig);
           }

@@ -22,7 +22,10 @@ import type {
   FormConfigType,
   Library,
 } from '@app/types/collections';
-import { agregarrOwnsSortTitle } from '@app/utils/collections/sortTitle';
+import {
+  agregarrOwnsSortTitle,
+  normalizeArticleForDisplay,
+} from '@app/utils/collections/sortTitle';
 import {
   closestCenter,
   DndContext,
@@ -85,7 +88,11 @@ function isLibraryPromoted(
  * neither field, so they always fall through to name.
  */
 function getEffectiveDisplayTitle(
-  collection: CollectionFormConfig | PlexHubConfig | PreExistingCollectionConfig
+  collection:
+    | CollectionFormConfig
+    | PlexHubConfig
+    | PreExistingCollectionConfig,
+  articleMode?: 'strip' | 'moveToEnd' | 'off'
 ): string {
   // Ordered the way Plex itself orders them, so this list cannot disagree
   // with what the user sees there:
@@ -100,16 +107,23 @@ function getEffectiveDisplayTitle(
   //    going stale at first discovery the way it used to; changing it in
   //    Plex needs a re-discover to show up here, which is the intended
   //    flow.
-  // 3. Otherwise the collection's own name.
+  // 3. Otherwise the name, article-normalized as the server writes it.
   const withOverrides = collection as {
     sortTitleOverride?: string;
     titleSort?: string;
     name?: string;
+    sortTitleArticleNormalized?: boolean;
     everLibraryPromoted?: boolean;
+    sortTitleResetRequested?: boolean;
   };
   const name = withOverrides.name || '';
 
   if (withOverrides.sortTitleOverride) return withOverrides.sortTitleOverride;
+
+  // A pending reset sorts by the name straight away, matching the field.
+  if (withOverrides.sortTitleResetRequested) {
+    return normalizeArticleForDisplay(name, articleMode);
+  }
 
   // Plex's stored value only wins where Agregarr does not own the sort title,
   // i.e. where a human set it there. Where Agregarr does own it, the value in
@@ -129,7 +143,7 @@ function getEffectiveDisplayTitle(
     return withOverrides.titleSort;
   }
 
-  return name;
+  return normalizeArticleForDisplay(name, articleMode);
 }
 
 function findPromotedDividerIndex(
@@ -660,6 +674,12 @@ const LibraryCollectionGroup = ({
   // SWR revalidation hook for refreshing collection data after sync
   const { mutate: revalidateCollections } = useSWR('/api/v1/collections');
 
+  // Sort the way Plex will, with the server's article normalization.
+  const { data: plexSettings } = useSWR<{
+    sortTitleArticleHandling?: 'strip' | 'moveToEnd' | 'off';
+  }>('/api/v1/settings/plex');
+  const articleMode = plexSettings?.sortTitleArticleHandling;
+
   // Monitor collections to detect when individual syncs complete (or fail)
   useEffect(() => {
     syncingIds.forEach((startedAt, syncingId) => {
@@ -811,8 +831,8 @@ const LibraryCollectionGroup = ({
             // "3 Men", "28 Days", "30 Days" as 3 < 28 < 30, whereas a plain
             // string compare would put "28 Days" first ("2" < "3") and this
             // list would disagree with what Plex actually displays.
-            const aTitle = getEffectiveDisplayTitle(a.config);
-            const bTitle = getEffectiveDisplayTitle(b.config);
+            const aTitle = getEffectiveDisplayTitle(a.config, articleMode);
+            const bTitle = getEffectiveDisplayTitle(b.config, articleMode);
             return aTitle.localeCompare(bTitle, undefined, { numeric: true });
           }
         }
@@ -824,7 +844,7 @@ const LibraryCollectionGroup = ({
 
     // For other tabs, use the normal sort order
     return result.sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [collections, hubs, preExisting, activeTab]);
+  }, [collections, hubs, preExisting, activeTab, articleMode]);
 
   // Calculate divider position for Library tab
   const dividerIndex = useMemo(() => {

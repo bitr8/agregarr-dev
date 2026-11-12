@@ -1480,6 +1480,16 @@ export class DiscoveryService {
               existingPreExisting.excludeFromOrdering = hasExclusionLabel;
               settings.save();
             }
+
+            // Refreshed every pass because the ownership check reads it.
+            const discoveredTitleSort =
+              typeof collection.titleSort === 'string'
+                ? collection.titleSort
+                : undefined;
+            if (existingPreExisting.titleSort !== discoveredTitleSort) {
+              existingPreExisting.titleSort = discoveredTitleSort;
+              settings.save();
+            }
           }
 
           if (

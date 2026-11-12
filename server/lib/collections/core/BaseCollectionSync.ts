@@ -34,8 +34,10 @@ import {
   getTargetUserLabel,
   handleRateLimit,
   hasAgregarrLabel,
+  isAgregarrOwnedSortTitle,
   isMultiCollectionPattern,
   logCollectionProcessingResults,
+  normalizeSortTitleArticle,
   resolveMultiCollectionBase,
   sanitizeCollectionName,
   updateConfigWithRatingKey,
@@ -2336,11 +2338,22 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       const effectiveOverride =
         options.config?.sortTitleOverride || matchingConfig?.sortTitleOverride;
 
+      // On, or was on and this collection still holds a value 'off' must restore.
+      const articleHandlingEngaged =
+        (!!settings.plex.sortTitleArticleHandling &&
+          settings.plex.sortTitleArticleHandling !== 'off') ||
+        matchingConfig?.sortTitleArticleNormalized === true;
+
       // Multi-collection configs put every collection they generate behind one
       // shared prefix, so the name following that prefix is what actually orders
       // them against each other - unlike a single collection, whose own rank
       // already decides its position and whose name is never compared.
-      const sortKeyName = collectionName;
+      const sortKeyName = isMultiCollectionPattern(matchingConfig)
+        ? normalizeSortTitleArticle(
+            collectionName,
+            settings.plex.sortTitleArticleHandling
+          )
+        : collectionName;
 
       // A demoted multi-collection group falls back to its parent config's name
       // as the shared base, so its members stay together under it instead of
@@ -2384,10 +2397,20 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           options.existingTitleSort
         );
       } else if (
-        // Only update sortTitle if everLibraryPromoted is not explicitly false
         effectiveSortOrderLibrary !== undefined &&
+        // Article handling also reaches never-promoted collections; position stays gated on promotion below.
         (matchingConfig?.everLibraryPromoted !== false ||
-          effectiveIsLibraryPromoted)
+          effectiveIsLibraryPromoted ||
+          articleHandlingEngaged) &&
+        // A user-set sort title wins, except on promoted and dynamic-title (renamed every sync) collections.
+        (effectiveIsLibraryPromoted ||
+          matchingConfig?.template === 'DYNAMIC_RANDOM_TITLE' ||
+          matchingConfig?.template === 'DYNAMIC_CYCLE_TITLE' ||
+          isAgregarrOwnedSortTitle(
+            options.existingTitleSort,
+            collectionName,
+            matchingConfig?.everLibraryPromoted
+          ))
       ) {
         let sortTitle: string;
         const updateConfig: Partial<CollectionConfig> = {};
@@ -2402,9 +2425,19 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             effectiveSortOrderLibrary
           );
         } else {
-          // A-Z: back to the natural title, clearing any rank prefix a
-          // previous promotion left behind.
-          sortTitle = collectionName;
+          // A-Z: the name, per leading-article handling.
+          sortTitle = normalizeSortTitleArticle(
+            collectionName,
+            settings.plex.sortTitleArticleHandling
+          );
+          // Recorded so a later switch to 'off' restores it.
+          const isNormalized = sortTitle !== collectionName;
+          if (
+            isNormalized !==
+            (matchingConfig?.sortTitleArticleNormalized === true)
+          ) {
+            updateConfig.sortTitleArticleNormalized = isNormalized;
+          }
           // After reset, set everLibraryPromoted back to false
           updateConfig.everLibraryPromoted = false;
         }
@@ -2412,16 +2445,19 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         await plexClient.updateCollectionSortTitle(
           collectionRatingKey,
           sortTitle,
-          options.existingTitleSort
+          // Plex omits titleSort when it equals the title.
+          options.existingTitleSort ?? options.existingTitle
         );
 
-        // Update config if everLibraryPromoted needs to be reset
-        // Groups never flip it, so a reset reaches every member, not just the first.
-        if (
-          updateConfig.everLibraryPromoted !== undefined &&
-          matchingConfig &&
-          !isMultiCollectionPattern(matchingConfig)
-        ) {
+        // Groups never latch everLibraryPromoted (one config, many members) and only ever set the normalized flag.
+        if (matchingConfig && isMultiCollectionPattern(matchingConfig)) {
+          delete updateConfig.everLibraryPromoted;
+          if (updateConfig.sortTitleArticleNormalized === false) {
+            delete updateConfig.sortTitleArticleNormalized;
+          }
+        }
+
+        if (matchingConfig && Object.keys(updateConfig).length > 0) {
           this.updateCollectionConfigField(matchingConfig.id, updateConfig);
         }
       }
