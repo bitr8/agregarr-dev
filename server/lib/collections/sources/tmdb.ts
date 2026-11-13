@@ -1,5 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
 import TmdbAPI from '@server/api/themoviedb';
+import { TMDB_MAX_PAGE } from '@server/api/themoviedb/constants';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyLabelExclusions,
@@ -33,9 +34,6 @@ import { RandomListManager } from '@server/lib/collections/utils/RandomListManag
 import type { CollectionConfig } from '@server/lib/settings';
 import { getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
-
-// TMDB rejects page numbers above 500 with a 400
-const TMDB_MAX_PAGE = 500;
 
 // TmdbSourceData interface is now imported from types.ts
 

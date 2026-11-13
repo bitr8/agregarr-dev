@@ -1,4 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
+import { TMDB_MAX_PAGE } from '@server/api/themoviedb/constants';
 import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 import { sortBy } from 'lodash';
@@ -1184,7 +1185,11 @@ class TheMovieDb extends ExternalAPI {
       const seenCollectionIds = new Set<number>();
 
       // Fetch multiple pages of popular movies to find collections
-      for (let currentPage = page; currentPage <= page + 2; currentPage++) {
+      for (
+        let currentPage = page;
+        currentPage <= Math.min(page + 2, TMDB_MAX_PAGE);
+        currentPage++
+      ) {
         try {
           const discoverResult = await this.getDiscoverMovies({
             sortBy: 'popularity.desc',

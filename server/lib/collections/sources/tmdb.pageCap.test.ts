@@ -92,8 +92,17 @@ describe('TMDB 500-page limit', () => {
         ([o]) => (o as { page: number }).page
       );
       expect(Math.max(...pages)).toBe(500);
+      expect(pages.filter((p) => p === 500)).toHaveLength(1);
     }
   );
+
+  it('stops at page 500 when max items is above 1000', async () => {
+    await new TmdbCollectionSync().fetchSourceData(cfg('top', '4', 2000));
+    const pages = discover.mock.calls.map(
+      ([o]) => (o as { page: number }).page
+    );
+    expect(Math.max(...pages)).toBe(500);
+  });
 
   it('still stops early when max items is set', async () => {
     await new TmdbCollectionSync().fetchSourceData(cfg('top', '4', 30));

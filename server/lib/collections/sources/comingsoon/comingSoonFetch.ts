@@ -1,5 +1,6 @@
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { TMDB_MAX_PAGE } from '@server/api/themoviedb/constants';
 import TraktAPI from '@server/api/trakt';
 import type { ComingSoonSourceData } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
@@ -751,7 +752,11 @@ export async function fetchTmdbComingSoonMovies(
     let totalFiltered = 0;
 
     // Keep fetching until we have enough valid items that pass release date filters
-    while (hasMorePages && validItems.length < maxItems) {
+    while (
+      hasMorePages &&
+      currentPage <= TMDB_MAX_PAGE &&
+      validItems.length < maxItems
+    ) {
       // Use TMDB Discover with release type filter for Digital (4) or Physical (5)
       const discoverResult = await tmdbClient.getDiscoverMovies({
         sortBy: 'popularity.desc',
@@ -1004,7 +1009,11 @@ export async function fetchTmdbComingSoonShows(
     let currentPage = 1;
     let hasMorePages = true;
 
-    while (hasMorePages && validItems.length < maxItems) {
+    while (
+      hasMorePages &&
+      currentPage <= TMDB_MAX_PAGE &&
+      validItems.length < maxItems
+    ) {
       const discoverResult = await tmdbClient.getDiscoverTv({
         sortBy: 'popularity.desc',
         page: currentPage,
@@ -1059,7 +1068,11 @@ export async function fetchTmdbComingSoonShows(
       currentPage = 1;
       hasMorePages = true;
 
-      while (hasMorePages && validItems.length < maxItems) {
+      while (
+        hasMorePages &&
+        currentPage <= TMDB_MAX_PAGE &&
+        validItems.length < maxItems
+      ) {
         const discoverResult = await tmdbClient.getDiscoverTv({
           sortBy: 'popularity.desc',
           page: currentPage,
