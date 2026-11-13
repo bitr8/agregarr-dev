@@ -34,6 +34,9 @@ import type { CollectionConfig } from '@server/lib/settings';
 import { getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 
+// TMDB rejects page numbers above 500 with a 400
+const TMDB_MAX_PAGE = 500;
+
 // TmdbSourceData interface is now imported from types.ts
 
 /** Type for individual filter within a group */
@@ -141,6 +144,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               }
             }
             currentPage++;
+            if (currentPage > TMDB_MAX_PAGE) {
+              hasMorePages = false;
+            }
           }
 
           // Check if we have enough data - stop if we have 10x maxItems (safety buffer)
@@ -207,6 +213,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               }
             }
             currentPage++;
+            if (currentPage > TMDB_MAX_PAGE) {
+              hasMorePages = false;
+            }
           }
 
           if (
@@ -272,6 +281,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               }
             }
             currentPage++;
+            if (currentPage > TMDB_MAX_PAGE) {
+              hasMorePages = false;
+            }
           }
 
           if (
@@ -362,6 +374,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
             }
 
             currentPage++;
+            if (currentPage > TMDB_MAX_PAGE) {
+              hasMorePages = false;
+            }
           }
 
           tmdbData.push(...allItems);
@@ -397,6 +412,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               }
 
               currentPage++;
+              if (currentPage > TMDB_MAX_PAGE) {
+                hasMorePages = false;
+              }
             }
 
             if (
@@ -465,6 +483,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               }
 
               currentPage++;
+              if (currentPage > TMDB_MAX_PAGE) {
+                hasMorePages = false;
+              }
             }
 
             if (
@@ -882,6 +903,9 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 hasMorePages = false;
               }
               currentPage++;
+              if (currentPage > TMDB_MAX_PAGE) {
+                hasMorePages = false;
+              }
             }
 
             if (
