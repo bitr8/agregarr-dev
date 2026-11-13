@@ -1,9 +1,8 @@
-import { calculateTextLayout } from '@app/components/PosterEditor/TextElement';
 import { fontLoader } from '@app/utils/fontLoader';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Group, Rect, Text } from 'react-konva';
+import { useEffect, useRef, useState } from 'react';
+import { Group, Rect, Shape } from 'react-konva';
 import type { OverlayElement, OverlayTextElementProps } from './types';
 
 interface TextElementComponentProps {
@@ -45,40 +44,38 @@ export const TextElement: React.FC<TextElementComponentProps> = ({
   }, [props.fontFamily]);
 
   // Display text (overlays just have static text)
-  const displayText = props.text || 'Sample Text';
+  const displayText = (props.text || 'Sample Text')
+    .replace(/[\r\n]/g, '')
+    .replace(/[\t ]+/g, ' ')
+    .trim();
 
-  // Calculate text layout
-  const textLayout = useMemo(() => {
-    if (!fontLoaded) {
-      return { finalFontSize: props.fontSize, lines: [], totalHeight: 0 };
+  // Drawn like the server's SVG <text>: one line, text-anchor x, middle baseline at y=50%
+  const anchorX =
+    props.textAlign === 'center'
+      ? element.width / 2
+      : props.textAlign === 'right'
+      ? element.width
+      : 0;
+  const font = `${props.fontStyle === 'italic' ? 'italic ' : ''}${
+    props.fontWeight === 'bold' ? 'bold ' : ''
+  }${props.fontSize}px "${(props.fontFamily || '').replace(/['"]/g, '')}"`;
+
+  const [middleBaseline, setMiddleBaseline] = useState<number>();
+
+  useEffect(() => {
+    const family = (props.fontFamily || '').replace(/'/g, '');
+    let active = true;
+    const readMetrics = () => {
+      if (active) setMiddleBaseline(fontLoader.getMiddleBaseline(family));
+    };
+    readMetrics();
+    if (!fontLoader.isFontLoaded(family)) {
+      fontLoader.waitForFont(family, 30000).then(readMetrics);
     }
-
-    const maxLines =
-      props.maxLines || Math.floor(element.height / props.fontSize);
-    return calculateTextLayout(
-      displayText,
-      element.width,
-      element.height,
-      props.fontSize,
-      maxLines,
-      props.fontFamily,
-      props.fontWeight
-    );
-  }, [
-    displayText,
-    element.width,
-    element.height,
-    props.fontSize,
-    props.maxLines,
-    props.fontFamily,
-    props.fontWeight,
-    fontLoaded,
-  ]);
-
-  const lineHeight = textLayout.finalFontSize * 1.1;
-
-  // Calculate vertical centering
-  const firstLineY = (element.height - textLayout.totalHeight) / 2;
+    return () => {
+      active = false;
+    };
+  }, [props.fontFamily]);
 
   const groupRef = useRef<Konva.Group | null>(null);
 
@@ -157,33 +154,38 @@ export const TextElement: React.FC<TextElementComponentProps> = ({
         listening={false}
       />
 
-      {/* Render text lines */}
-      {fontLoaded &&
-        textLayout.lines.map((line, index) => {
-          // Konva expects fontStyle to include bold (e.g., "bold", "italic", "bold italic")
-          const fontStyle =
-            props.fontWeight === 'bold'
-              ? props.fontStyle === 'italic'
-                ? 'bold italic'
-                : 'bold'
-              : props.fontStyle;
-
-          return (
-            <Text
-              key={`line-${index}`}
-              x={0}
-              y={firstLineY + index * lineHeight}
-              text={line}
-              fontSize={textLayout.finalFontSize}
-              fontFamily={props.fontFamily}
-              fontStyle={fontStyle}
-              fill={props.color}
-              align={props.textAlign}
-              width={element.width}
-              listening={false}
-            />
-          );
-        })}
+      {/* Single line, centred and clipped to the box, as the server renders it */}
+      {fontLoaded && (
+        <Group
+          clipX={0}
+          clipY={0}
+          clipWidth={element.width}
+          clipHeight={element.height}
+          listening={false}
+        >
+          <Shape
+            width={element.width}
+            height={element.height}
+            listening={false}
+            sceneFunc={(context) => {
+              context.setAttr('font', font);
+              context.setAttr('fillStyle', props.color);
+              context.setAttr('textAlign', props.textAlign || 'left');
+              if (middleBaseline === undefined) {
+                context.setAttr('textBaseline', 'middle');
+                context.fillText(displayText, anchorX, element.height / 2);
+              } else {
+                context.setAttr('textBaseline', 'alphabetic');
+                context.fillText(
+                  displayText,
+                  anchorX,
+                  element.height / 2 + middleBaseline * props.fontSize
+                );
+              }
+            }}
+          />
+        </Group>
+      )}
     </Group>
   );
 };

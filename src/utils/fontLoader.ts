@@ -4,8 +4,39 @@ interface FontInfo {
   fontUrl: string;
 }
 
+// Where librsvg puts dominant-baseline="middle": strikeout position + half its size, in ems
+export function readMiddleBaseline(buffer: ArrayBuffer): number | undefined {
+  try {
+    const view = new DataView(buffer);
+    const numTables = view.getUint16(4);
+    let head = -1;
+    let os2 = -1;
+    for (let i = 0; i < numTables; i++) {
+      const rec = 12 + i * 16;
+      const tag = String.fromCharCode(
+        view.getUint8(rec),
+        view.getUint8(rec + 1),
+        view.getUint8(rec + 2),
+        view.getUint8(rec + 3)
+      );
+      if (tag === 'head') head = view.getUint32(rec + 8);
+      if (tag === 'OS/2') os2 = view.getUint32(rec + 8);
+    }
+    if (head < 0 || os2 < 0) return undefined;
+    const unitsPerEm = view.getUint16(head + 18);
+    const strikeoutSize = view.getInt16(os2 + 26);
+    const strikeoutPosition = view.getInt16(os2 + 28);
+    if (!unitsPerEm || strikeoutPosition <= 0 || strikeoutPosition > unitsPerEm)
+      return undefined;
+    return (strikeoutPosition + strikeoutSize / 2) / unitsPerEm;
+  } catch {
+    return undefined;
+  }
+}
+
 class FontLoader {
   private loadedFonts = new Set<string>();
+  private middleBaselines = new Map<string, number>();
   private fontPromises = new Map<string, Promise<void>>();
 
   /**
@@ -36,8 +67,13 @@ class FontLoader {
     family: string,
     fontUrl: string
   ): Promise<void> {
-    // Create @font-face declaration
-    const fontFace = new FontFace(family, `url(${fontUrl})`);
+    const response = await fetch(fontUrl);
+    if (!response.ok) throw new Error(`Font fetch failed: ${response.status}`);
+    const buffer = await response.arrayBuffer();
+    const middle = readMiddleBaseline(buffer);
+    if (middle !== undefined) this.middleBaselines.set(family, middle);
+
+    const fontFace = new FontFace(family, buffer);
 
     // Load the font
     await fontFace.load();
@@ -62,6 +98,10 @@ class FontLoader {
    */
   isFontLoaded(family: string): boolean {
     return this.loadedFonts.has(family);
+  }
+
+  getMiddleBaseline(family: string): number | undefined {
+    return this.middleBaselines.get(family);
   }
 
   /**
