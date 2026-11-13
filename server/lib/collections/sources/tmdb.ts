@@ -35,6 +35,9 @@ import type { CollectionConfig } from '@server/lib/settings';
 import { getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 
+// Same vote floors as TMDB's own Top Rated lists
+const TOP_RATED_MIN_VOTES = { movie: '300', tv: '200' };
+
 // TmdbSourceData interface is now imported from types.ts
 
 /** Type for individual filter within a group */
@@ -237,6 +240,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
             if (mediaType === 'movie') {
               const data = await this.tmdbClient.getDiscoverMovies({
                 sortBy: 'vote_average.desc',
+                voteCountGte: TOP_RATED_MIN_VOTES.movie,
                 page: currentPage,
               });
 
@@ -259,6 +263,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
             if (mediaType === 'tv') {
               const data = await this.tmdbClient.getDiscoverTv({
                 sortBy: 'vote_average.desc',
+                voteCountGte: TOP_RATED_MIN_VOTES.tv,
                 page: currentPage,
               });
 

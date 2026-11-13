@@ -104,6 +104,22 @@ describe('TMDB 500-page limit', () => {
     expect(Math.max(...pages)).toBe(500);
   });
 
+  it('asks for the same vote floor as TMDB Top Rated', async () => {
+    await new TmdbCollectionSync().fetchSourceData(cfg('top', '4', 30));
+    expect(discover.mock.calls[0][0]).toMatchObject({
+      sortBy: 'vote_average.desc',
+      voteCountGte: '300',
+    });
+    discover.mockClear();
+    await new TmdbCollectionSync().fetchSourceData(cfg('top', '5', 30));
+    expect(discover.mock.calls[0][0]).toMatchObject({ voteCountGte: '200' });
+  });
+
+  it('leaves Popular without a vote floor', async () => {
+    await new TmdbCollectionSync().fetchSourceData(cfg('popular', '4', 30));
+    expect(discover.mock.calls[0][0]).not.toHaveProperty('voteCountGte');
+  });
+
   it('still stops early when max items is set', async () => {
     await new TmdbCollectionSync().fetchSourceData(cfg('top', '4', 30));
     expect(discover.mock.calls.length).toBeLessThanOrEqual(20);
