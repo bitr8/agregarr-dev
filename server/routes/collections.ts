@@ -12,6 +12,7 @@ import { OriginalsCollectionSync } from '@server/lib/collections/sources/origina
 import { templateEngine } from '@server/lib/collections/utils/TemplateEngine';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import collectionsSync from '@server/lib/collectionsSync';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import type {
   CollectionConfig,
   MultiSourceCombineMode,
@@ -891,6 +892,7 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
 
     settings.plex.collectionConfigs = configs;
     settings.save();
+    rotationGroupService.reassertManagedFields();
 
     // Update individual collection scheduler for edited collections only
     try {
@@ -1349,6 +1351,9 @@ collectionsRoutes.delete('/:id', isAuthenticated(), async (req, res) => {
     // Save updated configs (auto-reordering will handle sort order cleanup)
     settings.plex.collectionConfigs = remainingConfigs;
     settings.save();
+    deletedConfigIds.forEach((cid) =>
+      rotationGroupService.onCollectionDeleted(cid)
+    );
 
     // Deleting a promoted collection leaves a hole in the rank sequence the
     // same way demoting one does - ordering still holds, but the sequence

@@ -1,5 +1,6 @@
 import { defaultHubConfigService } from '@server/lib/collections/services/DefaultHubConfigService';
 import { preExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import type {
   CollectionConfig,
   PlexHubConfig,
@@ -375,6 +376,7 @@ async function handleManualReordering(
   // Single save operation for all changes
   if (finalCollectionConfigs || finalHubConfigs || finalPreExistingConfigs) {
     settings.save();
+    rotationGroupService.reassertManagedFields();
   }
 
   logger.info(`Manual reordering completed for library ${libraryId}`, {
