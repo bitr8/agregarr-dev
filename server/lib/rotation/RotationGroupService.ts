@@ -41,7 +41,6 @@ import type {
   Visibility,
 } from './types';
 import { ALL_HIDDEN, memberKey } from './types';
-import { periodKey } from './engine';
 
 export class RotationValidationError extends Error {}
 export class RotationNotFoundError extends Error {}
@@ -696,7 +695,6 @@ class RotationGroupService {
     }
 
     if (wasEnabled) this.adoptPositions(group);
-    const hadKey = state.periodKey !== null;
     group.state = planRotation({
       group,
       eligibility: this.eligibilityMap(group, now),
@@ -704,15 +702,6 @@ class RotationGroupService {
       toLocal,
       rng: Math.random,
     }).state;
-    if (!hadKey && group.state.periodKey === null) {
-      group.state.periodKey = periodKey(
-        group.interval,
-        group.weekday,
-        toLocal(now),
-        undefined,
-        group.state
-      );
-    }
     return { group, restore };
   }
 
