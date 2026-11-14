@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import Select from 'react-select';
 import useSWR from 'swr';
+import { isOperatorInvalidForField } from './conditionOperators';
 import { CONDITION_FIELD_CATEGORIES } from './types';
 
 interface ArrTag {
@@ -262,12 +263,15 @@ const RuleItem: React.FC<RuleItemProps> = ({
     const sanitizeKey = `${field}-${operator}`;
     if (lastSanitizedKey.current === sanitizeKey) return;
 
-    const numericOnlyOperators = ['gt', 'gte', 'lt', 'lte'];
+    const isSavedBooleanExists = isBoolean && operator === 'exists';
     const isInvalid =
-      (!isNumeric && numericOnlyOperators.includes(operator)) ||
-      (isBoolean && !['eq', 'neq'].includes(operator)) ||
-      (isCollectionField && !['eq', 'neq'].includes(operator)) ||
-      (isPlexLabels && !['eq', 'neq'].includes(operator));
+      !isSavedBooleanExists &&
+      isOperatorInvalidForField(operator, {
+        isNumeric,
+        isBoolean,
+        isCollection: isCollectionField,
+        isPlexLabels,
+      });
 
     if (isInvalid) {
       lastSanitizedKey.current = sanitizeKey;
@@ -307,14 +311,12 @@ const RuleItem: React.FC<RuleItemProps> = ({
           const isNewFieldCollection = newField === 'collection';
 
           // Determine if current operator is valid for new field type
-          const numericOnlyOperators = ['gt', 'gte', 'lt', 'lte'];
-          const isNewFieldPlexLabels = newField === 'plexLabels';
-          const isCurrentOperatorInvalid =
-            (!isNewFieldNumeric && numericOnlyOperators.includes(operator)) ||
-            (isNewFieldBoolean &&
-              !['eq', 'neq', 'exists'].includes(operator)) ||
-            (isNewFieldCollection && !['eq', 'neq'].includes(operator)) ||
-            (isNewFieldPlexLabels && !['eq', 'neq'].includes(operator));
+          const isCurrentOperatorInvalid = isOperatorInvalidForField(operator, {
+            isNumeric: isNewFieldNumeric,
+            isBoolean: isNewFieldBoolean,
+            isCollection: isNewFieldCollection,
+            isPlexLabels: newField === 'plexLabels',
+          });
 
           // Reset to appropriate defaults when changing field
           onChange({
@@ -389,11 +391,13 @@ const RuleItem: React.FC<RuleItemProps> = ({
             <option value="ends">{intl.formatMessage(messages.opEnds)}</option>
           </>
         )}
-        {!isCollectionField && !isPlexLabels && (
-          <option value="exists">
-            {intl.formatMessage(messages.opExists)}
-          </option>
-        )}
+        {!isCollectionField &&
+          !isPlexLabels &&
+          (!isBoolean || isExistsOperator) && (
+            <option value="exists">
+              {intl.formatMessage(messages.opExists)}
+            </option>
+          )}
       </select>
 
       {/* Value Input */}
