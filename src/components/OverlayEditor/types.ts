@@ -612,11 +612,6 @@ export const AVAILABLE_VARIABLES = {
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
     { field: 'episodeNumber', label: 'Episode Number', example: '16' },
-    {
-      field: 'episodeLabel',
-      label: 'Episode Label',
-      example: 'SERIES FINALE',
-    },
   ],
   status: [
     {
@@ -921,7 +916,6 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
     { field: 'episodeNumber', label: 'Episode Number', example: '16' },
-    { field: 'episodeLabel', label: 'Episode Label', example: 'SERIES FINALE' },
     { field: 'isMonitored', label: 'Is Monitored', example: 'true' },
     { field: 'inRadarr', label: 'In Radarr', example: 'true' },
     { field: 'inSonarr', label: 'In Sonarr', example: 'true' },
@@ -1146,7 +1140,6 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     seasonsAvailable: 1,
     seasonNumber: 5,
     episodeNumber: 16,
-    episodeLabel: 'SERIES FINALE',
     network: 'AMC',
     genre: 'Drama',
     runtime: 47,

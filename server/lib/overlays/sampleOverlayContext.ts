@@ -92,7 +92,6 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   // Episode information
   seasonNumber: 2,
   episodeNumber: 5,
-  episodeLabel: 'EPISODE 5',
 
   // Monitoring status
   isMonitored: true,
