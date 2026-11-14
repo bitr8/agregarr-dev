@@ -1,5 +1,6 @@
 import messages from '@app/components/Rotation/messages';
 import type {
+  GroupInput,
   MemberSummary,
   RotationGroupStatus,
   RotationInterval,
@@ -17,6 +18,19 @@ export const intervalLabels: Record<
   daily: { label: 'intervalDaily', help: 'intervalDailyHelp' },
   weekly: { label: 'intervalWeekly', help: 'intervalWeeklyHelp' },
   monthly_random: { label: 'intervalMonthly', help: 'intervalMonthlyHelp' },
+};
+
+export const draftProblem = (
+  draft: GroupInput
+): 'name' | 'library' | 'surface' | 'members' | null => {
+  if (draft.name.trim().length === 0) return 'name';
+  if (!draft.libraryId) return 'library';
+  const s = draft.surfaces;
+  if (!s.usersHome && !s.serverOwnerHome && !s.libraryRecommended) {
+    return 'surface';
+  }
+  if (draft.members.length === 0) return 'members';
+  return null;
 };
 
 export const isSyncRunningError = (error: unknown): boolean =>

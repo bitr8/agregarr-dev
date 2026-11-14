@@ -12,6 +12,7 @@ import RadioCards from '@app/components/Rotation/RadioCards';
 import SlotCountField from '@app/components/Rotation/SlotCountField';
 import useSyncRunning from '@app/components/Rotation/useSyncRunning';
 import {
+  draftProblem,
   intervalLabels,
   isSyncRunningError,
   nextChangeSentence,
@@ -274,6 +275,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
 
   const openPreview = async () => {
     setFormError(null);
+    if (!reportProblem()) return;
     setWorking('preview');
     const result = await fetchPreview();
     setWorking(null);
@@ -292,27 +294,26 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
     el?.focus({ preventScroll: true });
   };
 
-  const save = async () => {
+  const reportProblem = (): boolean => {
     setTriedSave(true);
-    setFormError(null);
-    if (nameMissing) {
+    const problem = draftProblem(draft);
+    if (problem === 'name') {
       focusField('rotation-name');
-      return;
-    }
-    if (!libraryId) {
+    } else if (problem === 'library') {
       setFormError(intl.formatMessage(messages.libraryRequired));
       focusField('rotation-library');
-      return;
-    }
-    if (noSurface) {
+    } else if (problem === 'surface') {
       focusField('rotation-surface-usersHome');
-      return;
-    }
-    if (count === 0) {
+    } else if (problem === 'members') {
       setFormError(intl.formatMessage(messages.membersRequired));
       focusField('rotation-member-search');
-      return;
     }
+    return problem === null;
+  };
+
+  const save = async () => {
+    setFormError(null);
+    if (!reportProblem()) return;
     setWorking('save');
     try {
       if (!previewSeen && count > 0) {
