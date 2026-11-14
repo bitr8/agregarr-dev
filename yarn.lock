@@ -2919,10 +2919,10 @@
     lodash "^4.17.4"
     read-pkg-up "^7.0.0"
 
-"@sidekickicons/react@^0.15.0":
-  version "0.15.0"
-  resolved "https://registry.yarnpkg.com/@sidekickicons/react/-/react-0.15.0.tgz#593ec3d8617c16a137fa496b28e27d88d8ec7099"
-  integrity sha512-z59NZ/Pb58aqVDrSuvpDTscudkKU4DFrhawA05TU+zRpwJYiGP21qXgAcgPeHNm38FJm/lygw8ZVCHI7kYr0Sg==
+"@sidekickicons/react@^0.21.0":
+  version "0.21.0"
+  resolved "https://registry.yarnpkg.com/@sidekickicons/react/-/react-0.21.0.tgz#c75765a8d8ee4c87822cce2a0c60f11b6d25bf1b"
+  integrity sha512-0nhEW736j2mwI+kE2FXBI1VaOLeqMf3vLbbKBFE+N0+hEYHiKsibp4CJtDCAToCXhqPcsKZgaMcom0Wd1PxY/g==
 
 "@so-ric/colorspace@^1.1.6":
   version "1.1.6"
@@ -5253,10 +5253,10 @@ cron-parser@^4.2.0:
   dependencies:
     luxon "^3.2.1"
 
-cron-parser@^5.10.2:
-  version "5.10.2"
-  resolved "https://registry.yarnpkg.com/cron-parser/-/cron-parser-5.10.2.tgz#a88afc3f47cd600f05e1193efa3d8535faaccf2b"
-  integrity sha512-JfAYMY0LZaWQTuict8PhtF/ksSnq8xefSDmQUnnoqvkPYkU/y3UP0DTWzJKFBz0P1IXsDG8q0vY3zHkoFZOhvw==
+cron-parser@^5.10.3:
+  version "5.10.3"
+  resolved "https://registry.yarnpkg.com/cron-parser/-/cron-parser-5.10.3.tgz#7e54d9002c9142a5aa3440bf16030cdc513d60a5"
+  integrity sha512-Fwlmlgiyoj5e7XDCy5T3ueFd3imgt714k7xjAzhkOBUrUgQxWtsjS7kWSEN3efDX34bebxBJAmPoCSisHvjlpw==
   dependencies:
     luxon "^3.7.2"
 
@@ -12719,10 +12719,10 @@ ts-node@10.9.2, ts-node@^10.8.1:
     v8-compile-cache-lib "^3.0.1"
     yn "3.1.1"
 
-tsc-alias@1.9.9:
-  version "1.9.9"
-  resolved "https://registry.yarnpkg.com/tsc-alias/-/tsc-alias-1.9.9.tgz#683d2b0eb01427e341d96648ccafbb1155f9cdc4"
-  integrity sha512-TxUi+OyqQXRwSMUQaB0pqM89VbOEvL/6RkgQa2LrxNvbhCmkQvrp8NX7VyMW9KYVLGlwICxrLwNv3Ik4vtIQxw==
+tsc-alias@1.9.10:
+  version "1.9.10"
+  resolved "https://registry.yarnpkg.com/tsc-alias/-/tsc-alias-1.9.10.tgz#e2bedb8e2421b20bc2505eef19d9208faefc4337"
+  integrity sha512-dsZvDB/wgAtRPFDHPYy7X7uqKFR4jJ7VB/2ndPGZQkIMQREz8q74fFsMZL4UmCbUztXhxoA1brKfqW7XzQeMqA==
   dependencies:
     chokidar "^3.5.3"
     commander "^9.0.0"
