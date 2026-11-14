@@ -1,0 +1,80 @@
+import messages from '@app/components/Rotation/messages';
+import type {
+  MemberSummary,
+  RotationInterval,
+  Visibility,
+} from '@server/interfaces/api/rotationInterfaces';
+import axios from 'axios';
+import type { IntlShape } from 'react-intl';
+
+export const intervalLabels: Record<
+  RotationInterval,
+  { label: keyof typeof messages; help: keyof typeof messages }
+> = {
+  every_sync: { label: 'intervalEverySync', help: 'intervalEverySyncHelp' },
+  '12h': { label: 'interval12h', help: 'interval12hHelp' },
+  daily: { label: 'intervalDaily', help: 'intervalDailyHelp' },
+  weekly: { label: 'intervalWeekly', help: 'intervalWeeklyHelp' },
+  monthly_random: { label: 'intervalMonthly', help: 'intervalMonthlyHelp' },
+};
+
+export const isSyncRunningError = (error: unknown): boolean =>
+  axios.isAxiosError(error) &&
+  error.response?.status === 409 &&
+  error.response.data?.code === 'SYNC_RUNNING';
+
+export const surfacePlaces = (intl: IntlShape, surfaces: Visibility) => {
+  const places: string[] = [];
+  if (surfaces.usersHome) {
+    places.push(intl.formatMessage(messages.usersHome));
+  }
+  if (surfaces.serverOwnerHome) {
+    places.push(intl.formatMessage(messages.serverOwnerHome));
+  }
+  if (surfaces.libraryRecommended) {
+    places.push(intl.formatMessage(messages.libraryRecommended));
+  }
+  return intl.formatList(places, { type: 'conjunction' });
+};
+
+export const formatDay = (intl: IntlShape, iso: string) =>
+  intl.formatDate(iso, { weekday: 'short', day: 'numeric', month: 'short' });
+
+export const formatWhen = (intl: IntlShape, iso: string) =>
+  `${intl.formatTime(iso, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}, ${formatDay(intl, iso)}`;
+
+export const formatRelative = (intl: IntlShape, iso: string) => {
+  const minutes = Math.round((new Date(iso).getTime() - Date.now()) / 60000);
+  const abs = Math.abs(minutes);
+  if (abs < 60) {
+    return intl.formatRelativeTime(minutes, 'minute', { numeric: 'auto' });
+  }
+  if (abs < 60 * 48) {
+    return intl.formatRelativeTime(Math.round(minutes / 60), 'hour');
+  }
+  return intl.formatRelativeTime(Math.round(minutes / 1440), 'day');
+};
+
+export const weekdayName = (intl: IntlShape, weekday: number) =>
+  intl.formatDate(new Date(2024, 0, 7 + weekday), { weekday: 'long' });
+
+export const reasonText = (
+  intl: IntlShape,
+  reason?: MemberSummary['reason']
+): string | null => {
+  switch (reason) {
+    case 'outside_schedule':
+      return intl.formatMessage(messages.reasonOutsideSchedule);
+    case 'not_in_plex':
+      return intl.formatMessage(messages.reasonNotInPlex);
+    case 'kind_not_allowed':
+      return intl.formatMessage(messages.reasonKindNotAllowed);
+    case 'unbound':
+      return intl.formatMessage(messages.reasonUnbound);
+    default:
+      return null;
+  }
+};
