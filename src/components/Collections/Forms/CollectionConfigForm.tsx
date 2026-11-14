@@ -4772,7 +4772,7 @@ const CollectionFormConfigForm = ({
                                             id="placeholderDaysAhead"
                                             name="placeholderDaysAhead"
                                             min="1"
-                                            placeholder="360"
+                                            placeholder="90"
                                             className="mt-1 w-24 rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white"
                                           />
                                           <p className="mt-1 text-xs text-gray-400">
