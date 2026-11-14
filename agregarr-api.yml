@@ -3798,6 +3798,10 @@ components:
           enum: [leave, strip, add]
           description: '" Collection" suffix on the Plex title. leave (default) never renames; strip removes it; add appends it.'
           example: 'leave'
+        resetSortTitle:
+          type: boolean
+          description: 'Clears the sort title override and hands the sort title back to Agregarr on the next sync, including one set outside Agregarr. Not stored.'
+          example: true
         collectionRatingKey:
           type: string
           description: 'Plex collection rating key'

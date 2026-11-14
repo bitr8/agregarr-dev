@@ -50,6 +50,12 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
     delete req.body.sortTitleOverrideIsFullTitle;
     delete req.body.sortTitleResetRequested;
     delete req.body.collectionSuffixRenameFailed;
+    // Bulk Edit's reset also takes back a sort title set outside Agregarr, which has no override to clear.
+    const resetSortTitle = req.body.resetSortTitle === true;
+    delete req.body.resetSortTitle;
+    if (resetSortTitle) {
+      req.body.sortTitleOverride = '';
+    }
     // The name comes from Plex and the suffix rename, so the form's loaded copy can be stale.
     delete req.body.name;
     if (
@@ -75,6 +81,7 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
 
     // One-shot: the sync that acts on it runs later and clears it.
     if (
+      resetSortTitle ||
       isSortTitleResetRequest(
         req.body.sortTitleOverride,
         existingConfig?.sortTitleOverride
