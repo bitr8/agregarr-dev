@@ -15,6 +15,7 @@ import {
   TrashIcon,
   VariableIcon,
 } from '@heroicons/react/24/outline';
+import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
 import { useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
@@ -714,16 +715,14 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                   <label className="mb-1 block text-xs text-stone-400">
                     Field
                     <select
-                      value={scale.field}
+                      value={colorScaleContextField(scale.field)}
                       onChange={(e) => updateScale({ field: e.target.value })}
                       className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
                     >
                       <option value="imdbRating">IMDb Rating</option>
                       <option value="tmdbRating">TMDB Rating</option>
-                      <option value="rtCriticRating">RT Critic Score</option>
-                      <option value="rtAudienceRating">
-                        RT Audience Score
-                      </option>
+                      <option value="rtCriticsScore">RT Critic Score</option>
+                      <option value="rtAudienceScore">RT Audience Score</option>
                     </select>
                   </label>
                   <div className="flex gap-2">

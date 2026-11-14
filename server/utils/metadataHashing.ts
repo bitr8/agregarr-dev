@@ -5,6 +5,7 @@ import type {
   OverlayTileElementProps,
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
+import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
 import { createHash } from 'crypto';
 
 /**
@@ -110,7 +111,7 @@ export function extractUsedContextFields(
       if (element.type === 'tile') {
         const props = element.properties as OverlayTileElementProps;
         if (props.colorScale?.field) {
-          usedFields.add(props.colorScale.field);
+          usedFields.add(colorScaleContextField(props.colorScale.field));
         }
       }
       if (element.condition) {
