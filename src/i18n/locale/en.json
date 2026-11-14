@@ -1363,6 +1363,7 @@
   "components.Posters.showingItems": "Showing {shown} of {total} retained items",
   "components.Posters.sourceColorsExportError": "Failed to export source colors",
   "components.Posters.sourceColorsExportSuccess": "Source colors exported successfully",
+  "components.Posters.stopRequested": "Stop requested for this library",
   "components.Posters.success": "Success",
   "components.Posters.successCount": "{count} success",
   "components.Posters.successful": "successful",
