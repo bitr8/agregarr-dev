@@ -72,7 +72,7 @@ const PreviewPanel = ({ preview, caption, onClose }: PreviewPanelProps) => {
       <SlotShelf
         caption={intl.formatMessage(messages.previewNow)}
         slots={preview.now.map((occupant, i) => ({
-          index: i + 1,
+          index: i,
           slotId: occupant.key,
           occupant,
         }))}
