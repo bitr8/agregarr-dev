@@ -333,6 +333,65 @@ describe('planRotation basics', () => {
     expect(again.changed).toBe(false);
   });
 
+  it('a stored key from another interval is adopted, not rotated on', () => {
+    const g = mkGroup(8, 3, { interval: 'every_sync' });
+    const a = planRotation(
+      input(g, '2026-03-10T10:00:00Z', { syncRunId: 'r1' })
+    );
+    const b = planRotation(
+      input(withState(g, a.state), '2026-03-10T11:00:00Z', { syncRunId: 'r2' })
+    );
+    expect(b.state.periodKey).toBe('sync:r2');
+    const daily = { ...g, interval: 'daily' as const };
+    const c = planRotation(
+      input(withState(daily, b.state), '2026-03-10T12:00:00Z', {
+        syncRunId: 'r3',
+      })
+    );
+    expect(c.rotated).toBe(false);
+    expect(c.state.periodKey).toBe('2026-03-10');
+    expect(occupants(c.state)).toEqual(occupants(b.state));
+    const d = planRotation(
+      input(withState(daily, c.state), '2026-03-11T00:30:00Z', {
+        syncRunId: 'r4',
+      })
+    );
+    expect(d.rotated).toBe(true);
+  });
+
+  it('monthly day beyond the month length still rotates on the last day', () => {
+    const g = mkGroup(8, 3, { interval: 'monthly_random' });
+    const filled = planRotation(input(g, '2026-03-10T10:00:00Z')).state;
+    const state = {
+      ...filled,
+      periodKey: '2026-03',
+      monthly: { month: '2026-04', day: 31 },
+    };
+    const r = planRotation(input(withState(g, state), '2026-04-30T10:00:00Z'));
+    expect(r.rotated).toBe(true);
+    expect(r.state.periodKey).toBe('2026-04');
+  });
+
+  it('shuffled: a dry run across the cycle boundary matches the real passes whatever rng is injected', () => {
+    const g = mkGroup(8, 3, { order: 'shuffled' });
+    const start = planRotation(input(g, '2026-03-10T10:00:00Z')).state;
+    const dry = simulate(
+      input(withState(g, start), '2026-03-10T10:00:00Z', { rng: () => 0.1 }),
+      6
+    );
+    let real = start;
+    for (let i = 0; i < 6; i++) {
+      real = planRotation(
+        input(withState(g, real), '2026-03-10T10:00:00Z', {
+          force: true,
+          rng: () => 0.9,
+        })
+      ).state;
+      expect(occupants(real), `step ${i}`).toEqual(occupants(dry[i]));
+      expect(real.queue, `queue ${i}`).toEqual(dry[i].queue);
+    }
+  });
+
   it('every_sync with empty slots fills without rotating', () => {
     const g = mkGroup(8, 3, { interval: 'every_sync' });
     const first = planRotation(

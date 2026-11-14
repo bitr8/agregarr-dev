@@ -14,6 +14,27 @@ import type {
 const HOUR_MS = 3600000;
 const SEARCH_HOURS = 24 * 45;
 const STORED_KEY = /^(sync:.+|\d{4}-\d{2}(-\d{2}[ap]?)?)$/;
+const KEY_FORMAT: Record<RotationInterval, RegExp> = {
+  every_sync: /^sync:.+$/,
+  '12h': /^\d{4}-\d{2}-\d{2}[ap]$/,
+  daily: /^\d{4}-\d{2}-\d{2}$/,
+  weekly: /^\d{4}-\d{2}-\d{2}$/,
+  monthly_random: /^\d{4}-\d{2}$/,
+};
+
+/** Same group and cycle always shuffle the same way, so a dry run matches the real pass. */
+function seededRng(seed: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
 
 const p2 = (n: number): string => String(n).padStart(2, '0');
 const ymd = (y: number, m: number, d: number): string =>
@@ -207,14 +228,16 @@ export function planRotation(input: PlanInput): PlanResult {
   // 3. due?
   const key = periodKey(group.interval, group.weekday, parts, syncRunId, state);
   const stored = before.periodKey;
-  const storedUsable = typeof stored === 'string' && STORED_KEY.test(stored);
+  const storedUsable =
+    typeof stored === 'string' &&
+    (KEY_FORMAT[group.interval] ?? STORED_KEY).test(stored);
   let due = false;
   if (force) {
     due = true;
   } else if (key !== null && storedUsable && key !== stored) {
     due =
       group.interval !== 'monthly_random' ||
-      parts.d >= (state.monthly?.day ?? Infinity);
+      parts.d >= Math.min(state.monthly?.day ?? Infinity, parts.daysInMonth);
   } else if (
     group.interval === 'every_sync' &&
     key !== null &&
@@ -288,7 +311,10 @@ export function planRotation(input: PlanInput): PlanResult {
     if (group.order === 'shuffled') {
       const tail = Math.min(slotCount, queue.length);
       const head = queue.slice(0, queue.length - tail);
-      nextQueue = [...shuffle(head, rng), ...queue.slice(queue.length - tail)];
+      nextQueue = [
+        ...shuffle(head, seededRng(`${group.id}:${cycle}`)),
+        ...queue.slice(queue.length - tail),
+      ];
     }
   }
 
