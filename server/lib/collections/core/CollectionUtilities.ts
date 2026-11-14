@@ -2954,7 +2954,11 @@ export function incrementCollectionSyncCounter(configId: string): number {
     const extendedConfig = existingConfig as typeof existingConfig & {
       syncCounter?: number;
     };
-    const newCounter = (extendedConfig.syncCounter || 0) + 1;
+    // An absent counter means never synced: stay on the first source
+    const newCounter =
+      extendedConfig.syncCounter === undefined
+        ? 0
+        : extendedConfig.syncCounter + 1;
 
     // Update config with new counter
     const updatedConfig = {
