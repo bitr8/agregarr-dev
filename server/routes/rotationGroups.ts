@@ -3,6 +3,7 @@ import type {
   GroupInput,
   OwnSettingsPatch,
   RotateResult,
+  Visibility,
 } from '@server/interfaces/api/rotationInterfaces';
 import { getAdminUser } from '@server/lib/collections/core/CollectionUtilities';
 import collectionsSync from '@server/lib/collectionsSync';
@@ -129,6 +130,72 @@ function validatePreviewInput(body: unknown): string | null {
   return null;
 }
 
+function toGroupInput(body: Record<string, unknown>): GroupInput {
+  const input = body as unknown as GroupInput;
+  const dto: GroupInput = {
+    name: input.name,
+    libraryId: input.libraryId,
+    enabled: input.enabled,
+    slotCount: input.slotCount,
+    interval: input.interval,
+    order: input.order,
+    surfaces: {
+      usersHome: input.surfaces.usersHome,
+      serverOwnerHome: input.surfaces.serverOwnerHome,
+      libraryRecommended: input.surfaces.libraryRecommended,
+    },
+    members: input.members.map((m) => ({
+      kind: m.kind,
+      configId: m.configId,
+    })),
+  };
+  if (input.weekday !== undefined) dto.weekday = input.weekday;
+  return dto;
+}
+
+function toVisibility(v: unknown): Visibility {
+  const o = v as Visibility;
+  return {
+    usersHome: o.usersHome,
+    serverOwnerHome: o.serverOwnerHome,
+    libraryRecommended: o.libraryRecommended,
+  };
+}
+
+function toPatch(body: Record<string, unknown>): OwnSettingsPatch {
+  const patch: OwnSettingsPatch = {};
+  if (body.visibilityConfig !== undefined) {
+    patch.visibilityConfig = toVisibility(body.visibilityConfig);
+  }
+  if (body.inactiveVisibilityConfig !== undefined) {
+    patch.inactiveVisibilityConfig = toVisibility(
+      body.inactiveVisibilityConfig
+    );
+  }
+  if (body.randomizeHomeOrder !== undefined) {
+    patch.randomizeHomeOrder = body.randomizeHomeOrder as boolean;
+  }
+  return patch;
+}
+
+function plexOrigin(): string {
+  const { plex } = getSettings();
+  return new URL(`${plex.useSsl ? 'https' : 'http'}://${plex.ip}:${plex.port}`)
+    .origin;
+}
+
+const POSTER_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const POSTER_MAX_BYTES = 10 * 1024 * 1024;
+
+function isTrustedPosterUrl(url: string): boolean {
+  if (url.startsWith('/')) return true;
+  try {
+    return new URL(url).origin === plexOrigin();
+  } catch {
+    return false;
+  }
+}
+
 async function getPlexClient(): Promise<PlexAPI> {
   const admin = await getAdminUser();
   if (!admin?.plexToken) throw new Error('No admin Plex token found');
@@ -151,9 +218,12 @@ rotationGroupsRoutes.post('/preview', async (req, res) => {
   const message = validatePreviewInput(req.body);
   if (message) return res.status(400).json({ message });
   try {
-    return res
-      .status(200)
-      .json(await service.previewDraft(req.body as GroupInput));
+    return res.status(200).json(
+      await service.previewDraft({
+        ...toGroupInput(req.body),
+        ...(typeof req.body.id === 'string' ? { id: req.body.id } : {}),
+      })
+    );
   } catch (error) {
     return fail(res, error, 'preview rotation group');
   }
@@ -219,7 +289,7 @@ rotationGroupsRoutes.patch('/membership/:kind/:configId', (req, res) => {
         service.patchOwn(
           kind as 'collection' | 'preExisting',
           configId,
-          body as OwnSettingsPatch
+          toPatch(body)
         )
       );
   } catch (error) {
@@ -235,15 +305,24 @@ rotationGroupsRoutes.get('/poster/:ratingKey', async (req, res) => {
     }
     const plex = await getPlexClient();
     const url = await plex.getCurrentPosterUrl(ratingKey);
-    if (!url) return res.status(404).end();
-    const upstream = await axios.get<ArrayBuffer>(url, {
-      responseType: 'arraybuffer',
-      timeout: 15000,
-    });
-    res.setHeader(
-      'Content-Type',
-      String(upstream.headers['content-type'] || 'image/jpeg')
+    if (!url || !isTrustedPosterUrl(url)) return res.status(404).end();
+    const upstream = await axios.get<ArrayBuffer>(
+      url.startsWith('/') ? `${plexOrigin()}${url}` : url,
+      {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+        maxRedirects: 0,
+        maxContentLength: POSTER_MAX_BYTES,
+        maxBodyLength: POSTER_MAX_BYTES,
+      }
     );
+    const type = String(upstream.headers['content-type'] || '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (!POSTER_TYPES.includes(type)) return res.status(404).end();
+    res.setHeader('Content-Type', type);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).send(Buffer.from(upstream.data));
   } catch (error) {
@@ -261,7 +340,7 @@ rotationGroupsRoutes.post('/', async (req, res) => {
   const message = validateGroupInput(req.body);
   if (message) return res.status(400).json({ message });
   try {
-    const group = await service.createGroup(req.body as GroupInput);
+    const group = await service.createGroup(toGroupInput(req.body));
     rotationApply.kick();
     return res.status(201).json(group);
   } catch (error) {
@@ -328,7 +407,7 @@ rotationGroupsRoutes.put('/:id', async (req, res) => {
   try {
     const group = await service.updateGroup(
       req.params.id,
-      req.body as GroupInput
+      toGroupInput(req.body)
     );
     rotationApply.kick();
     return res.status(200).json(group);

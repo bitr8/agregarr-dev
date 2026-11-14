@@ -66,9 +66,21 @@ vi.mock('@server/lib/collectionsSync', () => ({
   },
 }));
 vi.mock('@server/lib/collections/core/CollectionUtilities', () => ({
-  getAdminUser: vi.fn().mockResolvedValue(null),
+  getAdminUser: vi.fn().mockResolvedValue({ plexToken: 'tok' }),
 }));
-vi.mock('@server/api/plexapi', () => ({ default: class {} }));
+const plexMock = vi.hoisted(() => ({ posterUrl: null as string | null }));
+const axiosGet = vi.hoisted(() => vi.fn());
+vi.mock('@server/api/plexapi', () => ({
+  default: class {
+    getCurrentPosterUrl = async () => plexMock.posterUrl;
+  },
+}));
+vi.mock('axios', () => ({ default: { get: axiosGet } }));
+vi.mock('@server/lib/settings', () => ({
+  getSettings: () => ({
+    plex: { useSsl: false, ip: 'plex.test', port: 32400 },
+  }),
+}));
 
 const validInput = () => ({
   name: 'Group One',
@@ -216,6 +228,24 @@ describe('rotation groups routes', () => {
         expect(svc.updateGroup).not.toHaveBeenCalled();
       });
     }
+
+    it('does not pass stray properties to the service', async () => {
+      const body = {
+        ...validInput(),
+        evil: 1,
+        surfaces: { ...validInput().surfaces, extra: true },
+        members: [{ kind: 'collection', configId: 'cfg-a', extra: 1 }],
+      };
+      await call('POST', '/', body);
+      expect(svc.createGroup).toHaveBeenCalledWith(validInput());
+      await call('PATCH', '/membership/collection/cfg-a', {
+        randomizeHomeOrder: true,
+        stash: 'x',
+      });
+      expect(svc.patchOwn).toHaveBeenCalledWith('collection', 'cfg-a', {
+        randomizeHomeOrder: true,
+      });
+    });
 
     it('accepts a valid weekly group', async () => {
       const res = await call('POST', '/', {
@@ -380,7 +410,7 @@ describe('rotation groups routes', () => {
   });
 
   describe('poster', () => {
-    it('404 for non-digit rating keys without asking the service', async () => {
+    it('handler rejects non-digit rating keys without asking the service (the spec pattern answers 400 first in production)', async () => {
       for (const k of ['abc', '12a', '1.5']) {
         expect((await call('GET', `/poster/${k}`)).status, k).toBe(404);
       }
@@ -391,6 +421,50 @@ describe('rotation groups routes', () => {
       svc.isMemberRatingKey.mockReturnValue(false);
       expect((await call('GET', '/poster/123')).status).toBe(404);
       expect(svc.isMemberRatingKey).toHaveBeenCalledWith('123');
+    });
+
+    describe('proxy', () => {
+      const okUrl =
+        'http://plex.test:32400/library/metadata/1/thumb?X-Plex-Token=tok';
+      beforeEach(() => {
+        svc.isMemberRatingKey.mockReturnValue(true);
+        axiosGet.mockReset();
+        plexMock.posterUrl = okUrl;
+      });
+
+      it('streams an allowed image with hardened options', async () => {
+        axiosGet.mockResolvedValue({
+          data: new Uint8Array([1, 2, 3]).buffer,
+          headers: { 'content-type': 'image/png; charset=x' },
+        });
+        const res = await call('GET', '/poster/123');
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe('image/png');
+        expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+        expect(res.headers.get('cache-control')).toBe('private, max-age=300');
+        expect(axiosGet.mock.calls[0][1]).toMatchObject({
+          maxRedirects: 0,
+          timeout: 10000,
+          maxContentLength: 10 * 1024 * 1024,
+          maxBodyLength: 10 * 1024 * 1024,
+        });
+      });
+
+      it('404 for an off-origin poster URL without fetching', async () => {
+        plexMock.posterUrl = 'http://evil.test/poster.png';
+        expect((await call('GET', '/poster/123')).status).toBe(404);
+        expect(axiosGet).not.toHaveBeenCalled();
+      });
+
+      it('404 for a disallowed content type', async () => {
+        for (const type of ['image/svg+xml', 'text/html']) {
+          axiosGet.mockResolvedValue({
+            data: new ArrayBuffer(1),
+            headers: { 'content-type': type },
+          });
+          expect((await call('GET', '/poster/123')).status, type).toBe(404);
+        }
+      });
     });
   });
 });
