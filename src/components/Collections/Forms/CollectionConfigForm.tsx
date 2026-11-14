@@ -10,6 +10,7 @@ import type {
   MultiSourceCombineMode,
   MultiSourceType,
   PlexHubConfig,
+  PreExistingCollectionConfig,
   SonarrMonitorType,
 } from '@app/types/collections';
 import { SMART_COLLECTION_SORT_OPTIONS } from '@app/types/collections';
@@ -109,6 +110,12 @@ const messages = defineMessages({
     'Controls where this collection sorts in Plex. A padded prefix like !020_ places it at that position, and because Agregarr reads the number it keeps the collection in step - promote, demote and drag all still work. Anything Agregarr cannot read as a position is written through verbatim. Clear the field to return to its automatic position.',
   sortTitleGroupHelp:
     "This creates many collections at once, so whatever you type here becomes the shared base for all of them, with each one's own name added after it - a separator, if used, gets this value exactly as typed. The same rules apply as a single collection's Sort Title. Clear the field to drop the shared base, so each collection sorts under its own name again.",
+  collectionSuffix: 'Collection Suffix',
+  collectionSuffixLeave: 'Leave As Is',
+  collectionSuffixStrip: 'Remove " Collection"',
+  collectionSuffixAdd: 'Add " Collection"',
+  collectionSuffixHelp:
+    'Choose to add, remove or leave the " Collection" suffix on the collection. Default: Leave as is.',
   sortTitleEditedInPlex:
     'Edited in Plex as "{value}". Changes here will replace it on sync.',
   overlayConfigWarningTitle: 'No Overlay Templates Configured',
@@ -2180,6 +2187,9 @@ const CollectionFormConfigForm = ({
             (config as CollectionFormConfig).targetUserLabel || '',
           randomizeHomeOrder:
             (config as CollectionFormConfig).randomizeHomeOrder ?? false,
+          collectionSuffixMode:
+            (config as PreExistingCollectionConfig).collectionSuffixMode ??
+            'leave',
           customPoster: (config as CollectionFormConfig).customPoster || '',
           customWallpaper:
             (config as CollectionFormConfig).customWallpaper || '',
@@ -2801,6 +2811,9 @@ const CollectionFormConfigForm = ({
             filterUnwatched: values.filterUnwatched,
             smartCollectionSort: values.smartCollectionSort,
             randomizeHomeOrder: values.randomizeHomeOrder,
+            collectionSuffixMode: isPreExisting
+              ? values.collectionSuffixMode
+              : undefined,
             // Wallpaper, summary, and theme settings
             customWallpaper: values.customWallpaper,
             customSummary: values.customSummary,
@@ -5746,6 +5759,47 @@ const CollectionFormConfigForm = ({
                                       </div>
                                     </div>
                                   )}
+                                {isPreExisting && (
+                                  <div className="form-row">
+                                    <label
+                                      htmlFor="collectionSuffixMode"
+                                      className="text-label"
+                                    >
+                                      {intl.formatMessage(
+                                        messages.collectionSuffix
+                                      )}
+                                    </label>
+                                    <div className="form-input-area">
+                                      <Field
+                                        as="select"
+                                        id="collectionSuffixMode"
+                                        name="collectionSuffixMode"
+                                        className="block w-full rounded-md border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white focus:border-orange-500 focus:outline-none"
+                                      >
+                                        <option value="leave">
+                                          {intl.formatMessage(
+                                            messages.collectionSuffixLeave
+                                          )}
+                                        </option>
+                                        <option value="strip">
+                                          {intl.formatMessage(
+                                            messages.collectionSuffixStrip
+                                          )}
+                                        </option>
+                                        <option value="add">
+                                          {intl.formatMessage(
+                                            messages.collectionSuffixAdd
+                                          )}
+                                        </option>
+                                      </Field>
+                                      <div className="label-tip mt-1">
+                                        {intl.formatMessage(
+                                          messages.collectionSuffixHelp
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}

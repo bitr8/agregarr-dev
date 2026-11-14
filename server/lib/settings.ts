@@ -1,3 +1,4 @@
+import type { CollectionSuffixMode } from '@server/constants/sortTitle';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { defaultHubConfigService } from '@server/lib/collections/services/DefaultHubConfigService';
@@ -446,6 +447,7 @@ export interface PreExistingCollectionConfig {
   sortTitleArticleNormalized?: boolean; // True while this collection's sortTitle is an article-normalized value Agregarr wrote. Lets 'off' restore the natural title on the next sync instead of leaving the previous mode's value stranded
   sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto)
   sortTitleOverrideIsFullTitle?: boolean; // Set when the override was written through the Sort Title field, which accepts a complete title. Absent on anything saved earlier, which always had the collection name appended - see buildSortTitleFromOverride
+  collectionSuffixMode?: CollectionSuffixMode; // " Collection" suffix on the Plex title: absent or 'leave' never renames
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
     usersHome: boolean;

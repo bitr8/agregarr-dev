@@ -25,6 +25,7 @@ import type {
 import {
   agregarrOwnsSortTitle,
   normalizeArticleForDisplay,
+  plexTitleTemplate,
 } from '@app/utils/collections/sortTitle';
 import {
   closestCenter,
@@ -68,6 +69,8 @@ const messages = defineMessages({
   itemCount: '{count} {count, plural, one {item} other {items}}',
   bulkEdit: 'Bulk Edit',
   collectionSyncStarted: 'Sync started',
+  collectionSynced: 'Collection synced',
+  plexTitle: 'Plex title: {template}',
   userCollectionPositionWarning:
     'Library Recommended is enabled. This will show one collection per user on the Recommended screen. To avoid blocking other content, place this at the bottom of the list, or use Users Home only.',
 });
@@ -220,15 +223,20 @@ interface SortableItemProps {
   onPromotePreExisting?: (config: PreExistingCollectionConfig) => Promise<void>;
   onDemotePreExisting?: (config: PreExistingCollectionConfig) => Promise<void>;
   activeTab: 'home' | 'recommended' | 'library' | 'inactive' | 'unmanaged';
-  onIndividualSync?: (collectionId: string) => Promise<void>;
+  onIndividualSync?: (
+    collectionId: string,
+    configType: 'collection' | 'preExisting'
+  ) => Promise<void>;
   isSyncing?: boolean;
   isLast?: boolean;
+  libraryType: Library['type'];
 }
 
 const SortableItem = ({
   config,
   configType,
   isLast,
+  libraryType,
   onEditCollection,
   onEditHub,
   onEditPreExisting,
@@ -385,6 +393,19 @@ const SortableItem = ({
                 </Badge>
               )}
           </div>
+          {/* Plex titles come from the template, not the name above. */}
+          {isCollection &&
+            (() => {
+              const template = plexTitleTemplate(
+                config as CollectionFormConfig,
+                libraryType
+              );
+              return template ? (
+                <div className="-mt-1 mb-2 text-xs text-gray-400">
+                  {intl.formatMessage(messages.plexTitle, { template })}
+                </div>
+              ) : null;
+            })()}
 
           {/* Enhanced Badges - native type implementation */}
           <div className="flex flex-wrap items-center gap-2">
@@ -493,7 +514,15 @@ const SortableItem = ({
         <SyncStatus
           needsSync={config.needsSync}
           isActive={config.isActive}
-          onIndividualSync={isCollection ? onIndividualSync : undefined}
+          onIndividualSync={
+            onIndividualSync && (isCollection || isPreExisting)
+              ? (id: string) =>
+                  onIndividualSync(
+                    id,
+                    isCollection ? 'collection' : 'preExisting'
+                  )
+              : undefined
+          }
           collectionId={config.id}
           isSyncing={isSyncing}
           lastSyncedAt={config.lastSyncedAt}
@@ -673,6 +702,7 @@ const LibraryCollectionGroup = ({
 
   // SWR revalidation hook for refreshing collection data after sync
   const { mutate: revalidateCollections } = useSWR('/api/v1/collections');
+  const { mutate: revalidatePreExisting } = useSWR('/api/v1/preexisting');
 
   // Sort the way Plex will, with the server's article normalization.
   const { data: plexSettings } = useSWR<{
@@ -712,8 +742,37 @@ const LibraryCollectionGroup = ({
   }, [collections, syncingIds, addToast]);
 
   // Handle individual collection sync
-  const handleIndividualSync = async (collectionId: string) => {
+  const handleIndividualSync = async (
+    collectionId: string,
+    configType: 'collection' | 'preExisting'
+  ) => {
     setSyncingIds((prev) => new Map(prev).set(collectionId, Date.now()));
+
+    // Pre-existing syncs are quick enough for the route to finish before it answers.
+    if (configType === 'preExisting') {
+      try {
+        await axios.post(`/api/v1/preexisting/${collectionId}/sync`);
+        await revalidatePreExisting();
+        addToast(intl.formatMessage(messages.collectionSynced), {
+          appearance: 'success',
+          autoDismiss: true,
+        });
+      } catch (error) {
+        addToast(
+          `Failed to sync collection: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+          { appearance: 'error', autoDismiss: true }
+        );
+      } finally {
+        setSyncingIds((prev) => {
+          const next = new Map(prev);
+          next.delete(collectionId);
+          return next;
+        });
+      }
+      return;
+    }
 
     try {
       await axios.post(`/api/v1/collections/${collectionId}/sync`);
@@ -1017,6 +1076,7 @@ const LibraryCollectionGroup = ({
                       config={config}
                       configType={type}
                       isLast={index === allConfigs.length - 1}
+                      libraryType={library.type}
                       onEditCollection={onEditCollection}
                       onEditHub={onEditHub}
                       onEditPreExisting={onEditPreExisting}

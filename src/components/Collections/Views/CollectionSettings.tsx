@@ -1231,6 +1231,9 @@ const CollectionSettings = ({
         ...(preExistingConfig.sortTitleOverride !== undefined && {
           sortTitleOverride: preExistingConfig.sortTitleOverride,
         }),
+        ...(preExistingConfig.collectionSuffixMode && {
+          collectionSuffixMode: preExistingConfig.collectionSuffixMode,
+        }),
         ...(preExistingConfig.customTheme && {
           customTheme: preExistingConfig.customTheme,
         }),
