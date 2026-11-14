@@ -84,6 +84,78 @@ servers:
 
 components:
   schemas:
+    RotationVisibility:
+      type: object
+      required: [usersHome, serverOwnerHome, libraryRecommended]
+      properties:
+        usersHome:
+          type: boolean
+        serverOwnerHome:
+          type: boolean
+        libraryRecommended:
+          type: boolean
+    RotationGroupInput:
+      type: object
+      required:
+        [
+          name,
+          libraryId,
+          enabled,
+          slotCount,
+          interval,
+          order,
+          surfaces,
+          members,
+        ]
+      properties:
+        id:
+          type: string
+          description: Existing group id, accepted by the draft preview only
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        libraryId:
+          type: string
+        enabled:
+          type: boolean
+        slotCount:
+          type: integer
+          minimum: 1
+          maximum: 20
+        interval:
+          type: string
+          enum: [every_sync, 12h, daily, weekly, monthly_random]
+        weekday:
+          type: integer
+          minimum: 0
+          maximum: 6
+        order:
+          type: string
+          enum: [sequential, shuffled]
+        surfaces:
+          $ref: '#/components/schemas/RotationVisibility'
+        members:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [kind, configId]
+            properties:
+              kind:
+                type: string
+                enum: [collection, preExisting]
+              configId:
+                type: string
+    RotationOwnSettingsPatch:
+      type: object
+      properties:
+        visibilityConfig:
+          $ref: '#/components/schemas/RotationVisibility'
+        inactiveVisibilityConfig:
+          $ref: '#/components/schemas/RotationVisibility'
+        randomizeHomeOrder:
+          type: boolean
     OverlayTargetProgress:
       type: object
       properties:
@@ -9192,6 +9264,307 @@ paths:
           description: Invalid request body
         '500':
           description: Failed to append hub configurations
+  /rotation-groups:
+    get:
+      summary: List rotation groups
+      tags:
+        - collections
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      summary: Create a rotation group
+      tags:
+        - collections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotationGroupInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '409':
+          description: A sync is running (code SYNC_RUNNING)
+  /rotation-groups/preview:
+    post:
+      summary: Dry run a draft rotation group
+      tags:
+        - collections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotationGroupInput'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+  /rotation-groups/candidates:
+    get:
+      summary: List collections that can join a rotation group
+      tags:
+        - collections
+      parameters:
+        - name: libraryId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /rotation-groups/membership:
+    get:
+      summary: Rotation membership of every member collection
+      tags:
+        - collections
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /rotation-groups/membership/{kind}/{configId}:
+    patch:
+      summary: Update the stored own settings of a member
+      tags:
+        - collections
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [collection, preExisting]
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotationOwnSettingsPatch'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '404':
+          description: Not found
+  /rotation-groups/poster/{ratingKey}:
+    get:
+      summary: Current Plex poster of a member collection
+      tags:
+        - collections
+      parameters:
+        - name: ratingKey
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+      responses:
+        '200':
+          description: Poster image
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Not a member or no poster
+  /rotation-groups/{id}:
+    get:
+      summary: Get a rotation group
+      tags:
+        - collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Not found
+    put:
+      summary: Update a rotation group
+      tags:
+        - collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotationGroupInput'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '404':
+          description: Not found
+        '409':
+          description: A sync is running (code SYNC_RUNNING)
+    delete:
+      summary: Delete a rotation group
+      tags:
+        - collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+        '409':
+          description: A sync is running (code SYNC_RUNNING)
+  /rotation-groups/{id}/preview:
+    get:
+      summary: Preview upcoming batches of a saved group
+      tags:
+        - collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: steps
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '404':
+          description: Not found
+  /rotation-groups/{id}/rotate:
+    post:
+      summary: Rotate a group now
+      tags:
+        - collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Not found
+        '409':
+          description: A sync is running (code SYNC_RUNNING)
+  /rotation-groups/{id}/queue:
+    post:
+      summary: Move a waiting member to the front of the queue
+      tags:
+        - collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [moveToFront]
+              properties:
+                moveToFront:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '404':
+          description: Not found
+        '409':
+          description: A sync is running (code SYNC_RUNNING)
   /preexisting:
     get:
       summary: Get pre-existing collection configurations
