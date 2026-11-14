@@ -376,7 +376,7 @@ async function handleManualReordering(
   // Single save operation for all changes
   if (finalCollectionConfigs || finalHubConfigs || finalPreExistingConfigs) {
     settings.save();
-    rotationGroupService.reassertManagedFields();
+    rotationGroupService.reassertManagedFields({ adoptPositions: true });
   }
 
   logger.info(`Manual reordering completed for library ${libraryId}`, {

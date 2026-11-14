@@ -3,7 +3,9 @@ import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgre
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
 import { ensureSeerrIgnorePatterns } from '@server/lib/placeholders/seerrIgnorePatterns';
 import posterizarrTriggerJob from '@server/lib/posterizarrTrigger';
-import rotationApply from '@server/lib/rotation/rotationApply';
+import rotationApply, {
+  markVerified,
+} from '@server/lib/rotation/rotationApply';
 import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -492,7 +494,15 @@ class CollectionsSync {
       });
       plexClient.recordPhaseTime('ordering', Date.now() - orderingPhaseStart);
       if (!this.cancelled && rotationSeqs) {
-        rotationGroupService.markApplied(rotationSeqs);
+        try {
+          await markVerified(plexClient, rotationSeqs);
+        } catch (error) {
+          logger.warn('Could not verify rotation in Plex', {
+            label: 'Rotation',
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       // Clean up orphaned collections after sync completes

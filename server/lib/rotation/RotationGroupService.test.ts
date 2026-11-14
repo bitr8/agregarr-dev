@@ -349,9 +349,18 @@ describe('reassert and non-members', () => {
   it('adopts a dragged occupant position instead of reasserting it', async () => {
     await service.createGroup(input());
     (cfg(1) as { sortOrderHome: number }).sortOrderHome = 7;
-    service.reassertManagedFields();
+    service.reassertManagedFields({ adoptPositions: true });
     expect(cfg(1).sortOrderHome).toBe(7);
     expect(group().state.slots[0].sortOrderHome).toBe(7);
+  });
+
+  it('by default a stale sortOrderHome from an ordinary save is not treated as a drag', async () => {
+    await service.createGroup(input());
+    const slotPos = group().state.slots[0].sortOrderHome;
+    (cfg(1) as { sortOrderHome: number }).sortOrderHome = 7;
+    service.reassertManagedFields();
+    expect(cfg(1).sortOrderHome).toBe(slotPos);
+    expect(group().state.slots[0].sortOrderHome).toBe(slotPos);
   });
 
   it('saving a non-member with groups present leaves it byte-identical', async () => {
@@ -413,12 +422,12 @@ describe('restore reads only the stash', () => {
   };
 
   const LITERAL = [
-    { v: vis(true, true, false), s: 7, r: true },
-    { v: vis(false, false, false), s: 0, r: undefined },
-    { v: vis(true, true, false), s: 3, r: undefined },
-    { v: vis(false, false, false), s: 0, r: undefined },
-    { v: vis(true, true, false), s: 5, r: undefined },
-    { v: vis(false, false, false), s: 0, r: undefined },
+    { v: vis(true, true, false), s: 7, r: true, i: INACTIVE },
+    { v: vis(false, false, false), s: 0, r: undefined, i: undefined },
+    { v: vis(true, true, false), s: 3, r: undefined, i: undefined },
+    { v: vis(false, false, false), s: 0, r: undefined, i: undefined },
+    { v: vis(true, true, false), s: 5, r: undefined, i: undefined },
+    { v: vis(false, false, false), s: 0, r: undefined, i: undefined },
   ];
 
   const current = () =>
@@ -426,6 +435,7 @@ describe('restore reads only the stash', () => {
       v: c.visibilityConfig,
       s: c.sortOrderHome,
       r: c.randomizeHomeOrder,
+      i: (c.timeRestriction as Cfg | undefined)?.inactiveVisibilityConfig,
     }));
 
   const inactive = () =>
@@ -479,6 +489,25 @@ describe('restore reads only the stash', () => {
     expect(current()[0]).toEqual(LITERAL[0]);
     expect(inactive()).toEqual(INACTIVE);
     expect(group().members.length).toBe(5);
+  });
+
+  it('a missing stash on a time-restricted member hides all of its fields', async () => {
+    withRichMembers();
+    await service.createGroup(input());
+    delete group().members[0].own;
+    cfg(1).visibilityConfig = vis(true, true, true);
+    (cfg(1).timeRestriction as Cfg).inactiveVisibilityConfig = vis(
+      true,
+      true,
+      true
+    );
+    cfg(1).sortOrderHome = 9;
+    cfg(1).randomizeHomeOrder = true;
+    service.deleteGroup(group().id);
+    expect(cfg(1).visibilityConfig).toEqual(vis(false, false, false));
+    expect(inactive()).toEqual(vis(false, false, false));
+    expect(cfg(1).sortOrderHome).toBe(0);
+    expect(cfg(1).randomizeHomeOrder).toBe(false);
   });
 
   it('a missing stash is not guessed: member is left hidden and a warning is produced', async () => {
@@ -680,11 +709,18 @@ describe('status and previews', () => {
     expect(list.find((c) => c.configId === 'pre-2')?.selectable).toBe(true);
   });
 
-  it('deleting a collection drops its member and repairs the slot', async () => {
+  it('a pre-existing member whose config vanishes is marked unbound and its slot refilled from the queue', async () => {
     await service.createGroup(input());
+    expect(group().state.slots[0].occupant).toBe('preExisting:pre-1');
     settings().plex.preExistingCollectionConfigs.splice(0, 1);
-    service.onCollectionDeleted('pre-1');
-    expect(group().members.length).toBe(6);
+    service.runPass({ now: NOW });
+    const gone = group().members.find((m) => m.configId === 'pre-1');
+    expect(gone?.unboundSince).toBeDefined();
+    expect(group().state.slots.map((x) => x.occupant)).toEqual([
+      'preExisting:pre-3',
+      'preExisting:pre-2',
+    ]);
+    expect(group().state.queue).toContain('preExisting:pre-1');
   });
 });
 
@@ -747,8 +783,7 @@ describe('hardening', () => {
     const res = service.rotateNow(group().id);
     expect(res.rotated).toBe(false);
     expect(group().members[2].configId).toBe('pre-30');
-    await settle();
-    expect(autoReorderLibrary).toHaveBeenCalledWith('lib-1', 'home');
+    expect(kick).toHaveBeenCalledWith('lib-1');
   });
 
   it('two groups can never bind the same recreated config in one pass', async () => {
@@ -816,12 +851,15 @@ describe('hardening', () => {
 
   it('deleting a group settles the library its members were restored in', async () => {
     await service.createGroup(input());
-    await settle();
-    autoReorderLibrary.mockClear();
+    kick.mockClear();
     service.deleteGroup(group().id);
-    await vi.waitFor(() =>
-      expect(autoReorderLibrary).toHaveBeenCalledWith('lib-1', 'home')
-    );
+    expect(kick).toHaveBeenCalledWith('lib-1');
+  });
+
+  it('a follow-up is scheduled synchronously, before createGroup resolves', () => {
+    const pending = service.createGroup(input());
+    expect(kick).toHaveBeenCalledWith('lib-1');
+    return pending;
   });
 
   it('patchOwn on an enabled member with no stash writes nothing and throws', async () => {
@@ -917,5 +955,57 @@ describe('two libraries', () => {
     expect(byId('pre-12').visibilityConfig).toEqual(vis(false, false, false));
     expect(byId('pre-1').visibilityConfig).toEqual(vis(false, false, false));
     expect(settings().plex.rotationGroups?.length).toBe(1);
+  });
+});
+
+describe('save failure rolls back', () => {
+  const failOnce = () => {
+    let first = true;
+    settings().save.mockImplementation(() => {
+      if (first) {
+        first = false;
+        throw new Error('disk full');
+      }
+    });
+  };
+
+  it('createGroup leaves settings as they were, with rotationGroups still absent', async () => {
+    const before = snapshot();
+    failOnce();
+    await expect(service.createGroup(input())).rejects.toThrow('disk full');
+    expect(snapshot()).toBe(before);
+    expect('rotationGroups' in settings().plex).toBe(false);
+  });
+
+  it('runPass, updateGroup, deleteGroup and rotateNow restore the prior state', async () => {
+    await service.createGroup(input());
+    const next = new Date(NOW.getTime() + 24 * 3600e3);
+
+    let before = snapshot();
+    failOnce();
+    expect(() => service.runPass({ now: next, syncRunId: 'r' })).toThrow(
+      'disk full'
+    );
+    expect(snapshot()).toBe(before);
+
+    failOnce();
+    await expect(
+      service.updateGroup(group().id, input({ enabled: false }))
+    ).rejects.toThrow('disk full');
+    expect(snapshot()).toBe(before);
+
+    failOnce();
+    expect(() => service.deleteGroup(group().id)).toThrow('disk full');
+    expect(snapshot()).toBe(before);
+
+    failOnce();
+    expect(() => service.rotateNow(group().id)).toThrow('disk full');
+    expect(snapshot()).toBe(before);
+
+    cfg(3).visibilityConfig = vis(true, true, true);
+    before = snapshot();
+    failOnce();
+    expect(() => service.reassertManagedFields()).toThrow('disk full');
+    expect(snapshot()).toBe(before);
   });
 });
