@@ -15,6 +15,7 @@ import logger from '@server/logger';
 import fs from 'fs';
 import path from 'path';
 import sharp, { type OverlayOptions } from 'sharp';
+import { colorScaleContextField } from './colorScaleField';
 import {
   DEFAULT_OVERLAY_JPEG_QUALITY,
   normalizeOverlayJpegQuality,
@@ -552,7 +553,7 @@ export function resolveColorScale(
   scale: ColorScale,
   context: OverlayRenderContext
 ): string | null {
-  const raw = context[scale.field];
+  const raw = context[colorScaleContextField(scale.field)];
   if (typeof raw !== 'number') return null;
   const t = Math.max(
     0,

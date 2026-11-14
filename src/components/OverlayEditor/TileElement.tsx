@@ -1,3 +1,4 @@
+import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useRef } from 'react';
@@ -32,7 +33,8 @@ function resolveColorScale(
   context?: OverlayRenderContext
 ): string | null {
   if (!context) return null;
-  const raw = context[scale.field];
+  const raw =
+    context[colorScaleContextField(scale.field) as keyof OverlayRenderContext];
   if (typeof raw !== 'number') return null;
   const t = Math.max(
     0,
