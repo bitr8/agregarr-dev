@@ -313,6 +313,35 @@ describe('planRotation basics', () => {
     expect(b.changed).toBe(false);
   });
 
+  it('every_sync filled outside a sync rotates at its first sync', () => {
+    const g = mkGroup(8, 3, { interval: 'every_sync' });
+    const created = planRotation(input(g, '2026-03-10T10:00:00Z'));
+    expect(created.rotated).toBe(false);
+    expect(created.state.periodKey).toBeNull();
+    const first = planRotation(
+      input(withState(g, created.state), '2026-03-10T11:00:00Z', {
+        syncRunId: 'r1',
+      })
+    );
+    expect(first.rotated).toBe(true);
+    expect(occupants(first.state)).not.toEqual(occupants(created.state));
+    const again = planRotation(
+      input(withState(g, first.state), '2026-03-10T11:05:00Z', {
+        syncRunId: 'r1',
+      })
+    );
+    expect(again.changed).toBe(false);
+  });
+
+  it('every_sync with empty slots fills without rotating', () => {
+    const g = mkGroup(8, 3, { interval: 'every_sync' });
+    const first = planRotation(
+      input(g, '2026-03-10T10:00:00Z', { syncRunId: 'r1' })
+    );
+    expect(first.rotated).toBe(false);
+    expect(occupants(first.state)).toEqual([key(1), key(2), key(3)]);
+  });
+
   it('force rotates inside the period', () => {
     const g = mkGroup(8, 3);
     const a = planRotation(input(g, '2026-03-10T08:00:00Z'));

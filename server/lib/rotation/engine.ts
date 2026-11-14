@@ -215,6 +215,14 @@ export function planRotation(input: PlanInput): PlanResult {
     due =
       group.interval !== 'monthly_random' ||
       parts.d >= (state.monthly?.day ?? Infinity);
+  } else if (
+    group.interval === 'every_sync' &&
+    key !== null &&
+    !storedUsable &&
+    before.slots.some((s) => s.occupant)
+  ) {
+    // Filled outside a sync (create, rotate now): the first sync is a new period.
+    due = true;
   }
   const rotating = due && okSet.size > slotCount;
   if (rotating) {
