@@ -23,6 +23,7 @@ import PosterResetModal from './PosterResetModal';
 
 const messages = defineMessages({
   loading: 'Loading libraries...',
+  stopRequested: 'Stop requested for this library',
   noLibraries: 'No libraries found',
   configure: 'Configure',
   overlaysEnabled: '{count} overlays enabled',
@@ -260,12 +261,16 @@ const LibraryConfigView: React.FC = () => {
   const handleStopSync = async (libraryId: string) => {
     try {
       await axios.post(`/api/v1/overlay-library-configs/${libraryId}/stop`);
-      addToast('Overlay job cancelled', {
+      addToast(intl.formatMessage(messages.stopRequested), {
         appearance: 'success',
         autoDismiss: true,
       });
       mutateRunningLibraries();
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        mutateRunningLibraries();
+        return;
+      }
       addToast('Failed to stop overlay sync', {
         appearance: 'error',
         autoDismiss: true,
