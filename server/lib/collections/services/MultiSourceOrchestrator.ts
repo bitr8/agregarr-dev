@@ -152,6 +152,7 @@ export class MultiSourceOrchestrator {
   ): Promise<SyncResult> {
     let configForSync: MultiSourceCollectionConfig = config;
     let collectionNameForSync = config.name;
+    let pendingTitleName: string | undefined;
 
     try {
       // 1. Time Restrictions - check if collection should be active
@@ -283,10 +284,7 @@ export class MultiSourceOrchestrator {
             name: prefixedName,
           } as MultiSourceCollectionConfig;
 
-          // Persist updated name and source title for subsequent syncs
-          this.updateCollectionConfigField(config.id, {
-            name: prefixedName,
-          });
+          pendingTitleName = prefixedName;
           this.updateSourceResolvedTitle(
             config.id,
             activeSource.id,
@@ -466,6 +464,10 @@ export class MultiSourceOrchestrator {
           updated: 0,
           ...(failedError && { error: failedError }),
         };
+      }
+
+      if (pendingTitleName) {
+        this.updateCollectionConfigField(config.id, { name: pendingTitleName });
       }
 
       logger.info(
