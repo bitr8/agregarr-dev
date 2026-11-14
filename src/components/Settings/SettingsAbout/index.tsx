@@ -37,6 +37,7 @@ const messages = defineMessages({
   gettingsupport: 'Getting Support',
   githubissues: 'GitHub Issues',
   agregarrdocs: 'Agregarr Documentation',
+  forkdocs: 'Fork Documentation',
   exportdebug: 'Export Debugging Information',
   timezone: 'Time Zone',
   appDataPath: 'Data Directory',
@@ -202,6 +203,16 @@ const SettingsAbout = () => {
               className="text-orange-500 transition duration-300 hover:underline"
             >
               https://github.com/bitr8/agregarr-dev/issues
+            </a>
+          </List.Item>
+          <List.Item title={intl.formatMessage(messages.forkdocs)}>
+            <a
+              href="https://bitr8.github.io/agregarr-guide/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-orange-500 transition duration-300 hover:underline"
+            >
+              https://bitr8.github.io/agregarr-guide/
             </a>
           </List.Item>
           <List.Item title={intl.formatMessage(messages.agregarrdocs)}>
