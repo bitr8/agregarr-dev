@@ -9,7 +9,7 @@ type VisibilityConfig = {
   libraryRecommended: boolean;
 };
 
-const messages = defineMessages({
+export const messages = defineMessages({
   usersHome: 'Users Home',
   serverOwnerHome: 'Server Owner Home',
   libraryRecommended: 'Library Recommended',
