@@ -3,13 +3,17 @@ import RotationEditor from '@app/components/Rotation/RotationEditor';
 import { useUser } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
 import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
 
 const EditRotation: NextPage = () => {
   const { user } = useUser();
   const router = useRouter();
-  const groupId = router.query.groupId;
+  const [mounted, setMounted] = useState(false);
+  const groupId = router.query.id;
 
-  if (!user || typeof groupId !== 'string') {
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted || !user || typeof groupId !== 'string') {
     return <LoadingSpinner />;
   }
 

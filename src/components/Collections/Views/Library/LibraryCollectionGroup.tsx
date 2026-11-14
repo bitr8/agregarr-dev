@@ -659,7 +659,12 @@ const SortableItem = ({
           // Hide button for hubs and pre-existing collections
           activeTab !== 'inactive' &&
           (membership ? (
-            <Link href={`/rotation/${membership.groupId}`} legacyBehavior>
+            <Link
+              href={`/rotation/edit?id=${encodeURIComponent(
+                membership.groupId
+              )}`}
+              legacyBehavior
+            >
               <a className="whitespace-nowrap text-sm text-orange-400 hover:text-orange-300">
                 {intl.formatMessage(messages.manageRotation)}
               </a>

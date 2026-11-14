@@ -9404,6 +9404,12 @@ paths:
           schema:
             type: string
             pattern: '^[0-9]+$'
+        - name: v
+          in: query
+          required: false
+          description: Cache key; changes when the group rotates
+          schema:
+            type: string
       responses:
         '200':
           description: Poster image

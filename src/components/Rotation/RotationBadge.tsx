@@ -25,7 +25,7 @@ const RotationBadge: React.FC<RotationBadgeProps> = ({
       <Badge
         badgeType="primary"
         className="!bg-opacity-60"
-        href={`/rotation/${membership.groupId}`}
+        href={`/rotation/edit?id=${encodeURIComponent(membership.groupId)}`}
       >
         {intl.formatMessage(messages.badgeInRotation, {
           group: membership.groupName,

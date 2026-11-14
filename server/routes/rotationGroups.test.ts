@@ -140,6 +140,35 @@ describe('rotation groups routes', () => {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
 
+  it('the spec accepts the cache query the service puts on poster urls', () => {
+    const spec = yaml.load(
+      fs.readFileSync(path.resolve(process.cwd(), 'agregarr-api.yml'), 'utf8')
+    ) as {
+      paths: Record<
+        string,
+        { get?: { parameters?: { name: string; in: string }[] } }
+      >;
+    };
+    const params =
+      spec.paths['/rotation-groups/poster/{ratingKey}'].get?.parameters ?? [];
+    const service = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'server/lib/rotation/RotationGroupService.ts'
+      ),
+      'utf8'
+    );
+    const used = [
+      ...service.matchAll(/rotation-groups\/poster\/\$\{[^}]+\}\?(\w+)=/g),
+    ].map((m) => m[1]);
+    expect(used.length).toBeGreaterThan(0);
+    for (const name of used) {
+      expect(params.some((p) => p.in === 'query' && p.name === name)).toBe(
+        true
+      );
+    }
+  });
+
   it('declares every registered route in agregarr-api.yml', () => {
     const spec = yaml.load(
       fs.readFileSync(path.resolve(process.cwd(), 'agregarr-api.yml'), 'utf8')

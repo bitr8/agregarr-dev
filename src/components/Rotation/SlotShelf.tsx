@@ -42,7 +42,7 @@ const SlotShelf = ({ slots, caption, status, animate }: SlotShelfProps) => {
             key={`${slot.slotId}:${slot.occupant?.key ?? 'empty'}`}
             name={slot.occupant?.name ?? null}
             posterUrl={slot.occupant?.posterUrl ?? null}
-            slotIndex={slot.index}
+            slotIndex={slot.index + 1}
             animateIn={changed(slot.slotId)}
             delayMs={i * 40}
           />

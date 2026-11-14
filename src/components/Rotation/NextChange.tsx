@@ -14,7 +14,7 @@ const NextChange = ({ group }: NextChangeProps) => {
   const intl = useIntl();
 
   return (
-    <div className="order-first rounded-md bg-stone-800/60 p-4 lg:order-none">
+    <div className="order-first rounded-md bg-stone-800/60 p-4 lg:order-none lg:self-start">
       <h4 className="text-sm font-medium text-gray-300">
         {intl.formatMessage(messages.nextChangeTitle)}
       </h4>

@@ -205,7 +205,7 @@ const RotationGroupCard = ({
       role="status"
       className="inline-flex w-full items-center rounded-full bg-stone-800 px-2.5 py-1 text-xs text-orange-300 sm:w-auto"
     >
-      {group.plex.applying ? (
+      {group.plex.applying || syncRunning ? (
         <>
           <ArrowPathIcon
             className="mr-1 h-3 w-3 shrink-0 animate-spin motion-reduce:animate-none"
@@ -280,7 +280,11 @@ const RotationGroupCard = ({
                   <button
                     type="button"
                     disabled={syncRunning}
-                    onClick={() => router.push(`/rotation/${group.id}`)}
+                    onClick={() =>
+                      router.push(
+                        `/rotation/edit?id=${encodeURIComponent(group.id)}`
+                      )
+                    }
                     className={menuItem(active)}
                   >
                     {intl.formatMessage(messages.edit)}
