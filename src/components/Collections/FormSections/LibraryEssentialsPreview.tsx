@@ -106,7 +106,7 @@ const LibraryEssentialsPreview: React.FC = () => {
   useEffect(() => {
     if (resetKey !== prevResetKey) {
       setPrevResetKey(resetKey);
-      setFieldValue('selectionMode', 'include');
+      setFieldValue('selectionMode', 'exclude');
       setFieldValue('excludeValues', []);
       setFieldValue('includeValues', []);
     }
