@@ -2,6 +2,7 @@ import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { defaultHubConfigService } from '@server/lib/collections/services/DefaultHubConfigService';
 import { preExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
+import type { RotationGroup } from '@server/lib/rotation/types';
 import logger from '@server/logger';
 import {
   collectSecretValues,
@@ -514,6 +515,7 @@ export interface PlexSettings {
   collectionConfigs?: CollectionConfig[]; // Agregarr-created collections
   hubConfigs?: PlexHubConfig[]; // Plex built-in hub configurations
   preExistingCollectionConfigs?: PreExistingCollectionConfig[]; // Pre-existing Plex collections discovered by hub discovery
+  rotationGroups?: RotationGroup[]; // Absent until the first rotation group exists
   autoEmptyTrash?: boolean; // Auto-empty Plex trash after placeholder cleanup (default: true)
   // A-Z sort titles only; promoted collections are always positional. Default 'off'.
   sortTitleArticleHandling?: 'strip' | 'moveToEnd' | 'off';
