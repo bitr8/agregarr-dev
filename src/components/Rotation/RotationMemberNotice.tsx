@@ -18,11 +18,13 @@ const RotationMemberNotice: React.FC<{ membership: Membership }> = ({
       <div className="flex flex-wrap items-center gap-2">
         <RotationBadge membership={membership} hideState />
       </div>
-      <p>
-        {intl.formatMessage(messages.memberNotice, {
-          group: membership.groupName,
-        })}
-      </p>
+      {membership.own && (
+        <p>
+          {intl.formatMessage(messages.memberNotice, {
+            group: membership.groupName,
+          })}
+        </p>
+      )}
     </div>
   );
 };

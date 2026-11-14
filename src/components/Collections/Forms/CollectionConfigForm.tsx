@@ -18,6 +18,7 @@ import { SMART_COLLECTION_SORT_OPTIONS } from '@app/types/collections';
 import { Transition } from '@headlessui/react';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
+import type { Membership } from '@server/interfaces/api/rotationInterfaces';
 import axios from 'axios';
 import {
   Field,
@@ -27,7 +28,7 @@ import {
   type FormikTouched,
 } from 'formik';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { defineMessages, FormattedMessage, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
@@ -81,6 +82,12 @@ const SourceRankResetGuard = () => {
     }
   }, [isTraktAnticipated, values.sortOrder, setFieldValue]);
   return null;
+};
+
+const ROTATION_DEFAULT_INACTIVE_VISIBILITY = {
+  usersHome: false,
+  serverOwnerHome: false,
+  libraryRecommended: true,
 };
 
 const messages = defineMessages({
@@ -461,26 +468,44 @@ const CollectionFormConfigForm = ({
 
   // Get current user data which includes Plex Pass status
   const { data: currentUser } = useSWR('/api/v1/auth/me');
-  const { map: rotationMap, revalidate: revalidateRotation } =
-    useRotationMembership();
-  // Read once per open so the overlay, the notice and the PATCH always agree.
+  const {
+    map: rotationMap,
+    revalidate: revalidateRotation,
+    isLoading: rotationLoading,
+  } = useRotationMembership();
   const [rotationKind] = useState<'collection' | 'preExisting' | null>(() => {
     if (
-      config.collectionType === 'default_plex_hub' ||
-      (config as CollectionFormConfig).configType === 'hub'
+      config?.collectionType === 'default_plex_hub' ||
+      (config as CollectionFormConfig | undefined)?.configType === 'hub'
     ) {
       return null;
     }
-    return config.collectionType === 'pre_existing' ||
-      (config as CollectionFormConfig).configType === 'preExisting'
+    return config?.collectionType === 'pre_existing' ||
+      (config as CollectionFormConfig | undefined)?.configType === 'preExisting'
       ? 'preExisting'
       : 'collection';
   });
-  const [membership] = useState(() =>
-    rotationKind && config.id
-      ? rotationMap[`${rotationKind}:${config.id}`]
-      : undefined
+  // Frozen once the request settles so the overlay, notice and PATCH agree.
+  const frozenMembership = useRef<{ value: Membership | undefined } | null>(
+    null
   );
+  if (!rotationLoading && !frozenMembership.current) {
+    frozenMembership.current = {
+      value:
+        rotationKind && config?.id
+          ? rotationMap[`${rotationKind}:${config.id}`]
+          : undefined,
+    };
+  }
+  const membership = frozenMembership.current?.value;
+  const rotationInitial = membership?.own
+    ? {
+        inactiveVisibilityConfig:
+          membership.own.inactiveVisibilityConfig ??
+          ROTATION_DEFAULT_INACTIVE_VISIBILITY,
+        randomizeHomeOrder: membership.own.randomizeHomeOrder ?? false,
+      }
+    : null;
   // Mirrors what the sync will write - see normalizeSortTitleArticle.
   const { data: plexSortSettings } = useSWR<{
     sortTitleArticleHandling?: SortTitleArticleMode;
@@ -1209,7 +1234,7 @@ const CollectionFormConfigForm = ({
   });
 
   // Safety check for undefined config
-  if (!config) {
+  if (!config || rotationLoading) {
     return null;
   }
 
@@ -2331,21 +2356,17 @@ const CollectionFormConfigForm = ({
           ...(membership?.own
             ? {
                 visibilityConfig: { ...membership.own.visibilityConfig },
-                ...(membership.own.randomizeHomeOrder !== null
-                  ? { randomizeHomeOrder: membership.own.randomizeHomeOrder }
-                  : {}),
-                ...(membership.own.inactiveVisibilityConfig
-                  ? {
-                      timeRestriction: {
-                        alwaysActive: true,
-                        removeFromPlexWhenInactive: false,
-                        ...config.timeRestriction,
-                        inactiveVisibilityConfig: {
-                          ...membership.own.inactiveVisibilityConfig,
-                        },
-                      },
-                    }
-                  : {}),
+                randomizeHomeOrder:
+                  rotationInitial?.randomizeHomeOrder ?? false,
+                timeRestriction: {
+                  alwaysActive: true,
+                  removeFromPlexWhenInactive: false,
+                  ...config.timeRestriction,
+                  inactiveVisibilityConfig: {
+                    ...(rotationInitial?.inactiveVisibilityConfig ??
+                      ROTATION_DEFAULT_INACTIVE_VISIBILITY),
+                  },
+                },
               }
             : {}),
         }}
@@ -2890,15 +2911,18 @@ const CollectionFormConfigForm = ({
                 `/api/v1/rotation-groups/membership/${rotationKind}/${config.id}`,
                 {
                   visibilityConfig: values.visibilityConfig,
-                  ...(ownStash.inactiveVisibilityConfig ||
-                  values.timeRestriction?.alwaysActive === false
+                  ...(rotationInitial &&
+                  JSON.stringify(
+                    values.timeRestriction?.inactiveVisibilityConfig
+                  ) !== JSON.stringify(rotationInitial.inactiveVisibilityConfig)
                     ? {
                         inactiveVisibilityConfig:
                           values.timeRestriction?.inactiveVisibilityConfig,
                       }
                     : {}),
-                  ...(ownStash.randomizeHomeOrder !== null ||
-                  values.randomizeHomeOrder
+                  ...(rotationInitial &&
+                  Boolean(values.randomizeHomeOrder) !==
+                    rotationInitial.randomizeHomeOrder
                     ? { randomizeHomeOrder: Boolean(values.randomizeHomeOrder) }
                     : {}),
                 }
