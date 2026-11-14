@@ -1611,8 +1611,6 @@
   "components.Settings.SettingsMain.csrfProtectionTip": "Set external API access to read-only (requires HTTPS)",
   "components.Settings.SettingsMain.enableHealthChecks": "Enable Health Checks",
   "components.Settings.SettingsMain.enableHealthChecksTip": "Run periodic health checks to detect connection issues and configuration problems",
-  "components.Settings.SettingsMain.enableTmdbPosterCache": "Enable TMDB Poster Cache",
-  "components.Settings.SettingsMain.enableTmdbPosterCacheTip": "Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)",
   "components.Settings.SettingsMain.excludeFromOrderingLabel": "Exclude from Ordering (Plex Label)",
   "components.Settings.SettingsMain.excludeFromOrderingLabelTip": "Collections with any of these Plex labels (comma-separated) will be excluded from ordering, visibility, and sort title enforcement. Useful when other tools (Shortlist, Kometa) manage their own collections.",
   "components.Settings.SettingsMain.general": "General",
