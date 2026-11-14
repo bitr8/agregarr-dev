@@ -114,7 +114,9 @@ interface ConfigWrite {
 
 class RotationGroupService {
   private groupList(): RotationGroup[] {
-    return getSettings().plex.rotationGroups ?? [];
+    return (getSettings().plex.rotationGroups ?? []).filter(
+      (g) => !!g && typeof g === 'object'
+    );
   }
 
   private validGroups(): RotationGroup[] {
@@ -126,7 +128,7 @@ class RotationGroupService {
   }
 
   public hasEnabledGroups(): boolean {
-    return this.groupList().some((g) => g.enabled);
+    return this.validGroups().some((g) => g.enabled);
   }
 
   private findConfig(
@@ -155,7 +157,7 @@ class RotationGroupService {
         config,
         member.kind,
         group.libraryId,
-        this.groupList(),
+        this.validGroups(),
         group.id
       )
     ) {
@@ -186,13 +188,16 @@ class RotationGroupService {
   }
 
   /** Mark vanished members, re-bind recreated pre-existing ones. Mutates the given (cloned) group. */
-  private rebind(group: RotationGroup, now: Date): void {
-    const plex = getSettings().plex;
-    const taken = new Set(
-      this.groupList().flatMap((g) =>
-        g.members.map((m) => `${m.kind}:${m.configId}`)
+  private takenKeys(): Set<MemberKey> {
+    return new Set(
+      this.validGroups().flatMap((g) =>
+        g.members.map((m) => memberKey(m.kind, m.configId))
       )
     );
+  }
+
+  private rebind(group: RotationGroup, now: Date, taken: Set<MemberKey>): void {
+    const plex = getSettings().plex;
     const iso = now.toISOString();
     for (const member of group.members) {
       const config = this.memberConfig(member);
@@ -333,13 +338,14 @@ class RotationGroupService {
     const next: RotationGroup[] = [];
     const writes: ConfigWrite[] = [];
     const logs: (() => void)[] = [];
+    const taken = this.takenKeys();
     let dirty = false;
 
     for (const group of this.validGroups()) {
       if (!group.enabled) continue;
       if (opts?.forceGroupId && group.id !== opts.forceGroupId) continue;
       const draft = clone(group);
-      this.rebind(draft, now);
+      this.rebind(draft, now, taken);
       this.adoptPositions(draft);
       const plan = planRotation({
         group: draft,
@@ -375,13 +381,14 @@ class RotationGroupService {
   }
 
   /** Orders the libraries of enabled groups, then re-adopts slot positions. */
-  public async settlePositions(): Promise<void> {
+  public async settlePositions(extraLibraries: string[] = []): Promise<void> {
     const libraries = [
-      ...new Set(
-        this.validGroups()
+      ...new Set([
+        ...this.validGroups()
           .filter((g) => g.enabled)
-          .map((g) => g.libraryId)
-      ),
+          .map((g) => g.libraryId),
+        ...extraLibraries,
+      ]),
     ];
     if (libraries.length === 0) return;
     const { autoReorderLibrary } = await import('@server/routes/reorder');
@@ -396,14 +403,21 @@ class RotationGroupService {
     if (changed) getSettings().save();
   }
 
-  /** appliedSeq = seq for one group, or all when omitted. */
-  public markApplied(groupId?: string): void {
+  /** seq of every valid group right now; pass to markApplied once Plex has been brought up to it. */
+  public captureSeqs(): Record<string, number> {
+    return Object.fromEntries(
+      this.validGroups().map((g) => [g.id, g.state.seq])
+    );
+  }
+
+  /** appliedSeq = the captured seq, never the live one, so a change made mid-apply stays unapplied. */
+  public markApplied(captured: Record<string, number>): void {
     if (!this.hasGroups()) return;
     let changed = false;
     for (const g of this.validGroups()) {
-      if (groupId && g.id !== groupId) continue;
-      if (g.state.appliedSeq !== g.state.seq) {
-        g.state.appliedSeq = g.state.seq;
+      const seq = captured[g.id];
+      if (seq !== undefined && seq > g.state.appliedSeq) {
+        g.state.appliedSeq = seq;
         changed = true;
       }
     }
@@ -454,10 +468,10 @@ class RotationGroupService {
     });
   }
 
-  private afterChange(): void {
+  private afterChange(libraryId?: string): void {
     void (async () => {
       try {
-        await this.settlePositions();
+        await this.settlePositions(libraryId ? [libraryId] : []);
         rotationApply.kick();
       } catch (error) {
         logger.error('Rotation follow-up failed', {
@@ -472,10 +486,10 @@ class RotationGroupService {
     if (!this.hasGroups()) return;
     const key = memberKey('collection', configId);
     const now = new Date();
-    let touched = false;
+    const libraries = new Set<string>();
     for (const group of this.validGroups()) {
       if (!group.members.some((m) => m.key === key)) continue;
-      touched = true;
+      libraries.add(group.libraryId);
       const draft = clone(group);
       draft.members = draft.members.filter((m) => m.key !== key);
       const s = draft.state;
@@ -495,9 +509,9 @@ class RotationGroupService {
       }
       this.replaceGroup(draft);
     }
-    if (touched) {
+    if (libraries.size > 0) {
       getSettings().save();
-      this.afterChange();
+      for (const lib of libraries) this.afterChange(lib);
     }
   }
 
@@ -585,7 +599,7 @@ class RotationGroupService {
         config,
         m.kind,
         input.libraryId,
-        this.groupList(),
+        this.validGroups(),
         existing?.id
       );
       if (problem) {
@@ -634,6 +648,7 @@ class RotationGroupService {
         addedAt: iso,
       };
       member.name = config.name;
+      delete member.unboundSince;
       if (config.collectionRatingKey)
         member.ratingKey = config.collectionRatingKey;
       return member;
@@ -719,10 +734,13 @@ class RotationGroupService {
     const { group } = this.buildDraft(input, undefined, configs, now);
     const settings = getSettings();
     const writes = group.enabled ? this.planConfigWrites(group, false) : [];
-    settings.plex.rotationGroups = [...this.groupList(), group];
+    settings.plex.rotationGroups = [
+      ...(settings.plex.rotationGroups ?? []),
+      group,
+    ];
     this.commitWrites(writes);
     settings.save();
-    this.afterChange();
+    this.afterChange(group.libraryId);
     return this.getStatus(group.id);
   }
 
@@ -743,23 +761,32 @@ class RotationGroupService {
     this.replaceGroup(group);
     this.commitWrites(writes);
     settings.save();
-    this.afterChange();
+    this.afterChange(group.libraryId);
     return this.getStatus(id);
   }
 
   public deleteGroup(id: string): void {
-    const groups = this.groupList();
-    const group = groups.find((g) => g.id === id);
+    const groups = getSettings().plex.rotationGroups ?? [];
+    const group = groups.find((g) => g?.id === id);
     if (!group) throw new RotationNotFoundError('Rotation not found.');
-    if (group.enabled && isValidGroup(group)) {
-      for (const member of group.members) this.restoreMember(group, member);
+    if (group.enabled && Array.isArray(group.members)) {
+      for (const member of group.members) {
+        if (typeof member?.configId !== 'string') continue;
+        if (!member.own && !isValidGroup(group)) continue;
+        if (member.kind !== 'collection' && member.kind !== 'preExisting') {
+          continue;
+        }
+        this.restoreMember(group, member);
+      }
     }
     const settings = getSettings();
-    const rest = groups.filter((g) => g.id !== id);
+    const rest = groups.filter((g) => g !== group);
     if (rest.length === 0) delete settings.plex.rotationGroups;
     else settings.plex.rotationGroups = rest;
     settings.save();
-    this.afterChange();
+    this.afterChange(
+      typeof group.libraryId === 'string' ? group.libraryId : undefined
+    );
   }
 
   /** Forced pass for one group; does not touch Plex. */
@@ -771,10 +798,10 @@ class RotationGroupService {
     if (!group) throw new RotationNotFoundError('Rotation not found.');
     if (!group.enabled) return { rotated: false, reason: 'disabled' };
     const pass = this.runPass({ forceGroupId: id });
+    if (pass.saved) this.afterChange(group.libraryId);
     if (!pass.rotated.includes(id)) {
       return { rotated: false, reason: 'pool_not_larger_than_slots' };
     }
-    this.afterChange();
     return { rotated: true };
   }
 
@@ -1143,7 +1170,7 @@ class RotationGroupService {
     groupId?: string
   ): Promise<Candidate[]> {
     const plex = getSettings().plex;
-    const groups = this.groupList();
+    const groups = this.validGroups();
     const ctx = await this.statusContext(0);
     const rows: {
       kind: MemberKind;
@@ -1239,7 +1266,6 @@ class RotationGroupService {
     const found = this.findMember(kind, configId);
     if (!found) throw new RotationNotFoundError('Not part of a rotation.');
     const { group, member } = found;
-    const now = new Date().toISOString();
     const config = this.memberConfig(member);
 
     if (!group.enabled) {
@@ -1251,14 +1277,10 @@ class RotationGroupService {
       return this.membershipOf(group, member);
     }
 
-    const base: RotationOwnSettings = member.own ?? {
-      visibilityConfig: { ...ALL_HIDDEN },
-      inactiveVisibilityConfig: null,
-      sortOrderHome: 0,
-      randomizeHomeOrder: null,
-      capturedAt: now,
-    };
-    const merged = this.mergeOwn(base, patch);
+    if (!member.own) {
+      throw new RotationNotFoundError('No saved settings for this member.');
+    }
+    const merged = this.mergeOwn(member.own, patch);
     if (JSON.stringify(merged) !== JSON.stringify(member.own)) {
       member.own = merged;
       getSettings().save();

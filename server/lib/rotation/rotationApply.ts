@@ -39,11 +39,12 @@ class RotationApply {
         const { HubSyncService } = await import(
           '@server/lib/collections/plex/HubSyncService'
         );
+        const { rotationGroupService } = await import('./RotationGroupService');
+        const seqs = rotationGroupService.captureSeqs();
         const hubSync = new HubSyncService();
         await hubSync.syncHubVisibility(plexClient);
         await hubSync.syncUnifiedOrdering(plexClient);
-        const { rotationGroupService } = await import('./RotationGroupService');
-        rotationGroupService.markApplied();
+        rotationGroupService.markApplied(seqs);
       } while (this.rerun);
     } catch (error) {
       logger.error('Rotation apply failed', {

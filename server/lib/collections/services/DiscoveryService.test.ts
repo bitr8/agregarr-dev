@@ -46,6 +46,13 @@ vi.mock('@server/lib/collections/core/CollectionUtilities', async () => ({
   syncConfigsWithPlexCollections: syncConfigs,
 }));
 
+vi.mock('@server/routes/reorder', () => ({
+  autoReorderLibrary: vi.fn(async () => undefined),
+}));
+vi.mock('@server/lib/collections/services/DefaultHubConfigService', () => ({
+  defaultHubConfigService: {},
+}));
+
 import { DiscoveryService } from './DiscoveryService';
 
 describe('discovery relabel step', () => {
@@ -77,5 +84,63 @@ describe('discovery relabel step', () => {
       targetUserId?: string;
     }[];
     expect(configs[0].targetUserId).toBe('1001');
+  });
+});
+
+describe('enhanced pre-existing write-back', () => {
+  it('keeps a visibility restored between discovery taking its copy and writing it back', async () => {
+    const hidden = {
+      usersHome: false,
+      serverOwnerHome: false,
+      libraryRecommended: false,
+    };
+    const restored = {
+      usersHome: true,
+      serverOwnerHome: true,
+      libraryRecommended: false,
+    };
+    const config = {
+      id: 'pre-1',
+      collectionRatingKey: 'rk-1',
+      name: 'Collection One',
+      libraryId: '4',
+      sortOrderHome: 0,
+      visibilityConfig: hidden,
+      isPromotedToHub: false,
+    };
+    settings.plex.preExistingCollectionConfigs = [config] as never;
+
+    const service = new DiscoveryService();
+    const internals = service as unknown as Record<string, unknown>;
+    internals.cleanupOrphanedLibraryConfigs = () => ({ removed: 0 });
+    internals.discoverAllCollectionsFirst = async () => [];
+    internals.resetPreExistingPromotionStatus = async () => undefined;
+    internals.promoteCollectionsThatShouldBeVisible = async () => undefined;
+    internals.validateExistingCollections = async () => ({});
+    internals.discoverHubsAndEnhance = async (...args: unknown[]) => {
+      const enhanced = args[10] as unknown[];
+      const live = settings.plex
+        .preExistingCollectionConfigs[0] as typeof config;
+      enhanced.push({ ...live, sortOrderHome: 5, isPromotedToHub: true });
+      // a member restore lands while discovery is awaiting Plex
+      live.visibilityConfig = restored;
+      live.sortOrderHome = 3;
+    };
+
+    await service.discoverAllHubs(
+      {
+        getLibraries: async () => [
+          { key: '4', title: 'Library Four', type: 'movie' },
+        ],
+      } as unknown as PlexAPI,
+      true,
+      true
+    );
+
+    const after = settings.plex
+      .preExistingCollectionConfigs[0] as typeof config;
+    expect(after.visibilityConfig).toEqual(restored);
+    expect(after.sortOrderHome).toBe(3);
+    expect(after.isPromotedToHub).toBe(true);
   });
 });

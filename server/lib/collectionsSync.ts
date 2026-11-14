@@ -312,6 +312,28 @@ class CollectionsSync {
       return;
     }
 
+    if (rotationGroupService.hasGroups() && rotationApply.status.running) {
+      logger.info('Rotation apply is running, waiting for completion...', {
+        label: 'Rotation',
+      });
+      const waitStart = Date.now();
+      while (rotationApply.status.running && !this.cancelled) {
+        if (Date.now() - waitStart > 120000) {
+          logger.warn(
+            'Rotation apply is still running after 120s, continuing with the sync',
+            { label: 'Rotation' }
+          );
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    if (this.cancelled) {
+      this.pending = false;
+      return;
+    }
+
     // Wait for any running individual collection syncs to complete
     const { IndividualCollectionScheduler } = await import(
       '@server/lib/collections/services/IndividualCollectionScheduler'
@@ -338,17 +360,6 @@ class CollectionsSync {
       );
 
       await IndividualCollectionScheduler.waitForIndividualSyncsToComplete();
-    }
-
-    if (rotationApply.status.running) {
-      while (rotationApply.status.running && !this.cancelled) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-
-    if (this.cancelled) {
-      this.pending = false;
-      return;
     }
 
     // All cross-job waits have cleared: claim the running state now. Setting it
@@ -415,11 +426,21 @@ class CollectionsSync {
       collectionSyncProgress.setDetail('Refreshing external data...');
       await this.refreshExternalData(plexClient);
 
+      let rotationSeqs: Record<string, number> | undefined;
       if (rotationGroupService.hasEnabledGroups()) {
-        const pass = rotationGroupService.runPass({
-          syncRunId: new Date(startTime).toISOString(),
-        });
-        if (pass.saved) await rotationGroupService.settlePositions();
+        try {
+          const pass = rotationGroupService.runPass({
+            syncRunId: new Date(startTime).toISOString(),
+          });
+          if (pass.saved) await rotationGroupService.settlePositions();
+          rotationSeqs = rotationGroupService.captureSeqs();
+        } catch (error) {
+          logger.error('Rotation pass failed, continuing the sync', {
+            label: 'Rotation',
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       // Transition to processing phase — total set by syncAllConfigurations
@@ -470,7 +491,9 @@ class CollectionsSync {
         this.setStage(stage);
       });
       plexClient.recordPhaseTime('ordering', Date.now() - orderingPhaseStart);
-      if (!this.cancelled) rotationGroupService.markApplied();
+      if (!this.cancelled && rotationSeqs) {
+        rotationGroupService.markApplied(rotationSeqs);
+      }
 
       // Clean up orphaned collections after sync completes
       this.setStage('Cleaning up orphaned collections...');

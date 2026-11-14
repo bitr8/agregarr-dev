@@ -154,7 +154,7 @@ describe('feature off', () => {
       saved: false,
     });
     service.reassertManagedFields();
-    service.markApplied();
+    service.markApplied({ x: 5 });
     service.onCollectionDeleted('pre-1');
     await service.settlePositions();
     expect(service.withOwnSettings(cfg(1) as never, 'preExisting')).toBe(
@@ -321,8 +321,20 @@ describe('pass', () => {
   it('markApplied sets appliedSeq to seq', async () => {
     await service.createGroup(input());
     expect(group().state.appliedSeq).toBe(0);
-    service.markApplied();
+    const seqs = service.captureSeqs();
+    expect(seqs[group().id]).toBe(group().state.seq);
+    service.markApplied(seqs);
     expect(group().state.appliedSeq).toBe(group().state.seq);
+  });
+
+  it('markApplied only marks the captured seq, so a mid-apply change stays unapplied', async () => {
+    await service.createGroup(input());
+    const seqs = service.captureSeqs();
+    service.rotateNow(group().id);
+    expect(group().state.seq).toBeGreaterThan(seqs[group().id]);
+    service.markApplied(seqs);
+    expect(group().state.appliedSeq).toBe(seqs[group().id]);
+    expect(group().state.appliedSeq).toBeLessThan(group().state.seq);
   });
 });
 
@@ -374,66 +386,98 @@ describe('reassert and non-members', () => {
 });
 
 describe('restore reads only the stash', () => {
+  const INACTIVE = vis(false, false, true);
+
+  const withRichMembers = () => {
+    const c1 = cfg(1) as Cfg;
+    c1.randomizeHomeOrder = true;
+    c1.sortOrderHome = 7;
+    c1.timeRestriction = {
+      alwaysActive: true,
+      inactiveVisibilityConfig: INACTIVE,
+    };
+  };
+
   const scramble = () => {
     for (let n = 1; n <= 6; n++) {
       cfg(n).visibilityConfig = vis(true, false, true);
       cfg(n).sortOrderHome = 42;
+      if (n === 1) {
+        (cfg(1).timeRestriction as Cfg).inactiveVisibilityConfig = vis(
+          true,
+          true,
+          true
+        );
+      }
     }
   };
 
-  const originals = () => {
-    const fresh = makeSettings();
-    return fresh.plex.preExistingCollectionConfigs.map((c) =>
-      JSON.stringify({
-        v: c.visibilityConfig,
-        s: c.sortOrderHome,
-        r: c.randomizeHomeOrder,
-      })
-    );
-  };
-  const current = () =>
-    settings().plex.preExistingCollectionConfigs.map((c) =>
-      JSON.stringify({
-        v: c.visibilityConfig,
-        s: c.sortOrderHome,
-        r: c.randomizeHomeOrder,
-      })
-    );
+  const LITERAL = [
+    { v: vis(true, true, false), s: 7, r: true },
+    { v: vis(false, false, false), s: 0, r: undefined },
+    { v: vis(true, true, false), s: 3, r: undefined },
+    { v: vis(false, false, false), s: 0, r: undefined },
+    { v: vis(true, true, false), s: 5, r: undefined },
+    { v: vis(false, false, false), s: 0, r: undefined },
+  ];
 
-  it('delete writes own back exactly, even with live values scrambled', async () => {
-    const expected = originals();
+  const current = () =>
+    settings().plex.preExistingCollectionConfigs.map((c) => ({
+      v: c.visibilityConfig,
+      s: c.sortOrderHome,
+      r: c.randomizeHomeOrder,
+    }));
+
+  const inactive = () =>
+    (cfg(1).timeRestriction as Cfg).inactiveVisibilityConfig;
+
+  it('managed values differ from the originals while the group is on', async () => {
+    withRichMembers();
+    await service.createGroup(input());
+    expect(inactive()).toEqual(vis(false, false, false));
+    expect(cfg(1).randomizeHomeOrder).toBe(false);
+  });
+
+  it('delete writes the original values back exactly, even with live values scrambled', async () => {
+    withRichMembers();
     await service.createGroup(input());
     scramble();
     service.deleteGroup(group().id);
-    expect(current()).toEqual(expected);
+    expect(current()).toEqual(LITERAL);
+    expect(inactive()).toEqual(INACTIVE);
   });
 
   it('disable restores every member and deletes the stashes; enable recaptures', async () => {
-    const expected = originals();
+    withRichMembers();
     await service.createGroup(input());
     const id = group().id;
     scramble();
     await service.updateGroup(id, input({ enabled: false }));
-    expect(current()).toEqual(expected);
+    expect(current()).toEqual(LITERAL);
+    expect(inactive()).toEqual(INACTIVE);
     expect(group().members.every((m) => m.own === undefined)).toBe(true);
     expect(group().state.slots.every((s) => s.occupant === null)).toBe(true);
     cfg(1).visibilityConfig = vis(false, true, false);
     await service.updateGroup(id, input({ enabled: true }));
-    expect(group().members[0].own?.visibilityConfig).toEqual(
-      vis(false, true, false)
-    );
+    expect(group().members[0].own).toMatchObject({
+      visibilityConfig: vis(false, true, false),
+      inactiveVisibilityConfig: INACTIVE,
+      sortOrderHome: 7,
+      randomizeHomeOrder: true,
+    });
     expect(group().state.slots.some((s) => s.occupant)).toBe(true);
   });
 
-  it('removing a member restores it from the stash', async () => {
+  it('removing a member restores it to the original values', async () => {
+    withRichMembers();
     await service.createGroup(input());
-    const own = JSON.stringify(group().members[0].own?.visibilityConfig);
     scramble();
     await service.updateGroup(
       group().id,
       input({ members: input().members.slice(1) })
     );
-    expect(JSON.stringify(cfg(1).visibilityConfig)).toBe(own);
+    expect(current()[0]).toEqual(LITERAL[0]);
+    expect(inactive()).toEqual(INACTIVE);
     expect(group().members.length).toBe(5);
   });
 
@@ -525,14 +569,26 @@ describe('rebind', () => {
     await service.createGroup(input());
     const old = settings().plex.preExistingCollectionConfigs.splice(2, 1)[0];
     settings().plex.preExistingCollectionConfigs.push(
-      pre(30, { name: old.name, collectionRatingKey: 'rk-new' })
+      pre(30, {
+        name: old.name,
+        collectionRatingKey: 'rk-new',
+        visibilityConfig: vis(true, true, false),
+        sortOrderHome: 30,
+      })
     );
     service.runPass({ now: NOW });
     const m = group().members.find((x) => x.name === old.name);
     expect(m?.configId).toBe('pre-30');
+    expect(m?.key).toBe('preExisting:pre-30');
     expect(m?.rebound?.previousRatingKey).toBe('rk-3');
     expect(m?.unboundSince).toBeUndefined();
-    expect(m?.own).toBeDefined();
+    expect(m?.own).toEqual({
+      visibilityConfig: vis(true, true, false),
+      inactiveVisibilityConfig: null,
+      sortOrderHome: 30,
+      randomizeHomeOrder: null,
+      capturedAt: NOW.toISOString(),
+    });
     expect(group().state.queue).toContain('preExisting:pre-30');
     expect(group().state.queue).not.toContain('preExisting:pre-3');
   });
@@ -666,5 +722,200 @@ describe('collection kind', () => {
       'collection:cfg-3',
     ]);
     expect(group().state.slots[0].occupant).toBe('collection:cfg-2');
+  });
+});
+
+describe('hardening', () => {
+  const settle = () => vi.waitFor(() => expect(kick).toHaveBeenCalled());
+
+  it('rotateNow follows up whenever the forced pass saved, not only when it rotated', async () => {
+    await service.createGroup(
+      input({
+        slotCount: 3,
+        members: [1, 2, 3].map((n) => ({
+          kind: 'preExisting' as const,
+          configId: `pre-${n}`,
+        })),
+      })
+    );
+    await settle();
+    const old = settings().plex.preExistingCollectionConfigs.splice(2, 1)[0];
+    settings().plex.preExistingCollectionConfigs.push(
+      pre(30, { name: old.name })
+    );
+    kick.mockClear();
+    const res = service.rotateNow(group().id);
+    expect(res.rotated).toBe(false);
+    expect(group().members[2].configId).toBe('pre-30');
+    await settle();
+    expect(autoReorderLibrary).toHaveBeenCalledWith('lib-1', 'home');
+  });
+
+  it('two groups can never bind the same recreated config in one pass', async () => {
+    cfg(3).name = 'Collection 1';
+    await service.createGroup(
+      input({
+        name: 'A',
+        slotCount: 1,
+        members: [1, 2].map((n) => ({
+          kind: 'preExisting' as const,
+          configId: `pre-${n}`,
+        })),
+      })
+    );
+    await service.createGroup(
+      input({
+        name: 'B',
+        slotCount: 1,
+        members: [3, 4].map((n) => ({
+          kind: 'preExisting' as const,
+          configId: `pre-${n}`,
+        })),
+      })
+    );
+    const list = settings().plex.preExistingCollectionConfigs;
+    list.splice(2, 1);
+    list.splice(0, 1);
+    list.push(pre(40, { name: 'Collection 1' }));
+    service.runPass({ now: NOW });
+    const groups = settings().plex.rotationGroups as RotationGroup[];
+    const bound = groups
+      .flatMap((g) => g.members)
+      .filter((m) => m.configId === 'pre-40');
+    expect(bound.length).toBe(1);
+    const stillUnbound = groups
+      .flatMap((g) => g.members)
+      .filter((m) => m.unboundSince);
+    expect(stillUnbound.length).toBe(1);
+  });
+
+  it('a malformed group never aborts the pass or other operations', async () => {
+    await service.createGroup(input());
+    const rg = settings().plex.rotationGroups as unknown[];
+    rg.push({ id: 'bad', enabled: true }, null, 'junk');
+    const next = new Date(NOW.getTime() + 24 * 3600e3);
+    let res!: ReturnType<typeof service.runPass>;
+    expect(() => {
+      res = service.runPass({ now: next, syncRunId: 'r' });
+    }).not.toThrow();
+    expect(res.rotated).toEqual([group().id]);
+    expect(() => service.reassertManagedFields()).not.toThrow();
+    expect(() => service.getMembershipMap()).not.toThrow();
+    await expect(service.listStatus()).resolves.toBeDefined();
+    await expect(service.listCandidates('lib-1')).resolves.toBeDefined();
+    await expect(
+      service.createGroup(
+        input({
+          name: 'Other',
+          members: [],
+        })
+      )
+    ).resolves.toBeDefined();
+    expect(service.isMemberRatingKey('rk-1')).toBe(true);
+  });
+
+  it('deleting a group settles the library its members were restored in', async () => {
+    await service.createGroup(input());
+    await settle();
+    autoReorderLibrary.mockClear();
+    service.deleteGroup(group().id);
+    await vi.waitFor(() =>
+      expect(autoReorderLibrary).toHaveBeenCalledWith('lib-1', 'home')
+    );
+  });
+
+  it('patchOwn on an enabled member with no stash writes nothing and throws', async () => {
+    await service.createGroup(input());
+    delete group().members[0].own;
+    const before = snapshot();
+    settings().save.mockClear();
+    expect(() =>
+      service.patchOwn('preExisting', 'pre-1', {
+        visibilityConfig: vis(true, true, true),
+      })
+    ).toThrow(/No saved settings/);
+    expect(snapshot()).toBe(before);
+    expect(settings().save).not.toHaveBeenCalled();
+    const status = await service.getStatus(group().id);
+    expect(status.warnings.map((w) => w.code)).toContain(
+      'own_settings_missing'
+    );
+  });
+
+  it('enabling captures a stash for a member that was marked unbound but exists', async () => {
+    await service.createGroup(input({ enabled: false }));
+    group().members[0].unboundSince = '2026-01-01T00:00:00.000Z';
+    await service.updateGroup(group().id, input({ enabled: true }));
+    expect(group().members[0].unboundSince).toBeUndefined();
+    expect(group().members[0].own?.visibilityConfig).toEqual(
+      vis(true, true, false)
+    );
+  });
+
+  it('deleting an enabled but invalid group still restores members with a usable stash', async () => {
+    await service.createGroup(input());
+    const g = group() as unknown as { state: { queue?: unknown } };
+    g.state.queue = undefined;
+    cfg(1).visibilityConfig = vis(false, false, true);
+    cfg(1).sortOrderHome = 42;
+    service.deleteGroup(group().id);
+    expect(cfg(1).visibilityConfig).toEqual(vis(true, true, false));
+    expect(cfg(1).sortOrderHome).toBe(1);
+    expect(settings().plex.rotationGroups).toBeUndefined();
+  });
+});
+
+describe('two libraries', () => {
+  it('groups in different libraries rotate and restore independently', async () => {
+    settings().plex.libraries.push({
+      key: 'lib-2',
+      name: 'Library Two',
+      type: 'movie',
+    });
+    for (let n = 11; n <= 14; n++) {
+      settings().plex.preExistingCollectionConfigs.push(
+        pre(n, { libraryId: 'lib-2', libraryName: 'Library Two' })
+      );
+    }
+    const two = (n: number) => ({
+      kind: 'preExisting' as const,
+      configId: `pre-${n}`,
+    });
+    await service.createGroup(
+      input({ name: 'One', slotCount: 1, members: [1, 2, 3].map(two) })
+    );
+    await service.createGroup(
+      input({
+        name: 'Two',
+        libraryId: 'lib-2',
+        slotCount: 1,
+        members: [11, 12, 13, 14].map(two),
+      })
+    );
+    const [g1, g2] = settings().plex.rotationGroups as RotationGroup[];
+    expect(g1.state.slots[0].occupant).toBe('preExisting:pre-1');
+    expect(g2.state.slots[0].occupant).toBe('preExisting:pre-11');
+    await expect(
+      service.createGroup(
+        input({ name: 'Cross', libraryId: 'lib-2', members: [two(5)] })
+      )
+    ).rejects.toThrow(/different library/);
+
+    const next = new Date(NOW.getTime() + 24 * 3600e3);
+    const res = service.runPass({ now: next, syncRunId: 'r' });
+    expect(res.rotated.sort()).toEqual([g1.id, g2.id].sort());
+    const [n1, n2] = settings().plex.rotationGroups as RotationGroup[];
+    expect(n1.state.slots[0].occupant).toBe('preExisting:pre-2');
+    expect(n2.state.slots[0].occupant).toBe('preExisting:pre-12');
+
+    const byId = (id: string) =>
+      settings().plex.preExistingCollectionConfigs.find(
+        (c) => c.id === id
+      ) as Cfg;
+    service.deleteGroup(n2.id);
+    expect(byId('pre-11').visibilityConfig).toEqual(vis(true, true, false));
+    expect(byId('pre-12').visibilityConfig).toEqual(vis(false, false, false));
+    expect(byId('pre-1').visibilityConfig).toEqual(vis(false, false, false));
+    expect(settings().plex.rotationGroups?.length).toBe(1);
   });
 });
