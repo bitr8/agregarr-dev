@@ -1,5 +1,7 @@
 import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
+import RotationBadge from '@app/components/Rotation/RotationBadge';
+import useRotationMembership from '@app/hooks/rotation/useRotationMembership';
 import type {
   CollectionFormConfig,
   CollectionSortOrder,
@@ -14,6 +16,7 @@ import {
   FunnelIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import type { Membership } from '@server/interfaces/api/rotationInterfaces';
 import axios from 'axios';
 import type React from 'react';
 import { useMemo, useState } from 'react';
@@ -117,6 +120,7 @@ type UnifiedCollection = {
   minimumRottenTomatoesAudienceRating?: number;
   showUnwatchedOnly?: boolean;
   createPlaceholdersForMissing?: boolean;
+  membership?: Membership;
   // Original config for saving
   originalConfig:
     | CollectionFormConfig
@@ -133,6 +137,8 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
 }) => {
   const intl = useIntl();
   const { addToast } = useToasts();
+  const { map: rotationMap, revalidate: revalidateRotation } =
+    useRotationMembership();
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -179,6 +185,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
     // Agregarr Collections
     collections.forEach((config) => {
+      const membership = rotationMap[`collection:${config.id}`];
       unified.push({
         id: `collection-${config.id}`,
         name: config.name,
@@ -186,9 +193,11 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
         collectionType: CollectionType.AGREGARR_CREATED,
         libraryName: config.libraryName,
         libraryId: config.libraryId,
-        visibilityConfig: config.visibilityConfig,
+        visibilityConfig:
+          membership?.own?.visibilityConfig ?? config.visibilityConfig,
         maxItems: config.maxItems,
-        randomizeHomeOrder: config.randomizeHomeOrder,
+        randomizeHomeOrder:
+          membership?.own?.randomizeHomeOrder ?? config.randomizeHomeOrder,
         sortOrder: config.sortOrder,
         downloadMode: config.downloadMode,
         searchMissingMovies: config.searchMissingMovies,
@@ -206,6 +215,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
           config.minimumRottenTomatoesAudienceRating,
         showUnwatchedOnly: config.showUnwatchedOnly,
         createPlaceholdersForMissing: config.createPlaceholdersForMissing,
+        membership,
         originalConfig: config,
       });
     });
@@ -227,6 +237,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
     // Pre-existing Collections
     preExisting.forEach((pre) => {
+      const membership = rotationMap[`preExisting:${pre.id}`];
       unified.push({
         id: `preExisting-${pre.id}`,
         name: pre.name,
@@ -234,14 +245,17 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
         collectionType: CollectionType.PRE_EXISTING,
         libraryName: pre.libraryName,
         libraryId: pre.libraryId,
-        visibilityConfig: pre.visibilityConfig,
-        randomizeHomeOrder: pre.randomizeHomeOrder,
+        visibilityConfig:
+          membership?.own?.visibilityConfig ?? pre.visibilityConfig,
+        randomizeHomeOrder:
+          membership?.own?.randomizeHomeOrder ?? pre.randomizeHomeOrder,
+        membership,
         originalConfig: pre,
       });
     });
 
     return unified;
-  }, [collections, hubs, preExisting]);
+  }, [collections, hubs, preExisting, rotationMap]);
 
   // Get unique libraries for filter
   const uniqueLibraries = useMemo(() => {
@@ -490,6 +504,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
     setIsSaving(true);
 
     let successCount = 0;
+    let rotationChanged = false;
 
     // Get selected collections
     const selectedCollections = unifiedCollections.filter((c) =>
@@ -683,6 +698,31 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
         // Merge updated fields into the base config
         const updatedConfig = { ...baseConfig, ...updatedFields };
 
+        const own = collection.membership?.own;
+        if (
+          collection.membership &&
+          own &&
+          (editValues.visibilityConfig ||
+            (editValues.randomizeHomeOrder !== undefined &&
+              isFieldApplicable('randomizeHomeOrder', collection.type)))
+        ) {
+          await axios.patch(
+            `/api/v1/rotation-groups/membership/${collection.type}/${collection.originalConfig.id}`,
+            {
+              ...(editValues.visibilityConfig && {
+                visibilityConfig: {
+                  ...own.visibilityConfig,
+                  ...editValues.visibilityConfig,
+                },
+              }),
+              ...(editValues.randomizeHomeOrder !== undefined && {
+                randomizeHomeOrder: editValues.randomizeHomeOrder,
+              }),
+            }
+          );
+          rotationChanged = true;
+        }
+
         // Call appropriate API endpoint based on type
         if (collection.type === 'collection') {
           await axios.put(`/api/v1/collections/${updatedConfig.id}/settings`, {
@@ -725,6 +765,10 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
     }
 
     setIsSaving(false);
+
+    if (rotationChanged) {
+      await revalidateRotation();
+    }
 
     if (successCount > 0) {
       addToast(
@@ -1063,6 +1107,14 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         }`}
                       >
                         {collection.name}
+                        {collection.membership && (
+                          <div className="mt-1">
+                            <RotationBadge
+                              membership={collection.membership}
+                              hideState
+                            />
+                          </div>
+                        )}
                       </td>
                       <td
                         className={`sticky left-60 z-10 truncate px-3 py-2 text-sm text-gray-400 shadow-[2px_0_0_0_rgb(75,85,99)] transition-colors ${
