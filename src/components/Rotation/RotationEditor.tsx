@@ -114,7 +114,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
     libraryId
       ? `${ROTATION_GROUPS_URL}/candidates?libraryId=${encodeURIComponent(
           libraryId
-        )}`
+        )}${group ? `&groupId=${encodeURIComponent(group.id)}` : ''}`
       : null,
     { revalidateOnFocus: false }
   );

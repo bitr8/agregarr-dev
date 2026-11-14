@@ -230,14 +230,20 @@ rotationGroupsRoutes.post('/preview', async (req, res) => {
 });
 
 rotationGroupsRoutes.get('/candidates', async (req, res) => {
-  const { libraryId } = req.query;
+  const { libraryId, groupId } = req.query;
   if (libraryId !== undefined && typeof libraryId !== 'string') {
     return res.status(400).json({ message: 'libraryId must be a string' });
   }
+  if (groupId !== undefined && typeof groupId !== 'string') {
+    return res.status(400).json({ message: 'groupId must be a string' });
+  }
   try {
-    return res
-      .status(200)
-      .json({ items: await service.listCandidates(libraryId || undefined) });
+    return res.status(200).json({
+      items: await service.listCandidates(
+        libraryId || undefined,
+        groupId || undefined
+      ),
+    });
   } catch (error) {
     return fail(res, error, 'list rotation candidates');
   }
@@ -341,7 +347,6 @@ rotationGroupsRoutes.post('/', async (req, res) => {
   if (message) return res.status(400).json({ message });
   try {
     const group = await service.createGroup(toGroupInput(req.body));
-    rotationApply.kick();
     return res.status(201).json(group);
   } catch (error) {
     return fail(res, error, 'create rotation group');
@@ -369,7 +374,6 @@ rotationGroupsRoutes.post('/:id/rotate', async (req, res) => {
   if (rejectIfBusy(res)) return;
   try {
     const result = service.rotateNow(req.params.id);
-    rotationApply.kick();
     const group = await service.getStatus(req.params.id);
     const body: RotateResult = { ...result, group };
     return res.status(202).json(body);
@@ -409,7 +413,6 @@ rotationGroupsRoutes.put('/:id', async (req, res) => {
       req.params.id,
       toGroupInput(req.body)
     );
-    rotationApply.kick();
     return res.status(200).json(group);
   } catch (error) {
     return fail(res, error, 'update rotation group');
@@ -420,7 +423,6 @@ rotationGroupsRoutes.delete('/:id', (req, res) => {
   if (rejectIfBusy(res)) return;
   try {
     service.deleteGroup(req.params.id);
-    rotationApply.kick();
     return res.status(204).end();
   } catch (error) {
     return fail(res, error, 'delete rotation group');

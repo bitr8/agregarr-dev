@@ -385,19 +385,19 @@ describe('rotation groups routes', () => {
   });
 
   describe('kick', () => {
-    it('rotate kicks apply and returns 202 with the fresh status', async () => {
+    it('rotate returns 202 with the fresh status and leaves apply to the service', async () => {
       const res = await call('POST', '/g-1/rotate');
       expect(res.status).toBe(202);
       expect(await res.json()).toEqual({ rotated: true, group: { id: 'g-1' } });
       expect(svc.rotateNow).toHaveBeenCalledWith('g-1');
-      expect(sync.kick).toHaveBeenCalledTimes(1);
+      expect(sync.kick).not.toHaveBeenCalled();
     });
 
-    it('create, update and delete kick apply', async () => {
+    it('create, update and delete leave apply to the service', async () => {
       await call('POST', '/', validInput());
       await call('PUT', '/g-1', validInput());
       expect((await call('DELETE', '/g-1')).status).toBe(204);
-      expect(sync.kick).toHaveBeenCalledTimes(3);
+      expect(sync.kick).not.toHaveBeenCalled();
     });
 
     it('queue passes the member key through', async () => {
