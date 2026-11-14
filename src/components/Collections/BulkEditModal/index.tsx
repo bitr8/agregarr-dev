@@ -77,6 +77,8 @@ const messages = defineMessages({
   latestSeason: 'Latest',
   airingSeason: 'Airing',
   noCollectionsSelected: 'No collections selected',
+  rotationOwnSaveFailed:
+    "Couldn't save this collection's own visibility setting. The rotation keeps using the previous one.",
 });
 
 interface BulkEditModalProps {
@@ -706,21 +708,40 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
             (editValues.randomizeHomeOrder !== undefined &&
               isFieldApplicable('randomizeHomeOrder', collection.type)))
         ) {
-          await axios.patch(
-            `/api/v1/rotation-groups/membership/${collection.type}/${collection.originalConfig.id}`,
-            {
-              ...(editValues.visibilityConfig && {
-                visibilityConfig: {
-                  ...own.visibilityConfig,
-                  ...editValues.visibilityConfig,
-                },
-              }),
-              ...(editValues.randomizeHomeOrder !== undefined && {
-                randomizeHomeOrder: editValues.randomizeHomeOrder,
-              }),
-            }
-          );
-          rotationChanged = true;
+          try {
+            await axios.patch(
+              `/api/v1/rotation-groups/membership/${collection.type}/${collection.originalConfig.id}`,
+              {
+                ...(editValues.visibilityConfig && {
+                  visibilityConfig: {
+                    ...own.visibilityConfig,
+                    ...(editValues.visibilityConfig.usersHome !== undefined && {
+                      usersHome: editValues.visibilityConfig.usersHome,
+                    }),
+                    ...(editValues.visibilityConfig.serverOwnerHome !==
+                      undefined && {
+                      serverOwnerHome:
+                        editValues.visibilityConfig.serverOwnerHome,
+                    }),
+                    ...(editValues.visibilityConfig.libraryRecommended !==
+                      undefined && {
+                      libraryRecommended:
+                        editValues.visibilityConfig.libraryRecommended,
+                    }),
+                  },
+                }),
+                ...(editValues.randomizeHomeOrder !== undefined && {
+                  randomizeHomeOrder: editValues.randomizeHomeOrder,
+                }),
+              }
+            );
+            rotationChanged = true;
+          } catch {
+            addToast(intl.formatMessage(messages.rotationOwnSaveFailed), {
+              appearance: 'warning',
+              autoDismiss: true,
+            });
+          }
         }
 
         // Call appropriate API endpoint based on type

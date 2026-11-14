@@ -6,12 +6,19 @@ const EMPTY: MembershipMap = {};
 export const ROTATION_MEMBERSHIP_KEY = '/api/v1/rotation-groups/membership';
 
 const useRotationMembership = () => {
-  const { data, mutate } = useSWR<MembershipMap>(ROTATION_MEMBERSHIP_KEY, {
-    shouldRetryOnError: false,
-    revalidateOnFocus: false,
-  });
+  const { data, error, mutate } = useSWR<MembershipMap>(
+    ROTATION_MEMBERSHIP_KEY,
+    {
+      shouldRetryOnError: false,
+      revalidateOnFocus: false,
+    }
+  );
 
-  return { map: data ?? EMPTY, revalidate: mutate };
+  return {
+    map: data ?? EMPTY,
+    revalidate: mutate,
+    isLoading: data === undefined && !error,
+  };
 };
 
 export default useRotationMembership;
