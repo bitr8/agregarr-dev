@@ -732,6 +732,12 @@ class RotationGroupService {
     };
 
     const state = group.state;
+    if (
+      prior &&
+      (prior.interval !== group.interval || prior.weekday !== group.weekday)
+    ) {
+      state.periodKey = null;
+    }
     if (!prior) {
       const start = this.libraryNextPosition(group.libraryId);
       state.slots = Array.from({ length: group.slotCount }, (_, i) => ({

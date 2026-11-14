@@ -338,6 +338,57 @@ describe('pass', () => {
   });
 });
 
+describe('schedule edits', () => {
+  const occupants = () => group().state.slots.map((s) => s.occupant);
+
+  const editSchedule = async (
+    start: Partial<GroupInput>,
+    storedKey: string,
+    edit: Partial<GroupInput>
+  ) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(NOW);
+      await service.createGroup(input(start));
+      const before = occupants();
+      const queue = [...group().state.queue];
+      group().state.periodKey = storedKey;
+      await service.updateGroup(group().id, input({ ...start, ...edit }));
+      return { before, queue };
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  it('daily to weekly keeps the slots and restamps to the current week', async () => {
+    const { before, queue } = await editSchedule({}, '2026-11-13', {
+      interval: 'weekly',
+      weekday: 1,
+    });
+    expect(occupants()).toEqual(before);
+    expect(group().state.queue).toEqual(queue);
+    expect(group().state.periodKey).toBe('2026-11-09');
+  });
+
+  it('changing only the weekday keeps the slots and restamps', async () => {
+    const { before } = await editSchedule(
+      { interval: 'weekly', weekday: 1 },
+      '2026-11-09',
+      { weekday: 3 }
+    );
+    expect(occupants()).toEqual(before);
+    expect(group().state.periodKey).toBe('2026-11-11');
+  });
+
+  it('daily to monthly keeps the slots and treats this month as done', async () => {
+    const { before } = await editSchedule({}, '2026-11-13', {
+      interval: 'monthly_random',
+    });
+    expect(occupants()).toEqual(before);
+    expect(group().state.periodKey).toBe('2026-11');
+  });
+});
+
 describe('reassert and non-members', () => {
   it('puts managed fields back after a stale full-copy write', async () => {
     await service.createGroup(input());
