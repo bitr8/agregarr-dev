@@ -2,7 +2,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/bitr8/agregarr-dev?label=release&color=blue)](https://github.com/bitr8/agregarr-dev/releases/latest) [![Docker pulls](https://img.shields.io/docker/pulls/bitr8/agregarr)](https://hub.docker.com/r/bitr8/agregarr) [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-Agregarr builds Plex collections from lists (TMDB, IMDb, Letterboxd, MDBList, Trakt, AniList, and your own Plex labels), draws overlays onto posters, and creates Coming Soon placeholders for titles you don't have yet.
+Agregarr builds Plex collections from TMDB, IMDb, Letterboxd, MDBList, Trakt, AniList, TVDB, and Plex label lists. It draws overlays onto posters and creates Coming Soon placeholders for titles you don't have yet.
 
 Upstream [Agregarr](https://github.com/agregarr/agregarr) has been quiet since April 2026. This fork continues the work, with fixes, new features, and a release every few weeks. It's maintained by an upstream contributor with [46 merged PRs](https://github.com/agregarr/agregarr/pulls?q=is%3Apr+is%3Amerged+author%3Abitr8) there. Docker releases ship as `bitr8/agregarr`.
 
@@ -21,7 +21,7 @@ Each version's changes are in the [release notes](https://github.com/bitr8/agreg
 | Tag              | What it tracks                                             |
 | ---------------- | ---------------------------------------------------------- |
 | `:latest`        | Stable releases. Recommended for most users.               |
-| `:2.12.3` (etc.) | Pinned to a specific release.                              |
+| `:2.13.0` (etc.) | Pinned to a specific release.                              |
 | `:develop`       | Bleeding edge. Builds on every push to develop, may break. |
 
 Release tags support amd64 and arm64 (Apple Silicon, RPi 4+). The `:develop` tag is amd64 only.
@@ -92,7 +92,8 @@ Beyond list sources:
 - **Library essentials** uses one config to generate a smart collection for each genre, decade, resolution, or content rating. An optional separator collection can group them.
 - The **Plex Label** source builds a collection from items carrying a label. **Target User** hides that collection from everyone except one Plex user.
 - **Filtered Plex hubs** replace Recently Added, Recently Released, and Recently Released Episodes with versions that leave placeholders out.
-- **Sort Title** pins a collection's place in Plex's alphabetical order. **Exclude from Ordering (Plex Label)** under Settings > General leaves collections managed by Shortlist or Kometa alone.
+- **Sort Title** pins a collection's place in Plex's alphabetical order. **Collection Sort Format**, under Settings > Plex, can file "The Accountant" under A. **Exclude from Ordering (Plex Label)**, under Settings > General, leaves collections managed by Shortlist or Kometa alone.
+- Tautulli Statistics collections and the dashboard can read from **Tracearr** instead of Tautulli.
 - Multi-source collections get an **Item Order**, so the Max Items cut keeps the best of each list. **Minimum IMDb votes** stops auto-download chasing a high rating based on a handful of votes.
 - IMDb charts include the Top 250 and Bottom 100.
 - Collection configs export to JSON and can be imported on the same instance or another one.
@@ -103,13 +104,17 @@ Agregarr recognises its own collections by label, so a hand-made collection with
 
 The template editor supports per-element conditions, so an element only renders when a field matches. It also has colour scaling on tiles and a configurable canvas size.
 
-Presets cover the usual badges. There's also an opt-in **Audio Codec** preset that reads the streams Plex scanned, including TrueHD Atmos, DD+ Atmos, DTS-HD MA, and others. Movies only for now.
+Presets cover the usual badges. Movies also have an opt-in **Audio Codec** preset that reads the streams Plex scanned, including TrueHD Atmos, DD+ Atmos, DTS-HD MA, and others.
 
-Per-library **episode media scanning** reads the actual episode files for resolution and HDR badges instead of relying on show-level metadata.
+Turn on **Use episode files for quality badges** in a TV library's overlay settings and shows and seasons will take resolution, HDR, HDR10+, Dolby Vision, and audio from their episode files instead of show-level metadata. A 4K show with a 1080p first season then gets the right badge on each.
 
 ![Episode scanning toggle](public/images/episode-scanning-toggle.png)
 
 Next-episode countdowns come from Sonarr, and templates can distinguish an estimated release date from a published one.
+
+Templates can use a movie's edition, such as Extended or IMAX, plus its theatrical, digital, and physical release dates. They can also use an item's rank in a collection for numbered top 10 rows.
+
+**Check Layout** in the editor flags text that will be clipped or hang off the poster.
 
 With Maintainerr connected, season posters show a deletion countdown drawn with your own template. A per-library option also puts the countdown on the show poster once every season is scheduled to go.
 
@@ -127,7 +132,9 @@ Placeholders are small video files that put upcoming titles into Plex before you
 
 Trailers come from TMDB first, then a yt-dlp YouTube search. You can also skip the download and use the static placeholder video. Before creating one, Agregarr checks the Sonarr and Radarr download status and names folders to match.
 
-Movie folders can include the TMDB ID (`Title (Year) {tmdb-12345}`), which keeps two films with the same title and year apart. Cleanup is self-healing: filters apply retroactively, and stuck records are cleared so the next sync can recreate them.
+Movie folders can include the TMDB ID (`Title (Year) {tmdb-12345}`), keeping two films with the same title and year apart. TV folders can include the TVDB ID.
+
+On Plex 1.43.3 and newer, TV trailers get their own Plex edition so they stay out of the real show. Cleanup recovers on later syncs: filters apply retroactively, and stuck records are cleared so the next sync can recreate them.
 
 **Running Seerr too?** Seerr reads Plex for availability, and a placeholder looks like the real film, so requests get marked available.
 
