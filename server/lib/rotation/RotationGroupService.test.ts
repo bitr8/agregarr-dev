@@ -6,6 +6,10 @@ const state = vi.hoisted(() => ({
   settings: undefined as unknown,
   planFails: false,
 }));
+const kick = vi.hoisted(() => vi.fn());
+const autoReorderLibrary = vi.hoisted(() =>
+  vi.fn<(lib: string, ctx: string) => Promise<void>>(async () => undefined)
+);
 
 vi.mock('@server/lib/settings', async (importOriginal) => {
   const actual = (await importOriginal()) as { getSettings: () => unknown };
@@ -32,30 +36,29 @@ vi.mock('@server/lib/posterStorage', () => ({
   getPosterUrl: (f: string) => `/poster/${f}`,
 }));
 
-const kick = vi.fn();
 vi.mock('./rotationApply', () => ({
   rotationApply: { status: { running: false }, kick },
   default: { status: { running: false }, kick },
 }));
 
-const autoReorderLibrary = vi.fn(async () => undefined);
 vi.mock('@server/routes/reorder', () => ({ autoReorderLibrary }));
 
 vi.mock('./engine', async (importOriginal) => {
-  const actual = (await importOriginal()) as typeof import('./engine');
+  const actual = (await importOriginal()) as typeof Engine;
   return {
     ...actual,
-    planRotation: (input: Parameters<typeof actual.planRotation>[0]) => {
+    planRotation: (input: PlanInput) => {
       if (state.planFails) throw new Error('planner failed');
       return actual.planRotation(input);
     },
   };
 });
 
-import logger from '@server/logger';
 import type { GroupInput } from '@server/interfaces/api/rotationInterfaces';
+import logger from '@server/logger';
+import type * as Engine from './engine';
 import { rotationGroupService as service } from './RotationGroupService';
-import type { RotationGroup } from './types';
+import type { PlanInput, RotationGroup } from './types';
 
 type Cfg = Record<string, unknown>;
 
@@ -75,7 +78,8 @@ const pre = (n: number, extra: Cfg = {}): Cfg => ({
   sortOrderHome: n % 2 === 0 ? 0 : n,
   sortOrderLibrary: 0,
   isLibraryPromoted: false,
-  visibilityConfig: n % 2 === 0 ? vis(false, false, false) : vis(true, true, false),
+  visibilityConfig:
+    n % 2 === 0 ? vis(false, false, false) : vis(true, true, false),
   isActive: true,
   collectionType: 'preexisting',
   ...extra,
@@ -129,7 +133,6 @@ const input = (over: Partial<GroupInput> = {}): GroupInput => ({
 const cfg = (n: number) =>
   settings().plex.preExistingCollectionConfigs[n - 1] as Cfg;
 const group = () => settings().plex.rotationGroups?.[0] as RotationGroup;
-const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
   state.settings = makeSettings();
@@ -154,7 +157,9 @@ describe('feature off', () => {
     service.markApplied();
     service.onCollectionDeleted('pre-1');
     await service.settlePositions();
-    expect(service.withOwnSettings(cfg(1) as never, 'preExisting')).toBe(cfg(1));
+    expect(service.withOwnSettings(cfg(1) as never, 'preExisting')).toBe(
+      cfg(1)
+    );
     expect(service.getMembershipMap()).toEqual({});
     expect(snapshot()).toBe(before);
     expect(settings().save).not.toHaveBeenCalled();
@@ -198,7 +203,10 @@ describe('create', () => {
     });
     await service.createGroup(input());
     expect(settings().save).toHaveBeenCalledTimes(1);
-    expect(seen[0].occupants).toEqual(['preExisting:pre-1', 'preExisting:pre-2']);
+    expect(seen[0].occupants).toEqual([
+      'preExisting:pre-1',
+      'preExisting:pre-2',
+    ]);
     const g = group();
     expect(g.members.every((m) => m.own)).toBe(true);
     expect(g.members[0].own?.visibilityConfig).toEqual(own);
@@ -221,14 +229,14 @@ describe('create', () => {
     await expect(
       service.createGroup(input({ interval: 'weekly' }))
     ).rejects.toThrow(/weekday/);
-    await expect(service.createGroup(input({ libraryId: 'nope' }))).rejects.toThrow(
-      /library/
-    );
+    await expect(
+      service.createGroup(input({ libraryId: 'nope' }))
+    ).rejects.toThrow(/library/);
     expect(settings().save).not.toHaveBeenCalled();
     await service.createGroup(input());
-    await expect(service.createGroup(input({ name: 'group one' }))).rejects.toThrow(
-      /already exists/
-    );
+    await expect(
+      service.createGroup(input({ name: 'group one' }))
+    ).rejects.toThrow(/already exists/);
   });
 });
 
@@ -249,7 +257,9 @@ describe('pass', () => {
     expect(events[0]).toContain('preExisting:pre-3');
     expect(events[1]).toBe(JSON.stringify(vis(true, true, false)));
     expect(vi.mocked(logger.info)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(logger.info).mock.calls[0][1]).toEqual({ label: 'Rotation' });
+    expect((vi.mocked(logger.info).mock.calls[0] as unknown[])[1]).toEqual({
+      label: 'Rotation',
+    });
     expect(cfg(1).visibilityConfig).toEqual(vis(false, false, false));
   });
 
@@ -272,7 +282,10 @@ describe('pass', () => {
     settings().save.mockClear();
     state.planFails = true;
     expect(() =>
-      service.runPass({ now: new Date(NOW.getTime() + 48 * 3600e3), syncRunId: 'x' })
+      service.runPass({
+        now: new Date(NOW.getTime() + 48 * 3600e3),
+        syncRunId: 'x',
+      })
     ).toThrow('planner failed');
     expect(snapshot()).toBe(before);
     expect(settings().save).not.toHaveBeenCalled();
@@ -283,8 +296,13 @@ describe('pass', () => {
     const slotId = group().state.slots[0].id;
     (cfg(1) as { sortOrderHome: number }).sortOrderHome = 9;
     service.runPass({ now: NOW });
-    expect(group().state.slots.find((s) => s.id === slotId)?.sortOrderHome).toBe(9);
-    const res = service.runPass({ now: new Date(NOW.getTime() + 24 * 3600e3), syncRunId: 'r' });
+    expect(
+      group().state.slots.find((s) => s.id === slotId)?.sortOrderHome
+    ).toBe(9);
+    const res = service.runPass({
+      now: new Date(NOW.getTime() + 24 * 3600e3),
+      syncRunId: 'r',
+    });
     expect(res.rotated.length).toBe(1);
     expect(cfg(3).sortOrderHome).toBe(9);
   });
@@ -326,7 +344,12 @@ describe('reassert and non-members', () => {
 
   it('saving a non-member with groups present leaves it byte-identical', async () => {
     await service.createGroup(
-      input({ members: [1, 2, 3].map((n) => ({ kind: 'preExisting' as const, configId: `pre-${n}` })) })
+      input({
+        members: [1, 2, 3].map((n) => ({
+          kind: 'preExisting' as const,
+          configId: `pre-${n}`,
+        })),
+      })
     );
     const before = JSON.stringify(cfg(5));
     cfg(5).name = 'Renamed';
@@ -343,7 +366,8 @@ describe('reassert and non-members', () => {
     const stored = JSON.stringify(cfg(3));
     const out = service.withOwnSettings(cfg(3) as never, 'preExisting') as Cfg;
     expect(out).not.toBe(cfg(3));
-    expect(out.visibilityConfig).toEqual(vis(false, false, false));
+    expect(cfg(3).visibilityConfig).toEqual(vis(false, false, false));
+    expect(out.visibilityConfig).toEqual(vis(true, true, false));
     expect(out.sortOrderHome).toBe(3);
     expect(JSON.stringify(cfg(3))).toBe(stored);
   });
@@ -395,7 +419,9 @@ describe('restore reads only the stash', () => {
     expect(group().state.slots.every((s) => s.occupant === null)).toBe(true);
     cfg(1).visibilityConfig = vis(false, true, false);
     await service.updateGroup(id, input({ enabled: true }));
-    expect(group().members[0].own?.visibilityConfig).toEqual(vis(false, true, false));
+    expect(group().members[0].own?.visibilityConfig).toEqual(
+      vis(false, true, false)
+    );
     expect(group().state.slots.some((s) => s.occupant)).toBe(true);
   });
 
@@ -416,7 +442,9 @@ describe('restore reads only the stash', () => {
     delete group().members[0].own;
     cfg(1).visibilityConfig = vis(true, true, true);
     const status = await service.getStatus(group().id);
-    expect(status.warnings.map((w) => w.code)).toContain('own_settings_missing');
+    expect(status.warnings.map((w) => w.code)).toContain(
+      'own_settings_missing'
+    );
     service.deleteGroup(group().id);
     expect(cfg(1).visibilityConfig).toEqual(vis(false, false, false));
     expect(logger.warn).toHaveBeenCalled();
@@ -436,6 +464,32 @@ describe('membership and own settings', () => {
     expect(JSON.stringify(cfg(3))).toBe(live);
     service.deleteGroup(group().id);
     expect(cfg(3).visibilityConfig).toEqual(vis(true, false, false));
+  });
+
+  it('patchOwn merges partial visibility and ignores undefined values', async () => {
+    await service.createGroup(input());
+    const m = service.patchOwn('preExisting', 'pre-1', {
+      visibilityConfig: { libraryRecommended: true } as never,
+    });
+    expect(m.own?.visibilityConfig).toEqual(vis(true, true, true));
+    const m2 = service.patchOwn('preExisting', 'pre-1', {
+      visibilityConfig: {
+        usersHome: undefined,
+        serverOwnerHome: false,
+      } as never,
+    });
+    expect(m2.own?.visibilityConfig).toEqual(vis(true, false, true));
+  });
+
+  it('reassert after PUT-style writes of own visibility on a waiting member keeps it hidden and the stash intact', async () => {
+    await service.createGroup(input());
+    const stash = JSON.stringify(group().members[2].own);
+    for (const body of [vis(true, true, true), vis(false, true, false)]) {
+      cfg(3).visibilityConfig = { ...body };
+      service.reassertManagedFields();
+      expect(cfg(3).visibilityConfig).toEqual(vis(false, false, false));
+      expect(JSON.stringify(group().members[2].own)).toBe(stash);
+    }
   });
 
   it('patchOwn on a non-member throws not found', async () => {
@@ -514,7 +568,9 @@ describe('status and previews', () => {
     expect(s.nextChange.kind).toBe('boundary');
     expect(s.nextChange.expectedSyncAt).toBeDefined();
     expect(s.members?.length).toBe(6);
-    expect(s.members?.find((m) => m.key === 'preExisting:pre-3')?.queuePosition).toBe(1);
+    expect(
+      s.members?.find((m) => m.key === 'preExisting:pre-3')?.queuePosition
+    ).toBe(1);
   });
 
   it('previewDraft saves nothing and describes who leaves and joins', async () => {

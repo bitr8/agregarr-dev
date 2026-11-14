@@ -1,4 +1,3 @@
-import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
@@ -13,6 +12,7 @@ import { OriginalsCollectionSync } from '@server/lib/collections/sources/origina
 import { templateEngine } from '@server/lib/collections/utils/TemplateEngine';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import collectionsSync from '@server/lib/collectionsSync';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import type {
   CollectionConfig,
   MultiSourceCombineMode,

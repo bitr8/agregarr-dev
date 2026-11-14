@@ -1,5 +1,5 @@
-import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import { preExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';

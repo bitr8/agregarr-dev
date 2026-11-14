@@ -1,5 +1,5 @@
-import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';

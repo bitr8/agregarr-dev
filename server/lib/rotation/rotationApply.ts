@@ -42,9 +42,7 @@ class RotationApply {
         const hubSync = new HubSyncService();
         await hubSync.syncHubVisibility(plexClient);
         await hubSync.syncUnifiedOrdering(plexClient);
-        const { rotationGroupService } = await import(
-          './RotationGroupService'
-        );
+        const { rotationGroupService } = await import('./RotationGroupService');
         rotationGroupService.markApplied();
       } while (this.rerun);
     } catch (error) {

@@ -1,6 +1,6 @@
-import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import { defaultHubConfigService } from '@server/lib/collections/services/DefaultHubConfigService';
 import { preExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import type {
   CollectionConfig,
   PlexHubConfig,

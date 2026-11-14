@@ -1,20 +1,20 @@
-import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type {
   Candidate,
   GroupInput,
-  MemberSummary,
   Membership,
   MembershipMap,
+  MemberSummary,
   OwnSettingsPatch,
   PreviewResult,
   RotationGroupStatus,
   RotationWarning,
   SavedPreview,
 } from '@server/interfaces/api/rotationInterfaces';
+import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
+import MetadataTrackingService from '@server/lib/metadata/MetadataTrackingService';
 import { getPosterUrl } from '@server/lib/posterStorage';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
-import MetadataTrackingService from '@server/lib/metadata/MetadataTrackingService';
 import logger from '@server/logger';
 import parser from 'cron-parser';
 import { randomUUID } from 'crypto';
@@ -176,7 +176,8 @@ class RotationGroupService {
     now: Date
   ): Record<MemberKey, Eligibility> {
     const map: Record<MemberKey, Eligibility> = {};
-    for (const m of group.members) map[m.key] = this.eligibilityOf(group, m, now);
+    for (const m of group.members)
+      map[m.key] = this.eligibilityOf(group, m, now);
     return map;
   }
 
@@ -277,7 +278,9 @@ class RotationGroupService {
 
   private commitWrites(writes: ConfigWrite[]): void {
     for (const w of writes) {
-      applyManagedFields(w.config, w.fields, { adoptPosition: w.adoptPosition });
+      applyManagedFields(w.config, w.fields, {
+        adoptPosition: w.adoptPosition,
+      });
     }
   }
 
@@ -478,7 +481,8 @@ class RotationGroupService {
       const s = draft.state;
       s.queue = s.queue.filter((k) => k !== key);
       s.shownThisCycle = s.shownThisCycle.filter((k) => k !== key);
-      for (const slot of s.slots) if (slot.occupant === key) slot.occupant = null;
+      for (const slot of s.slots)
+        if (slot.occupant === key) slot.occupant = null;
       if (draft.enabled) {
         draft.state = planRotation({
           group: draft,
@@ -559,7 +563,9 @@ class RotationGroupService {
       throw new RotationValidationError('Pick at least one place to show.');
     }
     if (!Array.isArray(input.members) || input.members.length > 500) {
-      throw new RotationValidationError('A rotation can hold up to 500 members.');
+      throw new RotationValidationError(
+        'A rotation can hold up to 500 members.'
+      );
     }
     const configs = new Map<MemberKey, MemberConfig>();
     for (const m of input.members) {
@@ -628,7 +634,8 @@ class RotationGroupService {
         addedAt: iso,
       };
       member.name = config.name;
-      if (config.collectionRatingKey) member.ratingKey = config.collectionRatingKey;
+      if (config.collectionRatingKey)
+        member.ratingKey = config.collectionRatingKey;
       return member;
     });
 
@@ -636,7 +643,7 @@ class RotationGroupService {
     if (prior && wasEnabled) {
       const keep = new Set(members.map((m) => m.key));
       for (const old of prior.members) {
-        if (!keep.has(old.key) || !input.enabled) restore.push(old);
+        if (!keep.has(old.key) || !input.enabled) restore.push(clone(old));
       }
     }
 
@@ -644,9 +651,8 @@ class RotationGroupService {
       if (!input.enabled) {
         delete member.own;
       } else if (!member.own && !member.unboundSince) {
-        const wasBoundAndEnabled = wasEnabled && prior?.members.some(
-          (p) => p.key === member.key
-        );
+        const wasBoundAndEnabled =
+          wasEnabled && prior?.members.some((p) => p.key === member.key);
         if (!wasBoundAndEnabled) {
           member.own = captureOwn(configs.get(member.key) as MemberConfig, now);
         }
@@ -781,7 +787,9 @@ class RotationGroupService {
       throw new RotationValidationError('This rotation is turned off.');
     }
     if (!group.members.some((m) => m.key === key)) {
-      throw new RotationValidationError('That collection is not in this rotation.');
+      throw new RotationValidationError(
+        'That collection is not in this rotation.'
+      );
     }
     if (group.state.slots.some((s) => s.occupant === key)) {
       throw new RotationValidationError('That collection is already showing.');
@@ -817,14 +825,16 @@ class RotationGroupService {
     const upNext = this.upNextOf(group, eligibility, now).map(summarise);
     const ok = kept.filter((m) => eligibility[m.key] === 'ok').length;
     const restoredSummaries = await Promise.all(
-      restore.map(async (m): Promise<MemberSummary> => ({
-        key: m.key,
-        kind: m.kind,
-        configId: m.configId,
-        name: m.name,
-        posterUrl: await this.posterFor(m.ratingKey, group.state.seq, ctx),
-        state: 'waiting',
-      }))
+      restore.map(
+        async (m): Promise<MemberSummary> => ({
+          key: m.key,
+          kind: m.kind,
+          configId: m.configId,
+          name: m.name,
+          posterUrl: await this.posterFor(m.ratingKey, group.state.seq, ctx),
+          state: 'waiting',
+        })
+      )
     );
     return {
       now: group.state.slots
@@ -882,7 +892,9 @@ class RotationGroupService {
   ): Promise<string | null> {
     if (!ratingKey) return null;
     if (ctx.posters.has(ratingKey)) return ctx.posters.get(ratingKey) ?? null;
-    let url: string | null = `/api/v1/rotation-groups/poster/${ratingKey}?v=${seq}`;
+    let url:
+      | string
+      | null = `/api/v1/rotation-groups/poster/${ratingKey}?v=${seq}`;
     try {
       const file = await MetadataTrackingService.getPosterLocalPath(ratingKey);
       if (file) url = getPosterUrl(file);
@@ -972,23 +984,35 @@ class RotationGroupService {
       reason: eligibility[m.key],
     });
     const ok = group.members.filter((m) => eligibility[m.key] === 'ok').length;
-    if (ok <= group.slotCount) warnings.push({ code: 'pool_not_larger_than_slots' });
-    if (group.state.slots.some((s) => !s.occupant)) warnings.push({ code: 'empty_slots' });
+    if (ok <= group.slotCount)
+      warnings.push({ code: 'pool_not_larger_than_slots' });
+    if (group.state.slots.some((s) => !s.occupant))
+      warnings.push({ code: 'empty_slots' });
     const sitting = group.members.filter(
       (m) => eligibility[m.key] !== 'ok' && eligibility[m.key] !== 'unbound'
     );
-    if (sitting.length) warnings.push({ code: 'sitting_out', members: sitting.map(entry) });
-    const unbound = group.members.filter((m) => eligibility[m.key] === 'unbound');
-    if (unbound.length) warnings.push({ code: 'unbound', members: unbound.map(entry) });
-    const rebound = group.members.filter(
-      (m) => m.rebound && now.getTime() - Date.parse(m.rebound.at) < REBOUND_WARNING_MS
+    if (sitting.length)
+      warnings.push({ code: 'sitting_out', members: sitting.map(entry) });
+    const unbound = group.members.filter(
+      (m) => eligibility[m.key] === 'unbound'
     );
-    if (rebound.length) warnings.push({ code: 'rebound', members: rebound.map(entry) });
+    if (unbound.length)
+      warnings.push({ code: 'unbound', members: unbound.map(entry) });
+    const rebound = group.members.filter(
+      (m) =>
+        m.rebound &&
+        now.getTime() - Date.parse(m.rebound.at) < REBOUND_WARNING_MS
+    );
+    if (rebound.length)
+      warnings.push({ code: 'rebound', members: rebound.map(entry) });
     const noOwn = group.members.filter(
       (m) => !m.own && !m.unboundSince && this.memberConfig(m)
     );
     if (noOwn.length) {
-      warnings.push({ code: 'own_settings_missing', members: noOwn.map(entry) });
+      warnings.push({
+        code: 'own_settings_missing',
+        members: noOwn.map(entry),
+      });
     }
     const period = PERIOD_MS[group.interval];
     if (period) {
@@ -1013,7 +1037,7 @@ class RotationGroupService {
       return {
         id: String((group as RotationGroup)?.id ?? ''),
         name: String((group as RotationGroup)?.name ?? ''),
-        libraryId: group?.libraryId ?? '',
+        libraryId: (group as RotationGroup | undefined)?.libraryId ?? '',
         libraryName,
         enabled: false,
         slotCount: 0,
@@ -1038,7 +1062,9 @@ class RotationGroupService {
     const okKeys = group.members
       .filter((m) => eligibility[m.key] === 'ok')
       .map((m) => m.key);
-    const shown = group.state.shownThisCycle.filter((k) => okKeys.includes(k)).length;
+    const shown = group.state.shownThisCycle.filter((k) =>
+      okKeys.includes(k)
+    ).length;
 
     let nextChange: RotationGroupStatus['nextChange'] = { kind: 'disabled' };
     if (group.enabled) {
@@ -1143,7 +1169,9 @@ class RotationGroupService {
           groupId
         );
         const subtype =
-          kind === 'collection' ? (config as CollectionConfig).subtype : undefined;
+          kind === 'collection'
+            ? (config as CollectionConfig).subtype
+            : undefined;
         return {
           key: memberKey(kind, config.id),
           kind,
@@ -1176,7 +1204,10 @@ class RotationGroupService {
     return undefined;
   }
 
-  private membershipOf(group: RotationGroup, member: RotationMember): Membership {
+  private membershipOf(
+    group: RotationGroup,
+    member: RotationMember
+  ): Membership {
     const idx = group.state.slots.findIndex((s) => s.occupant === member.key);
     return {
       groupId: group.id,
@@ -1221,7 +1252,7 @@ class RotationGroupService {
     }
 
     const base: RotationOwnSettings = member.own ?? {
-      visibilityConfig: patch.visibilityConfig ?? { ...ALL_HIDDEN },
+      visibilityConfig: { ...ALL_HIDDEN },
       inactiveVisibilityConfig: null,
       sortOrderHome: 0,
       randomizeHomeOrder: null,
@@ -1239,13 +1270,27 @@ class RotationGroupService {
     own: RotationOwnSettings,
     patch: OwnSettingsPatch
   ): RotationOwnSettings {
+    const defined = <T extends object>(v: T | undefined): Partial<T> =>
+      Object.fromEntries(
+        Object.entries(v ?? {}).filter(([, x]) => x !== undefined)
+      ) as Partial<T>;
     return {
       ...own,
       ...(patch.visibilityConfig
-        ? { visibilityConfig: { ...patch.visibilityConfig } }
+        ? {
+            visibilityConfig: {
+              ...own.visibilityConfig,
+              ...defined(patch.visibilityConfig),
+            },
+          }
         : {}),
       ...(patch.inactiveVisibilityConfig
-        ? { inactiveVisibilityConfig: { ...patch.inactiveVisibilityConfig } }
+        ? {
+            inactiveVisibilityConfig: {
+              ...(own.inactiveVisibilityConfig ?? ALL_HIDDEN),
+              ...defined(patch.inactiveVisibilityConfig),
+            },
+          }
         : {}),
       ...(patch.randomizeHomeOrder !== undefined
         ? { randomizeHomeOrder: patch.randomizeHomeOrder }
