@@ -1,23 +1,39 @@
 import Button from '@app/components/Common/Button';
 import messages from '@app/components/Rotation/messages';
 import PosterTile from '@app/components/Rotation/PosterTile';
-import { formatDay } from '@app/components/Rotation/utils';
 import { ROTATION_GROUPS_URL } from '@app/hooks/rotation/useRotationGroups';
 import type { SavedPreview } from '@server/interfaces/api/rotationInterfaces';
+import { useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 interface PreviewNextProps {
   groupId: string;
-  notBefore?: string;
+  seq: number;
+  nextSentence: string;
 }
 
-const PreviewNext = ({ groupId, notBefore }: PreviewNextProps) => {
+const PreviewNext = ({ groupId, seq, nextSentence }: PreviewNextProps) => {
   const intl = useIntl();
   const { data, error, mutate, isLoading } = useSWR<SavedPreview>(
     `${ROTATION_GROUPS_URL}/${groupId}/preview?steps=3`,
     { revalidateOnFocus: false }
   );
+  const seenSeq = useRef(seq);
+
+  useEffect(() => {
+    if (seenSeq.current !== seq) {
+      seenSeq.current = seq;
+      mutate();
+    }
+  }, [seq, mutate]);
+
+  const label = (i: number) =>
+    i === 0
+      ? nextSentence
+      : intl.formatMessage(
+          i === 1 ? messages.previewThen : messages.previewLater
+        );
 
   let body: React.ReactNode;
   if (error) {
@@ -54,13 +70,7 @@ const PreviewNext = ({ groupId, notBefore }: PreviewNextProps) => {
       <div className="space-y-5">
         {data.steps.map((step, i) => (
           <div key={i}>
-            <h5 className="mb-2 text-xs text-gray-400">
-              {i === 0 && notBefore
-                ? intl.formatMessage(messages.previewAfterThat, {
-                    date: formatDay(intl, notBefore),
-                  })
-                : intl.formatMessage(messages.previewStep, { number: i + 1 })}
-            </h5>
+            <h5 className="mb-2 text-xs text-gray-400">{label(i)}</h5>
             <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
               {step.slots.map((m) => (
                 <PosterTile

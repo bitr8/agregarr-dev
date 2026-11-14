@@ -19,6 +19,7 @@ const SlotCountField = ({ value, onChange }: SlotCountFieldProps) => {
       <div className="flex items-center gap-3">
         <Button
           buttonSize="sm"
+          className="min-h-[40px] min-w-[40px] justify-center sm:min-h-0 sm:min-w-0"
           disabled={value <= MIN}
           aria-label={intl.formatMessage(messages.slotsFewer)}
           onClick={() => onChange(Math.max(MIN, value - 1))}
@@ -33,6 +34,7 @@ const SlotCountField = ({ value, onChange }: SlotCountFieldProps) => {
         </output>
         <Button
           buttonSize="sm"
+          className="min-h-[40px] min-w-[40px] justify-center sm:min-h-0 sm:min-w-0"
           disabled={value >= MAX}
           aria-label={intl.formatMessage(messages.slotsMore)}
           onClick={() => onChange(Math.min(MAX, value + 1))}

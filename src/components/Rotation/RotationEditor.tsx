@@ -4,12 +4,18 @@ import PageTitle from '@app/components/Common/PageTitle';
 import SlideCheckbox from '@app/components/Common/SlideCheckbox';
 import Tooltip from '@app/components/Common/Tooltip';
 import IntervalField from '@app/components/Rotation/IntervalField';
+import type { RowCandidate } from '@app/components/Rotation/MemberPicker';
 import MemberPicker from '@app/components/Rotation/MemberPicker';
 import messages from '@app/components/Rotation/messages';
 import PreviewPanel from '@app/components/Rotation/PreviewPanel';
+import RadioCards from '@app/components/Rotation/RadioCards';
 import SlotCountField from '@app/components/Rotation/SlotCountField';
 import useSyncRunning from '@app/components/Rotation/useSyncRunning';
-import { isSyncRunningError } from '@app/components/Rotation/utils';
+import {
+  intervalLabels,
+  isSyncRunningError,
+  nextChangeSentence,
+} from '@app/components/Rotation/utils';
 import { ROTATION_GROUPS_URL } from '@app/hooks/rotation/useRotationGroups';
 import { apiErrorMessage } from '@app/utils/apiErrorMessage';
 import { ChevronLeftIcon, LockClosedIcon } from '@heroicons/react/24/outline';
@@ -52,13 +58,16 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
   const syncRunning = useSyncRunning();
   const isEdit = !!groupId;
 
-  const { data: libraries, error: librariesError } = useSWR<PlexLibrary[]>(
-    '/api/v1/settings/plex/libraries'
-  );
+  const {
+    data: libraries,
+    error: librariesError,
+    mutate: mutateLibraries,
+  } = useSWR<PlexLibrary[]>('/api/v1/settings/plex/libraries');
   const {
     data: group,
     error: groupError,
     mutate: mutateGroup,
+    isValidating: groupValidating,
   } = useSWR<RotationGroupStatus>(
     groupId ? `${ROTATION_GROUPS_URL}/${groupId}` : null
   );
@@ -82,10 +91,16 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
   const [formError, setFormError] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
   const [triedSave, setTriedSave] = useState(false);
+  const [lookResult, setLookResult] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const hydrated = useRef(false);
 
   useEffect(() => {
-    if (group && !hydrated.current) {
+    hydrated.current = false;
+  }, [groupId]);
+
+  useEffect(() => {
+    if (group && !groupValidating && !hydrated.current) {
       hydrated.current = true;
       setName(group.name);
       setSlotCount(group.slotCount);
@@ -96,7 +111,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
       setEnabled(group.enabled);
       setSelected(new Set((group.members ?? []).map((m) => m.key)));
     }
-  }, [group]);
+  }, [group, groupValidating]);
 
   const libraryId = isEdit
     ? group?.libraryId ?? ''
@@ -118,27 +133,49 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
       : null,
     { revalidateOnFocus: false }
   );
-  const candidates = candidateData?.items;
+  const serverCandidates = candidateData?.items;
+
+  const candidates = useMemo<RowCandidate[] | undefined>(() => {
+    if (!serverCandidates) {
+      return undefined;
+    }
+    const known = new Set(serverCandidates.map((c) => c.key));
+    const missing: RowCandidate[] = (group?.members ?? [])
+      .filter((m) => !known.has(m.key))
+      .map((m) => ({
+        key: m.key,
+        kind: m.kind,
+        configId: m.configId,
+        name: m.name,
+        libraryId: group?.libraryId ?? '',
+        libraryName: group?.libraryName ?? '',
+        type: '',
+        posterUrl: m.posterUrl,
+        selectable: false,
+        missing: true,
+      }));
+    return [...missing, ...serverCandidates];
+  }, [serverCandidates, group]);
 
   const saved = useMemo(
     () => new Map((group?.members ?? []).map((m) => [m.key, m])),
     [group]
   );
 
+  const excluded = useMemo(
+    () =>
+      new Set(
+        (candidates ?? [])
+          .filter((c) => selected.has(c.key) && !c.selectable)
+          .map((c) => c.key)
+      ),
+    [candidates, selected]
+  );
+
   const draft = useMemo<GroupInput>(() => {
     const ordered = (candidates ?? [])
-      .filter((c) => selected.has(c.key))
+      .filter((c) => selected.has(c.key) && c.selectable)
       .map((c) => ({ kind: c.kind, configId: c.configId }));
-    const known = new Set((candidates ?? []).map((c) => c.key));
-    const extra = Array.from(selected)
-      .filter((key) => !known.has(key))
-      .map((key) => {
-        const at = key.indexOf(':');
-        return {
-          kind: key.slice(0, at) as Candidate['kind'],
-          configId: key.slice(at + 1),
-        };
-      });
     return {
       name: name.trim(),
       libraryId,
@@ -148,7 +185,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
       weekday: interval === 'weekly' ? weekday : undefined,
       order,
       surfaces,
-      members: [...ordered, ...extra],
+      members: ordered,
     };
   }, [
     candidates,
@@ -199,6 +236,13 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
         : interval === 'weekly'
         ? intl.formatMessage(messages.turnWeeks, { count: rotations })
         : intl.formatMessage(messages.turnMonths, { count: rotations });
+    if (count === 0 || count <= slotCount) {
+      return intl.formatMessage(messages.summaryShort, {
+        slots: slotCount,
+        count,
+        interval: intervalText,
+      });
+    }
     return intl.formatMessage(messages.summary, {
       slots: slotCount,
       count,
@@ -236,13 +280,37 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
     if (result) {
       setPreview(result);
       setPreviewSeen(true);
+      requestAnimationFrame(() =>
+        previewRef.current?.scrollIntoView({ block: 'nearest' })
+      );
     }
+  };
+
+  const focusField = (id: string) => {
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ block: 'center' });
+    el?.focus({ preventScroll: true });
   };
 
   const save = async () => {
     setTriedSave(true);
     setFormError(null);
-    if (nameMissing || noSurface || !libraryId) {
+    if (nameMissing) {
+      focusField('rotation-name');
+      return;
+    }
+    if (!libraryId) {
+      setFormError(intl.formatMessage(messages.libraryRequired));
+      focusField('rotation-library');
+      return;
+    }
+    if (noSurface) {
+      focusField('rotation-surface-usersHome');
+      return;
+    }
+    if (count === 0) {
+      setFormError(intl.formatMessage(messages.membersRequired));
+      focusField('rotation-member-search');
       return;
     }
     setWorking('save');
@@ -268,6 +336,9 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
         autoDismiss: true,
       });
       mutateGlobal(ROTATION_GROUPS_URL);
+      if (groupId) {
+        mutateGlobal(`${ROTATION_GROUPS_URL}/${groupId}`);
+      }
       router.push('/rotation');
     } catch (error) {
       handleError(error, intl.formatMessage(messages.saveFailed));
@@ -298,12 +369,20 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
 
   const lookInPlex = async () => {
     setLooking(true);
+    setLookResult(null);
     try {
       await axios.get('/api/v1/settings/plex/library', {
         params: { sync: true },
       });
       await axios.get('/api/v1/discovery/hubs/scan');
-      await mutateCandidates();
+      const after = await mutateCandidates();
+      const added =
+        (after?.items.length ?? 0) - (serverCandidates?.length ?? 0);
+      setLookResult(
+        added > 0
+          ? intl.formatMessage(messages.foundNew, { count: added })
+          : intl.formatMessage(messages.foundNone)
+      );
     } catch (error) {
       addToast(
         apiErrorMessage(error, intl.formatMessage(messages.candidatesError)),
@@ -342,7 +421,22 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
     );
   }
 
-  if ((isEdit && !group) || (!isEdit && !libraries && !librariesError)) {
+  if (!isEdit && librariesError && !libraries) {
+    return (
+      <>
+        {back}
+        <Alert
+          type="error"
+          title={intl.formatMessage(messages.librariesError)}
+        />
+        <Button onClick={() => mutateLibraries()}>
+          {intl.formatMessage(messages.tryAgain)}
+        </Button>
+      </>
+    );
+  }
+
+  if ((isEdit && (!group || !hydrated.current)) || (!isEdit && !libraries)) {
     return (
       <>
         {back}
@@ -366,6 +460,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
   const saveButton = (
     <Button
       buttonType="primary"
+      className="w-full justify-center sm:w-auto"
       disabled={working !== null || syncRunning}
       onClick={save}
     >
@@ -373,20 +468,16 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
     </Button>
   );
 
-  const radioCard = (selectedNow: boolean) =>
-    `rounded-md border p-3 text-left text-sm font-medium text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${
-      selectedNow
-        ? 'border-orange-500 bg-orange-500/10'
-        : 'border-gray-700 hover:border-gray-500'
-    }`;
+  const nextSentence =
+    group && group.interval === interval
+      ? nextChangeSentence(intl, group)
+      : intl.formatMessage(messages[intervalLabels[interval].help]);
 
   return (
     <>
       <PageTitle title={[title, intl.formatMessage(messages.pageTitle)]} />
       {back}
       <h3 className="heading mb-6 text-white">{title}</h3>
-
-      {formError && <Alert type="error">{formError}</Alert>}
 
       <div className="lg:grid lg:grid-cols-[22rem_minmax(0,1fr)] lg:gap-8">
         <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
@@ -466,29 +557,21 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
             <span className="text-label">
               {intl.formatMessage(messages.fieldOrder)}
             </span>
-            <div
-              role="radiogroup"
-              aria-label={intl.formatMessage(messages.fieldOrder)}
-              className="grid gap-2"
-            >
-              {(
-                [
-                  ['sequential', messages.orderSequential],
-                  ['shuffled', messages.orderShuffled],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={order === value}
-                  onClick={() => setOrder(value)}
-                  className={radioCard(order === value)}
-                >
-                  {intl.formatMessage(label)}
-                </button>
-              ))}
-            </div>
+            <RadioCards
+              ariaLabel={intl.formatMessage(messages.fieldOrder)}
+              value={order}
+              onChange={setOrder}
+              options={[
+                {
+                  value: 'sequential',
+                  label: intl.formatMessage(messages.orderSequential),
+                },
+                {
+                  value: 'shuffled',
+                  label: intl.formatMessage(messages.orderShuffled),
+                },
+              ]}
+            />
           </div>
 
           <fieldset className="form-row">
@@ -524,12 +607,19 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
           </fieldset>
 
           <div className="form-row">
-            <div className="flex items-center gap-3">
+            <div
+              role="group"
+              aria-labelledby="rotation-enabled-label"
+              className="flex items-center gap-3"
+            >
               <SlideCheckbox
                 checked={enabled}
                 onClick={() => setEnabled((v) => !v)}
               />
-              <span className="text-sm text-gray-200">
+              <span
+                id="rotation-enabled-label"
+                className="text-sm text-gray-200"
+              >
                 {intl.formatMessage(messages.fieldEnabled)}
               </span>
             </div>
@@ -555,18 +645,32 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
             onShowNext={showNext}
             actionsLocked={syncRunning}
             lockTip={intl.formatMessage(messages.syncRunningTip)}
+            excluded={excluded}
+            lookResult={lookResult}
             onLookInPlex={lookInPlex}
             looking={looking}
           />
         </div>
       </div>
 
+      {preview && (
+        <div ref={previewRef} className="mt-8">
+          <PreviewPanel
+            preview={preview}
+            caption={nextSentence}
+            onClose={() => setPreview(null)}
+          />
+        </div>
+      )}
+
       <div
-        className="sticky bottom-0 -mx-4 mt-8 border-t border-gray-800 bg-stone-900/95 px-4 pt-3 backdrop-blur"
+        className="sticky bottom-0 z-10 -mx-4 mt-6 border-t border-gray-800 bg-stone-900/95 px-4 pt-3 backdrop-blur"
         style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
       >
-        {preview && (
-          <PreviewPanel preview={preview} onClose={() => setPreview(null)} />
+        {formError && (
+          <p role="alert" className="mb-2 text-sm text-red-400">
+            {formError}
+          </p>
         )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-gray-300">
@@ -580,23 +684,30 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
             )}
             <p>{summary}</p>
           </div>
-          <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">
-            <Button buttonType="ghost" onClick={() => router.push('/rotation')}>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+            <Button
+              buttonType="ghost"
+              className="justify-center"
+              onClick={() => router.push('/rotation')}
+            >
               {intl.formatMessage(messages.cancel)}
             </Button>
             <Button
+              className="justify-center"
               disabled={working !== null || count === 0}
               onClick={openPreview}
             >
               {intl.formatMessage(messages.preview)}
             </Button>
-            {syncRunning ? (
-              <Tooltip content={intl.formatMessage(messages.syncRunningTip)}>
-                <span className="inline-flex">{saveButton}</span>
-              </Tooltip>
-            ) : (
-              saveButton
-            )}
+            <div className="col-span-2 sm:col-span-1">
+              {syncRunning ? (
+                <Tooltip content={intl.formatMessage(messages.syncRunningTip)}>
+                  <span className="flex">{saveButton}</span>
+                </Tooltip>
+              ) : (
+                saveButton
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
 import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
 import messages from '@app/components/Rotation/messages';
+import PosterThumb from '@app/components/Rotation/PosterThumb';
 import { reasonText } from '@app/components/Rotation/utils';
 import {
   LockClosedIcon,
@@ -18,8 +19,10 @@ import type {
 import { useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 
+export type RowCandidate = Candidate & { missing?: boolean };
+
 interface MemberPickerProps {
-  candidates?: Candidate[];
+  candidates?: RowCandidate[];
   error?: unknown;
   loading: boolean;
   onRetry: () => void;
@@ -32,8 +35,12 @@ interface MemberPickerProps {
   actionsLocked: boolean;
   lockTip: string;
   onLookInPlex: () => void;
+  excluded: Set<string>;
   looking: boolean;
+  lookResult: string | null;
 }
+
+const touch = 'min-h-[40px] sm:min-h-0';
 
 const MemberPicker = ({
   candidates,
@@ -49,7 +56,9 @@ const MemberPicker = ({
   actionsLocked,
   lockTip,
   onLookInPlex,
+  excluded,
   looking,
+  lookResult,
 }: MemberPickerProps) => {
   const intl = useIntl();
   const [query, setQuery] = useState('');
@@ -215,7 +224,17 @@ const MemberPicker = ({
               })}
             </p>
             <div className="mt-3">
-              <Button buttonSize="sm" disabled={looking} onClick={onLookInPlex}>
+              {lookResult && (
+                <p className="mb-2 text-gray-300" role="status">
+                  {lookResult}
+                </p>
+              )}
+              <Button
+                buttonSize="sm"
+                className={touch}
+                disabled={looking}
+                onClick={onLookInPlex}
+              >
                 {intl.formatMessage(
                   looking ? messages.lookingInPlex : messages.lookInPlex
                 )}
@@ -234,11 +253,14 @@ const MemberPicker = ({
           const isSelected = selected.has(c.key);
           const locked = !c.selectable && !isSelected;
           const savedMember = saved.get(c.key);
-          const line = locked
-            ? lockReason(c)
-            : !c.selectable
-            ? lockReason(c)
-            : status(c.key);
+          const line = excluded.has(c.key)
+            ? [
+                status(c.key) ?? lockReason(c),
+                intl.formatMessage(messages.willRemove),
+              ]
+                .filter(Boolean)
+                .join(' ')
+            : status(c.key) ?? (c.selectable ? null : lockReason(c));
           const canShowNext =
             isSelected &&
             savedMember?.state === 'waiting' &&
@@ -268,22 +290,13 @@ const MemberPicker = ({
                     className="h-4 w-4 shrink-0 rounded border-gray-600 bg-stone-700 text-indigo-500 focus:ring-indigo-500"
                   />
                 )}
-                {c.posterUrl ? (
-                  <img
-                    src={c.posterUrl}
-                    alt=""
-                    loading="lazy"
-                    className="h-12 w-8 shrink-0 rounded bg-stone-700 object-cover"
-                  />
-                ) : (
-                  <div className="h-12 w-8 shrink-0 rounded bg-stone-700" />
-                )}
+                <PosterThumb name={c.name} posterUrl={c.posterUrl} />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="truncate text-sm font-normal text-gray-200">
                       {c.name}
                     </span>
-                    {c.kind === 'preExisting' ? (
+                    {c.missing ? null : c.kind === 'preExisting' ? (
                       <PreExistingBadge />
                     ) : (
                       <SourceSubtypeBadge type={c.type} subtype={c.subtype} />
@@ -299,6 +312,7 @@ const MemberPicker = ({
               {canShowNext && (
                 <Button
                   buttonSize="sm"
+                  className={touch}
                   disabled={actionsLocked}
                   title={actionsLocked ? lockTip : undefined}
                   onClick={() => onShowNext(c.key)}
@@ -322,6 +336,7 @@ const MemberPicker = ({
             aria-hidden="true"
           />
           <input
+            id="rotation-member-search"
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}

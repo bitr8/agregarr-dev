@@ -11,6 +11,7 @@ import { useIntl } from 'react-intl';
 
 interface PreviewPanelProps {
   preview: PreviewResult;
+  caption: string;
   onClose: () => void;
 }
 
@@ -52,12 +53,12 @@ const NameList = ({
   );
 };
 
-const PreviewPanel = ({ preview, onClose }: PreviewPanelProps) => {
+const PreviewPanel = ({ preview, caption, onClose }: PreviewPanelProps) => {
   const intl = useIntl();
 
   return (
     <div
-      className="mb-3 rounded-lg border border-gray-800 bg-stone-900 p-4 shadow-lg"
+      className="rounded-lg border border-gray-800 bg-stone-900 p-4 shadow-lg"
       aria-live="polite"
     >
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -80,6 +81,7 @@ const PreviewPanel = ({ preview, onClose }: PreviewPanelProps) => {
         <div className="mt-4">
           <h5 className="mb-2 text-sm font-medium text-gray-300">
             {intl.formatMessage(messages.previewUpNext)}
+            <span className="ml-2 font-normal text-gray-400">{caption}</span>
           </h5>
           <div className="flex gap-3 overflow-x-auto pb-1">
             {preview.upNext.map((m) => (
