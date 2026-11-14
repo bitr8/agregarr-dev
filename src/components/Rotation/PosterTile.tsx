@@ -1,6 +1,6 @@
 import Tooltip from '@app/components/Common/Tooltip';
 import messages from '@app/components/Rotation/messages';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 
 interface PosterTileProps {
@@ -22,15 +22,16 @@ const PosterTile = ({
 }: PosterTileProps) => {
   const intl = useIntl();
   const [failed, setFailed] = useState(false);
+  const startsHidden = useRef(animateIn);
   const [entered, setEntered] = useState(!animateIn);
 
   useEffect(() => {
-    if (!animateIn) {
+    if (!startsHidden.current) {
       return;
     }
     const frame = requestAnimationFrame(() => setEntered(true));
     return () => cancelAnimationFrame(frame);
-  }, [animateIn]);
+  }, []);
 
   const isLarge = size === 'lg';
   const empty = name === null;
@@ -44,8 +45,10 @@ const PosterTile = ({
     <div
       className={`shrink-0 snap-start transition duration-300 ease-out motion-reduce:transform-none motion-reduce:transition-none ${
         isLarge ? 'w-28 sm:w-32 lg:w-36' : 'w-16 opacity-80 lg:w-20'
-      } ${entered ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}
-      style={animateIn ? { transitionDelay: `${delayMs}ms` } : undefined}
+      } ${entered ? 'translate-y-0' : 'translate-y-3 !opacity-0'}`}
+      style={
+        startsHidden.current ? { transitionDelay: `${delayMs}ms` } : undefined
+      }
     >
       <div
         className={`relative aspect-[2/3] overflow-hidden rounded-md ${box}`}
@@ -53,7 +56,7 @@ const PosterTile = ({
         {showImage ? (
           <img
             src={posterUrl}
-            alt={name ?? ''}
+            alt=""
             loading="lazy"
             onError={() => setFailed(true)}
             className="h-full w-full object-cover"

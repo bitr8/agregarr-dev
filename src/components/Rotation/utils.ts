@@ -1,6 +1,7 @@
 import messages from '@app/components/Rotation/messages';
 import type {
   MemberSummary,
+  RotationGroupStatus,
   RotationInterval,
   Visibility,
 } from '@server/interfaces/api/rotationInterfaces';
@@ -77,4 +78,51 @@ export const reasonText = (
     default:
       return null;
   }
+};
+
+export const nextChangeSentence = (
+  intl: IntlShape,
+  group: Pick<
+    RotationGroupStatus,
+    'nextChange' | 'interval' | 'warnings' | 'enabled'
+  >
+): string => {
+  const { nextChange, interval } = group;
+  const { notBefore, expectedSyncAt } = nextChange;
+
+  if (nextChange.kind === 'disabled') {
+    return intl.formatMessage(messages.nextDisabled);
+  }
+  if (group.warnings.some((w) => w.code === 'pool_not_larger_than_slots')) {
+    return intl.formatMessage(messages.nextNoChange);
+  }
+  if (nextChange.kind === 'monthly_done') {
+    return intl.formatMessage(messages.nextMonthlyDone);
+  }
+  if (nextChange.kind === 'every_sync') {
+    return expectedSyncAt
+      ? intl.formatMessage(messages.nextEverySync, {
+          time: formatWhen(intl, expectedSyncAt),
+        })
+      : intl.formatMessage(messages.nextEverySyncNoTime);
+  }
+  if (!notBefore) {
+    return intl.formatMessage(messages.nextUnknown);
+  }
+  if (!expectedSyncAt) {
+    return intl.formatMessage(messages.nextNoSchedule, {
+      date: formatDay(intl, notBefore),
+    });
+  }
+  if (interval === 'daily' || interval === '12h') {
+    const midday = new Date(notBefore).getHours() >= 12;
+    return intl.formatMessage(
+      midday ? messages.nextAfterMidday : messages.nextAfterMidnight,
+      { time: formatWhen(intl, expectedSyncAt) }
+    );
+  }
+  return intl.formatMessage(messages.nextOnOrAfterDay, {
+    date: formatDay(intl, notBefore),
+    time: formatWhen(intl, expectedSyncAt),
+  });
 };

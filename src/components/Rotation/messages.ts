@@ -44,9 +44,23 @@ const messages = defineMessages({
   nothingToRotate: 'Nothing to swap in yet. Add more collections than slots.',
   rotateDisabled: 'This rotation is turned off.',
   previewNext: 'Preview next',
+  previewThen: 'Then',
+  previewLater: 'After that',
+  nextNoChange:
+    'No change is planned until you add more collections than slots.',
+  nextUnknown: 'Changes on the first sync after its next scheduled change.',
+  plexWaitingNoTime: 'Plex will catch up on the next sync.',
+  membersRequired: 'Pick at least one collection.',
+  libraryRequired: 'Pick a library.',
+  librariesError: "Couldn't load your libraries.",
+  willRemove: 'Will be removed when you save.',
+  foundNew:
+    '{count, plural, one {Found # new collection} other {Found # new collections}}',
+  foundNone: 'Nothing new found.',
+  droppedOnToggle:
+    '{count, plural, one {# collection that can no longer rotate was removed.} other {# collections that can no longer rotate were removed.}}',
+  deleteTitle: 'Delete rotation',
   previewError: "Couldn't work out what's next. Try again.",
-  previewAfterThat: 'After that, on the first sync after {date}',
-  previewStep: 'Change {number}',
   previewNothing: 'Nothing would change.',
   syncRunning: 'A sync is running. Try again when it finishes.',
   syncRunningTip: 'A sync is running. This will be available when it finishes.',
@@ -77,7 +91,7 @@ const messages = defineMessages({
   intervalMonthlyHelp:
     'Agregarr picks a different day each month and swaps at the first sync on or after it.',
   warnPool:
-    'This rotation has {slots} slots but only {ready} collections ready, so nothing will change. Add more collections or use fewer slots.',
+    'This rotation has {slots, plural, one {# slot} other {# slots}} but only {ready, plural, one {# collection} other {# collections}} ready, so nothing will change. Add more collections or use fewer slots.',
   warnEmptySlots:
     '{count, plural, one {# slot is empty because nothing is ready to fill it.} other {# slots are empty because nothing is ready to fill them.}}',
   warnSittingOut:
@@ -151,7 +165,9 @@ const messages = defineMessages({
   cantOtherGroup: 'Already in {group}.',
   cantOther: "Can't join a rotation.",
   summary:
-    '{slots} slots, {count} collections, changes {interval}. Each collection gets a turn about every {turn}.',
+    '{slots, plural, one {# slot} other {# slots}}, {count, plural, one {# collection} other {# collections}}, changes {interval}. Each collection gets a turn about every {turn}.',
+  summaryShort:
+    '{slots, plural, one {# slot} other {# slots}}, {count, plural, one {# collection} other {# collections}}, changes {interval}.',
   summaryEverySync: 'every sync',
   summary12h: 'twice a day',
   summaryDaily: 'every day',

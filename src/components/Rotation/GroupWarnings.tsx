@@ -15,6 +15,8 @@ interface GroupWarningsProps {
   >;
 }
 
+const PER_MEMBER = ['unbound', 'rebound', 'own_settings_missing'];
+
 const WarningStrip = ({
   warning,
   group,
@@ -61,7 +63,7 @@ const WarningStrip = ({
       text = intl.formatMessage(messages.warnInvalid);
   }
 
-  const expandable = warning.code === 'sitting_out' && members.length > 0;
+  const expandable = members.length > 0 && !PER_MEMBER.includes(warning.code);
 
   return (
     <div className="mt-4 rounded border border-orange-500/20 bg-orange-500/10 p-3 text-sm text-orange-300">
@@ -76,7 +78,7 @@ const WarningStrip = ({
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            className="shrink-0 rounded text-orange-200 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+            className="shrink-0 rounded px-1 text-orange-200 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
           >
             {intl.formatMessage(open ? messages.hide : messages.show)}
           </button>
@@ -101,16 +103,24 @@ const WarningStrip = ({
   );
 };
 
-const GroupWarnings = ({ group }: GroupWarningsProps) => (
-  <>
-    {group.warnings.map((warning, i) => (
-      <WarningStrip
-        key={`${warning.code}:${i}`}
-        warning={warning}
-        group={group}
-      />
-    ))}
-  </>
-);
+const GroupWarnings = ({ group }: GroupWarningsProps) => {
+  const strips = group.warnings.flatMap((warning) =>
+    PER_MEMBER.includes(warning.code) && (warning.members?.length ?? 0) > 1
+      ? (warning.members ?? []).map((m) => ({ ...warning, members: [m] }))
+      : [warning]
+  );
+
+  return (
+    <>
+      {strips.map((warning, i) => (
+        <WarningStrip
+          key={`${warning.code}:${warning.members?.[0]?.key ?? i}`}
+          warning={warning}
+          group={group}
+        />
+      ))}
+    </>
+  );
+};
 
 export default GroupWarnings;
