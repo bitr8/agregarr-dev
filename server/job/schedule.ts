@@ -1,4 +1,5 @@
-// Availability sync import removed - not needed for collections-only app
+// Availability sync import rotationGroupService from '@server/lib/rotation/RotationGroupService';
+import removed - not needed for collections-only app
 import { getRepository } from '@server/datasource';
 import { JobRunHistory } from '@server/entity/JobRunHistory';
 import collectionsQuickSync from '@server/lib/collectionsQuickSync';
@@ -239,7 +240,7 @@ export const startJobs = (): void => {
           settings.plex.collectionConfigs &&
           settings.plex.collectionConfigs.length > 0;
 
-        if (!hasCollections) {
+        if (!hasCollections && !rotationGroupService.hasEnabledGroups()) {
           logger.debug(
             'Skipping scheduled Plex Collections Sync: No collections configured',
             { label: 'Jobs' }

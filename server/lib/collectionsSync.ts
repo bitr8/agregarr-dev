@@ -1,3 +1,5 @@
+import rotationApply from '@server/lib/rotation/rotationApply';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import PlexAPI from '@server/api/plexapi';
 import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
@@ -338,6 +340,12 @@ class CollectionsSync {
       await IndividualCollectionScheduler.waitForIndividualSyncsToComplete();
     }
 
+    if (rotationApply.status.running) {
+      while (rotationApply.status.running && !this.cancelled) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
     if (this.cancelled) {
       this.pending = false;
       return;
@@ -407,6 +415,13 @@ class CollectionsSync {
       collectionSyncProgress.setDetail('Refreshing external data...');
       await this.refreshExternalData(plexClient);
 
+      if (rotationGroupService.hasEnabledGroups()) {
+        const pass = rotationGroupService.runPass({
+          syncRunId: new Date(startTime).toISOString(),
+        });
+        if (pass.saved) await rotationGroupService.settlePositions();
+      }
+
       // Transition to processing phase — total set by syncAllConfigurations
       collectionSyncProgress.setPhase('processing');
 
@@ -455,6 +470,7 @@ class CollectionsSync {
         this.setStage(stage);
       });
       plexClient.recordPhaseTime('ordering', Date.now() - orderingPhaseStart);
+      if (!this.cancelled) rotationGroupService.markApplied();
 
       // Clean up orphaned collections after sync completes
       this.setStage('Cleaning up orphaned collections...');

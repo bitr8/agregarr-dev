@@ -1,3 +1,4 @@
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -366,7 +367,9 @@ collectionExportImportRoutes.post(
           .json({ error: 'No matching collection configs found' });
       }
 
-      const collections = matched.map(buildExportPayload);
+      const collections = matched
+        .map((c) => rotationGroupService.withOwnSettings(c, 'collection'))
+        .map(buildExportPayload);
 
       const filename =
         matched.length === 1

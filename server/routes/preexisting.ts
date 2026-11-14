@@ -1,3 +1,4 @@
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import { preExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -143,6 +144,7 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       id,
       req.body
     );
+    rotationGroupService.reassertManagedFields();
 
     // Mark pre-existing collection as needing sync due to modification
     const { getSettings } = await import('@server/lib/settings');
@@ -217,6 +219,7 @@ preExistingRoutes.post('/discover', isAuthenticated(), async (req, res) => {
     const discoveredConfigs = preExistingCollectionConfigService.saveConfigs(
       preExistingCollectionConfigs
     );
+    rotationGroupService.reassertManagedFields();
 
     // Mark all newly discovered pre-existing collections as needing sync
     const { getSettings } = await import('@server/lib/settings');
@@ -271,6 +274,8 @@ preExistingRoutes.post('/', isAuthenticated(), async (req, res) => {
         preExistingCollectionConfigs
       );
     }
+
+    rotationGroupService.reassertManagedFields();
 
     res.status(200).json({
       preExistingCollectionConfigs: savedConfigs,
