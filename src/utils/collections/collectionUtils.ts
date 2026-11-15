@@ -452,6 +452,18 @@ export function isLibraryEssentialsPattern(
   );
 }
 
+/** Individual episode hubs: the server skips auto posters and exclusions for them */
+export function isEpisodeHub(config: {
+  type?: string;
+  subtype?: string;
+}): boolean {
+  return (
+    config.type === 'filtered_hub' &&
+    (config.subtype === 'recently_added_episodes' ||
+      config.subtype === 'recently_aired_episodes')
+  );
+}
+
 export function getLibraryEssentialsLabel(subtype?: string): string {
   if (subtype === 'contentRating') return 'Content Rating';
   if (!subtype) return '';

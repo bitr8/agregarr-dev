@@ -1,4 +1,5 @@
 import type { CollectionFormConfig } from '@app/types/collections';
+import { isEpisodeHub } from '@app/utils/collections/collectionUtils';
 import { Menu, Transition } from '@headlessui/react';
 import { ChevronDownIcon, PlusIcon } from '@heroicons/react/24/solid';
 import { Fragment, useEffect, useState } from 'react';
@@ -123,8 +124,9 @@ const PosterUploadSection = ({
   const isPreExisting =
     values.collectionType === 'pre_existing' ||
     ('configType' in values && values.configType === 'preExisting');
+  const supportsAutoPoster = !isEpisodeHub(values);
   const isAutoPosterEnabled =
-    values.autoPoster ?? (isPreExisting ? false : true);
+    supportsAutoPoster && (values.autoPoster ?? (isPreExisting ? false : true));
 
   // Get current selected template - if none selected, use the default template
   const defaultTemplate =
@@ -226,7 +228,7 @@ const PosterUploadSection = ({
   return (
     <>
       {/* Auto-poster toggle - only for Agregarr collections */}
-      {isAgregarrCollection && (
+      {isAgregarrCollection && supportsAutoPoster && (
         <div className="mb-6">
           <div className="flex items-center">
             <input

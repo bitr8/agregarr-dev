@@ -59,6 +59,7 @@ import PreviewCollectionModal from '@app/components/Collections/PreviewCollectio
 import { COLLECTION_PRESETS } from '@app/utils/collectionPresets';
 import {
   getLibraryEssentialsLabel,
+  isEpisodeHub,
   isLibraryEssentialsPattern,
 } from '@app/utils/collections/collectionUtils';
 import type { SortTitleArticleMode } from '@app/utils/collections/sortTitle';
@@ -4390,7 +4391,7 @@ const CollectionFormConfigForm = ({
                             </div>
 
                             {/* Collection Mutual Exclusion - only for Agregarr-created collections */}
-                            {isCollection && (
+                            {isCollection && !isEpisodeHub(typedValues) && (
                               <CollectionExclusionSection
                                 values={typedValues as CollectionFormConfig}
                                 setFieldValue={setFieldValue}
