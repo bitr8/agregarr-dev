@@ -1118,18 +1118,22 @@ const TmdbAdvancedFiltersSection = ({
   const updateFilter = useCallback(
     (groupId: string, filterId: string, updates: Partial<Filter>) => {
       updateFilterGroups(
-        filterGroups.map((g) =>
-          g.id === groupId
-            ? {
-                ...g,
-                filters: keepCountryCertifications(
-                  g.filters.map((f) =>
-                    f.id === filterId ? { ...f, ...updates } : f
-                  )
-                ),
-              }
-            : g
-        )
+        filterGroups.map((g) => {
+          if (g.id !== groupId) return g;
+          const filters = g.filters.map((f) =>
+            f.id === filterId ? { ...f, ...updates } : f
+          );
+          const countryChanged =
+            'value' in updates &&
+            g.filters.find((f) => f.id === filterId)?.field ===
+              'certification_country';
+          return {
+            ...g,
+            filters: countryChanged
+              ? keepCountryCertifications(filters)
+              : filters,
+          };
+        })
       );
     },
     [filterGroups, updateFilterGroups]

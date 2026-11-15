@@ -16,14 +16,17 @@ export const keepCountryCertifications = <
 ): T[] => {
   const country = String(
     filters.find((f) => f.field === 'certification_country')?.value || 'US'
-  );
-  const allowed = new Set(
-    CERTIFICATIONS_BY_COUNTRY[country] ?? CERTIFICATIONS_BY_COUNTRY.US
-  );
+  ).trim();
+  const list = CERTIFICATIONS_BY_COUNTRY[country];
+  if (!list) return filters;
+  const allowed = new Set(list);
   return filters.map((f) => {
     if (!CERTIFICATION_FIELDS.has(f.field) || !f.value) return f;
     const raw = f.value.toString();
-    const kept = raw.split(/[,|]/).filter((v) => allowed.has(v));
+    const kept = raw
+      .split(/[,|]/)
+      .map((v) => v.trim())
+      .filter((v) => allowed.has(v));
     const value = kept.join(raw.includes('|') ? '|' : ',');
     return value === raw ? f : { ...f, value };
   });

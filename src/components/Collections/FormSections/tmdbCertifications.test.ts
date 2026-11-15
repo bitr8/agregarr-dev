@@ -19,3 +19,21 @@ describe('keepCountryCertifications', () => {
     expect(keepCountryCertifications(filters)).toEqual(filters);
   });
 });
+
+describe('keepCountryCertifications edge input', () => {
+  it('trims spaced values', () => {
+    const out = keepCountryCertifications([
+      { field: 'certification_country', value: 'GB ' },
+      { field: 'certification', value: 'PG | 15' },
+    ]);
+    expect(out[1].value).toBe('PG|15');
+  });
+
+  it('leaves ratings alone for a country it has no list for', () => {
+    const filters = [
+      { field: 'certification_country', value: 'AU' },
+      { field: 'certification', value: 'M' },
+    ];
+    expect(keepCountryCertifications(filters)).toEqual(filters);
+  });
+});
