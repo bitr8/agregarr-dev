@@ -80,6 +80,15 @@ const MULTIVALUE_SEPARATOR_FIELDS = new Set([
   'with_release_type',
   'with_watch_providers',
   'with_watch_monetization_types',
+  'with_networks',
+  'with_origin_country',
+]);
+
+// An item has only one status, type or certification, so these always match any
+const MATCH_ANY_ONLY_FIELDS = new Set([
+  'with_status',
+  'with_type',
+  'certification',
 ]);
 
 // Fields that use TMDB search-as-you-type instead of free-text ID entry
@@ -1036,7 +1045,14 @@ const TmdbAdvancedFiltersSection = ({
 
   const removeFilterGroup = useCallback(
     (groupId: string) => {
-      updateFilterGroups(filterGroups.filter((g) => g.id !== groupId));
+      const remaining = filterGroups.filter((g) => g.id !== groupId);
+      updateFilterGroups(
+        remaining.map((g, i) =>
+          i === 0
+            ? { ...g, operator: 'and' as const, groupOperator: 'and' as const }
+            : g
+        )
+      );
     },
     [filterGroups, updateFilterGroups]
   );
@@ -1325,7 +1341,11 @@ const TmdbAdvancedFiltersSection = ({
               options={fieldConfig.options}
               value={filter.value ? filter.value.toString().split(/[,|]/) : []}
               onChange={(selected: string[]) => {
-                const separator = filter.operator === 'or' ? '|' : ',';
+                const separator =
+                  filter.operator === 'or' ||
+                  MATCH_ANY_ONLY_FIELDS.has(filter.field)
+                    ? '|'
+                    : ',';
                 updateFilter(groupId, filter.id, {
                   value: selected.join(separator),
                 });
