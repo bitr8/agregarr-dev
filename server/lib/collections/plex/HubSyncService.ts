@@ -6,6 +6,7 @@ import {
   isAgregarrOwnedSortTitle,
   normalizeSortTitleArticle,
 } from '@server/lib/collections/core/CollectionUtilities';
+import { clearRemovedCustomArtwork } from '@server/lib/collections/plex/customArtworkCleanup';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import type {
@@ -1207,6 +1208,15 @@ export class HubSyncService {
               // Don't fail the entire sync if theme upload fails
             }
           }
+        }
+
+        if (preExistingConfig.collectionRatingKey) {
+          await clearRemovedCustomArtwork(
+            plexClient,
+            preExistingConfig.collectionRatingKey,
+            preExistingConfig,
+            preExistingConfig.libraryId
+          );
         }
 
         // Mark pre-existing collection as successfully synced

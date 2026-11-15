@@ -228,6 +228,40 @@ class MetadataTrackingService {
     });
   }
 
+  async getAppliedArtworkFilename(
+    collectionRatingKey: string,
+    kind: 'art' | 'theme'
+  ): Promise<string | null> {
+    const metadata = await getRepository(CollectionMetadata).findOne({
+      where: { plexCollectionRatingKey: collectionRatingKey },
+    });
+    return (
+      (kind === 'art'
+        ? metadata?.lastWallpaperFilename
+        : metadata?.lastThemeFilename) ?? null
+    );
+  }
+
+  async clearArtworkRecord(
+    collectionRatingKey: string,
+    kind: 'art' | 'theme'
+  ): Promise<void> {
+    await getRepository(CollectionMetadata).update(
+      { plexCollectionRatingKey: collectionRatingKey },
+      kind === 'art'
+        ? {
+            lastWallpaperFilename: () => 'NULL',
+            lastWallpaperUploadUrl: () => 'NULL',
+            lastWallpaperAppliedAt: () => 'NULL',
+          }
+        : {
+            lastThemeFilename: () => 'NULL',
+            lastThemeUploadUrl: () => 'NULL',
+            lastThemeAppliedAt: () => 'NULL',
+          }
+    );
+  }
+
   // === THEME METHODS ===
 
   async shouldReapplyTheme(

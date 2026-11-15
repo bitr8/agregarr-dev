@@ -1,6 +1,7 @@
 import type PlexAPI from '@server/api/plexapi';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { extractContentAddressedPosterRef } from '@server/utils/posterUrlHelpers';
 import type { PlexPosterMetadata } from './posterSelection';
 import { selectPreferredPosterReference } from './posterSelection';
 
@@ -572,6 +573,58 @@ class PlexPosterManager {
       });
       throw error;
     }
+  }
+
+  /**
+   * SHA-1 of the uploaded art or theme Plex has selected, or null when the
+   * selection is not an upload. Plex names uploads by the SHA-1 of their bytes.
+   */
+  public async getSelectedUploadSha(
+    ratingKey: string,
+    kind: 'art' | 'theme'
+  ): Promise<string | null> {
+    const response = await this.plexApi['plexClient'].query(
+      `/library/metadata/${ratingKey}/${kind === 'art' ? 'arts' : 'themes'}`
+    );
+    if (!response?.MediaContainer) {
+      throw new Error(`Unreadable ${kind} list for ${ratingKey}`);
+    }
+    const selected = (
+      response.MediaContainer.Metadata as
+        | {
+            selected?: string | number | boolean;
+            ratingKey?: string;
+            thumb?: string;
+            key?: string;
+          }[]
+        | undefined
+    )?.find(
+      (m) => m.selected === true || m.selected === 1 || m.selected === '1'
+    );
+    const prefix = kind === 'art' ? 'upload://art/' : 'upload://themes/';
+    for (const value of [selected?.ratingKey, selected?.thumb, selected?.key]) {
+      const ref = extractContentAddressedPosterRef(value);
+      if (ref?.startsWith(prefix)) {
+        return ref.slice(prefix.length);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Remove the selected art or theme from an item
+   */
+  public async deleteArtwork(
+    ratingKey: string,
+    kind: 'art' | 'theme'
+  ): Promise<void> {
+    await this.plexApi['safeDeleteQuery'](
+      `/library/metadata/${ratingKey}/${kind}`
+    );
+    logger.info(`Removed ${kind} from ${ratingKey}`, {
+      label: 'Plex API',
+      ratingKey,
+    });
   }
 }
 

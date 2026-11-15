@@ -9,6 +9,7 @@ import type {
   SyncResult,
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
+import { clearRemovedCustomArtwork } from '@server/lib/collections/plex/customArtworkCleanup';
 // getCollectionMediaType removed - using items[0]?.type instead
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
@@ -2591,6 +2592,13 @@ export class MultiSourceOrchestrator {
         }
       }
     }
+
+    await clearRemovedCustomArtwork(
+      plexClient,
+      collectionRatingKey,
+      options.config,
+      options.config.libraryId
+    );
 
     logger.debug(`Applied standardized metadata to multi-source collection`, {
       label: 'Multi-Source Orchestrator',

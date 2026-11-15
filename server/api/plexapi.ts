@@ -3362,6 +3362,20 @@ class PlexAPI {
     return this.posterManager.uploadThemeFromFile(ratingKey, filepath);
   }
 
+  public async getSelectedUploadSha(
+    ratingKey: string,
+    kind: 'art' | 'theme'
+  ): Promise<string | null> {
+    return this.posterManager.getSelectedUploadSha(ratingKey, kind);
+  }
+
+  public async deleteArtwork(
+    ratingKey: string,
+    kind: 'art' | 'theme'
+  ): Promise<void> {
+    return this.posterManager.deleteArtwork(ratingKey, kind);
+  }
+
   /**
    * Lock the theme for an item (prevents auto-updates)
    */

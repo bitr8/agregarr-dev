@@ -9,6 +9,7 @@ import { getRepository } from '@server/datasource';
 import { CollectionMetadata } from '@server/entity/CollectionMetadata';
 import { PosterTemplate } from '@server/entity/PosterTemplate';
 import cacheManager from '@server/lib/cache';
+import { clearRemovedCustomArtwork } from '@server/lib/collections/plex/customArtworkCleanup';
 import type { ServiceUserManager } from '@server/lib/collections/services/ServiceUserManager';
 import { serviceUserManager } from '@server/lib/collections/services/ServiceUserManager';
 import type { TemplateEngine } from '@server/lib/collections/utils/TemplateEngine';
@@ -2857,6 +2858,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         }
       }
     }
+
+    await clearRemovedCustomArtwork(
+      plexClient,
+      collectionRatingKey,
+      options.config,
+      options.libraryKey
+    );
 
     return { ratingKeyIsStale: false };
   }
