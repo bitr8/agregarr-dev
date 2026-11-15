@@ -202,3 +202,38 @@ describe('advanced discover empty groups', () => {
     expect(out.map((i) => i.id)).toEqual([1, 2]);
   });
 });
+
+describe('advanced discover certification country', () => {
+  beforeEach(() => {
+    movies.mockReset();
+    movies.mockResolvedValue({ results: [] });
+  });
+
+  it('sends US when a rating has no country', async () => {
+    await new TmdbCollectionSync().fetchSourceData(
+      cfg('4', [{ field: 'certification.lte', operator: 'and', value: 'PG' }])
+    );
+    expect(sentParams(movies)).toMatchObject({
+      certification_country: 'US',
+      'certification.lte': 'PG',
+    });
+  });
+
+  it('keeps the chosen country', async () => {
+    await new TmdbCollectionSync().fetchSourceData(
+      cfg('4', [
+        { field: 'certification_country', operator: 'and', value: 'GB' },
+        { field: 'certification', operator: 'and', value: '15' },
+      ])
+    );
+    expect(sentParams(movies)).toMatchObject({ certification_country: 'GB' });
+  });
+
+  it('adds no country without a rating', async () => {
+    await new TmdbCollectionSync().fetchSourceData(
+      cfg('4', [{ field: 'with_genres', operator: 'and', value: '28' }])
+    );
+    expect(sentParams(movies)).not.toHaveProperty('certification_country');
+    expect(sentParams(movies)).toMatchObject({ with_genres: '28' });
+  });
+});

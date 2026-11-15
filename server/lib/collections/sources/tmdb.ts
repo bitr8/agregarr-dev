@@ -820,6 +820,14 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
             }
           }
 
+          // TMDB ignores a rating without a country; the picker shows US ratings
+          if (
+            !groupFilters.certification_country &&
+            Object.keys(groupFilters).some((k) => k.startsWith('certification'))
+          ) {
+            groupFilters.certification_country = 'US';
+          }
+
           return groupFilters;
         };
 
