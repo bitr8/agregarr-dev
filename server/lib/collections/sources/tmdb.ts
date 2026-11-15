@@ -935,7 +935,11 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
 
         const effectiveGroups: AdvancedDiscoverFilterGroup[] =
           groups.length > 0
-            ? (groups as AdvancedDiscoverFilterGroup[])
+            ? (groups as AdvancedDiscoverFilterGroup[]).filter(
+                // A later group with nothing to send would join the whole Discover list
+                (group, i) =>
+                  i === 0 || Object.keys(buildGroupFilters(group)).length > 0
+              )
             : ([{ filters: [] }] as unknown as AdvancedDiscoverFilterGroup[]);
 
         // Fetch each group separately and then AND/OR join results between groups

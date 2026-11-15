@@ -84,6 +84,17 @@ const MULTIVALUE_SEPARATOR_FIELDS = new Set([
   'with_origin_country',
 ]);
 
+const CERTIFICATIONS_BY_COUNTRY: Record<string, string[]> = {
+  US: ['NR', 'G', 'PG', 'PG-13', 'R', 'NC-17'],
+  GB: ['U', 'PG', '12A', '12', '15', '18', 'R18'],
+  CA: ['E', 'G', 'PG', '14A', '18A', 'R', 'A'],
+};
+const CERTIFICATION_FIELDS = new Set([
+  'certification',
+  'certification.gte',
+  'certification.lte',
+]);
+
 // An item has only one status, type or certification, so these always match any
 const MATCH_ANY_ONLY_FIELDS = new Set([
   'with_status',
@@ -1133,6 +1144,19 @@ const TmdbAdvancedFiltersSection = ({
       FILTER_FIELDS[filter.field as keyof typeof FILTER_FIELDS];
     if (!fieldConfig) return null;
 
+    const certificationCountry = String(
+      filterGroups
+        .find((g) => g.id === groupId)
+        ?.filters.find((f) => f.field === 'certification_country')?.value ||
+        'US'
+    );
+    const fieldOptions = CERTIFICATION_FIELDS.has(filter.field)
+      ? (
+          CERTIFICATIONS_BY_COUNTRY[certificationCountry] ??
+          CERTIFICATIONS_BY_COUNTRY.US
+        ).map((c) => ({ value: c, label: c }))
+      : fieldConfig.options;
+
     switch (fieldConfig.type) {
       case 'number':
         return (
@@ -1316,7 +1340,7 @@ const TmdbAdvancedFiltersSection = ({
         }
 
         // Option-based multi-select (release type, monetization types)
-        if (fieldConfig.options && fieldConfig.multiple === false) {
+        if (fieldOptions && fieldConfig.multiple === false) {
           return (
             <select
               value={(filter.value as string) || ''}
@@ -1326,7 +1350,7 @@ const TmdbAdvancedFiltersSection = ({
               className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="">Select...</option>
-              {fieldConfig.options.map((opt) => (
+              {fieldOptions.map((opt) => (
                 <option key={String(opt.value)} value={opt.value}>
                   {opt.label}
                 </option>
@@ -1335,10 +1359,10 @@ const TmdbAdvancedFiltersSection = ({
           );
         }
 
-        if (fieldConfig.options) {
+        if (fieldOptions) {
           return (
             <OptionMultiSelect
-              options={fieldConfig.options}
+              options={fieldOptions}
               value={filter.value ? filter.value.toString().split(/[,|]/) : []}
               onChange={(selected: string[]) => {
                 const separator =

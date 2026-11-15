@@ -136,3 +136,69 @@ describe('advanced discover filter operators', () => {
     expect(out.map((i) => i.id)).toEqual([1, 2, 3]);
   });
 });
+
+describe('advanced discover empty groups', () => {
+  beforeEach(() => {
+    movies.mockReset();
+    movies.mockImplementation(async (p: Record<string, unknown>) => ({
+      results: p.with_genres
+        ? [
+            { id: 1, popularity: 5 },
+            { id: 2, popularity: 4 },
+          ]
+        : [
+            { id: 1, popularity: 5 },
+            { id: 9, popularity: 99 },
+          ],
+    }));
+  });
+
+  const groupsCfg = (second: Record<string, unknown>) =>
+    ({
+      id: 'cfg-1',
+      name: 'Adv',
+      type: 'tmdb',
+      subtype: 'advanced_custom_tmdb',
+      libraryId: '4',
+      isActive: true,
+      maxItems: 5,
+      tmdbAdvancedFilters: {
+        filterGroups: [
+          {
+            id: 'g1',
+            operator: 'and',
+            filters: [
+              { id: 'f1', field: 'with_genres', operator: 'and', value: '28' },
+            ],
+          },
+          second,
+        ],
+      },
+    } as unknown as CollectionConfig);
+
+  it('skips a later group with only blank filters', async () => {
+    const out = await new TmdbCollectionSync().fetchSourceData(
+      groupsCfg({
+        id: 'g2',
+        operator: 'not',
+        filters: [{ id: 'f2', field: '', operator: 'and', value: '' }],
+      })
+    );
+    expect(movies).toHaveBeenCalledTimes(1);
+    expect(out.map((i) => i.id)).toEqual([1, 2]);
+  });
+
+  it('skips a later group whose filters only apply to TV', async () => {
+    const out = await new TmdbCollectionSync().fetchSourceData(
+      groupsCfg({
+        id: 'g2',
+        operator: 'or',
+        filters: [
+          { id: 'f2', field: 'with_networks', operator: 'and', value: '49' },
+        ],
+      })
+    );
+    expect(movies).toHaveBeenCalledTimes(1);
+    expect(out.map((i) => i.id)).toEqual([1, 2]);
+  });
+});
