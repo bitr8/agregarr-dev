@@ -1105,11 +1105,19 @@ const TmdbAdvancedFiltersSection = ({
   const removeFilter = useCallback(
     (groupId: string, filterId: string) => {
       updateFilterGroups(
-        filterGroups.map((g) =>
-          g.id === groupId
-            ? { ...g, filters: g.filters.filter((f) => f.id !== filterId) }
-            : g
-        )
+        filterGroups.map((g) => {
+          if (g.id !== groupId) return g;
+          const filters = g.filters.filter((f) => f.id !== filterId);
+          const countryRemoved =
+            g.filters.find((f) => f.id === filterId)?.field ===
+            'certification_country';
+          return {
+            ...g,
+            filters: countryRemoved
+              ? keepCountryCertifications(filters)
+              : filters,
+          };
+        })
       );
     },
     [filterGroups, updateFilterGroups]
