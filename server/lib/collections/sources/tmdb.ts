@@ -1084,10 +1084,6 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               return typeof item.vote_count === 'number'
                 ? item.vote_count
                 : undefined;
-            case 'revenue':
-              return typeof item.revenue === 'number'
-                ? item.revenue
-                : undefined;
             case 'release_date':
             case 'primary_release_date':
               return toTime(item.release_date);
@@ -1106,17 +1102,11 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           }
         };
 
-        if (sortField && sortDirection) {
-          const fetchOrder = new Map(
-            combinedOrdered.map((item, i) => [item, i])
-          );
+        // Discover results carry no revenue, so a revenue sort keeps TMDB's order
+        if (sortField && sortDirection && sortField !== 'revenue') {
           combinedOrdered.sort((a, b) => {
             const av = getSortValue(a);
             const bv = getSortValue(b);
-            // Discover results carry no revenue, so keep TMDB's own order
-            if (av === undefined && bv === undefined) {
-              return (fetchOrder.get(a) ?? 0) - (fetchOrder.get(b) ?? 0);
-            }
             const primary = compareNullable(av, bv, sortDirection);
             if (primary !== 0) return primary;
 
