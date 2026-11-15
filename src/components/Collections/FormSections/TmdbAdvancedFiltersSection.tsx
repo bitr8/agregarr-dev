@@ -5,6 +5,11 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
+import {
+  CERTIFICATIONS_BY_COUNTRY,
+  CERTIFICATION_FIELDS,
+  keepCountryCertifications,
+} from './tmdbCertifications';
 import TmdbSearchSelect from './TmdbSearchSelect';
 
 interface TmdbGenre {
@@ -82,17 +87,6 @@ const MULTIVALUE_SEPARATOR_FIELDS = new Set([
   'with_watch_monetization_types',
   'with_networks',
   'with_origin_country',
-]);
-
-const CERTIFICATIONS_BY_COUNTRY: Record<string, string[]> = {
-  US: ['NR', 'G', 'PG', 'PG-13', 'R', 'NC-17'],
-  GB: ['U', 'PG', '12A', '12', '15', '18', 'R18'],
-  CA: ['E', 'G', 'PG', '14A', '18A', 'R', 'A'],
-};
-const CERTIFICATION_FIELDS = new Set([
-  'certification',
-  'certification.gte',
-  'certification.lte',
 ]);
 
 // An item has only one status, type or certification, so these always match any
@@ -1128,8 +1122,10 @@ const TmdbAdvancedFiltersSection = ({
           g.id === groupId
             ? {
                 ...g,
-                filters: g.filters.map((f) =>
-                  f.id === filterId ? { ...f, ...updates } : f
+                filters: keepCountryCertifications(
+                  g.filters.map((f) =>
+                    f.id === filterId ? { ...f, ...updates } : f
+                  )
                 ),
               }
             : g
