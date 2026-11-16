@@ -24,6 +24,7 @@ import type {
 } from '@app/types/collections';
 import {
   agregarrOwnsSortTitle,
+  applyCollectionSuffix,
   normalizeArticleForDisplay,
   plexTitleTemplate,
 } from '@app/utils/collections/sortTitle';
@@ -377,7 +378,13 @@ const SortableItem = ({
                   'Auto Director Collections'
                 )
               ) : (
-                config.name || 'Unnamed Collection'
+                (isPreExisting
+                  ? applyCollectionSuffix(
+                      config.name,
+                      (config as PreExistingCollectionConfig)
+                        .collectionSuffixMode
+                    )
+                  : config.name) || 'Unnamed Collection'
               )}
             </h5>
             {/* Greyed out indicator for Recommended tab - inline with title */}

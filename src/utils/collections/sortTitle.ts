@@ -15,6 +15,9 @@ import {
   LEADING_PUNCTUATION_PATTERN,
 } from '@server/constants/sortTitle';
 
+// Shown before the sync renames the collection in Plex.
+export { applyCollectionSuffix } from '@server/constants/sortTitle';
+
 // Must match PROMOTED_SORT_TITLE_RANK_WIDTH in CollectionUtilities.ts. 3
 // digits matches Kometa's !010_/!020_ convention; see that constant for why
 // the width is an interop contract rather than cosmetics.

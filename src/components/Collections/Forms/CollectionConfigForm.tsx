@@ -66,6 +66,7 @@ import {
 import type { SortTitleArticleMode } from '@app/utils/collections/sortTitle';
 import {
   agregarrOwnsSortTitle,
+  applyCollectionSuffix,
   buildPromotedSortTitle,
   normalizeArticleForDisplay,
 } from '@app/utils/collections/sortTitle';
@@ -3005,7 +3006,12 @@ const CollectionFormConfigForm = ({
                       {(isHub || isPreExisting) && (
                         <div className="mb-6">
                           <h2 className="text-lg font-medium text-white">
-                            {values.name || 'Collection Settings'}
+                            {(isPreExisting
+                              ? applyCollectionSuffix(
+                                  values.name ?? '',
+                                  values.collectionSuffixMode
+                                )
+                              : values.name) || 'Collection Settings'}
                           </h2>
                         </div>
                       )}
