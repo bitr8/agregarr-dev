@@ -1,6 +1,9 @@
 import type PlexAPI from '@server/api/plexapi';
 import TmdbAPI from '@server/api/themoviedb';
-import { TMDB_MAX_PAGE } from '@server/api/themoviedb/constants';
+import {
+  isLastTmdbPage,
+  TMDB_MAX_PAGE,
+} from '@server/api/themoviedb/constants';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyLabelExclusions,
@@ -101,10 +104,26 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           // Fetch a batch of pages
           for (let i = 0; i < BATCH_SIZE && hasMorePages; i++) {
             if (mediaType === 'movie') {
-              const data = await this.tmdbClient.getMovieTrending({
-                page: currentPage,
-                timeWindow,
-              });
+              let data: Awaited<ReturnType<TmdbAPI['getMovieTrending']>>;
+              try {
+                data = await this.tmdbClient.getMovieTrending({
+                  page: currentPage,
+                  timeWindow,
+                });
+              } catch (error) {
+                if (tmdbData.length === 0) throw error;
+                logger.warn(
+                  'TMDB trending request failed, keeping the pages already fetched',
+                  {
+                    label: 'Collection Sync',
+                    page: currentPage,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  }
+                );
+                hasMorePages = false;
+                break;
+              }
 
               if (!data.results || data.results.length === 0) {
                 hasMorePages = false;
@@ -118,15 +137,31 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
             if (mediaType === 'tv') {
-              const data = await this.tmdbClient.getTvTrending({
-                page: currentPage,
-                timeWindow,
-              });
+              let data: Awaited<ReturnType<TmdbAPI['getTvTrending']>>;
+              try {
+                data = await this.tmdbClient.getTvTrending({
+                  page: currentPage,
+                  timeWindow,
+                });
+              } catch (error) {
+                if (tmdbData.length === 0) throw error;
+                logger.warn(
+                  'TMDB trending request failed, keeping the pages already fetched',
+                  {
+                    label: 'Collection Sync',
+                    page: currentPage,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  }
+                );
+                hasMorePages = false;
+                break;
+              }
 
               if (!data.results || data.results.length === 0) {
                 hasMorePages = false;
@@ -140,7 +175,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -187,7 +222,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -209,7 +244,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -256,7 +291,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -279,7 +314,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -371,8 +406,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
 
             allItems.push(...normalizedItems);
 
-            // Stop if this page had fewer items than expected (last page)
-            if (listData.items.length < 20) {
+            if (isLastTmdbPage(currentPage, listData, listData.items.length)) {
               hasMorePages = false;
             }
 
@@ -410,7 +444,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
 
@@ -457,7 +491,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                   }))
                 );
 
-                if (currentPage >= data.total_pages) {
+                if (isLastTmdbPage(currentPage, data, data.results.length)) {
                   hasMorePages = false;
                 }
               } else {
@@ -480,7 +514,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                   }))
                 );
 
-                if (currentPage >= data.total_pages) {
+                if (isLastTmdbPage(currentPage, data, data.results.length)) {
                   hasMorePages = false;
                 }
               }
@@ -920,7 +954,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (currentPage >= data.total_pages) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
               currentPage++;

@@ -1,6 +1,9 @@
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
-import { TMDB_MAX_PAGE } from '@server/api/themoviedb/constants';
+import {
+  isLastTmdbPage,
+  TMDB_MAX_PAGE,
+} from '@server/api/themoviedb/constants';
 import TraktAPI from '@server/api/trakt';
 import type { ComingSoonSourceData } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
@@ -734,7 +737,6 @@ export async function fetchTmdbComingSoonMovies(
     const TmdbAPI = (await import('@server/api/themoviedb')).default;
     const tmdbClient = new TmdbAPI();
 
-    const perPage = 20; // TMDB returns 20 per page
     const maxDaysAway =
       config.placeholderDaysAhead || config.comingSoonDays || 360;
 
@@ -872,8 +874,11 @@ export async function fetchTmdbComingSoonMovies(
 
       // Check if we should stop pagination
       if (
-        discoverResult.results.length < perPage ||
-        currentPage > discoverResult.total_pages
+        isLastTmdbPage(
+          currentPage - 1,
+          discoverResult,
+          discoverResult.results.length
+        )
       ) {
         hasMorePages = false;
       }
@@ -917,7 +922,6 @@ export async function fetchTmdbComingSoonShows(
     const TmdbAPI = (await import('@server/api/themoviedb')).default;
     const tmdbClient = new TmdbAPI();
 
-    const perPage = 20; // TMDB returns 20 per page
     const maxDaysAway =
       config.placeholderDaysAhead || config.comingSoonDays || 360;
 
@@ -1056,8 +1060,11 @@ export async function fetchTmdbComingSoonShows(
       currentPage++;
 
       if (
-        discoverResult.results.length < perPage ||
-        currentPage > discoverResult.total_pages
+        isLastTmdbPage(
+          currentPage - 1,
+          discoverResult,
+          discoverResult.results.length
+        )
       ) {
         hasMorePages = false;
       }
@@ -1115,8 +1122,11 @@ export async function fetchTmdbComingSoonShows(
         currentPage++;
 
         if (
-          discoverResult.results.length < perPage ||
-          currentPage > discoverResult.total_pages
+          isLastTmdbPage(
+            currentPage - 1,
+            discoverResult,
+            discoverResult.results.length
+          )
         ) {
           hasMorePages = false;
         }
