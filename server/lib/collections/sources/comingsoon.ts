@@ -83,7 +83,6 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     allCollections: PlexCollection[],
     processedCollectionKeys?: Set<string>,
     libraryCache?: LibraryItemsCache,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     options?: CollectionSyncOptions
   ): Promise<SyncResult> {
     try {
@@ -148,32 +147,84 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
       );
 
       const useSourceRank = this.usesSourceRank(config);
-      if (useSourceRank) {
-        mappedResult.items = this.sortBySourceRank(
-          mappedResult.items,
-          sourceData
+      const rank = this.buildSourceRank(
+        this.orderForWindow(sourceData, config)
+      );
+      const rankOf = (item: { tmdbId?: number }) =>
+        (item.tmdbId !== undefined ? rank.get(item.tmdbId) : undefined) ??
+        Number.MAX_SAFE_INTEGER;
+      const byRank = <T extends { tmdbId?: number }>(list: T[]): T[] =>
+        [...list].sort((a, b) => rankOf(a) - rankOf(b));
+      const maxItems =
+        config.maxItems && config.maxItems > 0 ? config.maxItems : undefined;
+
+      // maxItems is applied below, across present items and placeholders together
+      const { items, missingItems, mappingStats } =
+        await this.applyFilteringToMappedItems(mappedResult, {
+          ...config,
+          maxItems: 0,
+        });
+
+      const mediaType = getCollectionMediaType(config);
+      const keep = async (list: CollectionItem[]) => {
+        let kept = list.filter((item) => item.type === mediaType);
+        kept = await applyCollectionExclusions(
+          kept,
+          config,
+          plexClient,
+          this.source
+        );
+        return applyLabelExclusions(kept, config, plexClient, this.source);
+      };
+
+      // Tag existing items in Radarr/Sonarr (if enabled), the same set the trim used to keep
+      if (!options?.reorderOnly) {
+        await this.tagExistingItemsInArr(
+          byRank(items).slice(0, maxItems),
+          config
         );
       }
 
-      // Apply filtering (placeholderItems in mappedResult are ignored - overlays handled by overlay sync job)
-      const { items, missingItems, mappingStats } =
-        await this.applyFilteringToMappedItems(mappedResult, config);
-
-      // Tag existing items in Radarr/Sonarr (if enabled)
-      await this.tagExistingItemsInArr(items, config);
-
-      // Handle placeholder cleanup and process missing items
-      const placeholderItems = await this.handlePlaceholdersAndMissingItems(
-        items,
-        missingItems,
-        config,
-        plexClient,
-        libraryCache,
-        undefined // No auto-requests for Coming Soon collections
+      const present = byRank(await keep(items));
+      const sourceTmdbIds = new Set(
+        [...items, ...(missingItems ?? [])]
+          .map((item) => item.tmdbId)
+          .filter((id): id is number => typeof id === 'number')
       );
+      const rankedMissing = byRank(missingItems ?? []);
 
-      // Add newly created placeholder items to the collection
-      items.push(...placeholderItems);
+      const placeholderItems: CollectionItem[] = [];
+      if (!options?.reorderOnly) {
+        await this.cleanupPlaceholders(
+          config,
+          plexClient,
+          libraryCache,
+          sourceTmdbIds
+        );
+        if (config.createPlaceholdersForMissing) {
+          placeholderItems.push(
+            ...(await this.fillWithPlaceholders(
+              present,
+              rankedMissing,
+              maxItems,
+              rankOf,
+              keep,
+              config,
+              plexClient,
+              sourceTmdbIds
+            ))
+          );
+        }
+      }
+
+      const seen = new Set<number | undefined>();
+      const finalItems = byRank([...present, ...placeholderItems])
+        .filter((item) => {
+          if (item.tmdbId !== undefined && seen.has(item.tmdbId)) return false;
+          seen.add(item.tmdbId);
+          return true;
+        })
+        .slice(0, maxItems);
 
       // Note: We don't show "released" items anymore
       // When real content is detected, placeholder is deleted immediately
@@ -181,7 +232,7 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
 
       // Sort items by release date (closest first)
       const sortedItems = await this.sortByReleaseDate(
-        items,
+        finalItems,
         sourceData,
         useSourceRank
       );
@@ -216,31 +267,7 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         return { created: 0, updated: 0 };
       }
 
-      const mediaType = getCollectionMediaType(config);
-      let filteredItems = sortedItems.filter((item) => item.type === mediaType);
-
-      if (filteredItems.length === 0) {
-        logger.debug(`No ${mediaType} items found for collection`, {
-          label: 'Coming Soon Collections',
-          configName: config.name,
-          mediaType,
-          totalItems: sortedItems.length,
-        });
-        return { created: 0, updated: 0 };
-      }
-
-      filteredItems = await applyCollectionExclusions(
-        filteredItems,
-        config,
-        plexClient,
-        this.source
-      );
-      filteredItems = await applyLabelExclusions(
-        filteredItems,
-        config,
-        plexClient,
-        this.source
-      );
+      const filteredItems = sortedItems;
 
       if (filteredItems.length === 0) {
         logger.info(
@@ -274,12 +301,20 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
       );
 
       // createOrUpdateCollectionStandardized already clears a smart collection's rows
-      const missingItemsToStore = missingItems ?? [];
+      const worstKept =
+        maxItems && finalItems.length >= maxItems
+          ? Math.max(...finalItems.map(rankOf))
+          : Number.MAX_SAFE_INTEGER;
+      const missingItemsToStore = (missingItems ?? []).filter(
+        (item) => rankOf(item) <= worstKept
+      );
       if (
         result.collectionRatingKey &&
         !result.isSmartCollection &&
-        missingItemsToStore.length > 0
+        missingItemsToStore.length === 0
       ) {
+        await this.clearCollectionMissingItems(result.collectionRatingKey);
+      } else if (result.collectionRatingKey && !result.isSmartCollection) {
         await this.storeCollectionMissingItems(
           missingItemsToStore,
           result.collectionRatingKey,
@@ -966,16 +1001,104 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
     );
   }
 
-  public sortBySourceRank<T extends { tmdbId?: number }>(
-    items: T[],
+  /**
+   * The order maxItems keeps from: Trakt's own ranking for Trakt Anticipated, soonest
+   * release first for every other subtype (their fetch order is arbitrary).
+   */
+  public orderForWindow(
+    sourceData: ComingSoonSourceData[],
+    config: CollectionConfig
+  ): ComingSoonSourceData[] {
+    if (config.subtype === 'trakt_anticipated') {
+      return sourceData;
+    }
+    const time = (s: ComingSoonSourceData) => {
+      const date = s.mediaType === 'movie' ? s.releaseDate : s.airDate;
+      const t = date ? new Date(date).getTime() : NaN;
+      return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
+    };
+    return [...sourceData].sort((a, b) => time(a) - time(b));
+  }
+
+  private buildSourceRank(
     sourceData: ComingSoonSourceData[]
-  ): T[] {
+  ): Map<number, number> {
     const rank = new Map<number, number>();
     sourceData.forEach((source, index) => {
       if (source.tmdbId && !rank.has(source.tmdbId)) {
         rank.set(source.tmdbId, index);
       }
     });
+    return rank;
+  }
+
+  private async cleanupPlaceholders(
+    config: CollectionConfig,
+    plexClient: PlexAPI,
+    libraryCache: LibraryItemsCache | undefined,
+    keepTmdbIds: Set<number>
+  ): Promise<void> {
+    const { handlePlaceholderCleanup } = await import(
+      '@server/lib/placeholders/services/PlaceholderCleanup'
+    );
+    await handlePlaceholderCleanup(
+      config,
+      plexClient,
+      libraryCache,
+      keepTmdbIds
+    );
+  }
+
+  /**
+   * Creates placeholders for the missing items that fit in the maxItems window. An item
+   * whose placeholder can't be made (no date, outside the days window, excluded) frees its
+   * slot for the next-ranked one.
+   */
+  private async fillWithPlaceholders(
+    present: CollectionItem[],
+    missing: MissingItem[],
+    maxItems: number | undefined,
+    rankOf: (item: { tmdbId?: number }) => number,
+    keep: (list: CollectionItem[]) => Promise<CollectionItem[]>,
+    config: CollectionConfig,
+    plexClient: PlexAPI,
+    sourceTmdbIds: Set<number>
+  ): Promise<CollectionItem[]> {
+    const made: CollectionItem[] = [];
+    const attempted = new Set<MissingItem>();
+    // Each round attempts at least one new item, so this ends
+    for (;;) {
+      const open = missing.filter((item) => !attempted.has(item));
+      const windowIds = new Set(
+        [
+          ...new Set(
+            [...present, ...made, ...open]
+              .sort((x, y) => rankOf(x) - rankOf(y))
+              .map((item) => item.tmdbId)
+          ),
+        ].slice(0, maxItems)
+      );
+      const toCreate = open.filter((item) => windowIds.has(item.tmdbId));
+      if (toCreate.length === 0) break;
+      toCreate.forEach((item) => attempted.add(item));
+
+      const created = await this.processMissingItems(
+        toCreate,
+        config,
+        plexClient,
+        undefined,
+        sourceTmdbIds
+      );
+      made.push(...(await keep(created)));
+    }
+    return made;
+  }
+
+  public sortBySourceRank<T extends { tmdbId?: number }>(
+    items: T[],
+    sourceData: ComingSoonSourceData[]
+  ): T[] {
+    const rank = this.buildSourceRank(sourceData);
     const rankOf = (item: T) =>
       (item.tmdbId !== undefined ? rank.get(item.tmdbId) : undefined) ??
       Number.MAX_SAFE_INTEGER;

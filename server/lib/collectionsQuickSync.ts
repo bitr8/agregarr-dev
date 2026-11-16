@@ -110,7 +110,7 @@ class CollectionsQuickSync {
     // Skip if full collections sync is running to prevent conflicts
     const collectionsSync = (await import('@server/lib/collectionsSync'))
       .default;
-    if (collectionsSync.status.running) {
+    if (collectionsSync.status.running || collectionsSync.status.pending) {
       logger.info(
         'Full Collections Sync is currently running, skipping Quick Sync',
         {
@@ -1105,8 +1105,27 @@ class CollectionsQuickSync {
         )
       : null;
 
+    // Plex moves a re-added member to the end, so only add items not already in
+    const fresh = await this.dropExistingMembers(
+      collectionRatingKey,
+      matches,
+      plexClient
+    );
+    if (fresh.length === 0) {
+      return 0;
+    }
+
+    if (config && this.needsResync(config)) {
+      return this.resyncCollection(
+        config,
+        collectionRatingKey,
+        fresh,
+        plexClient
+      );
+    }
+
     // Sort matches by original position for correct ordering
-    const sortedMatches = matches.sort(
+    const sortedMatches = fresh.sort(
       (a, b) => a.missingItem.originalPosition - b.missingItem.originalPosition
     );
 
@@ -1158,6 +1177,119 @@ class CollectionsQuickSync {
     await repository.delete(missingItemIds);
 
     return successful;
+  }
+
+  private async dropExistingMembers(
+    collectionRatingKey: string,
+    matches: MissingItemMatch[],
+    plexClient: PlexAPI
+  ): Promise<MissingItemMatch[]> {
+    let members: Set<string>;
+    try {
+      members = new Set(
+        await plexClient.getCollectionItemsOrThrow(collectionRatingKey)
+      );
+    } catch (error) {
+      logger.debug('Could not read collection members, adding all matches', {
+        label: 'Collections Quick Sync',
+        collectionRatingKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return matches;
+    }
+
+    const present = matches.filter((m) => members.has(m.plexItem.ratingKey));
+    if (present.length === 0) {
+      return matches;
+    }
+
+    await getRepository(CollectionMissingItems).delete(
+      present.map((m) => m.missingItem.id)
+    );
+    logger.debug('Skipped items already in collection', {
+      label: 'Collections Quick Sync',
+      collectionRatingKey,
+      titles: present.map((m) => m.missingItem.title),
+    });
+    return matches.filter((m) => !members.has(m.plexItem.ratingKey));
+  }
+
+  // Coming Soon order and maxItems depend on the whole source list, which only its own sync knows
+  private needsResync(config: CollectionConfig): boolean {
+    return config.type === 'comingsoon' && !config.isMultiSource;
+  }
+
+  private async resyncCollection(
+    config: CollectionConfig,
+    collectionRatingKey: string,
+    fresh: MissingItemMatch[],
+    plexClient: PlexAPI
+  ): Promise<number> {
+    const { libraryCacheService } = await import(
+      '@server/lib/collections/services/LibraryCacheService'
+    );
+    const { collectionSyncService } = await import(
+      '@server/lib/collections/services/CollectionSyncService'
+    );
+    const { IndividualCollectionScheduler } = await import(
+      '@server/lib/collections/services/IndividualCollectionScheduler'
+    );
+
+    const libraryId = Array.isArray(config.libraryId)
+      ? config.libraryId[0]
+      : config.libraryId;
+
+    await IndividualCollectionScheduler.waitForApiAccess(
+      config.type,
+      config.id,
+      config.name,
+      libraryId
+    );
+    let result;
+    try {
+      const collectionsSync = (await import('@server/lib/collectionsSync'))
+        .default;
+      if (collectionsSync.status.running || collectionsSync.status.pending) {
+        return 0;
+      }
+      // Loaded under the lock, so it includes whatever an individual sync just added
+      const libraryCache = await libraryCacheService.getFreshCache(plexClient);
+      const syncService = await collectionSyncService.createSyncService(
+        config.type
+      );
+      result = await syncService.processCollections(
+        [config],
+        plexClient,
+        await plexClient.getAllCollections(),
+        new Set(),
+        libraryCache,
+        { reorderOnly: true }
+      );
+    } finally {
+      IndividualCollectionScheduler.releaseApiAccess(config.type);
+    }
+
+    const ratingKey =
+      getSettings().plex.collectionConfigs?.find((c) => c.id === config.id)
+        ?.collectionRatingKey || collectionRatingKey;
+    const members = new Set(await plexClient.getCollectionItems(ratingKey));
+    const added = fresh.filter((m) => members.has(m.plexItem.ratingKey));
+    if (added.length > 0) {
+      await getRepository(CollectionMissingItems).delete(
+        added.map((m) => m.missingItem.id)
+      );
+    }
+    logger.info('Re-synced collection for newly added items', {
+      label: 'Collections Quick Sync',
+      collectionName: config.name,
+      collectionRatingKey: ratingKey,
+      configId: config.id,
+      matched: fresh.length,
+      nowInCollection: added.length,
+      titles: added.map((m) => m.missingItem.title),
+      ...(result?.error && { error: result.error }),
+    });
+    return added.length;
   }
 
   /**

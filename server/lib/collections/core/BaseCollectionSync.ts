@@ -364,7 +364,11 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             ),
           });
 
-          if (effectiveConfig.applyOverlaysDuringSync && collectionRatingKey) {
+          if (
+            effectiveConfig.applyOverlaysDuringSync &&
+            collectionRatingKey &&
+            !options?.reorderOnly
+          ) {
             try {
               const { overlayLibraryService } = await import(
                 '@server/lib/overlays/OverlayLibraryService'

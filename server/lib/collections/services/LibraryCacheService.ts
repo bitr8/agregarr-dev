@@ -64,6 +64,15 @@ class LibraryCacheService {
     }
   }
 
+  /** A cache loaded after this call, never one already in flight */
+  public async getFreshCache(plexClient: PlexAPI): Promise<LibraryItemsCache> {
+    if (this.loadingPromise) {
+      await this.loadingPromise.catch(() => undefined);
+    }
+    this.clearCache();
+    return this.getCache(plexClient);
+  }
+
   /**
    * Clear the cache (for memory cleanup)
    */
