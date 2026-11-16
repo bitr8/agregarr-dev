@@ -785,13 +785,109 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       return [];
     }
 
-    return this.processMissingItems(
-      missingItems,
-      config,
-      plexClient,
-      autoRequestHandler,
-      sourceTmdbIds
+    // Under any sort but the source's own, placeholders only fill free slots, so
+    // don't make ones that can't fit. Auto-requests keep the caller's full list.
+    const maxItems =
+      config.maxItems && config.maxItems > 0 ? config.maxItems : undefined;
+    if (
+      !maxItems ||
+      !config.createPlaceholdersForMissing ||
+      this.inSourceOrder(config)
+    ) {
+      return this.processMissingItems(
+        missingItems,
+        config,
+        plexClient,
+        autoRequestHandler,
+        sourceTmdbIds
+      );
+    }
+
+    // One that can't be made frees its slot for the next, round by round
+    const queue = [...missingItems].sort(
+      (a, b) => a.originalPosition - b.originalPosition
     );
+    const made: CollectionItem[] = [];
+    let room = Math.max(0, maxItems - items.length);
+    while (room > 0 && queue.length > 0) {
+      made.push(
+        ...(await this.processMissingItems(
+          queue.splice(0, room),
+          config,
+          plexClient,
+          undefined,
+          sourceTmdbIds
+        ))
+      );
+      room = Math.max(0, maxItems - items.length - made.length);
+    }
+    await autoRequestHandler?.();
+    return made;
+  }
+
+  /**
+   * Adds new placeholders to the matched items, each tagged with its list position. In
+   * source order they sit at that position; under any other sort they follow the sorted
+   * items. capToMaxItems applies the limit once exclusions have run.
+   */
+  protected mergePlaceholders(
+    items: CollectionItem[],
+    placeholderItems: CollectionItem[],
+    missingItems: MissingItem[] | undefined,
+    config: CollectionConfig
+  ): CollectionItem[] {
+    if (placeholderItems.length === 0) {
+      return items;
+    }
+    const missingPositions = new Map<string, number>();
+    for (const m of missingItems ?? []) {
+      const key = `${m.mediaType}:${m.tmdbId}`;
+      if (!missingPositions.has(key))
+        missingPositions.set(key, m.originalPosition);
+    }
+    const placed = placeholderItems.map((item) => {
+      const position =
+        (item.metadata?.originalPosition as number | undefined) ??
+        missingPositions.get(`${item.type}:${item.tmdbId}`);
+      return position === undefined
+        ? item
+        : {
+            ...item,
+            metadata: { ...item.metadata, originalPosition: position },
+          };
+    });
+    const merged = [...items, ...placed];
+    if (!this.inSourceOrder(config)) {
+      return merged;
+    }
+    const positionOf = (item: CollectionItem) =>
+      item.metadata?.originalPosition;
+    if (merged.some((item) => positionOf(item) === undefined)) {
+      logger.debug('Placeholders appended: some items have no list position', {
+        label: `${this.source} Collections`,
+        configName: config.name,
+      });
+      return merged;
+    }
+    return [...merged].sort(
+      (a, b) => (positionOf(a) as number) - (positionOf(b) as number)
+    );
+  }
+
+  /** Max Items over matched items and placeholders together, after exclusions */
+  protected capToMaxItems(
+    items: CollectionItem[],
+    config: CollectionConfig
+  ): CollectionItem[] {
+    return config.maxItems &&
+      config.maxItems > 0 &&
+      items.length > config.maxItems
+      ? items.slice(0, config.maxItems)
+      : items;
+  }
+
+  private inSourceOrder(config: CollectionConfig): boolean {
+    return !config.sortOrder || config.sortOrder === 'default';
   }
 
   /**
@@ -3886,6 +3982,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       plexClient,
       this.source
     );
+    filteredItems = this.capToMaxItems(filteredItems, config);
 
     // Check again if we have items after exclusions
     if (filteredItems.length === 0) {

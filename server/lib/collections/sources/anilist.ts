@@ -131,7 +131,12 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
       // Add placeholder items to the collection
       let finalItems = items;
       if (placeholderItems.length > 0) {
-        finalItems = [...items, ...placeholderItems];
+        finalItems = this.mergePlaceholders(
+          items,
+          placeholderItems,
+          missingItems,
+          config
+        );
       }
 
       // If no items were mapped, log a warning and return early

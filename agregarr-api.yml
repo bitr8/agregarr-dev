@@ -8501,6 +8501,10 @@ paths:
                     type: string
                   description: Plex item labels; matching items are left out of the preview
                   example: ['trailer-placeholder']
+                createPlaceholdersForMissing:
+                  type: boolean
+                  description: Whether the collection creates placeholders, so missing items share the Max Items limit with matched items
+                  example: true
                 timePeriod:
                   type: string
                   description: Time period for Tautulli collections

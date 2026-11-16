@@ -5841,6 +5841,14 @@ const CollectionFormConfigForm = ({
                             : undefined,
                         maxItems: values.maxItems,
                         excludeLabels: values.excludeLabels,
+                        createPlaceholdersForMissing:
+                          isLibraryEssentialsPattern(
+                            values.type,
+                            values.subtype
+                          )
+                            ? false
+                            : values.type === 'comingsoon' ||
+                              !!values.createPlaceholdersForMissing,
                         // TMDB streaming service + advanced discover fields
                         tmdbAdvancedFilters:
                           valuesRecord.tmdbAdvancedFilters as

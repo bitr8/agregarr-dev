@@ -1,6 +1,7 @@
 import type PlexAPI from '@server/api/plexapi';
 import type { CollectionConfig } from '@server/lib/settings';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CollectionItem } from './types';
 import { CollectionSyncErrorType } from './types';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
@@ -658,5 +659,223 @@ describe('updateCollectionMetadata: sort title PUTs', () => {
     expect(String(sortTitlePuts()[0][0])).toContain(
       encodeURIComponent('Matrix Collection')
     );
+  });
+});
+
+describe('mergePlaceholders and capToMaxItems', () => {
+  const sync = new TestSync() as unknown as {
+    mergePlaceholders: (...a: unknown[]) => CollectionItem[];
+    capToMaxItems: (...a: unknown[]) => CollectionItem[];
+  };
+  const run = (
+    items: CollectionItem[],
+    placeholders: CollectionItem[],
+    missing: { tmdbId: number; originalPosition: number }[],
+    config: Partial<CollectionConfig>,
+    excluded: number[] = []
+  ) =>
+    sync.capToMaxItems(
+      sync
+        .mergePlaceholders(items, placeholders, missing, config)
+        .filter((i) => !excluded.includes(i.tmdbId as number)),
+      config
+    );
+  const present = (tmdbId: number, p?: number) =>
+    ({
+      ratingKey: `rk${tmdbId}`,
+      tmdbId,
+      metadata: p === undefined ? {} : { originalPosition: p },
+    } as unknown as CollectionItem);
+  const ph = (tmdbId: number) =>
+    ({
+      ratingKey: `ph${tmdbId}`,
+      tmdbId,
+      type: 'movie',
+    } as unknown as CollectionItem);
+  const ids = (list: CollectionItem[]) => list.map((i) => i.tmdbId);
+  const rows = (...ns: number[]) =>
+    ns.map((n) => ({ tmdbId: n, mediaType: 'movie', originalPosition: n }));
+
+  it('puts placeholders at their list position and keeps Max Items', () => {
+    const out = run(
+      [present(1, 1), present(3, 3), present(5, 5)],
+      [ph(2), ph(4)],
+      rows(2, 4),
+      { maxItems: 4 }
+    );
+    expect(ids(out)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('places placeholders by position when the collection fits', () => {
+    const out = run([present(1, 1), present(3, 3)], [ph(2)], rows(2), {
+      maxItems: 10,
+    });
+    expect(ids(out)).toEqual([1, 2, 3]);
+  });
+
+  it('lets placeholders take the slots of excluded items', () => {
+    const out = run(
+      [present(1, 1), present(2, 2), present(3, 3)],
+      [ph(4), ph(5)],
+      rows(4, 5),
+      { maxItems: 3 },
+      [1]
+    );
+    expect(ids(out)).toEqual([2, 3, 4]);
+  });
+
+  it('fills free slots after the sorted items under any other sort', () => {
+    const out = run(
+      [present(5, 5), present(1, 1)],
+      [ph(2), ph(3)],
+      rows(2, 3),
+      { maxItems: 3, sortOrder: 'imdb_rating_desc' }
+    );
+    expect(ids(out)).toEqual([5, 1, 2]);
+  });
+
+  it('gives a placeholder its own media type position, first row wins', () => {
+    const out = sync.mergePlaceholders(
+      [present(1, 1), present(4, 4)],
+      [{ ...ph(7), type: 'tv' } as CollectionItem],
+      [
+        { tmdbId: 7, mediaType: 'movie', originalPosition: 3 },
+        { tmdbId: 7, mediaType: 'tv', originalPosition: 2 },
+        { tmdbId: 7, mediaType: 'tv', originalPosition: 9 },
+      ],
+      { maxItems: 3 }
+    );
+    expect(out.map((i) => i.metadata?.originalPosition)).toEqual([1, 2, 4]);
+  });
+
+  it('still keeps Max Items when an item has no position', () => {
+    const out = run([present(1), present(3, 3)], [ph(2)], rows(2), {
+      maxItems: 2,
+    });
+    expect(ids(out)).toEqual([1, 3]);
+  });
+
+  it('changes nothing without placeholders or within the limit', () => {
+    const items = [present(1, 1), present(2, 2)];
+    expect(sync.mergePlaceholders(items, [], [], { maxItems: 2 })).toBe(items);
+    expect(sync.capToMaxItems(items, { maxItems: 2 })).toBe(items);
+    expect(sync.capToMaxItems(items, {})).toBe(items);
+  });
+});
+
+describe('processWithMediaTypeStrategy applies Max Items after exclusions', () => {
+  it('sends at most maxItems to collection creation', async () => {
+    (settings.plex as Record<string, unknown>).libraries = [
+      { key: '1', name: 'Movies', type: 'movie' },
+    ];
+    const sync = new TestSync() as unknown as {
+      processWithMediaTypeStrategy: (...a: unknown[]) => Promise<unknown>;
+      createOrUpdateCollectionStandardized: (...a: unknown[]) => unknown;
+      generateCollectionNameWithCustom: () => Promise<string>;
+    };
+    const created = vi.fn(async () => ({ created: 1, updated: 0 }));
+    sync.createOrUpdateCollectionStandardized = created;
+    sync.generateCollectionNameWithCustom = async () => 'Name';
+    const items = [1, 2, 3, 4].map(
+      (n) =>
+        ({
+          ratingKey: `rk${n}`,
+          tmdbId: n,
+          type: 'movie',
+          metadata: { originalPosition: n },
+        } as unknown as CollectionItem)
+    );
+    await sync.processWithMediaTypeStrategy(
+      items,
+      {
+        id: 'c',
+        name: 'List',
+        type: 'tmdb',
+        libraryId: '1',
+        mediaType: 'movie',
+        maxItems: 3,
+      },
+      {} as PlexAPI,
+      [],
+      new Set()
+    );
+    const sent = (created.mock.calls[0] as unknown[])[0] as CollectionItem[];
+    expect(sent.map((i) => i.tmdbId)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('handlePlaceholdersAndMissingItems candidate limit', () => {
+  const requested = vi.fn(async () => undefined);
+  let creatable: number[] = [];
+  let allSeen: number[][] = [];
+  const run = async (
+    sortOrder: string | undefined,
+    present: number,
+    placeholders = true
+  ) => {
+    requested.mockClear();
+    const sync = new TestSync() as unknown as {
+      handlePlaceholdersAndMissingItems: (...a: unknown[]) => Promise<unknown>;
+      processMissingItems: (...a: unknown[]) => Promise<unknown[]>;
+    };
+    const seen: number[][] = [];
+    sync.processMissingItems = async (list: unknown) => {
+      const ids = (list as { tmdbId: number }[]).map((m) => m.tmdbId);
+      seen.push(ids);
+      return ids
+        .filter((id) => creatable.includes(id))
+        .map((id) => ({ ratingKey: `ph${id}`, tmdbId: id }));
+    };
+    const items = Array.from({ length: present }, (_, i) => ({
+      ratingKey: `rk${i}`,
+      tmdbId: 100 + i,
+    }));
+    const missing = [5, 2, 9].map((n) => ({
+      tmdbId: n,
+      mediaType: 'movie',
+      title: `T${n}`,
+      originalPosition: n,
+    }));
+    await sync.handlePlaceholdersAndMissingItems(
+      items,
+      missing,
+      {
+        id: 'c',
+        name: 'L',
+        maxItems: 4,
+        sortOrder,
+        createPlaceholdersForMissing: placeholders,
+      },
+      {} as PlexAPI,
+      undefined,
+      requested
+    );
+    allSeen = seen;
+    return seen[0];
+  };
+
+  it('only makes placeholders for free slots under another sort', async () => {
+    expect(await run('imdb_rating_desc', 2)).toEqual([2, 5]);
+  });
+
+  it('gives a slot to the next missing item when one cannot be made', async () => {
+    creatable = [5, 9];
+    await run('imdb_rating_desc', 2);
+    expect(allSeen).toEqual([[2, 5], [9]]);
+    expect(requested).toHaveBeenCalledTimes(1);
+    creatable = [];
+  });
+
+  it('still sends auto-requests when no placeholder slot is free', async () => {
+    expect(await run('random', 4)).toBeUndefined();
+    expect(requested).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the missing list alone when placeholders are off', async () => {
+    expect(await run('imdb_rating_desc', 4, false)).toEqual([5, 2, 9]);
+  });
+
+  it('passes every missing item through in source order', async () => {
+    expect(await run(undefined, 4)).toEqual([5, 2, 9]);
   });
 });

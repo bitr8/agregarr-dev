@@ -1600,22 +1600,106 @@ export function combinePreviewMissingItems<
   });
 }
 
+/**
+ * Keeps the maxItems best-positioned items in their current order. Returns the list
+ * unchanged when any item has no position, since there is nothing to rank it by.
+ */
+export function limitByPosition<T>(
+  items: T[],
+  positionOf: (item: T) => number | undefined,
+  maxItems?: number
+): T[] {
+  if (!maxItems || maxItems <= 0 || items.length <= maxItems) {
+    return items;
+  }
+  const positions = items.map(positionOf);
+  if (positions.some((p) => typeof p !== 'number')) {
+    return items;
+  }
+  const kept = new Set(
+    items
+      .map((item, i) => ({ item, p: positions[i] as number }))
+      .sort((a, b) => a.p - b.p)
+      .slice(0, maxItems)
+      .map((e) => e.item)
+  );
+  return items.filter((item) => kept.has(item));
+}
+
+/**
+ * How the preview counts missing items against Max Items, matching the sync. Coming
+ * Soon ranks across present items and placeholders itself, so it keeps the old caps.
+ */
+export function previewPlaceholderMode(
+  type: string,
+  createPlaceholdersForMissing: boolean | undefined,
+  sortOrder: string | undefined
+): 'position' | 'fill' | undefined {
+  if (!createPlaceholdersForMissing || type === 'comingsoon') {
+    return undefined;
+  }
+  return !sortOrder || sortOrder === 'default' ? 'position' : 'fill';
+}
+
 export function capPreviewItemsToMaxItems<
   TItem,
-  TMissing extends { originalPosition: number }
+  TMissing extends { originalPosition: number; tmdbId?: number }
 >(
   items: TItem[],
   missingItems: TMissing[],
-  maxItems?: number
+  maxItems?: number,
+  placeholders?: 'position' | 'fill',
+  matchedBeforeExclusions = items.length
 ): { items: TItem[]; missingItems: TMissing[] } {
   if (!maxItems || maxItems <= 0) {
     return { items, missingItems };
   }
 
   // Mirror the sync: matched items cap by count, missing items by source position
-  return {
+  const capped = {
     items: items.slice(0, maxItems),
     missingItems: filterItemsByPosition(missingItems, maxItems),
+  };
+  if (!placeholders) {
+    return capped;
+  }
+  // A row without a TMDB id can never become a placeholder
+  capped.missingItems = capped.missingItems.filter(
+    (m) => m.tmdbId === undefined || m.tmdbId > 0
+  );
+
+  // Missing items become placeholders, so they share the limit with matched items:
+  // by list position in source order, otherwise after the sorted matched items
+  if (placeholders === 'fill') {
+    return {
+      items: capped.items,
+      missingItems: [...capped.missingItems]
+        .sort((a, b) => a.originalPosition - b.originalPosition)
+        .slice(
+          0,
+          Math.max(0, maxItems - Math.min(matchedBeforeExclusions, maxItems))
+        ),
+    };
+  }
+  type Entry = { item?: TItem; missing?: TMissing; p: number | undefined };
+  const entries: Entry[] = [
+    ...capped.items.map((item) => ({
+      item,
+      p: (item as { metadata?: { originalPosition?: number } }).metadata
+        ?.originalPosition,
+    })),
+    ...capped.missingItems.map((missing) => ({
+      missing,
+      p: missing.originalPosition,
+    })),
+  ];
+  const kept = limitByPosition(entries, (e) => e.p, maxItems);
+  if (kept === entries && entries.length > maxItems) {
+    return capPreviewItemsToMaxItems(items, missingItems, maxItems, 'fill');
+  }
+  return {
+    items: kept.flatMap((e) => (e.item !== undefined ? [e.item] : [])),
+    missingItems: kept.flatMap((e) => (e.missing ? [e.missing] : [])),
   };
 }
 

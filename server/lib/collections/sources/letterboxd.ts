@@ -853,7 +853,12 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
       // Add placeholder items to the collection
       let finalItems = items;
       if (placeholderItems.length > 0) {
-        finalItems = [...items, ...placeholderItems];
+        finalItems = this.mergePlaceholders(
+          items,
+          placeholderItems,
+          missingItems,
+          config
+        );
       }
       finalItems = await applyLabelExclusions(
         finalItems,
@@ -861,6 +866,7 @@ export class LetterboxdCollectionSync extends BaseCollectionSync<'letterboxd'> {
         plexClient,
         this.source
       );
+      finalItems = this.capToMaxItems(finalItems, config);
 
       if (finalItems.length === 0) {
         logger.debug('No items found, returning early', {

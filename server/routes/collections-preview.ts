@@ -6,6 +6,7 @@ import {
   capPreviewItemsToMaxItems,
   combinePreviewMissingItems,
   extractErrorMessage,
+  previewPlaceholderMode,
   type LibraryItemsCache,
 } from '@server/lib/collections/core/CollectionUtilities';
 import type {
@@ -1000,6 +1001,7 @@ async function processPreviewAsync(
     sortOrder?: CollectionSortOrder;
     cycleIndex?: number; // For cycle_lists mode, which source to show
     excludeLabels?: string[];
+    createPlaceholdersForMissing?: boolean;
   }
 ): Promise<void> {
   try {
@@ -1035,6 +1037,7 @@ async function processPreviewAsync(
       sortOrder,
       cycleIndex,
       excludeLabels,
+      createPlaceholdersForMissing,
     } = requestBody;
 
     logger.info(
@@ -1103,6 +1106,7 @@ async function processPreviewAsync(
       template: '',
       isLibraryPromoted: false,
       everLibraryPromoted: false,
+      createPlaceholdersForMissing: !!createPlaceholdersForMissing,
     };
 
     // Add type-specific fields
@@ -1295,7 +1299,14 @@ async function processPreviewAsync(
       capPreviewItemsToMaxItems(
         labelFilteredItems,
         filteredResult.missingItems || [],
-        previewConfig.maxItems
+        previewConfig.maxItems,
+        previewPlaceholderMode(
+          type,
+          previewConfig.createPlaceholdersForMissing,
+          sortOrder
+        ),
+        // the sync counts free slots before exclusions run
+        filteredResult.items.length
       );
 
     // Enrich items with poster URLs and merge in original order

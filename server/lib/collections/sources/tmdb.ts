@@ -1427,7 +1427,12 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     // Add placeholder items to the collection
     let finalItems = items;
     if (placeholderItems.length > 0) {
-      finalItems = [...items, ...placeholderItems];
+      finalItems = this.mergePlaceholders(
+        items,
+        placeholderItems,
+        missingItems,
+        config
+      );
     }
 
     if (finalItems.length === 0) return { created: 0, updated: 0 };

@@ -91,8 +91,12 @@ export class TvdbCollectionSync extends BaseCollectionSync<'tvdb'> {
           : undefined
       );
 
-      const finalItems =
-        placeholderItems.length > 0 ? [...items, ...placeholderItems] : items;
+      const finalItems = this.mergePlaceholders(
+        items,
+        placeholderItems,
+        missingItems,
+        config
+      );
 
       if (finalItems.length === 0) {
         logger.warn('No items to create collection from', {
