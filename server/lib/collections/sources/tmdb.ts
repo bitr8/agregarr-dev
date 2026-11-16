@@ -118,7 +118,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
             }
@@ -140,7 +140,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
             }
@@ -187,7 +187,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
             }
@@ -209,7 +209,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
             }
@@ -256,7 +256,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
             }
@@ -279,7 +279,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
             }
@@ -410,7 +410,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
 
@@ -457,7 +457,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                   }))
                 );
 
-                if (data.results.length < 20) {
+                if (currentpage >= data.total_pages) {
                   hasMorePages = false;
                 }
               } else {
@@ -480,7 +480,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                   }))
                 );
 
-                if (data.results.length < 20) {
+                if (currentpage >= data.total_pages) {
                   hasMorePages = false;
                 }
               }
@@ -920,7 +920,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (currentpage >= data.total_pages) {
                 hasMorePages = false;
               }
               currentPage++;
