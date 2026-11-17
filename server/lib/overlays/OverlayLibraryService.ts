@@ -61,6 +61,7 @@ import {
   cloneOverlayTargetProgress,
   createOverlayTargetProgress,
   recordOverlayTargetOutcome,
+  retainOverlayItemOutcome,
   type OverlayTargetProgressMap,
 } from './overlayProgress';
 import {
@@ -415,24 +416,20 @@ class OverlayLibraryService {
     else progress.skippedCount++;
     recordOverlayTargetOutcome(progress.targetProgress, target, outcome);
 
-    progress.itemOutcomes.push({
-      title,
-      ratingKey: item.ratingKey,
-      target,
-      outcome,
-      processedAt: Date.now(),
-      ...(safeMessage ? { message: safeMessage } : {}),
-      ...(item.filePath ? { filePath: item.filePath } : {}),
-    });
-    if (progress.itemOutcomes.length > MAX_RETAINED_OVERLAY_ITEM_OUTCOMES) {
-      const removed = progress.itemOutcomes.splice(
-        0,
-        progress.itemOutcomes.length - MAX_RETAINED_OVERLAY_ITEM_OUTCOMES
-      );
-      for (const item of removed) {
-        progress.omittedOutcomeCounts[item.outcome]++;
-      }
-    }
+    const evicted = retainOverlayItemOutcome(
+      progress.itemOutcomes,
+      {
+        title,
+        ratingKey: item.ratingKey,
+        target,
+        outcome,
+        processedAt: Date.now(),
+        ...(safeMessage ? { message: safeMessage } : {}),
+        ...(item.filePath ? { filePath: item.filePath } : {}),
+      },
+      MAX_RETAINED_OVERLAY_ITEM_OUTCOMES
+    );
+    if (evicted) progress.omittedOutcomeCounts[evicted.outcome]++;
 
     if (outcome === 'error' && progress.itemErrors.length < 50) {
       progress.itemErrors.push({

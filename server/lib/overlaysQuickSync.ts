@@ -170,8 +170,6 @@ class OverlaysQuickSync {
       const { overlayLibraryService } = await import(
         '@server/lib/overlays/OverlayLibraryService'
       );
-      overlayLibraryService.beginOutcomeRun();
-
       logger.info('Found libraries with overlays configured', {
         label: 'Overlays Quick Sync',
         libraryCount: activeConfigs.length,
