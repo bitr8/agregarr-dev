@@ -49,7 +49,10 @@ function resolveColorScale(
 }
 
 interface TileElementComponentProps {
-  element: OverlayElement;
+  element: Pick<
+    OverlayElement,
+    'id' | 'x' | 'y' | 'width' | 'height' | 'rotation'
+  > & { properties: object };
   isSelected: boolean;
   renderContext?: OverlayRenderContext;
   onSelect: (node: Konva.Node) => void;
@@ -156,11 +159,19 @@ export const TileElement: React.FC<TileElementComponentProps> = ({
         height={element.height}
         fill={fillColor}
         opacity={props.fillOpacity / 100}
-        stroke={props.borderColor}
-        strokeWidth={props.borderWidth || 0}
         cornerRadius={cornerRadius}
         listening={false}
       />
+      {(props.borderWidth ?? 0) > 0 && props.borderColor && (
+        <Rect
+          width={element.width}
+          height={element.height}
+          stroke={props.borderColor}
+          strokeWidth={props.borderWidth}
+          cornerRadius={cornerRadius}
+          listening={false}
+        />
+      )}
 
       {/* Selection indicator */}
       {isSelected && (

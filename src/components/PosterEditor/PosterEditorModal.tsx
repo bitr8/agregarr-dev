@@ -52,7 +52,7 @@ export type EditorMode =
 export interface LayeredElement {
   id: string;
   layerOrder: number; // 0 = bottom, higher = top
-  type: 'text' | 'raster' | 'svg' | 'content-grid' | 'person';
+  type: 'text' | 'raster' | 'svg' | 'content-grid' | 'person' | 'tile';
 
   // Common properties
   x: number;
@@ -68,7 +68,8 @@ export interface LayeredElement {
     | RasterElementProps
     | SVGElementProps
     | ContentGridProps
-    | PersonElementProps;
+    | PersonElementProps
+    | TileElementProps;
 }
 
 export interface TextElementProps {
@@ -100,6 +101,15 @@ export interface SVGElementProps {
   iconType: 'source-logo' | 'svg-icon' | 'custom-icon';
   iconPath?: string; // For custom icons, service logo is dynamic
   grayscale?: boolean;
+}
+
+export interface TileElementProps {
+  fillColor: string;
+  fillOpacity: number; // 0-100
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadiusTopLeft?: number;
+  lockCorners?: boolean;
 }
 
 export interface ContentGridProps {

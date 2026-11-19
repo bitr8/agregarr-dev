@@ -156,7 +156,7 @@ export function validateTemplateData(
         errors.push(`Element ${index} missing required id`);
       }
       if (
-        !['text', 'raster', 'svg', 'content-grid', 'person'].includes(
+        !['text', 'raster', 'svg', 'content-grid', 'person', 'tile'].includes(
           element.type
         )
       ) {

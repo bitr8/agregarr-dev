@@ -8,6 +8,7 @@ import {
   PhotoIcon,
   PlusIcon,
   Squares2X2Icon,
+  StopIcon,
   TrashIcon,
   UserIcon,
 } from '@heroicons/react/24/outline';
@@ -25,6 +26,7 @@ import type {
   RasterElementProps,
   SVGElementProps,
   TextElementProps,
+  TileElementProps,
 } from './PosterEditorModal';
 
 const messages = defineMessages({
@@ -35,6 +37,11 @@ const messages = defineMessages({
   addSourceLogo: 'Add Source Logo',
   addCustomSVGIcon: 'Add Custom SVG Icon',
   addGrid: 'Add Grid',
+  addTile: 'Add Tile',
+  tile: 'Tile',
+  fillColor: 'Fill Color',
+  borderColor: 'Border Color',
+  borderWidth: 'Border Width',
   moveUp: 'Move Up',
   moveDown: 'Move Down',
   deleteElement: 'Delete Element',
@@ -107,6 +114,81 @@ const messages = defineMessages({
   pixelsAutoLabel: 'px - Auto',
   lockedToAspectRatio: 'Locked to poster aspect ratio (2:3)',
 });
+
+const TileProperties: React.FC<{
+  props: TileElementProps;
+  onChange: (updates: Partial<TileElementProps>) => void;
+}> = ({ props, onChange }) => {
+  const intl = useIntl();
+  const slider = (
+    label: string,
+    value: number,
+    max: number,
+    unit: string,
+    update: (v: number) => Partial<TileElementProps>
+  ) => (
+    <div>
+      <label className="mb-1 block text-xs text-stone-400">
+        {label} ({value}
+        {unit})
+      </label>
+      <input
+        type="range"
+        min="0"
+        max={max}
+        value={value}
+        onChange={(e) => onChange(update(Number(e.target.value)))}
+        className="w-full"
+      />
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <label className="mb-1 block text-xs text-stone-400">
+          {intl.formatMessage(messages.fillColor)}
+        </label>
+        <ColorInput
+          value={props.fillColor}
+          onChange={(fillColor) => onChange({ fillColor })}
+        />
+      </div>
+      {slider(
+        intl.formatMessage(messages.opacity),
+        props.fillOpacity,
+        100,
+        '%',
+        (fillOpacity) => ({ fillOpacity })
+      )}
+      {slider(
+        intl.formatMessage(messages.cornerRadius),
+        props.borderRadiusTopLeft ?? 0,
+        200,
+        intl.formatMessage(messages.pixelsUnit),
+        (borderRadiusTopLeft) => ({ borderRadiusTopLeft, lockCorners: true })
+      )}
+      {slider(
+        intl.formatMessage(messages.borderWidth),
+        props.borderWidth ?? 0,
+        30,
+        intl.formatMessage(messages.pixelsUnit),
+        (borderWidth) => ({ borderWidth })
+      )}
+      {(props.borderWidth ?? 0) > 0 && (
+        <div>
+          <label className="mb-1 block text-xs text-stone-400">
+            {intl.formatMessage(messages.borderColor)}
+          </label>
+          <ColorInput
+            value={props.borderColor || '#ffffff'}
+            onChange={(borderColor) => onChange({ borderColor })}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface FontInfo {
   family: string;
@@ -304,6 +386,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
         | SVGElementProps
         | ContentGridProps
         | PersonElementProps
+        | TileElementProps
       >
     ) => {
       const elementIndex = elements.findIndex((el) => el.id === elementId);
@@ -562,6 +645,25 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
             } as SVGElementProps,
           };
           break;
+        case 'tile':
+          newElement = {
+            id: elementId,
+            layerOrder: maxLayerOrder + 1,
+            type: 'tile',
+            x: (posterData.width - 300) / 2,
+            y: stackedY(200, 120, elements.length, posterData.height, 100),
+            width: 300,
+            height: 100,
+            properties: {
+              fillColor: '#000000',
+              fillOpacity: 60,
+              borderColor: '#ffffff',
+              borderWidth: 0,
+              borderRadiusTopLeft: 12,
+              lockCorners: true,
+            } as TileElementProps,
+          };
+          break;
         case 'content-grid': {
           const columns = 2;
           const rows = 2;
@@ -615,6 +717,8 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
         return CodeBracketSquareIcon;
       case 'content-grid':
         return Squares2X2Icon;
+      case 'tile':
+        return StopIcon;
       default:
         return DocumentTextIcon;
     }
@@ -640,6 +744,8 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
       }
       case 'content-grid':
         return intl.formatMessage(messages.contentGrid);
+      case 'tile':
+        return intl.formatMessage(messages.tile);
       default:
         return element.id;
     }
@@ -722,6 +828,20 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
               />
             ) : null}
             <CodeBracketSquareIcon className="h-4 w-4 text-white" />
+          </div>
+        );
+      }
+      case 'tile': {
+        const props = element.properties as TileElementProps;
+        return (
+          <div className="flex h-6 w-8 items-center justify-center rounded bg-stone-600">
+            <div
+              className="h-3 w-5 rounded-sm"
+              style={{
+                backgroundColor: props.fillColor,
+                opacity: props.fillOpacity / 100,
+              }}
+            />
           </div>
         );
       }
@@ -1134,6 +1254,15 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
             >
               <PlusIcon className="h-3 w-3" />
               {intl.formatMessage(messages.addGrid)}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleAddElement('tile')}
+              className="flex w-full items-center justify-center gap-1 rounded bg-stone-700 px-2 py-1 text-xs text-white hover:bg-stone-600"
+            >
+              <PlusIcon className="h-3 w-3" />
+              {intl.formatMessage(messages.addTile)}
             </button>
           </div>
         </div>
@@ -2051,6 +2180,15 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                     </div>
                   </div>
                 </div>
+              )}
+
+              {selectedElement.type === 'tile' && (
+                <TileProperties
+                  props={selectedElement.properties as TileElementProps}
+                  onChange={(updates) =>
+                    updateElementProperties(selectedElement.id, updates)
+                  }
+                />
               )}
 
               {selectedElement.type === 'content-grid' && (

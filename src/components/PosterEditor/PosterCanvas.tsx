@@ -1,3 +1,4 @@
+import { TileElement } from '@app/components/OverlayEditor/TileElement';
 import { evaluateCondition } from '@app/utils/conditionEvaluator';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -266,12 +267,15 @@ export const PosterCanvas = forwardRef<PosterCanvasRef, PosterCanvasProps>(
 
         // Configure aspect ratio locking
         const elementId = selectedShapeRef.id();
-        const shouldLockAspectRatio = aspectRatioLocked[elementId] ?? true;
+        const shouldLockAspectRatio =
+          aspectRatioLocked[elementId] ??
+          posterData.elements.find((el) => el.id === elementId)?.type !==
+            'tile';
 
         transformerRef.current.keepRatio(shouldLockAspectRatio);
         transformerRef.current.getLayer()?.batchDraw();
       }
-    }, [selectedShapeRef, aspectRatioLocked]);
+    }, [selectedShapeRef, aspectRatioLocked, posterData.elements]);
 
     // Expose export method via ref
     useImperativeHandle(
@@ -330,6 +334,8 @@ export const PosterCanvas = forwardRef<PosterCanvasRef, PosterCanvasProps>(
           return <SVGElement {...shapeProps} />;
         case 'content-grid':
           return <ContentGridElement {...shapeProps} />;
+        case 'tile':
+          return <TileElement {...shapeProps} />;
         default:
           return null;
       }

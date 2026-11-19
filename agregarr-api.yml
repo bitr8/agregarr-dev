@@ -13929,7 +13929,8 @@ paths:
                                     example: 20
                                   type:
                                     type: string
-                                    enum: [text, raster, svg, content-grid]
+                                    enum:
+                                      [text, raster, svg, content-grid, tile]
                                     example: 'text'
                                   x:
                                     type: number
@@ -13999,6 +14000,21 @@ paths:
                                             type: number
                                           cornerRadius:
                                             type: number
+                                      - type: object
+                                        title: 'Tile Element Properties'
+                                        properties:
+                                          fillColor:
+                                            type: string
+                                          fillOpacity:
+                                            type: number
+                                          borderColor:
+                                            type: string
+                                          borderWidth:
+                                            type: number
+                                          borderRadiusTopLeft:
+                                            type: number
+                                          lockCorners:
+                                            type: boolean
                             migrated:
                               type: boolean
                               description: 'Flag indicating if template has been migrated to unified layering system'

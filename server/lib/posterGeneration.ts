@@ -8,9 +8,14 @@ import type {
   RasterElementProps,
   SVGElementProps,
   TextElementProps,
+  TileElementProps,
 } from '@server/entity/PosterTemplate';
 import { PosterTemplate } from '@server/entity/PosterTemplate';
 import { evaluateCondition } from '@server/lib/overlays/OverlayTemplateRenderer';
+import {
+  resolveTileCornerRadii,
+  roundedRectPath,
+} from '@server/lib/overlays/roundedRect';
 import { getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import axios from 'axios';
@@ -1580,6 +1585,13 @@ async function generateUnifiedLayeredElements(
           );
           break;
         }
+        case 'tile': {
+          elementContent = generateTileElement(
+            element,
+            element.properties as TileElementProps
+          );
+          break;
+        }
         case 'person': {
           const props = element.properties as PersonElementProps;
           elementContent = await generatePersonElement(
@@ -1614,6 +1626,56 @@ async function generateUnifiedLayeredElements(
   }
 
   return renderedElements.join('');
+}
+
+export function generateTileElement(
+  element: LayeredElement,
+  props: TileElementProps
+): string {
+  const num = (v: unknown, fallback = 0) =>
+    Number.isFinite(Number(v)) ? Number(v) : fallback;
+  const color = (v: unknown, fallback: string) =>
+    escapeXml(typeof v === 'string' && v ? v : fallback);
+
+  const { width, height } = element;
+  const radii = resolveTileCornerRadii({
+    borderRadius:
+      props.borderRadius === undefined ? undefined : num(props.borderRadius),
+    borderRadiusTopLeft: num(props.borderRadiusTopLeft),
+    borderRadiusTopRight: num(props.borderRadiusTopRight),
+    borderRadiusBottomRight: num(props.borderRadiusBottomRight),
+    borderRadiusBottomLeft: num(props.borderRadiusBottomLeft),
+    lockCorners: props.lockCorners,
+  });
+  const opacity = Math.max(0, Math.min(100, num(props.fillOpacity, 100))) / 100;
+  const borderWidth = num(props.borderWidth);
+  const paint = `fill="${color(
+    props.fillColor,
+    '#000000'
+  )}" fill-opacity="${opacity}"${
+    borderWidth > 0 && props.borderColor
+      ? ` stroke="${color(
+          props.borderColor,
+          '#ffffff'
+        )}" stroke-width="${borderWidth}"`
+      : ''
+  }`;
+  const transform = `transform="translate(${element.x} ${element.y})"`;
+
+  const r = radii.topLeft;
+  if (
+    radii.topRight === r &&
+    radii.bottomRight === r &&
+    radii.bottomLeft === r
+  ) {
+    const rx = Math.max(0, Math.min(r, width / 2, height / 2));
+    return `<rect ${transform} width="${width}" height="${height}" rx="${rx}" ry="${rx}" ${paint}/>`;
+  }
+  return `<path ${transform} d="${roundedRectPath(
+    width,
+    height,
+    radii
+  )}" ${paint}/>`;
 }
 
 /**
