@@ -3447,6 +3447,11 @@ components:
           type: string
           description: 'Unique collection identifier (libraryId-collectionRatingKey)'
           example: '1-35954'
+        collectionSuffixMode:
+          type: string
+          enum: [leave, strip, add]
+          description: '" Collection" suffix on the Plex title. leave (default) never renames; strip removes it; add appends it.'
+          example: 'leave'
         collectionRatingKey:
           type: string
           description: 'Plex collection rating key'
@@ -3705,6 +3710,11 @@ components:
           type: string
           description: 'Unique collection identifier (libraryId-collectionRatingKey)'
           example: '1-35954'
+        collectionSuffixMode:
+          type: string
+          enum: [leave, strip, add]
+          description: '" Collection" suffix on the Plex title. leave (default) never renames; strip removes it; add appends it.'
+          example: 'leave'
         collectionRatingKey:
           type: string
           description: 'Plex collection rating key'
@@ -9277,6 +9287,36 @@ paths:
           description: Pre-existing collection not found
         '500':
           description: Failed to update pre-existing collection settings
+  /preexisting/{id}/sync:
+    post:
+      summary: Sync individual pre-existing collection
+      description: Applies one pre-existing collection's visibility, artwork, title and sort title to Plex now instead of waiting for the next full sync. Refuses with 409 while a full sync is running.
+      tags:
+        - pre-existing-collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Pre-existing collection ID
+          schema:
+            type: string
+            example: '1-35954'
+      responses:
+        '200':
+          description: Collection synced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preExistingCollectionConfig:
+                    $ref: '#/components/schemas/PreExistingCollectionConfig'
+        '404':
+          description: Pre-existing collection not found
+        '409':
+          description: A full sync is running
+        '500':
+          description: Failed to sync collection
   /preexisting/{id}/promote:
     patch:
       summary: Promote pre-existing collection to top section

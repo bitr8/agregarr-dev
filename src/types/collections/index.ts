@@ -3,6 +3,7 @@
  * Extracted from SettingsPlex.tsx to improve maintainability
  */
 // Types extracted from server to avoid importing server-side modules in client
+import type { CollectionSuffixMode } from '@server/constants/sortTitle';
 
 export enum CollectionType {
   DEFAULT_PLEX_HUB = 'default_plex_hub', // Built-in Plex algorithmic hubs
@@ -109,6 +110,7 @@ export interface PreExistingCollectionConfig {
   isLibraryPromoted: boolean; // true = promoted section (rank-prefixed sort title), false = A-Z section
   sortTitleResetRequested?: boolean; // One-shot: the user cleared the Sort Title field, asking Agregarr to take the sort title back. Consumed and cleared by the next sync
   sortTitleArticleNormalized?: boolean; // True while this collection's sortTitle is an article-normalized value Agregarr wrote
+  collectionSuffixMode?: CollectionSuffixMode; // " Collection" suffix on the Plex title: absent or 'leave' never renames
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
     usersHome: boolean;

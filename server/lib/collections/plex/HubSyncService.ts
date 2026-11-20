@@ -1,4 +1,5 @@
 import type PlexAPI from '@server/api/plexapi';
+import { applyCollectionSuffix } from '@server/constants/sortTitle';
 import {
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
@@ -1665,11 +1666,12 @@ export class HubSyncService {
   }
 
   /**
-   * Sync pre-existing collection sortTitles based on isLibraryPromoted status
-   * Only updates sortTitle when collections are in promoted state
+   * Sync pre-existing collection titles (" Collection" suffix) and sortTitles,
+   * all of them or just onlyConfigId
    */
   public async syncPreExistingCollectionSortTitles(
-    plexClient: PlexAPI
+    plexClient: PlexAPI,
+    onlyConfigId?: string
   ): Promise<void> {
     if (this.cancelled) return;
 
@@ -1678,8 +1680,21 @@ export class HubSyncService {
       const preExistingConfigs =
         settings.plex.preExistingCollectionConfigs || [];
 
+      // Every collection's name, even for a single-collection sync: Plex rejects a rename onto a taken name.
+      const namesByLibrary = new Map<string, Set<string>>();
+      const noteName = (libraryId: string, name: string) => {
+        const names = namesByLibrary.get(libraryId) ?? new Set<string>();
+        names.add(name);
+        namesByLibrary.set(libraryId, names);
+      };
+      preExistingConfigs.forEach((c) => noteName(c.libraryId, c.name));
+      (settings.plex.collectionConfigs || []).forEach((c) =>
+        [c.libraryId].flat().forEach((id) => noteName(id, c.name))
+      );
+
       for (const config of preExistingConfigs) {
         if (this.cancelled) return;
+        if (onlyConfigId && config.id !== onlyConfigId) continue;
 
         // A reset applies to this sync only, so clear it on the paths that skip the write.
         if (
@@ -1698,6 +1713,14 @@ export class HubSyncService {
           continue;
         }
 
+        // The title isn't ordering, so this runs even when ordering is excluded.
+        const name = await this.applyCollectionSuffixRename(
+          plexClient,
+          config,
+          namesByLibrary.get(config.libraryId)
+        );
+        const renamed = name !== config.name;
+
         if (config.excludeFromOrdering) {
           continue;
         }
@@ -1713,7 +1736,7 @@ export class HubSyncService {
           try {
             const overrideSortTitle = buildSortTitleFromOverride(
               config.sortTitleOverride,
-              config.name,
+              name,
               false,
               config.sortTitleOverrideIsFullTitle === true
             );
@@ -1759,6 +1782,7 @@ export class HubSyncService {
         const needsArticleReset = config.sortTitleArticleNormalized === true;
         if (
           !config.sortTitleResetRequested &&
+          !renamed &&
           config.everLibraryPromoted === false &&
           !articleHandlingEnabled &&
           !needsArticleReset
@@ -1771,17 +1795,17 @@ export class HubSyncService {
 
         if (isCurrentlyPromoted) {
           // Promoted: positional sortTitle (see buildPromotedSortTitle)
-          sortTitle = buildPromotedSortTitle(
-            config.name,
-            config.sortOrderLibrary
-          );
+          sortTitle = buildPromotedSortTitle(name, config.sortOrderLibrary);
         } else if (
           // A reset bypasses ownership: the hand-set value is the one being cleared.
           !config.sortTitleResetRequested &&
+          // Agregarr made the rename, so a sort title that was just the old name moves with it.
+          !(renamed && config.titleSort?.trim() === config.name.trim()) &&
           !isAgregarrOwnedSortTitle(
             config.titleSort,
-            config.name,
-            config.everLibraryPromoted
+            name,
+            config.everLibraryPromoted,
+            renamed ? config.name : undefined
           )
         ) {
           // A user-set sort title wins; discovery keeps the stored copy current.
@@ -1789,10 +1813,10 @@ export class HubSyncService {
         } else {
           // A-Z: the name, per leading-article handling.
           sortTitle = normalizeSortTitleArticle(
-            config.name,
+            name,
             settings.plex.sortTitleArticleHandling
           );
-          const isNormalized = sortTitle !== config.name;
+          const isNormalized = sortTitle !== name;
           if (isNormalized !== (config.sortTitleArticleNormalized === true)) {
             updateConfig.sortTitleArticleNormalized = isNormalized;
           }
@@ -1874,6 +1898,76 @@ export class HubSyncService {
           error: extractErrorMessage(error),
         }
       );
+    }
+  }
+
+  /** The full sync's two pre-existing passes, for one collection; false when it isn't found. */
+  public async syncSinglePreExistingCollection(
+    plexClient: PlexAPI,
+    configId: string
+  ): Promise<boolean> {
+    const config = getSettings().plex.preExistingCollectionConfigs?.find(
+      (c) => c.id === configId
+    );
+    if (!config) return false;
+    await this.syncPreExistingCollections(plexClient, [config]);
+    await this.syncPreExistingCollectionSortTitles(plexClient, configId);
+    return true;
+  }
+
+  /** Renames the Plex collection per its suffix mode and returns the name it ends up with. */
+  private async applyCollectionSuffixRename(
+    plexClient: PlexAPI,
+    config: PreExistingCollectionConfig,
+    namesInLibrary: Set<string> | undefined
+  ): Promise<string> {
+    const target = applyCollectionSuffix(
+      config.name,
+      config.collectionSuffixMode
+    );
+    if (target === config.name) return config.name;
+
+    const logMeta = {
+      label: 'Hub Sync Service',
+      collectionId: config.id,
+      collectionRatingKey: config.collectionRatingKey,
+      libraryId: config.libraryId,
+    };
+    if (namesInLibrary?.has(target)) {
+      logger.warn(
+        `Skipping " Collection" suffix change for "${config.name}": "${target}" already exists in this library`,
+        logMeta
+      );
+      return config.name;
+    }
+
+    try {
+      await plexClient.updateCollectionTitle(
+        config.collectionRatingKey,
+        target,
+        config.libraryId,
+        config.name
+      );
+      this.updatePreExistingConfigField(config.id, { name: target });
+      namesInLibrary?.delete(config.name);
+      namesInLibrary?.add(target);
+      logger.debug(`Renamed "${config.name}" to "${target}"`, logMeta);
+      return target;
+    } catch (error) {
+      const message = extractErrorMessage(error);
+      // 409: a deleted collection still holds the name until the library's trash is emptied; retried every sync.
+      if (message.includes('409')) {
+        logger.warn(
+          `Plex refused to rename "${config.name}" to "${target}" (409). Empty the library's trash in Plex and it will apply on the next sync`,
+          logMeta
+        );
+      } else {
+        logger.error(
+          `Failed to rename "${config.name}" to "${target}": ${message}`,
+          logMeta
+        );
+      }
+      return config.name;
     }
   }
 
