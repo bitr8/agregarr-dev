@@ -22,6 +22,7 @@ import type {
   ConditionRule,
   ConditionSection,
 } from '@server/entity/OverlayTemplate';
+import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
 import { useEffect, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import Select from 'react-select';
@@ -922,7 +923,7 @@ interface ConditionEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialCondition: ApplicationCondition | undefined;
-  onSave: (condition: ApplicationCondition | undefined) => void;
+  onSave: (condition: ApplicationCondition | undefined) => boolean | void;
   title?: string;
   description?: string;
   enableLabel?: string;
@@ -951,7 +952,8 @@ export const ConditionEditorModal: React.FC<ConditionEditorModalProps> = ({
   }, [isOpen, initialCondition]);
 
   const handleSave = () => {
-    onSave(condition);
+    const toSave = hasEffectiveCondition(condition) ? condition : undefined;
+    if (onSave(toSave) === false) return;
     onClose();
   };
 

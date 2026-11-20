@@ -1,6 +1,6 @@
 import type { ApplicationCondition } from '@server/entity/OverlayTemplate';
 import { describe, expect, it } from 'vitest';
-import { evaluateCondition } from './conditionEvaluator';
+import { evaluateCondition, hasEffectiveCondition } from './conditionEvaluator';
 
 const rule = (
   field: string,
@@ -122,5 +122,23 @@ describe('existing behaviour is unchanged', () => {
     } as ApplicationCondition;
     expect(evaluateCondition(cond, { a: 1, b: 2, c: 1 })).toBe(true);
     expect(evaluateCondition(cond, { a: 1, b: 2, c: 2 })).toBe(false);
+  });
+});
+
+describe('hasEffectiveCondition', () => {
+  it('is true only when a section holds at least one rule', () => {
+    expect(hasEffectiveCondition(rule('a', 'eq', 1))).toBe(true);
+    expect(hasEffectiveCondition(undefined)).toBe(false);
+    expect(hasEffectiveCondition(null)).toBe(false);
+    expect(hasEffectiveCondition({ sections: [] })).toBe(false);
+    expect(hasEffectiveCondition({ sections: [{ rules: [] }] } as never)).toBe(
+      false
+    );
+  });
+
+  it('leaves evaluation alone: an emptied condition still always matches', () => {
+    expect(evaluateCondition({ sections: [{ rules: [] }] } as never, {})).toBe(
+      true
+    );
   });
 });

@@ -7,8 +7,12 @@ import type {
   OverlayTileElementProps,
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
-import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import {
+  OverlayTemplate,
+  type ApplicationCondition,
+} from '@server/entity/OverlayTemplate';
 import { sampleCollectionRankContext } from '@server/lib/overlays/collectionRank';
+import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
 import { extractStreamingProvider } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayOutputFormat } from '@server/lib/overlays/overlayOutputQuality';
 import { createOverlayPreviewArtwork } from '@server/lib/overlays/overlayPreviewArtwork';
@@ -571,8 +575,8 @@ router.post('/', async (req, res, next) => {
     // Conditional variable elements are mutually exclusive at render time
     const unconditionalVariables =
       templateData.elements?.filter(
-        (el: { type: string; condition?: unknown }) =>
-          el.type === 'variable' && !el.condition
+        (el: { type: string; condition?: ApplicationCondition }) =>
+          el.type === 'variable' && !hasEffectiveCondition(el.condition)
       ) || [];
 
     if (unconditionalVariables.length > 1) {
@@ -669,8 +673,8 @@ router.put('/:id', async (req, res, next) => {
     if (templateData) {
       const unconditionalVariables =
         templateData.elements?.filter(
-          (el: { type: string; condition?: unknown }) =>
-            el.type === 'variable' && !el.condition
+          (el: { type: string; condition?: ApplicationCondition }) =>
+            el.type === 'variable' && !hasEffectiveCondition(el.condition)
         ) || [];
 
       if (unconditionalVariables.length > 1) {

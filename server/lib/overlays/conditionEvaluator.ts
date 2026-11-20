@@ -1,5 +1,11 @@
 import type { ApplicationCondition } from '@server/entity/OverlayTemplate';
 
+export function hasEffectiveCondition(
+  condition: ApplicationCondition | undefined | null
+): boolean {
+  return !!condition?.sections?.some((section) => section.rules?.length > 0);
+}
+
 /**
  * Evaluate an application condition against the render context
  * Returns true if condition is met (or if no condition specified)

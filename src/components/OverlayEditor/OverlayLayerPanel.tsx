@@ -18,6 +18,7 @@ import {
   VariableIcon,
 } from '@heroicons/react/24/outline';
 import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
+import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
 import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
 import { DEFAULT_TILE_BORDER_COLOR } from '@server/lib/overlays/tileBorder';
 import { useEffect, useState } from 'react';
@@ -429,23 +430,31 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
     condition: OverlayElement['condition']
   ) =>
     element.type === 'variable' &&
-    !condition &&
+    !hasEffectiveCondition(condition) &&
     elements.some(
-      (el) => el.id !== element.id && el.type === 'variable' && !el.condition
+      (el) =>
+        el.id !== element.id &&
+        el.type === 'variable' &&
+        !hasEffectiveCondition(el.condition)
     );
+
+  const hasUnconditionalVariable = elements.some(
+    (el) => el.type === 'variable' && !hasEffectiveCondition(el.condition)
+  );
 
   const handleSetElementCondition = (
     element: OverlayElement,
     condition: OverlayElement['condition']
-  ) => {
+  ): boolean => {
     if (wouldDuplicateUnconditionalVariable(element, condition)) {
       addToast(intl.formatMessage(messages.oneUnconditionalVariable), {
         appearance: 'error',
         autoDismiss: true,
       });
-      return;
+      return false;
     }
     handleUpdateElement(element.id, { condition });
+    return true;
   };
 
   const getElementIcon = (type: OverlayElement['type']) => {
@@ -2372,12 +2381,10 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           </button>
           <button
             onClick={handleAddVariable}
-            disabled={elements.some(
-              (el) => el.type === 'variable' && !el.condition
-            )}
+            disabled={hasUnconditionalVariable}
             className="flex flex-col items-center rounded-lg bg-stone-700 p-2 text-xs text-stone-200 transition-colors hover:bg-stone-600 disabled:cursor-not-allowed disabled:opacity-50"
             title={
-              elements.some((el) => el.type === 'variable' && !el.condition)
+              hasUnconditionalVariable
                 ? intl.formatMessage(messages.oneUnconditionalVariable)
                 : undefined
             }
