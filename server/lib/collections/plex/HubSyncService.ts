@@ -778,6 +778,13 @@ export class HubSyncService {
                 posterTemplateReadsField,
                 posterTemplateReadsCollectionType,
               } = await import('@server/utils/metadataHashing');
+              const ruleTemplateData =
+                templateData ??
+                (preExistingConfig.autoPosterTemplate == null
+                  ? await (
+                      await import('@server/lib/posterGeneration')
+                    ).getDefaultPosterTemplateData()
+                  : null);
               posterInputHash = calculatePosterInputHash({
                 templateId: preExistingConfig.autoPosterTemplate || null,
                 templateData, // Include template content for change detection
@@ -800,10 +807,10 @@ export class HubSyncService {
                 collectionName,
                 mediaType: preExistingConfig.mediaType,
                 collectionType: 'pre_existing',
-                ...(posterTemplateReadsField(templateData, 'itemCount') && {
+                ...(posterTemplateReadsField(ruleTemplateData, 'itemCount') && {
                   itemCount: totalItemCount,
                 }),
-                ...(posterTemplateReadsCollectionType(templateData) && {
+                ...(posterTemplateReadsCollectionType(ruleTemplateData) && {
                   conditionCollectionType: 'plex',
                 }),
               });

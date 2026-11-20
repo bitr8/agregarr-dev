@@ -2095,3 +2095,11 @@ export function getPosterCacheKey(config: PosterGenerationConfig): string {
 
   return `generated_${Math.abs(hash).toString(36)}`;
 }
+
+export async function getDefaultPosterTemplateData(): Promise<unknown> {
+  const defaultTemplate = await getRepository(PosterTemplate).findOne({
+    where: { isDefault: true, isActive: true },
+    order: { updatedAt: 'DESC' },
+  });
+  return defaultTemplate?.templateData ?? null;
+}

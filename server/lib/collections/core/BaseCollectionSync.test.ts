@@ -920,4 +920,55 @@ describe('generateAutoPoster: Item Count is the collection size', () => {
 
     expect(vi.mocked(generatePoster).mock.calls[0][0].itemCount).toBe(40);
   });
+
+  it('reads the default template rules when no template is picked', async () => {
+    const metadata = (
+      await import('@server/lib/metadata/MetadataTrackingService')
+    ).default as unknown as {
+      shouldRegeneratePoster: (rk: string, hash: string) => Promise<boolean>;
+    };
+    const hashes: string[] = [];
+    const spy = vi
+      .spyOn(metadata, 'shouldRegeneratePoster')
+      .mockImplementation(async (_rk, hash) => {
+        hashes.push(hash);
+        return true;
+      });
+    Object.assign(settings.plex, { libraries: [{ key: '4', type: 'movie' }] });
+    vi.mocked(getRepository).mockReturnValue({
+      findOne: async () => ({
+        templateData: JSON.stringify({
+          elements: [
+            {
+              condition: {
+                sections: [
+                  { rules: [{ field: 'itemCount', operator: 'gte' }] },
+                ],
+              },
+            },
+          ],
+        }),
+        getTemplateData: () => ({ elements: [] }),
+      }),
+    } as never);
+
+    const sync = new TestSync() as unknown as {
+      generateAutoPoster: (...args: unknown[]) => Promise<void>;
+    };
+    for (const itemCount of [9, 10]) {
+      await sync.generateAutoPoster(
+        'Neon Noir',
+        config({ autoPosterTemplate: undefined }),
+        '900',
+        { getCurrentPosterUrl: async () => undefined },
+        [{ ratingKey: '1', title: 'A', type: 'movie' }],
+        undefined,
+        { itemCount }
+      );
+    }
+    spy.mockRestore();
+
+    expect(hashes).toHaveLength(2);
+    expect(hashes[0]).not.toBe(hashes[1]);
+  });
 });

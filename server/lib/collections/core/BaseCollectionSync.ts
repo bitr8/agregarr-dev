@@ -4155,6 +4155,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         posterTemplateReadsField,
         posterTemplateReadsCollectionType,
       } = await import('@server/utils/metadataHashing');
+      const ruleTemplateData =
+        templateData ??
+        (config.autoPosterTemplate == null
+          ? await (
+              await import('@server/lib/posterGeneration')
+            ).getDefaultPosterTemplateData()
+          : null);
       const posterInputHash = calculatePosterInputHash({
         templateId: config.autoPosterTemplate || null,
         templateData, // Include template content for change detection
@@ -4165,10 +4172,10 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         mediaType,
         collectionType: options?.collectionTypeOverride || config.type,
         collectionSubtype: config.subtype,
-        ...(posterTemplateReadsField(templateData, 'itemCount') && {
+        ...(posterTemplateReadsField(ruleTemplateData, 'itemCount') && {
           itemCount: fullItemCount,
         }),
-        ...(posterTemplateReadsCollectionType(templateData) && {
+        ...(posterTemplateReadsCollectionType(ruleTemplateData) && {
           conditionCollectionType: config.type,
           conditionCollectionSubtype: config.subtype,
         }),
