@@ -15,7 +15,9 @@ import logger from '@server/logger';
 import fs from 'fs';
 import path from 'path';
 import sharp, { type OverlayOptions } from 'sharp';
-import { colorScaleContextField } from './colorScaleField';
+import { colorScaleContextField, colorScaleFraction } from './colorScaleField';
+import { mappedIconContentSize } from './mappedIconLayout';
+import { isOverlayDateField } from './overlayDateFields';
 import {
   DEFAULT_OVERLAY_JPEG_QUALITY,
   normalizeOverlayJpegQuality,
@@ -23,6 +25,7 @@ import {
 } from './overlayOutputQuality';
 import { AGREGARR_OVERLAY_MARKER } from './posterOwnershipMetadata';
 import { resolveTileCornerRadii, roundedRectPath } from './roundedRect';
+import { DEFAULT_TILE_BORDER_COLOR, insetTileBorder } from './tileBorder';
 import { getMergedMappings } from './UserMappingsService';
 
 /**
@@ -556,16 +559,40 @@ export function resolveColorScale(
 ): string | null {
   const raw = context[colorScaleContextField(scale.field)];
   if (typeof raw !== 'number') return null;
-  const t = Math.max(
-    0,
-    Math.min(1, (raw - scale.min) / (scale.max - scale.min))
-  );
+  const t = colorScaleFraction(raw, scale.min, scale.max);
   if (scale.midColor) {
     return t < 0.5
       ? lerpColor(scale.fromColor, scale.midColor, t * 2)
       : lerpColor(scale.midColor, scale.toColor, (t - 0.5) * 2);
   }
   return lerpColor(scale.fromColor, scale.toColor, t);
+}
+
+export async function applyOpacityAndGrayscale(
+  input: Buffer,
+  opacity: number | undefined,
+  grayscale: boolean | undefined
+): Promise<Buffer> {
+  const fade = opacity === undefined || opacity >= 100 ? 1 : opacity / 100;
+  if (fade === 1 && !grayscale) return input;
+
+  const source = grayscale
+    ? await sharp(input).grayscale().png().toBuffer()
+    : input;
+  const { data, info } = await sharp(source)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  if (fade !== 1) {
+    for (let i = info.channels - 1; i < data.length; i += info.channels) {
+      data[i] = Math.round(data[i] * Math.max(0, fade));
+    }
+  }
+  return await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: info.channels },
+  })
+    .png()
+    .toBuffer();
 }
 
 /**
@@ -1015,19 +1042,33 @@ class OverlayTemplateRendererService {
       resolveTileCornerRadii(props, scale)
     );
 
+    let borderPath = '';
+    if (borderWidth > 0) {
+      const inner = insetTileBorder(
+        width,
+        height,
+        resolveTileCornerRadii(props, scale),
+        borderWidth
+      );
+      borderPath = `<path transform="translate(${inner.inset} ${
+        inner.inset
+      })" d="${roundedRectPath(
+        inner.width,
+        inner.height,
+        inner.radii
+      )}" fill="none" stroke="${
+        props.borderColor || DEFAULT_TILE_BORDER_COLOR
+      }" stroke-width="${borderWidth}" />`;
+    }
+
     const svg = `
       <svg width="${width}" height="${height}">
         <path
           d="${path}"
           fill="${fillColor}"
           fill-opacity="${props.fillOpacity / 100}"
-          ${
-            borderWidth > 0 && props.borderColor
-              ? `stroke="${props.borderColor}"`
-              : ''
-          }
-          ${borderWidth > 0 ? `stroke-width="${borderWidth}"` : ''}
         />
+        ${borderPath}
       </svg>
     `;
 
@@ -1068,17 +1109,7 @@ class OverlayTemplateRendererService {
         let formattedValue = '';
 
         // Check if this is a date field with custom format
-        const isDateField = [
-          'releaseDate',
-          'theatricalReleaseDate',
-          'digitalReleaseDate',
-          'physicalReleaseDate',
-          'nextEpisodeAirDate',
-          'nextSeasonAirDate',
-          'lastPlayed',
-          'dateAdded',
-          'lastEpisodeAddedDate',
-        ].includes(segment.field);
+        const isDateField = isOverlayDateField(segment.field);
 
         if (
           isDateField &&
@@ -1207,13 +1238,18 @@ class OverlayTemplateRendererService {
           iconType as 'user' | 'system'
         );
 
-        return await sharp(svgBuffer)
+        const icon = await sharp(svgBuffer)
           .resize(width, height, {
             fit: 'contain',
             background: { r: 0, g: 0, b: 0, alpha: 0 },
           })
           .png()
           .toBuffer();
+        return await applyOpacityAndGrayscale(
+          icon,
+          props.opacity,
+          props.grayscale
+        );
       } catch (error) {
         logger.error('Failed to load SVG icon', {
           label: 'OverlayRenderer',
@@ -1275,13 +1311,14 @@ class OverlayTemplateRendererService {
         );
 
         // Resize with 'contain' to maintain aspect ratio (match editor behavior)
-        return await sharp(imageBuffer)
+        const image = await sharp(imageBuffer)
           .resize(width, height, {
             fit: 'contain',
             background: { r: 0, g: 0, b: 0, alpha: 0 },
           })
           .png()
           .toBuffer();
+        return await applyOpacityAndGrayscale(image, props.opacity, false);
       } catch (error) {
         logger.error('Failed to load raster image', {
           label: 'OverlayRenderer',
@@ -1394,16 +1431,10 @@ class OverlayTemplateRendererService {
     );
 
     // Calculate canvas size to fit all icons (auto-size to content)
-    const totalWidth = this.calculateContentWidth(
+    const { width: totalWidth, height: totalHeight } = mappedIconContentSize(
       iconsToRender.length,
       iconSize,
       spacingX,
-      props.layout,
-      props.gridColumns || 3
-    );
-    const totalHeight = this.calculateContentHeight(
-      iconsToRender.length,
-      iconSize,
       spacingY,
       props.layout,
       props.gridColumns || 3
@@ -1526,16 +1557,7 @@ class OverlayTemplateRendererService {
       .png()
       .toBuffer();
 
-    // Apply opacity if specified
-    if (props.opacity !== undefined && props.opacity < 100) {
-      // Apply opacity by reducing alpha channel
-      return await sharp(result)
-        .ensureAlpha(props.opacity / 100)
-        .png()
-        .toBuffer();
-    }
-
-    return result;
+    return await applyOpacityAndGrayscale(result, props.opacity, false);
   }
 
   /**
@@ -1577,58 +1599,6 @@ class OverlayTemplateRendererService {
     }
 
     return positions;
-  }
-
-  /**
-   * Calculate content width based on layout
-   */
-  private calculateContentWidth(
-    count: number,
-    iconSize: number,
-    spacingX: number,
-    layout: 'horizontal' | 'vertical' | 'grid',
-    gridColumns: number
-  ): number {
-    if (count === 0) return iconSize;
-
-    switch (layout) {
-      case 'horizontal':
-        return count * iconSize + (count - 1) * spacingX;
-      case 'vertical':
-        return iconSize;
-      case 'grid': {
-        const cols = Math.min(count, gridColumns);
-        return cols * iconSize + (cols - 1) * spacingX;
-      }
-      default:
-        return iconSize;
-    }
-  }
-
-  /**
-   * Calculate content height based on layout
-   */
-  private calculateContentHeight(
-    count: number,
-    iconSize: number,
-    spacingY: number,
-    layout: 'horizontal' | 'vertical' | 'grid',
-    gridColumns: number
-  ): number {
-    if (count === 0) return iconSize;
-
-    switch (layout) {
-      case 'horizontal':
-        return iconSize;
-      case 'vertical':
-        return count * iconSize + (count - 1) * spacingY;
-      case 'grid': {
-        const rows = Math.ceil(count / gridColumns);
-        return rows * iconSize + (rows - 1) * spacingY;
-      }
-      default:
-        return iconSize;
-    }
   }
 }
 
