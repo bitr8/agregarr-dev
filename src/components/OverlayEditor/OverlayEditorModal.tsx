@@ -15,7 +15,6 @@ import {
   setOverlayTargetTags,
   type OverlayArtworkTarget,
 } from '@server/lib/overlays/overlayTargets';
-import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
 import type React from 'react';
 import {
   Fragment,
@@ -29,6 +28,7 @@ import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
 import { ConditionDisplay } from './ConditionDisplay';
 import { ConditionEditorModal } from './ConditionEditorModal';
+import { buildEditorPreviewContext } from './editorPreviewContext';
 import { computeLayoutWarnings, type LayoutWarning } from './layoutWarnings';
 import type { OverlayCanvasRef } from './OverlayCanvas';
 import { OverlayCanvas } from './OverlayCanvas';
@@ -39,10 +39,7 @@ import type {
   OverlayTemplateData,
   PreviewPosterInfo,
 } from './types';
-import {
-  getTemplateTypeFromConditionField,
-  SAMPLE_PREVIEW_CONTEXTS,
-} from './types';
+import { getTemplateTypeFromConditionField } from './types';
 
 const messages = defineMessages({
   createOverlayTitle: 'Create Overlay Template',
@@ -252,23 +249,8 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
       : null
   );
 
-  const conditionContext = useMemo(
-    () =>
-      createSampleOverlayContext(
-        currentPoster?.type === 'tv' ? 'show' : 'movie',
-        metadataResponse && {
-          title: metadataResponse.title,
-          year: metadataResponse.year,
-          imdbRating: metadataResponse.imdbRating,
-          tmdbRating: metadataResponse.tmdbRating,
-          tmdbVoteCount: metadataResponse.tmdbVoteCount,
-          rtCriticsScore: metadataResponse.rtCriticsScore,
-          rtAudienceScore: metadataResponse.rtAudienceScore,
-          studio: metadataResponse.studio,
-          streamingProvider: metadataResponse.streamingProvider,
-          streamingProviderId: metadataResponse.streamingProviderId,
-        }
-      ),
+  const previewContext = useMemo(
+    () => buildEditorPreviewContext(currentPoster?.type, metadataResponse),
     [currentPoster?.type, metadataResponse]
   );
 
@@ -488,15 +470,6 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
       setCurrentPosterIndex((prev) => (prev + 1) % postersData.count);
     }
   };
-
-  // Get preview context - use real metadata if available, otherwise fallback to sample data
-  const previewContext: OverlayRenderContext | undefined = metadataResponse
-    ? metadataResponse
-    : currentPoster?.type === 'movie'
-    ? (SAMPLE_PREVIEW_CONTEXTS.movie as OverlayRenderContext)
-    : currentPoster?.type === 'tv'
-    ? (SAMPLE_PREVIEW_CONTEXTS.tv as OverlayRenderContext)
-    : (SAMPLE_PREVIEW_CONTEXTS.movie as OverlayRenderContext);
 
   // Get poster URL
   const posterUrl = currentPoster?.url;
@@ -828,7 +801,7 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                         onElementSelect={setSelectedElementId}
                         backgroundImageUrl={posterUrl}
                         renderContext={previewContext}
-                        conditionContext={conditionContext}
+                        conditionContext={previewContext}
                         snapToGuides={snapToGuides}
                         previewOverlays={selectedPreviewOverlays}
                       />

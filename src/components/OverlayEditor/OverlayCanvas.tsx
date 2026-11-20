@@ -1,9 +1,9 @@
+import { elementMatchesContext } from '@app/components/OverlayEditor/editorPreviewContext';
 import { useCanvasHandlers } from '@app/components/PosterEditor/PosterCanvas';
 import {
   SnapLines,
   useSnapToGuides,
 } from '@app/components/PosterEditor/useSnapToGuides';
-import { evaluateCondition } from '@server/lib/overlays/conditionEvaluator';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Box } from 'konva/lib/shapes/Transformer';
@@ -383,17 +383,21 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
                 const sortedPreviewElements = [...overlay.elements].sort(
                   (a, b) => a.layerOrder - b.layerOrder
                 );
-                return sortedPreviewElements.map((element) =>
-                  renderPreviewElement(element, overlayIndex)
-                );
+                return sortedPreviewElements
+                  .filter((element) =>
+                    elementMatchesContext(element.condition, conditionContext)
+                  )
+                  .map((element) =>
+                    renderPreviewElement(element, overlayIndex)
+                  );
               })}
 
               {/* Elements sorted by layer order */}
               {sortedElements.map((element) => {
-                const matches =
-                  !element.condition ||
-                  !conditionContext ||
-                  evaluateCondition(element.condition, conditionContext);
+                const matches = elementMatchesContext(
+                  element.condition,
+                  conditionContext
+                );
                 if (!matches && element.id !== selectedElementId) return null;
                 return (
                   <Group
