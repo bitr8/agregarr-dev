@@ -1,4 +1,5 @@
 import { mappedIconContentSize } from '@server/lib/overlays/mappedIconLayout';
+import { LIST_FIELDS } from './conditionFields';
 import type {
   ApplicationCondition,
   ConditionRule,
@@ -250,22 +251,11 @@ const SCALAR_STRING_FIELDS = new Set([
   'showAudioCodec',
 ]);
 
-const ARRAY_FIELDS = new Set([
-  'radarrTags',
-  'sonarrTags',
-  'audioLanguages',
-  'audioLanguageCodes',
-  'subtitleLanguages',
-  'subtitleLanguageCodes',
-  'collection',
-  'plexLabels',
-]);
-
 const rulesContradict = (a: ConditionRule, b: ConditionRule): boolean => {
   if (a.field !== b.field) return false;
   const ra = toRange(a);
   const rb = toRange(b);
-  if (ra && rb) return !ARRAY_FIELDS.has(a.field) && rangesDisjoint(ra, rb);
+  if (ra && rb) return !LIST_FIELDS.has(a.field) && rangesDisjoint(ra, rb);
 
   const isEqLike = (r: ConditionRule) =>
     r.operator === 'eq' || r.operator === 'in';

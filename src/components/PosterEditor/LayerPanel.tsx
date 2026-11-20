@@ -2737,7 +2737,10 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                           >
                             <option value="eq">=</option>
                             <option value="neq">≠</option>
-                            <option value="contains">contains</option>
+                            {(rule.field !== 'itemCount' ||
+                              rule.operator === 'contains') && (
+                              <option value="contains">contains</option>
+                            )}
                             {rule.field === 'itemCount' && (
                               <>
                                 <option value="gt">&gt;</option>

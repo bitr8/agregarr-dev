@@ -799,8 +799,6 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'filePath', label: 'File Path', example: '/movies/Inception.mkv' },
     { field: 'edition', label: 'Edition', example: 'Extended Cut' },
     { field: 'viewCount', label: 'View Count', example: '5' },
-    { field: 'lastPlayed', label: 'Last Played', example: '2024-01-15' },
-    { field: 'dateAdded', label: 'Date Added', example: '2024-01-01' },
     { field: 'daysSinceAdded', label: 'Days Since Added', example: '14' },
     {
       field: 'daysSinceLastPlayed',
@@ -946,11 +944,6 @@ export const CONDITION_FIELD_CATEGORIES = {
       field: 'episodeMediaSource',
       label: 'Media Source (aggregated/show)',
       example: 'aggregated',
-    },
-    {
-      field: 'lastEpisodeAddedDate',
-      label: 'Last Episode Added Date',
-      example: '2024-01-01',
     },
     {
       field: 'daysSinceLastEpisodeAdded',
