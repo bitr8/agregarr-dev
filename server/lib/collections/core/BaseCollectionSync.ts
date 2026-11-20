@@ -4051,10 +4051,12 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       collectionTypeOverride?: string; // For networks/originals to pass platform name
       dynamicLogo?: string; // For networks to pass extracted sprite logo
       personImageUrl?: string; // For person collections to pass TMDB profile image
+      itemCount?: number; // Full collection size when `items` is a slice
     }
   ): Promise<void> {
     try {
       const mediaType = getCollectionMediaType(config);
+      const fullItemCount = options?.itemCount ?? items?.length ?? 0;
 
       logger.info(`Auto-generating poster for collection: ${collectionName}`, {
         label: `${this.source} Collections`,
@@ -4161,7 +4163,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         collectionType: options?.collectionTypeOverride || config.type,
         collectionSubtype: config.subtype,
         ...(posterTemplateReadsField(templateData, 'itemCount') && {
-          itemCount: items?.length ?? 0,
+          itemCount: fullItemCount,
         }),
       });
 
@@ -4228,7 +4230,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           items: posterItems,
           autoPosterTemplate: config.autoPosterTemplate,
           libraryId: config.libraryId,
-          itemCount: items?.length ?? 0,
+          itemCount: fullItemCount,
           conditionCollectionType: config.type,
           conditionCollectionSubtype: config.subtype,
           ...(options?.dynamicLogo && { dynamicLogo: options.dynamicLogo }),

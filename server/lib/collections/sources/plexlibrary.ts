@@ -1024,10 +1024,12 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
 
           if (config.autoPoster ?? true) {
             let posterItems: CollectionItem[] | undefined;
+            let childCount: number | undefined;
             try {
               const children = await plexClient.getCollectionItemsWithMetadata(
                 collectionRatingKey
               );
+              childCount = children.length;
               posterItems = posterSourceOrder(children, config.sortOrder)
                 .slice(0, 12)
                 .map((item, index) => ({
@@ -1055,7 +1057,9 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
               config,
               collectionRatingKey,
               plexClient,
-              posterItems
+              posterItems,
+              undefined,
+              { itemCount: childCount }
             );
           }
 
@@ -1634,6 +1638,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
               undefined,
               {
                 personImageUrl,
+                itemCount: person.count,
               }
             );
           }

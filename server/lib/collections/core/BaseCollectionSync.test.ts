@@ -22,6 +22,9 @@ vi.mock('@server/lib/collections/services/ServiceUserManager', () => ({
 vi.mock('@server/lib/collections/utils/TemplateEngine', () => ({
   templateEngine: {},
 }));
+vi.mock('@server/lib/metadata/MetadataTrackingService', () => ({
+  default: { shouldRegeneratePoster: async () => true },
+}));
 vi.mock('@server/logger', () => ({
   default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -877,5 +880,44 @@ describe('handlePlaceholdersAndMissingItems candidate limit', () => {
 
   it('passes every missing item through in source order', async () => {
     expect(await run(undefined, 4)).toEqual([5, 2, 9]);
+  });
+});
+
+describe('generateAutoPoster: Item Count is the collection size', () => {
+  it('uses the full count when the items handed in are a slice', async () => {
+    const { generatePoster } = await import('@server/lib/posterStorage');
+    Object.assign(settings.plex, { libraries: [{ key: '4', type: 'movie' }] });
+    vi.mocked(generatePoster).mockRejectedValue(new Error('captured'));
+    vi.mocked(getRepository).mockReturnValue({
+      findOne: async () => ({
+        templateData: JSON.stringify({
+          elements: [
+            {
+              condition: {
+                sections: [{ rules: [{ field: 'itemCount', operator: 'gt' }] }],
+              },
+            },
+          ],
+        }),
+        getTemplateData: () => ({ elements: [] }),
+      }),
+    } as never);
+
+    const sync = new TestSync() as unknown as {
+      generateAutoPoster: (...args: unknown[]) => Promise<void>;
+    };
+    await sync.generateAutoPoster(
+      'Neon Noir',
+      config({ autoPosterTemplate: 7 }),
+      '900',
+      {
+        getCurrentPosterUrl: async () => undefined,
+      },
+      [{ ratingKey: '1', title: 'A', type: 'movie' }],
+      undefined,
+      { itemCount: 40 }
+    );
+
+    expect(vi.mocked(generatePoster).mock.calls[0][0].itemCount).toBe(40);
   });
 });
