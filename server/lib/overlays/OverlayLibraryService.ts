@@ -2007,17 +2007,15 @@ class OverlayLibraryService {
 
       // Build collection membership map for condition evaluation
       // Only build if any enabled template uses a 'collection' condition field
-      const hasCollectionConditions = sortedTemplates.some((template) => {
-        const condition = template.getApplicationCondition();
-        return condition?.sections?.some((s) =>
-          s.rules.some((r) => r.field === 'collection')
-        );
-      });
-
-      if (hasCollectionConditions) {
-        this.collectionMembershipCache =
-          await this.buildCollectionMembershipMap(plexApi);
-      }
+      const { templatesReadContextField } = await import(
+        '@server/utils/metadataHashing'
+      );
+      this.collectionMembershipCache = templatesReadContextField(
+        sortedTemplates,
+        'collection'
+      )
+        ? await this.buildCollectionMembershipMap(plexApi)
+        : undefined;
 
       await this.refreshCollectionRanks(plexApi, sortedTemplates);
 
@@ -2749,17 +2747,15 @@ class OverlayLibraryService {
       const plexApi = new PlexAPI({ plexToken: admin.plexToken });
 
       // Build collection membership map if any template uses collection conditions
-      const hasCollectionConditions = sortedTemplates.some((template) => {
-        const condition = template.getApplicationCondition();
-        return condition?.sections?.some((s) =>
-          s.rules.some((r) => r.field === 'collection')
-        );
-      });
-
-      if (hasCollectionConditions) {
-        this.collectionMembershipCache =
-          await this.buildCollectionMembershipMap(plexApi);
-      }
+      const { templatesReadContextField } = await import(
+        '@server/utils/metadataHashing'
+      );
+      this.collectionMembershipCache = templatesReadContextField(
+        sortedTemplates,
+        'collection'
+      )
+        ? await this.buildCollectionMembershipMap(plexApi)
+        : undefined;
 
       if (!options.skipRankRefresh) {
         await this.refreshCollectionRanks(plexApi, sortedTemplates);

@@ -1,4 +1,5 @@
 import type {
+  ApplicationCondition,
   IconMapping,
   OverlayMappedIconElementProps,
   OverlayTemplateData,
@@ -139,6 +140,19 @@ export function extractUsedContextFields(
   usedFields.add('isPlaceholder');
 
   return usedFields;
+}
+
+export function templatesReadContextField(
+  templates: {
+    getTemplateData(): OverlayTemplateData;
+    getApplicationCondition(): ApplicationCondition | null | undefined;
+  }[],
+  field: string
+): boolean {
+  return extractUsedContextFields(
+    templates.map((t) => t.getTemplateData()),
+    templates.map((t) => t.getApplicationCondition())
+  ).has(field);
 }
 
 /**
