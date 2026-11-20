@@ -30,6 +30,7 @@ import {
   refreshRankCache,
   type RankCollectionConfig,
 } from './collectionRank';
+import { buildEpisodeAggregationContext } from './episodeAggregationContext';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -48,7 +49,6 @@ import {
 import {
   buildRenderContext,
   checkMonitoringStatus,
-  daysSince,
   fetchReleaseDateInfo,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
@@ -2007,17 +2007,15 @@ class OverlayLibraryService {
 
       // Build collection membership map for condition evaluation
       // Only build if any enabled template uses a 'collection' condition field
-      const hasCollectionConditions = sortedTemplates.some((template) => {
-        const condition = template.getApplicationCondition();
-        return condition?.sections?.some((s) =>
-          s.rules.some((r) => r.field === 'collection')
-        );
-      });
-
-      if (hasCollectionConditions) {
-        this.collectionMembershipCache =
-          await this.buildCollectionMembershipMap(plexApi);
-      }
+      const { templatesReadContextField } = await import(
+        '@server/utils/metadataHashing'
+      );
+      this.collectionMembershipCache = templatesReadContextField(
+        sortedTemplates,
+        'collection'
+      )
+        ? await this.buildCollectionMembershipMap(plexApi)
+        : undefined;
 
       await this.refreshCollectionRanks(plexApi, sortedTemplates);
 
@@ -2749,17 +2747,15 @@ class OverlayLibraryService {
       const plexApi = new PlexAPI({ plexToken: admin.plexToken });
 
       // Build collection membership map if any template uses collection conditions
-      const hasCollectionConditions = sortedTemplates.some((template) => {
-        const condition = template.getApplicationCondition();
-        return condition?.sections?.some((s) =>
-          s.rules.some((r) => r.field === 'collection')
-        );
-      });
-
-      if (hasCollectionConditions) {
-        this.collectionMembershipCache =
-          await this.buildCollectionMembershipMap(plexApi);
-      }
+      const { templatesReadContextField } = await import(
+        '@server/utils/metadataHashing'
+      );
+      this.collectionMembershipCache = templatesReadContextField(
+        sortedTemplates,
+        'collection'
+      )
+        ? await this.buildCollectionMembershipMap(plexApi)
+        : undefined;
 
       if (!options.skipRankRefresh) {
         await this.refreshCollectionRanks(plexApi, sortedTemplates);
@@ -3518,58 +3514,12 @@ class OverlayLibraryService {
         downloaded = true; // Real items not in *arr are assumed downloaded (they exist in Plex)
       }
 
-      // Merge aggregated episode media info if available for this show
-      let episodeAggregation: Partial<OverlayRenderContext> = {};
-      const aggregatedMap =
-        aggregatedMediaOverride ?? this.aggregatedMediaByLibrary.get(libraryId);
-      if (item.type === 'show') {
-        episodeAggregation.episodeMediaSource = 'show';
-      }
-      if (aggregatedMap && (item.type === 'show' || item.type === 'season')) {
-        const agg = aggregatedMap.get(item.ratingKey);
-        if (agg) {
-          episodeAggregation = {
-            ...(item.type === 'show'
-              ? {
-                  showResolution: baseContext.resolution,
-                  showHdr: baseContext.hdr,
-                  showDolbyVision: baseContext.dolbyVision,
-                  showDolbyVisionProfile: baseContext.dolbyVisionProfile,
-                  showAudioCodec: baseContext.audioCodec,
-                  showAudioChannels: baseContext.audioChannels,
-                  showVideoCodec: baseContext.videoCodec,
-                  showBitDepth: baseContext.bitDepth,
-                }
-              : {}),
-            resolution: agg.resolution,
-            hdr: agg.hdr,
-            dolbyVision: agg.dolbyVision,
-            dolbyVisionProfile: agg.dolbyVisionProfile,
-            hdr10Plus: agg.hdr10Plus,
-            videoCodec: agg.videoCodec,
-            audioCodec: agg.audioCodec,
-            audioProfile: agg.audioProfile,
-            audioChannels: agg.audioChannels,
-            bitDepth: agg.bitDepth,
-            episodeCount: agg.episodeCount,
-            episode4kCount: agg.episode4kCount,
-            episode4kPercent: agg.episode4kPercent,
-            episodeHdrCount: agg.episodeHdrCount,
-            episodeHdrPercent: agg.episodeHdrPercent,
-            episodeDvCount: agg.episodeDvCount,
-            episodeDvPercent: agg.episodeDvPercent,
-            episodeMediaSource: 'aggregated',
-          };
-          if (agg.lastEpisodeAddedAt !== undefined) {
-            episodeAggregation.lastEpisodeAddedDate = new Date(
-              agg.lastEpisodeAddedAt * 1000
-            );
-            episodeAggregation.daysSinceLastEpisodeAdded = daysSince(
-              agg.lastEpisodeAddedAt
-            );
-          }
-        }
-      }
+      const episodeAggregation = buildEpisodeAggregationContext(
+        item.type,
+        item.ratingKey,
+        baseContext,
+        aggregatedMediaOverride ?? this.aggregatedMediaByLibrary.get(libraryId)
+      );
 
       // Collection membership for condition evaluation
       const collection = this.collectionMembershipCache?.get(item.ratingKey);
@@ -4727,7 +4677,7 @@ class OverlayLibraryService {
    * - Returns undefined when the cache is empty (e.g. before the first scan), in
    *   which case items fall back to base context exactly as before.
    */
-  private async getAggregatedMediaFromCache(
+  async getAggregatedMediaFromCache(
     libraryId: string
   ): Promise<Map<string, AggregatedMediaInfo> | undefined> {
     const memo = this.aggregatedMediaCacheMemo.get(libraryId);

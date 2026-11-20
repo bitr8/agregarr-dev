@@ -2,7 +2,10 @@ import type { OverlayTemplateData } from '@server/entity/OverlayTemplate';
 import { describe, expect, it } from 'vitest';
 import {
   calculateOverlayInputHash,
+  calculatePosterInputHash,
   extractMappedIconFields,
+  posterTemplateReadsField,
+  templatesReadContextField,
 } from './metadataHashing';
 
 const baseConfig = {
@@ -399,5 +402,85 @@ describe('render effects in the overlay input hash', () => {
       hashOf(tpl({}, flat)),
     ];
     now.forEach((hash, i) => expect(hash).not.toBe(developHashes[i]));
+  });
+});
+
+describe('poster item count hashing', () => {
+  const rule = (field: string) => ({
+    sections: [{ rules: [{ field, operator: 'gte', value: 10 }] }],
+  });
+  const tpl = (field: string) =>
+    JSON.stringify({ elements: [{ id: 'a', condition: rule(field) }] });
+  const base = { templateId: 1, itemIds: ['a'], collectionName: 'C' };
+
+  it('detects itemCount rules in templateData JSON', () => {
+    expect(posterTemplateReadsField(tpl('itemCount'), 'itemCount')).toBe(true);
+    expect(posterTemplateReadsField(tpl('mediaType'), 'itemCount')).toBe(false);
+    expect(posterTemplateReadsField('not json', 'itemCount')).toBe(false);
+    expect(posterTemplateReadsField(null, 'itemCount')).toBe(false);
+  });
+
+  it('leaves the hash unchanged when no count is supplied', () => {
+    expect(calculatePosterInputHash({ ...base, itemCount: undefined })).toBe(
+      calculatePosterInputHash(base)
+    );
+  });
+
+  it('changes the hash when the supplied count changes', () => {
+    expect(calculatePosterInputHash({ ...base, itemCount: 9 })).not.toBe(
+      calculatePosterInputHash({ ...base, itemCount: 10 })
+    );
+  });
+});
+
+describe('templatesReadContextField', () => {
+  const mk = (
+    elementCondition?: unknown,
+    appCondition?: unknown
+  ): Parameters<typeof templatesReadContextField>[0][number] => ({
+    getTemplateData: () =>
+      ({
+        width: 1,
+        height: 1,
+        elements: [
+          {
+            id: 'e',
+            layerOrder: 0,
+            type: 'tile',
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            properties: {},
+            condition: elementCondition,
+          },
+        ],
+      } as unknown as OverlayTemplateData),
+    getApplicationCondition: () => appCondition as never,
+  });
+  const rule = (field: string) => ({
+    sections: [{ rules: [{ field, operator: 'eq', value: 'x' }] }],
+  });
+
+  it('sees a collection rule on an element condition', () => {
+    expect(
+      templatesReadContextField([mk(rule('collection'))], 'collection')
+    ).toBe(true);
+  });
+
+  it('sees a collection rule on an application condition', () => {
+    expect(
+      templatesReadContextField(
+        [mk(undefined, rule('collection'))],
+        'collection'
+      )
+    ).toBe(true);
+  });
+
+  it('is false when no condition reads it', () => {
+    expect(
+      templatesReadContextField([mk(rule('imdbRating'))], 'collection')
+    ).toBe(false);
+    expect(templatesReadContextField([], 'collection')).toBe(false);
   });
 });

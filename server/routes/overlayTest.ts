@@ -4,6 +4,7 @@ import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import { rankContextFromOrderedKeys } from '@server/lib/overlays/collectionRank';
+import { buildEpisodeAggregationContext } from '@server/lib/overlays/episodeAggregationContext';
 import { seasonFallbackFor } from '@server/lib/overlays/maintainerrCountdown';
 import {
   buildRenderContext,
@@ -451,10 +452,23 @@ overlayTestRouter.post('/', async (req, res) => {
         .length,
     });
 
+    const aggregatedMap =
+      config.enableEpisodeScanning &&
+      (item.type === 'show' || item.type === 'season')
+        ? await overlayLibraryService.getAggregatedMediaFromCache(libraryId)
+        : undefined;
+    const episodeAggregation = buildEpisodeAggregationContext(
+      item.type,
+      ratingKey,
+      baseContext,
+      aggregatedMap
+    );
+
     const context: OverlayRenderContext = {
       ...baseContext,
       isPlaceholder: actualIsPlaceholder,
       downloaded,
+      ...episodeAggregation,
       ...releaseDateContext,
       ...monitoringContext,
       collection: collectionIds,

@@ -619,6 +619,7 @@ export class HubSyncService {
 
             // Fetch collection items from Plex for content grid
             let posterItems: CollectionItemWithPoster[] | undefined;
+            let totalItemCount = 0;
 
             try {
               // Get template to determine how many items we need
@@ -680,6 +681,8 @@ export class HubSyncService {
                   itemCount: plexItems?.length || 0,
                 }
               );
+
+              totalItemCount = plexItems?.length ?? 0;
 
               // Convert Plex metadata to poster format
               if (plexItems && plexItems.length > 0) {
@@ -770,9 +773,8 @@ export class HubSyncService {
               }
 
               // Calculate input hash based on what determines the poster content
-              const { calculatePosterInputHash } = await import(
-                '@server/utils/metadataHashing'
-              );
+              const { calculatePosterInputHash, posterTemplateReadsField } =
+                await import('@server/utils/metadataHashing');
               posterInputHash = calculatePosterInputHash({
                 templateId: preExistingConfig.autoPosterTemplate || null,
                 templateData, // Include template content for change detection
@@ -795,6 +797,9 @@ export class HubSyncService {
                 collectionName,
                 mediaType: preExistingConfig.mediaType,
                 collectionType: 'pre_existing',
+                ...(posterTemplateReadsField(templateData, 'itemCount') && {
+                  itemCount: totalItemCount,
+                }),
               });
 
               const metadataTrackingService = (
@@ -848,6 +853,8 @@ export class HubSyncService {
                     mediaType: preExistingConfig.mediaType,
                     items: posterItems,
                     autoPosterTemplate: preExistingConfig.autoPosterTemplate,
+                    itemCount: totalItemCount,
+                    conditionCollectionType: 'plex',
                   },
                   `Auto-generated: ${collectionName}`,
                   preExistingConfig.id

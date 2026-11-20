@@ -2868,6 +2868,8 @@ export class MultiSourceOrchestrator {
           mediaType,
           items: posterItems,
           autoPosterTemplate: config.autoPosterTemplate, // Use configured template or default
+          itemCount: items.length,
+          conditionCollectionType: 'multi-source',
           ...(dynamicPlatformLogo && { dynamicLogo: dynamicPlatformLogo }), // Pass dynamic logo if available
         },
         `${
