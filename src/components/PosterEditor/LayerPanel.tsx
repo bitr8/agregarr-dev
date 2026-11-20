@@ -1,4 +1,5 @@
 import ColorInput from '@app/components/Common/ColorInput';
+import { coerceValueForOperator } from '@app/components/OverlayEditor/conditionOperators';
 import { fontLoader } from '@app/utils/fontLoader';
 import {
   ArrowDownIcon,
@@ -2722,10 +2723,20 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                               const newRules = [
                                 ...selectedElement.condition!.sections[0].rules,
                               ];
+                              const newOperator = e.target
+                                .value as (typeof rule)['operator'];
                               newRules[ruleIndex] = {
                                 ...rule,
-                                operator: e.target
-                                  .value as (typeof rule)['operator'],
+                                operator: newOperator,
+                                value: coerceValueForOperator(
+                                  rule.operator,
+                                  newOperator,
+                                  rule.value,
+                                  {
+                                    isNumeric: rule.field === 'itemCount',
+                                    isBoolean: false,
+                                  }
+                                ) as typeof rule.value,
                               };
                               updateElement(selectedElement.id, {
                                 condition: {

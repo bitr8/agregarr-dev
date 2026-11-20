@@ -105,3 +105,10 @@ describe('reordering rules keeps connectors in their slots', () => {
     expect(out.map((x) => x.ruleOperator)).toEqual([undefined, 'or', 'and']);
   });
 });
+
+describe('Item Count operator switch', () => {
+  it('turns the text value into a number when leaving contains', () => {
+    const kind = { isNumeric: true, isBoolean: false };
+    expect(coerceValueForOperator('contains', 'gte', '10', kind)).toBe(10);
+  });
+});

@@ -75,4 +75,6 @@ export const LIST_FIELDS: ReadonlySet<string> = new Set([
   'subtitleLanguageCodes',
   'collection',
   'plexLabels',
+  'originCountries',
+  'productionCountries',
 ]);

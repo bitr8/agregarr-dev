@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOOLEAN_FIELDS, NUMERIC_FIELDS } from './conditionFields';
+import { BOOLEAN_FIELDS, LIST_FIELDS, NUMERIC_FIELDS } from './conditionFields';
 import { CONDITION_FIELD_CATEGORIES } from './types';
 
 const offered = Object.values(CONDITION_FIELD_CATEGORIES)
@@ -27,5 +27,12 @@ describe('condition field kinds', () => {
       expect(offered).not.toContain(f);
     }
     expect(offered).toContain('daysSinceAdded');
+  });
+});
+
+describe('list fields', () => {
+  it('includes the country arrays', () => {
+    expect(LIST_FIELDS.has('originCountries')).toBe(true);
+    expect(LIST_FIELDS.has('productionCountries')).toBe(true);
   });
 });
