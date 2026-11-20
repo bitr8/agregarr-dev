@@ -1,6 +1,7 @@
-import Konva from 'konva';
+import type Konva from 'konva';
 import { useEffect, useRef } from 'react';
 import { Image } from 'react-konva';
+import { sharpGrayscaleFilter } from './grayscaleFilter';
 
 type FilteredImageProps = React.ComponentProps<typeof Image> & {
   grayscale?: boolean;
@@ -16,7 +17,7 @@ export const FilteredImage: React.FC<FilteredImageProps> = ({
     const node = ref.current;
     if (!node) return;
     if (grayscale) {
-      node.filters([Konva.Filters.Grayscale]);
+      node.filters([sharpGrayscaleFilter]);
       node.cache();
     } else {
       node.clearCache();

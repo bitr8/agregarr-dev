@@ -185,7 +185,7 @@ export const TileElement: React.FC<TileElementComponentProps> = ({
           width={border.width}
           height={border.height}
           stroke={props.borderColor || DEFAULT_TILE_BORDER_COLOR}
-          strokeWidth={borderWidth}
+          strokeWidth={border.strokeWidth}
           cornerRadius={[
             border.radii.topLeft,
             border.radii.topRight,

@@ -1,3 +1,6 @@
+export const overlayMappingsKey = (field: string) =>
+  `/api/v1/overlay-mappings/${field}`;
+
 export interface IconMapping {
   value: string;
   iconPath: string;

@@ -12,6 +12,8 @@ import type React from 'react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
+import { mutate } from 'swr';
+import { overlayMappingsKey } from './mappedIconSelection';
 import type { IconMapping } from './types';
 
 const messages = defineMessages({
@@ -154,6 +156,7 @@ const MappedIconMappingModal: React.FC<MappedIconMappingModalProps> = ({
       if (!response.ok) {
         throw new Error('Failed to save mappings');
       }
+      await mutate(overlayMappingsKey(fieldName));
 
       // Call parent onSave to update the element
       onSave(validMappings);
@@ -184,6 +187,7 @@ const MappedIconMappingModal: React.FC<MappedIconMappingModalProps> = ({
         const data: MappingsResponse = await response.json();
         setLocalMappings(data.mappings);
         setIsUsingDefaults(true);
+        await mutate(overlayMappingsKey(fieldName));
       }
     } catch (error) {
       addToast(intl.formatMessage(messages.failedToLoad), {

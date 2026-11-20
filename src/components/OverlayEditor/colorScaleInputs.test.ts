@@ -36,6 +36,12 @@ describe('parseScaleBound', () => {
     expect(parseScaleBound('-2.5', 7)).toBe(-2.5);
   });
 
+  it('settles the half-typed drafts a user passes through', () => {
+    expect(parseScaleBound('2.', 7)).toBe(2);
+    expect(parseScaleBound('-', 7)).toBe(7);
+    expect(parseScaleBound('-1', 7)).toBe(-1);
+  });
+
   it('keeps the previous value for non-numbers', () => {
     expect(parseScaleBound('abc', 7)).toBe(7);
   });

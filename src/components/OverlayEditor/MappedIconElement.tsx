@@ -6,7 +6,11 @@ import { defineMessages, useIntl } from 'react-intl';
 import { Group, Rect } from 'react-konva';
 import useSWR from 'swr';
 import { FilteredImage } from './FilteredImage';
-import { selectMappedIcons, type IconMapping } from './mappedIconSelection';
+import {
+  overlayMappingsKey,
+  selectMappedIcons,
+  type IconMapping,
+} from './mappedIconSelection';
 import {
   isSingleValueField,
   type OverlayElement,
@@ -63,7 +67,7 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
   const intl = useIntl();
 
   const { data: fallbackData } = useSWR<{ mappings: IconMapping[] }>(
-    props.field ? `/api/v1/overlay-mappings/${props.field}` : null
+    props.field ? overlayMappingsKey(props.field) : null
   );
   const fallbackMappings = fallbackData?.mappings;
 
@@ -116,6 +120,7 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
 
   // Load icons
   useEffect(() => {
+    let cancelled = false;
     if (mappingsToShow.length === 0) {
       setLoadedIcons([]);
       setIsLoading(false);
@@ -189,9 +194,14 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
     );
 
     Promise.all(loadPromises).then((results) => {
+      if (cancelled) return;
       setLoadedIcons(results.filter((r): r is LoadedIcon => r !== null));
       setIsLoading(false);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [mappingsToShow, iconSize, spacingX, spacingY, layout, gridColumns]);
 
   // Use content bounds for positioning

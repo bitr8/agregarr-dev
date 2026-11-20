@@ -23,9 +23,10 @@ import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 import CollectionRankPicker from './CollectionRankPicker';
-import { colorScaleFieldOptions, parseScaleBound } from './colorScaleInputs';
+import { colorScaleFieldOptions } from './colorScaleInputs';
 import { isResizable } from './elementTransform';
 import MappedIconMappingModal from './MappedIconMappingModal';
+import { ScaleBoundInput } from './ScaleBoundInput';
 import type {
   ColorScale,
   IconMapping,
@@ -731,32 +732,16 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                     </select>
                   </label>
                   <div className="flex gap-2">
-                    <label className="flex-1 text-xs text-stone-400">
-                      Min
-                      <input
-                        type="number"
-                        value={scale.min}
-                        onChange={(e) =>
-                          updateScale({
-                            min: parseScaleBound(e.target.value, scale.min),
-                          })
-                        }
-                        className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
-                      />
-                    </label>
-                    <label className="flex-1 text-xs text-stone-400">
-                      Max
-                      <input
-                        type="number"
-                        value={scale.max}
-                        onChange={(e) =>
-                          updateScale({
-                            max: parseScaleBound(e.target.value, scale.max),
-                          })
-                        }
-                        className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
-                      />
-                    </label>
+                    <ScaleBoundInput
+                      label="Min"
+                      value={scale.min}
+                      onCommit={(min) => updateScale({ min })}
+                    />
+                    <ScaleBoundInput
+                      label="Max"
+                      value={scale.max}
+                      onCommit={(max) => updateScale({ max })}
+                    />
                   </div>
                   <div className="flex gap-2">
                     <label className="flex-1 text-xs text-stone-400">
