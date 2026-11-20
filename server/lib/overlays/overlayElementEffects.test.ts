@@ -227,17 +227,27 @@ describe('tile border', () => {
     expect(await pixel(buffer, 1, 10)).toEqual([255, 255, 255, 255]);
   });
 
-  it('keeps a border wider than the tile inside the tile', async () => {
-    const tile = {
-      ...bordered({ borderWidth: 30 }),
-      x: 20,
-      y: 20,
-      width: 10,
-      height: 10,
-    };
-    const buffer = await render(tile, 50);
-    const meta = await sharp(buffer).metadata();
-    expect([meta.width, meta.height]).toEqual([10, 10]);
-    expect(await pixel(buffer, 5, 5)).toEqual([0, 0, 255, 255]);
-  });
+  it.each([
+    [10, 10],
+    [10, 100],
+  ])(
+    'paints a %ix%i tile solid border colour when the border is too thick',
+    async (w, h) => {
+      const buffer = await render(
+        { ...bordered({ borderWidth: 30 }), x: 20, y: 20, width: w, height: h },
+        200
+      );
+      const meta = await sharp(buffer).metadata();
+      expect([meta.width, meta.height]).toEqual([w, h]);
+      for (const [x, y] of [
+        [0, 0],
+        [w - 1, h - 1],
+        [Math.floor(w / 2), Math.floor(h / 2)],
+        [0, h - 1],
+        [w - 1, 0],
+      ]) {
+        expect(await pixel(buffer, x, y)).toEqual([255, 0, 0, 255]);
+      }
+    }
+  );
 });

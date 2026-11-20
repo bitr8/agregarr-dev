@@ -14,7 +14,7 @@ export function insetTileBorder(
   height: number;
   radii: CornerRadii;
 } {
-  const strokeWidth = Math.min(borderWidth, width, height);
+  const strokeWidth = Math.min(borderWidth, Math.min(width, height) / 2);
   const inset = strokeWidth / 2;
   const shrink = (r: number) => Math.max(0, r - inset);
   return {

@@ -21,11 +21,11 @@ describe('insetTileBorder', () => {
     });
   });
 
-  it('clamps a border wider than the tile to the tile', () => {
+  it('clamps a border wider than the tile to half the short side', () => {
     const b = insetTileBorder(10, 40, radii, 30);
-    expect(b.strokeWidth).toBe(10);
-    expect(b.inset).toBe(5);
-    expect(b.width).toBe(0);
-    expect(b.height).toBe(30);
+    expect(b.strokeWidth).toBe(5);
+    expect(b.inset).toBe(2.5);
+    expect(b.width).toBe(5);
+    expect(b.height).toBe(35);
   });
 });
