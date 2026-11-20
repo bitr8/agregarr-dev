@@ -1,5 +1,5 @@
 import { TileElement } from '@app/components/OverlayEditor/TileElement';
-import { evaluateCondition } from '@app/utils/conditionEvaluator';
+import { evaluateCondition } from '@server/lib/overlays/conditionEvaluator';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Box } from 'konva/lib/shapes/Transformer';

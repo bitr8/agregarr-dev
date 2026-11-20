@@ -1,4 +1,4 @@
-import type { OverlayRenderContext } from './OverlayTemplateRenderer';
+import type { OverlayRenderContext } from './overlayRenderContext';
 
 /**
  * Shared sample overlay context factory. Single source of truth for all preview locations:
