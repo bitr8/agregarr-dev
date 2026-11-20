@@ -1,11 +1,14 @@
+import { mappedIconContentSize } from '@server/lib/overlays/mappedIconLayout';
 import type {
   ApplicationCondition,
   ConditionRule,
   OverlayElement,
+  OverlayMappedIconElementProps,
   OverlayTextElementProps,
   OverlayTileElementProps,
   OverlayVariableElementProps,
 } from './types';
+import { isSingleValueField } from './types';
 
 export type LayoutWarningKind =
   | 'out-of-bounds'
@@ -79,6 +82,29 @@ const rotatedBounds = (element: OverlayElement): Rect => {
   const cx = element.x + element.width / 2;
   const cy = element.y + element.height / 2;
   return { x: cx - width / 2, y: cy - height / 2, width, height };
+};
+
+const mappedBox = (element: OverlayElement): OverlayElement => {
+  if (element.type !== 'mapped-icon') return element;
+  const props = element.properties as OverlayMappedIconElementProps;
+  const listed = props.mappings.length;
+  const count = isSingleValueField(props.field)
+    ? 1
+    : Math.max(
+        1,
+        props.maxIcons && props.maxIcons > 0
+          ? Math.min(props.maxIcons, listed)
+          : listed
+      );
+  const { width, height } = mappedIconContentSize(
+    count,
+    props.iconSize,
+    props.spacingX ?? props.spacing ?? 4,
+    props.spacingY ?? props.spacing ?? 4,
+    props.layout,
+    props.gridColumns || 3
+  );
+  return { ...element, width, height };
 };
 
 const intersects = (a: Rect, b: Rect): boolean =>
@@ -324,7 +350,7 @@ export function computeLayoutWarnings(
   });
 
   for (const element of input.elements) {
-    if (!contains(canvas, rotatedBounds(element))) {
+    if (!contains(canvas, rotatedBounds(mappedBox(element)))) {
       warnings.push({ kind: 'out-of-bounds', elementId: element.id });
     }
 

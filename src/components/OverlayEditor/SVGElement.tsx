@@ -1,7 +1,9 @@
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useEffect, useRef, useState } from 'react';
-import { Group, Image, Rect } from 'react-konva';
+import { Group, Rect } from 'react-konva';
+import { FilteredImage } from './FilteredImage';
+import { containScale } from './imageFit';
 import type { OverlayElement, OverlaySVGElementProps } from './types';
 
 interface SVGElementComponentProps {
@@ -112,11 +114,13 @@ export const SVGElement: React.FC<SVGElementComponentProps> = ({
     );
   }
 
-  // Calculate scale to fit HEIGHT (matching server-side logic for SVG logos)
-  // Server scales to match height exactly, letting width adjust to maintain aspect ratio
-  const scale = element.height / image.height;
+  const scale = containScale(
+    element.width,
+    element.height,
+    image.width,
+    image.height
+  );
 
-  // Calculate scaled dimensions and centering offset (matching server-side logic)
   const scaledWidth = image.width * scale;
   const scaledHeight = image.height * scale;
   const offsetX = (element.width - scaledWidth) / 2;
@@ -184,7 +188,7 @@ export const SVGElement: React.FC<SVGElementComponentProps> = ({
         listening={true}
       />
 
-      <Image
+      <FilteredImage
         image={image}
         x={offsetX}
         y={offsetY}
@@ -192,6 +196,8 @@ export const SVGElement: React.FC<SVGElementComponentProps> = ({
         height={image.height}
         scaleX={scale}
         scaleY={scale}
+        opacity={(props.opacity ?? 100) / 100}
+        grayscale={props.grayscale}
         listening={false}
       />
       {isSelected && (

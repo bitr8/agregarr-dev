@@ -21,6 +21,7 @@ import {
   Stage,
   Transformer,
 } from 'react-konva';
+import { isResizable } from './elementTransform';
 import { MappedIconElement } from './MappedIconElement';
 import { RasterElement } from './RasterElement';
 import { SVGElement } from './SVGElement';
@@ -203,9 +204,13 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
         const shouldLockAspectRatio = aspectRatioLocked[elementId] ?? true;
 
         transformerRef.current.keepRatio(shouldLockAspectRatio);
+        const selectedType = elements.find((e) => e.id === elementId)?.type;
+        transformerRef.current.resizeEnabled(
+          !selectedType || isResizable(selectedType)
+        );
         transformerRef.current.getLayer()?.batchDraw();
       }
-    }, [selectedShapeRef, aspectRatioLocked]);
+    }, [selectedShapeRef, aspectRatioLocked, elements]);
 
     // Expose export method via ref
     useImperativeHandle(
