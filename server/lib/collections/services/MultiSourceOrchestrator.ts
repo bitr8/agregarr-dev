@@ -11,6 +11,7 @@ import type {
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
 import { clearRemovedCustomArtwork } from '@server/lib/collections/plex/customArtworkCleanup';
 // getCollectionMediaType removed - using items[0]?.type instead
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
@@ -785,7 +786,7 @@ export class MultiSourceOrchestrator {
       // Handle placeholder creation for missing items using unified flow
       // This respects the createPlaceholdersForMissing checkbox on the parent config
       if (
-        parentConfig.createPlaceholdersForMissing &&
+        placeholdersEnabled(parentConfig) &&
         missingItems &&
         missingItems.length > 0
       ) {

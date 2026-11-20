@@ -3,6 +3,7 @@ import type { PlexMetadataSafeResult } from '@server/api/plexMetadataClassify';
 import { classifyCollectionKey } from '@server/api/plexMetadataClassify';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
@@ -450,8 +451,8 @@ export const seerrPlaceholderPatternsCheck: HealthCheck = {
     if (!overseerr?.hostname || !overseerr?.apiKey)
       return { status: 'skipped' };
 
-    const hasPlaceholders = (plex.collectionConfigs ?? []).some(
-      (c) => c.createPlaceholdersForMissing
+    const hasPlaceholders = (plex.collectionConfigs ?? []).some((c) =>
+      placeholdersEnabled(c)
     );
     if (!hasPlaceholders) return { status: 'skipped' };
 

@@ -62,12 +62,17 @@ import {
   isEpisodeHub,
   isLibraryEssentialsPattern,
 } from '@app/utils/collections/collectionUtils';
+import {
+  placeholderInitialValues,
+  placeholderSaveValues,
+} from '@app/utils/collections/placeholderForm';
 import type { SortTitleArticleMode } from '@app/utils/collections/sortTitle';
 import {
   agregarrOwnsSortTitle,
   buildPromotedSortTitle,
   normalizeArticleForDisplay,
 } from '@app/utils/collections/sortTitle';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 
 const SourceRankResetGuard = () => {
   const { values, setFieldValue } = useFormikContext<CollectionFormConfig>();
@@ -1986,9 +1991,7 @@ const CollectionFormConfigForm = ({
           minimumPlays: (config as CollectionFormConfig).minimumPlays || 3,
           customDays: (config as CollectionFormConfig).customDays || 30,
           // Placeholder settings - map old Coming Soon fields for backward compatibility
-          createPlaceholdersForMissing:
-            (config as CollectionFormConfig).createPlaceholdersForMissing ??
-            (config as CollectionFormConfig).type === 'comingsoon', // Force true for Coming Soon
+          ...placeholderInitialValues(config as CollectionFormConfig),
           personMinimumItems:
             (config as CollectionFormConfig).personMinimumItems ??
             ((config as CollectionFormConfig).type === 'plex' &&
@@ -2018,14 +2021,6 @@ const CollectionFormConfigForm = ({
           placeholderSkipEstimatedDates:
             (config as CollectionFormConfig).placeholderSkipEstimatedDates ??
             false,
-          placeholderReleasedDays:
-            (config as CollectionFormConfig).placeholderReleasedDays ||
-            (config as CollectionFormConfig).comingSoonReleasedDays ||
-            14,
-          placeholderDaysAhead:
-            (config as CollectionFormConfig).placeholderDaysAhead ||
-            (config as CollectionFormConfig).comingSoonDays ||
-            90,
           includeAllReleasedItems:
             (config as CollectionFormConfig).includeAllReleasedItems ?? true, // Default true for new configs
           applyOverlaysDuringSync:
@@ -2577,25 +2572,11 @@ const CollectionFormConfigForm = ({
               ? parseInt(values.customDays.toString(), 10)
               : undefined,
             // Placeholder settings (unified for all collection types including Coming Soon)
-            createPlaceholdersForMissing: isEssentials
-              ? false
-              : values.type === 'comingsoon'
-              ? true
-              : values.createPlaceholdersForMissing ?? false,
-            placeholderSkipEstimatedDates: values.createPlaceholdersForMissing
+            ...placeholderSaveValues(values, isEssentials),
+            placeholderSkipEstimatedDates: placeholdersEnabled(values)
               ? values.placeholderSkipEstimatedDates
               : undefined,
-            placeholderReleasedDays: values.createPlaceholdersForMissing
-              ? values.placeholderReleasedDays
-                ? parseInt(values.placeholderReleasedDays.toString(), 10)
-                : 14
-              : undefined,
-            placeholderDaysAhead: values.createPlaceholdersForMissing
-              ? values.placeholderDaysAhead
-                ? parseInt(values.placeholderDaysAhead.toString(), 10)
-                : 90
-              : undefined,
-            includeAllReleasedItems: values.createPlaceholdersForMissing
+            includeAllReleasedItems: placeholdersEnabled(values)
               ? values.includeAllReleasedItems ?? true
               : undefined,
             applyOverlaysDuringSync:
@@ -4635,7 +4616,7 @@ const CollectionFormConfigForm = ({
                                     })()}
 
                                     {/* YouTube cookies status */}
-                                    {typedValues.createPlaceholdersForMissing &&
+                                    {placeholdersEnabled(typedValues) &&
                                       !settingsData?.skipYoutubeTrailerDownloads &&
                                       youtubeCookiesStatus &&
                                       !youtubeCookiesStatus.valid && (
@@ -4693,7 +4674,7 @@ const CollectionFormConfigForm = ({
                                       )}
 
                                     {/* YouTube cookies success message */}
-                                    {typedValues.createPlaceholdersForMissing &&
+                                    {placeholdersEnabled(typedValues) &&
                                       !settingsData?.skipYoutubeTrailerDownloads &&
                                       youtubeCookiesStatus &&
                                       youtubeCookiesStatus.valid && (
@@ -4738,7 +4719,7 @@ const CollectionFormConfigForm = ({
                                       )}
 
                                     {/* Info alert about Filtered Plex Hubs */}
-                                    {typedValues.createPlaceholdersForMissing && (
+                                    {placeholdersEnabled(typedValues) && (
                                       <div className="mt-3">
                                         <Alert type="info">
                                           <p className="font-medium">
@@ -4756,7 +4737,7 @@ const CollectionFormConfigForm = ({
                                     )}
 
                                     {/* Placeholder options - show when enabled */}
-                                    {typedValues.createPlaceholdersForMissing && (
+                                    {placeholdersEnabled(typedValues) && (
                                       <div className="mt-4 space-y-4 rounded-lg bg-stone-800 p-4">
                                         {/* Days Ahead */}
                                         <div>
@@ -4896,7 +4877,7 @@ const CollectionFormConfigForm = ({
                               )}
 
                             {/* Placeholder Filters - collapsible */}
-                            {typedValues.createPlaceholdersForMissing && (
+                            {placeholdersEnabled(typedValues) && (
                               <div className="mt-4 border-t border-stone-600 pt-4">
                                 <button
                                   type="button"
@@ -5212,7 +5193,7 @@ const CollectionFormConfigForm = ({
                             )}
 
                             {/* Warning when placeholders + overlays enabled but no overlay configs exist */}
-                            {typedValues.createPlaceholdersForMissing &&
+                            {placeholdersEnabled(typedValues) &&
                               (typedValues.applyOverlaysDuringSync ||
                                 typedValues.type === 'comingsoon') &&
                               (() => {

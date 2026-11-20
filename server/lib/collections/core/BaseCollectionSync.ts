@@ -83,6 +83,7 @@ interface MediaProcessingResult {
 }
 // CollectionUpdateStrategy removed - logic moved inline below
 import type { PlexCollectionItem } from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 
 // Types moved from CollectionUpdateStrategy.ts
 interface CollectionUpdateOptions {
@@ -791,7 +792,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       config.maxItems && config.maxItems > 0 ? config.maxItems : undefined;
     if (
       !maxItems ||
-      !config.createPlaceholdersForMissing ||
+      !placeholdersEnabled(config) ||
       this.inSourceOrder(config)
     ) {
       return this.processMissingItems(
@@ -923,7 +924,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     let placeholderItems: CollectionItem[] = [];
 
     // Create placeholders if enabled
-    if (config.createPlaceholdersForMissing) {
+    if (placeholdersEnabled(config)) {
       // Apply missing item filters (rating, year, genre, etc.) before creating placeholders
       const { missingItemFilterService, buildPlaceholderFilterConfig } =
         await import('../services/MissingItemFilterService');

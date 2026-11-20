@@ -5,6 +5,10 @@ import {
   TMDB_MAX_PAGE,
 } from '@server/api/themoviedb/constants';
 import TraktAPI from '@server/api/trakt';
+import {
+  DEFAULT_PLACEHOLDER_DAYS_AHEAD,
+  resolvePlaceholderDaysAhead,
+} from '@server/constants/placeholders';
 import type { ComingSoonSourceData } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -73,8 +77,7 @@ export async function fetchMonitoredMovies(
   }
 
   const { getFutureDateFromToday } = await import('@server/utils/dateHelpers');
-  const maxDaysAway =
-    config.placeholderDaysAhead || config.comingSoonDays || 360;
+  const maxDaysAway = resolvePlaceholderDaysAhead(config);
   const maxDate = getFutureDateFromToday(maxDaysAway);
 
   // Filter to specific server if configured
@@ -284,8 +287,7 @@ export async function fetchMonitoredShows(
     return items;
   }
 
-  const maxDaysAway =
-    config.placeholderDaysAhead || config.comingSoonDays || 360;
+  const maxDaysAway = resolvePlaceholderDaysAhead(config);
 
   // Filter to specific server if configured
   const sonarrInstances = config.comingSoonSonarrServerId
@@ -737,8 +739,7 @@ export async function fetchTmdbComingSoonMovies(
     const TmdbAPI = (await import('@server/api/themoviedb')).default;
     const tmdbClient = new TmdbAPI();
 
-    const maxDaysAway =
-      config.placeholderDaysAhead || config.comingSoonDays || 360;
+    const maxDaysAway = resolvePlaceholderDaysAhead(config);
 
     // Calculate date range for upcoming releases
     const { getToday, getFutureDateFromToday, extractReleaseDates } =
@@ -922,8 +923,7 @@ export async function fetchTmdbComingSoonShows(
     const TmdbAPI = (await import('@server/api/themoviedb')).default;
     const tmdbClient = new TmdbAPI();
 
-    const maxDaysAway =
-      config.placeholderDaysAhead || config.comingSoonDays || 360;
+    const maxDaysAway = resolvePlaceholderDaysAhead(config);
 
     // Calculate date range for upcoming air dates
     const { getToday, getFutureDateFromToday } = await import(
@@ -1162,13 +1162,13 @@ export async function fetchTmdbComingSoonShows(
  * Modifies the array in place
  *
  * @param items - Array of items to enrich
- * @param maxDaysAway - Maximum days in future to include (default 360)
+ * @param maxDaysAway - Maximum days in future to include (default 90)
  * @param releasedDays - Days in past to include (default 0)
  * @param skipDateFilter - When true, only enrich metadata without filtering (for non-Coming-Soon with includeAllReleasedItems)
  */
 export async function enrichWithTMDBReleaseDates(
   items: ComingSoonSourceData[],
-  maxDaysAway = 360,
+  maxDaysAway = DEFAULT_PLACEHOLDER_DAYS_AHEAD,
   releasedDays = 0,
   skipDateFilter = false
 ): Promise<void> {
@@ -1472,7 +1472,7 @@ export async function enrichWithTMDBReleaseDates(
  */
 export async function markMonitoredStatus(
   items: ComingSoonSourceData[],
-  maxDaysAway = 360,
+  maxDaysAway = DEFAULT_PLACEHOLDER_DAYS_AHEAD,
   releasedDays = 0
 ): Promise<void> {
   const settings = getSettings();

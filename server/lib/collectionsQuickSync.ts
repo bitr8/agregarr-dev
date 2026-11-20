@@ -1,4 +1,5 @@
 import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import { getRepository } from '@server/datasource';
 import { CollectionMissingItems } from '@server/entity/CollectionMissingItems';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
@@ -477,7 +478,7 @@ class CollectionsQuickSync {
     const libraryMediaType: 'movie' | 'tv' =
       library?.type === 'show' ? 'tv' : 'movie';
     const collectionsForLibrary = settings.plex.collectionConfigs?.filter(
-      (c) => c.libraryId === libraryId && c.createPlaceholdersForMissing
+      (c) => c.libraryId === libraryId && placeholdersEnabled(c)
     );
 
     if (!collectionsForLibrary || collectionsForLibrary.length === 0) {

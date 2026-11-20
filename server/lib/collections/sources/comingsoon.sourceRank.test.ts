@@ -366,13 +366,12 @@ describe('Coming Soon maxItems covers present items and placeholders together', 
     expect(r.taggedIds).toEqual([]);
   });
 
-  it('skips placeholder rounds when placeholders are off', async () => {
+  it('still runs placeholder rounds when the stored flag is false', async () => {
     const r = await harness('source_rank', {
       maxItems: 4,
       createPlaceholdersForMissing: false,
     });
-    expect(r.ids).toEqual([1, 3]);
-    expect(r.attempts).toEqual([]);
+    expect(r.attempts.length).toBeGreaterThan(0);
     expect(r.cleanup).toHaveBeenCalledTimes(1);
   });
 });

@@ -36,6 +36,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
 } from '@heroicons/react/24/solid';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import type {
   OverseerrSettings,
   PlexHubConfig,
@@ -143,8 +144,7 @@ const checkPlaceholderHubWarning = (
   libs.forEach((library) => {
     // 1. Check if library has any collection with placeholders enabled
     const hasPlaceholders = collections.some(
-      (c) =>
-        c.libraryId === library.key && c.createPlaceholdersForMissing === true
+      (c) => c.libraryId === library.key && placeholdersEnabled(c)
     );
 
     if (!hasPlaceholders) return;

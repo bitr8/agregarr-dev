@@ -272,9 +272,9 @@ export interface CollectionConfig {
   readonly enableCustomTheme?: boolean; // Enable custom theme sync to Plex
   // Placeholder settings (for createPlaceholdersForMissing feature)
   readonly createPlaceholdersForMissing?: boolean; // If true, create placeholder files in Plex for missing items instead of auto-requesting
-  readonly placeholderReleasedDays?: number; // Days to keep released items with overlay (default: 7). After this window, original posters are restored.
+  readonly placeholderReleasedDays?: number; // Creation window in days for already-released items; 0 = unreleased only (default: 14)
   readonly placeholderSkipEstimatedDates?: boolean; // Skip movies whose release date is the cinema date plus 90 days
-  readonly placeholderDaysAhead?: number; // Number of days to look ahead for release dates (default: 360)
+  readonly placeholderDaysAhead?: number; // Number of days to look ahead for release dates (default: 90)
   readonly includeAllReleasedItems?: boolean; // If true, include all released items regardless of release date (default: true for new configs)
   // Placeholder filter settings (independent of auto-request filters)
   readonly placeholderMinimumYear?: number;

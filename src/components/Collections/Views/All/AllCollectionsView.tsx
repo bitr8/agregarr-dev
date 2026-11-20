@@ -37,6 +37,7 @@ import {
   PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import type {
   PlexHubConfig,
   PreExistingCollectionConfig,
@@ -801,10 +802,9 @@ const AllCollectionsView: React.FC = () => {
                       {/* Placeholders Badge - Shows when create placeholders is enabled for collections */}
                       {isCollection && collection.originalConfig && (
                         <PlaceholdersBadge
-                          createPlaceholdersForMissing={
-                            (collection.originalConfig as CollectionFormConfig)
-                              .createPlaceholdersForMissing
-                          }
+                          createPlaceholdersForMissing={placeholdersEnabled(
+                            collection.originalConfig as CollectionFormConfig
+                          )}
                         />
                       )}
 

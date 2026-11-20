@@ -50,6 +50,7 @@ import {
   PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import type {
   PlexHubConfig,
   PreExistingCollectionConfig,
@@ -435,9 +436,9 @@ const SortableItem = ({
             {/* Placeholders Badge - Shows when create placeholders is enabled for collections */}
             {isCollection && (
               <PlaceholdersBadge
-                createPlaceholdersForMissing={
-                  (config as CollectionFormConfig).createPlaceholdersForMissing
-                }
+                createPlaceholdersForMissing={placeholdersEnabled(
+                  config as CollectionFormConfig
+                )}
               />
             )}
 

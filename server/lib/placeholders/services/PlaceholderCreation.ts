@@ -1,4 +1,9 @@
 import type PlexAPI from '@server/api/plexapi';
+import {
+  placeholdersEnabled,
+  resolvePlaceholderDaysAhead,
+  resolvePlaceholderReleasedDays,
+} from '@server/constants/placeholders';
 import { getRepository } from '@server/datasource';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import {
@@ -393,14 +398,14 @@ export async function getTvPlaceholderFilePath(
  * Get effective released days from config (with backward compatibility)
  */
 export function getReleasedDays(config: CollectionConfig): number {
-  return config.placeholderReleasedDays || config.comingSoonReleasedDays || 7;
+  return resolvePlaceholderReleasedDays(config);
 }
 
 /**
  * Get effective days ahead from config (with backward compatibility)
  */
 export function getDaysAhead(config: CollectionConfig): number {
-  return config.placeholderDaysAhead || config.comingSoonDays || 360;
+  return resolvePlaceholderDaysAhead(config);
 }
 
 /**
@@ -409,7 +414,7 @@ export function getDaysAhead(config: CollectionConfig): number {
 export function isPlaceholderCreationEnabled(
   config: CollectionConfig
 ): boolean {
-  return config.createPlaceholdersForMissing === true;
+  return placeholdersEnabled(config);
 }
 
 // Adopt if this config's source contains it; otherwise leave for other owners, else delete.
@@ -1661,7 +1666,7 @@ async function createPlaceholders(
       // record-less orphan it owns is left alone rather than deleted. Safe
       // re: data loss (it only leaks disk, never deletes); the alternative
       // (ignoring inactive configs) could delete a real co-owned placeholder.
-      if (other.createPlaceholdersForMissing !== true) {
+      if (!placeholdersEnabled(other)) {
         return false;
       }
       const otherLibraries = Array.isArray(other.libraryId)

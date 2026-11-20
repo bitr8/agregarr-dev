@@ -2,6 +2,7 @@ import OverseerrAPI, {
   type OverseerrMediaRequest,
 } from '@server/api/overseerr';
 import type PlexAPI from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import { PlaceholderItem } from '@server/entity/PlaceholderItem';
 import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
@@ -169,8 +170,8 @@ export class CollectionSyncService {
     const movies: DiscoveredMoviePlaceholder[] = [];
 
     // Only run discovery if there are collections with placeholders enabled
-    const hasPlaceholderCollections = collectionConfigs.some(
-      (c) => c.createPlaceholdersForMissing
+    const hasPlaceholderCollections = collectionConfigs.some((c) =>
+      placeholdersEnabled(c)
     );
 
     if (!hasPlaceholderCollections) {
@@ -191,7 +192,7 @@ export class CollectionSyncService {
       ...new Set(
         collectionConfigs
           .filter((c) => {
-            if (!c.createPlaceholdersForMissing) return false;
+            if (!placeholdersEnabled(c)) return false;
             try {
               return getCollectionMediaType(c) === 'tv';
             } catch {
@@ -467,7 +468,7 @@ export class CollectionSyncService {
       ...new Set(
         collectionConfigs
           .filter((c) => {
-            if (!c.createPlaceholdersForMissing) return false;
+            if (!placeholdersEnabled(c)) return false;
             try {
               return getCollectionMediaType(c) === 'movie';
             } catch {
