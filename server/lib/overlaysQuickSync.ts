@@ -6,6 +6,10 @@ import type { OverlayItemInput } from '@server/lib/overlays/OverlayLibraryServic
 import { getOverlayLibraryType } from '@server/lib/overlays/overlayLibraryType';
 import { buildOverlaySyncItems } from '@server/lib/overlays/overlaySyncItems';
 import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
+import {
+  partitionPlaceholderSeasons,
+  plexPlaceholderShowResolver,
+} from '@server/lib/overlays/placeholderSeasons';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 
@@ -237,7 +241,26 @@ class OverlaysQuickSync {
               plexType
             );
 
-            recentItems.push(...buildOverlaySyncItems(targetItems, target));
+            let eligibleItems = targetItems;
+            if (target === 'season') {
+              const { kept, skipped } = await partitionPlaceholderSeasons(
+                targetItems,
+                plexPlaceholderShowResolver(plexClient)
+              );
+              eligibleItems = kept;
+              if (skipped.length > 0) {
+                logger.debug(
+                  'Skipped placeholder seasons without their own poster',
+                  {
+                    label: 'Overlays Quick Sync',
+                    libraryName: library.name,
+                    skipped: skipped.length,
+                  }
+                );
+              }
+            }
+
+            recentItems.push(...buildOverlaySyncItems(eligibleItems, target));
           }
 
           if (!recentItems || recentItems.length === 0) {

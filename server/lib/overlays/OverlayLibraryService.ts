@@ -78,6 +78,12 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
+import {
+  findPlaceholderShowKeys,
+  partitionPlaceholderSeasons,
+  PLACEHOLDER_SEASON_SKIP_MESSAGE,
+  plexPlaceholderShowResolver,
+} from './placeholderSeasons';
 import { resolveBasePosterSourceWithTrail } from './PlexBasePosterManager';
 import {
   deriveReleaseDateContext,
@@ -2046,7 +2052,7 @@ class OverlayLibraryService {
               (item) => item.type !== 'episode' && item.type !== 'season'
             )
           : [];
-      const [seasons, episodes] = await Promise.all([
+      const [allSeasons, episodes] = await Promise.all([
         syncSeasons
           ? plexApi.getLibraryItemsByType(libraryId, 3)
           : Promise.resolve([] as PlexLibraryItem[]),
@@ -2054,6 +2060,15 @@ class OverlayLibraryService {
           ? plexApi.getLibraryItemsByType(libraryId, 4)
           : Promise.resolve([] as PlexLibraryItem[]),
       ]);
+      const placeholderShowKeys = findPlaceholderShowKeys(allItems, allSeasons);
+      const { kept: seasons, skipped: skippedSeasons } =
+        await partitionPlaceholderSeasons(allSeasons, (showKey) =>
+          placeholderShowKeys.has(showKey)
+        );
+      const skippedSeasonItems = buildOverlaySyncItems(
+        skippedSeasons,
+        'season'
+      );
       let seasonItems = buildOverlaySyncItems(seasons, 'season');
       let fullSyncSeasonImdbRatings: Map<string, number> | undefined;
       const episodeItems = syncEpisodes
@@ -2065,10 +2080,28 @@ class OverlayLibraryService {
       // a root-only total for a TV full sync.
       this.updateProgress(libraryId, (p) => {
         p.targetProgress.main.totalItems = mainItems.length;
-        p.targetProgress.season.totalItems = seasonItems.length;
+        p.targetProgress.season.totalItems =
+          seasonItems.length + skippedSeasonItems.length;
         p.targetProgress.episode.totalItems = episodeItems.length;
-        p.totalItems = mainItems.length + childItems.length;
+        p.totalItems =
+          mainItems.length + childItems.length + skippedSeasonItems.length;
+        for (const item of skippedSeasonItems) {
+          this.recordProgressOutcome(
+            p,
+            item,
+            'skipped',
+            PLACEHOLDER_SEASON_SKIP_MESSAGE
+          );
+        }
       });
+
+      if (skippedSeasonItems.length > 0) {
+        logger.info('Skipped placeholder seasons without their own poster', {
+          label: 'OverlayLibrary',
+          libraryId,
+          skipped: skippedSeasonItems.length,
+        });
+      }
 
       logger.info('Processing library items', {
         label: 'OverlayLibrary',
@@ -2541,7 +2574,21 @@ class OverlayLibraryService {
           seasonNumber: input.seasonNumber,
         });
       } else {
-        if (syncSeasons) {
+        const skipSeason =
+          syncSeasons &&
+          (
+            await partitionPlaceholderSeasons(
+              [season as unknown as PlexLibraryItem],
+              plexPlaceholderShowResolver(plexApi)
+            )
+          ).skipped.length > 0;
+        if (skipSeason) {
+          logger.debug('Skipping placeholder season without its own poster', {
+            label: 'Posterizarr Trigger',
+            ratingKey: season.ratingKey,
+          });
+        }
+        if (syncSeasons && !skipSeason) {
           items.push({
             ratingKey: season.ratingKey,
             target: 'season',
