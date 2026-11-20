@@ -577,9 +577,25 @@ class CollectionsQuickSync {
 
       // Get ALL placeholder records for this TMDB ID across all collections,
       // scoped to this library's media type (C5).
-      const allPlaceholderRecords = await placeholderRepository.find({
+      const matchedRecords = await placeholderRepository.find({
         where: { tmdbId, mediaType: libraryMediaType },
       });
+
+      // TV edition placeholders are handed over by full sync, which deletes
+      // them only once every collection holds the real show.
+      const allPlaceholderRecords = matchedRecords.filter(
+        (r) =>
+          !(
+            libraryMediaType === 'tv' && r.placeholderPath.includes('{edition-')
+          )
+      );
+      if (allPlaceholderRecords.length < matchedRecords.length) {
+        logger.debug('Leaving TV edition placeholder for full sync hand-over', {
+          label: 'Collections Quick Sync',
+          title: recentItem.title,
+          tmdbId,
+        });
+      }
 
       if (allPlaceholderRecords.length === 0) {
         continue;
