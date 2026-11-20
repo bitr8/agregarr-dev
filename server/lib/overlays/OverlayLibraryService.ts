@@ -280,8 +280,6 @@ class OverlayLibraryService {
   // These are shared across libraries since Radarr/Sonarr data is the same regardless of Plex library
   private radarrMoviesCache?: Map<string, RadarrMovie[]>;
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
-  // Maps item ratingKey → array of collection IDs the item belongs to
-  private collectionMembershipCache?: Map<string, string[]>;
   private collectionRankCache = new Map<string, Map<string, number>>();
 
   // Aggregated episode media info for show libraries (per-library, keyed by show ratingKey)
@@ -1515,7 +1513,7 @@ class OverlayLibraryService {
     if (!this.sonarrSeriesCache) {
       this.sonarrSeriesCache = new Map();
     }
-    // collectionMembershipCache and preloadedImdbRatings are initialized on-demand
+    // preloadedImdbRatings is initialized on-demand
     // (Maintainerr collections are fetched job-locally, not cached on the instance)
     // requiredContextFieldsByLibrary is already initialized as a Map
   }
@@ -2010,7 +2008,7 @@ class OverlayLibraryService {
       const { templatesReadContextField } = await import(
         '@server/utils/metadataHashing'
       );
-      this.collectionMembershipCache = templatesReadContextField(
+      const collectionMembership = templatesReadContextField(
         sortedTemplates,
         'collection'
       )
@@ -2246,7 +2244,13 @@ class OverlayLibraryService {
             libraryId,
             config.libraryName,
             maintainerrCollections,
-            seasonFallbackFor(config)
+            seasonFallbackFor(config),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            false,
+            collectionMembership
           );
 
           this.updateProgress(libraryId, (p) => {
@@ -2417,7 +2421,8 @@ class OverlayLibraryService {
           sortedTemplates,
           maintainerrResult,
           fullSyncSeasonImdbRatings,
-          checkCancelled
+          checkCancelled,
+          collectionMembership
         );
 
         // Cancellation is checked BEFORE resolutionComplete: a run can resolve
@@ -2750,7 +2755,7 @@ class OverlayLibraryService {
       const { templatesReadContextField } = await import(
         '@server/utils/metadataHashing'
       );
-      this.collectionMembershipCache = templatesReadContextField(
+      const collectionMembership = templatesReadContextField(
         sortedTemplates,
         'collection'
       )
@@ -3203,7 +3208,8 @@ class OverlayLibraryService {
                 aggregatedMedia,
                 undefined,
                 contextFallbacks,
-                restoreMissingEpisodeRating
+                restoreMissingEpisodeRating,
+                collectionMembership
               );
               if (result.skipped) {
                 reportOutcome('skipped', outcomeItem);
@@ -3294,7 +3300,8 @@ class OverlayLibraryService {
     aggregatedMediaOverride?: Map<string, AggregatedMediaInfo>,
     requireOverlayMatch?: boolean,
     contextFallbacks?: Partial<OverlayRenderContext>,
-    restoreTrackedBaseForEmptyTemplates = false
+    restoreTrackedBaseForEmptyTemplates = false,
+    collectionMembership?: Map<string, string[]>
   ): Promise<OverlayApplyResult> {
     try {
       // CRITICAL: Derive actual media type from item.type, not library config
@@ -3522,7 +3529,7 @@ class OverlayLibraryService {
       );
 
       // Collection membership for condition evaluation
-      const collection = this.collectionMembershipCache?.get(item.ratingKey);
+      const collection = collectionMembership?.get(item.ratingKey);
 
       const context: OverlayRenderContext = {
         ...contextFallbacks,
@@ -3986,7 +3993,8 @@ class OverlayLibraryService {
     sortedTemplates: OverlayTemplate[],
     maintainerrResult: MaintainerrFetchResult,
     fullSyncSeasonImdbRatings?: ReadonlyMap<string, number>,
-    checkCancelled?: () => boolean
+    checkCancelled?: () => boolean,
+    collectionMembership?: Map<string, string[]>
   ): Promise<SeasonSubpassResult> {
     // A Maintainerr outage tells us nothing about which seasons departed, so we
     // neither process nor clean up. Leaving existing season overlays untouched is
@@ -4259,7 +4267,10 @@ class OverlayLibraryService {
           undefined,
           // Maintainerr nominated this season; if no template condition matches it,
           // leave its poster alone.
-          true
+          true,
+          undefined,
+          false,
+          collectionMembership
         );
 
         this.updateProgress(libraryId, (p) => {

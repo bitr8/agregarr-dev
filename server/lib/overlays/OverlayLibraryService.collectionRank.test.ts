@@ -170,4 +170,37 @@ describe('collection rank cache refresh', () => {
     expect(mockHash).toHaveBeenCalledTimes(1);
     expect(mockHash.mock.calls[0][0].context['collectionRank:col-1']).toBe(2);
   });
+
+  it('reads collection membership from the job it was handed, not the instance', async () => {
+    mockHash.mockImplementation(() => {
+      throw new Error('captured');
+    });
+    const item = { ratingKey: 'a', title: 'Item', type: 'movie', Guid: [] };
+    const run = (membership?: Map<string, string[]>) =>
+      svc
+        .applyOverlaysToItem(
+          {},
+          item,
+          [rankTemplate],
+          'movie',
+          'lib',
+          'Lib',
+          undefined,
+          { fallback: false },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          membership
+        )
+        .catch(() => undefined);
+
+    await run(new Map([['a', ['col-1']]]));
+    await run(undefined);
+
+    expect(mockHash.mock.calls[0][0].context.collection).toEqual(['col-1']);
+    expect(mockHash.mock.calls[1][0].context.collection).toBeUndefined();
+    expect('collectionMembershipCache' in svc).toBe(false);
+  });
 });
