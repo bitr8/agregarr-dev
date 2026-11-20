@@ -1,4 +1,12 @@
-import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
+import {
+  colorScaleContextField,
+  colorScaleFraction,
+} from '@server/lib/overlays/colorScaleField';
+import { resolveTileCornerRadii } from '@server/lib/overlays/roundedRect';
+import {
+  DEFAULT_TILE_BORDER_COLOR,
+  insetTileBorder,
+} from '@server/lib/overlays/tileBorder';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useRef } from 'react';
@@ -36,10 +44,7 @@ function resolveColorScale(
   const raw =
     context[colorScaleContextField(scale.field) as keyof OverlayRenderContext];
   if (typeof raw !== 'number') return null;
-  const t = Math.max(
-    0,
-    Math.min(1, (raw - scale.min) / (scale.max - scale.min))
-  );
+  const t = colorScaleFraction(raw, scale.min, scale.max);
   if (scale.midColor) {
     return t < 0.5
       ? lerpColor(scale.fromColor, scale.midColor, t * 2)
@@ -98,6 +103,17 @@ export const TileElement: React.FC<TileElementComponentProps> = ({
       props.borderRadiusBottomLeft ?? 0,
     ];
   }
+
+  const borderWidth = props.borderWidth ?? 0;
+  const border =
+    borderWidth > 0
+      ? insetTileBorder(
+          element.width,
+          element.height,
+          resolveTileCornerRadii(props),
+          borderWidth
+        )
+      : null;
 
   return (
     <Group
@@ -162,13 +178,20 @@ export const TileElement: React.FC<TileElementComponentProps> = ({
         cornerRadius={cornerRadius}
         listening={false}
       />
-      {(props.borderWidth ?? 0) > 0 && props.borderColor && (
+      {border && (
         <Rect
-          width={element.width}
-          height={element.height}
-          stroke={props.borderColor}
-          strokeWidth={props.borderWidth}
-          cornerRadius={cornerRadius}
+          x={border.inset}
+          y={border.inset}
+          width={border.width}
+          height={border.height}
+          stroke={props.borderColor || DEFAULT_TILE_BORDER_COLOR}
+          strokeWidth={borderWidth}
+          cornerRadius={[
+            border.radii.topLeft,
+            border.radii.topRight,
+            border.radii.bottomRight,
+            border.radii.bottomLeft,
+          ]}
           listening={false}
         />
       )}

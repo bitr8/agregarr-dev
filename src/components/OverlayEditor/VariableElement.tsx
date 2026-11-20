@@ -1,8 +1,11 @@
 import { fontLoader } from '@app/utils/fontLoader';
+import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useEffect, useRef, useState } from 'react';
-import { Group, Rect, Text } from 'react-konva';
+import { Group, Rect } from 'react-konva';
+import { SingleLineText } from './SingleLineText';
+import { normaliseSingleLine } from './singleLineText';
 import type {
   OverlayElement,
   OverlayRenderContext,
@@ -184,15 +187,7 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
           const value = renderContext[segment.field];
           if (value !== undefined && value !== null) {
             // Check if this is a date field with custom format
-            const isDateField = [
-              'releaseDate',
-              'theatricalReleaseDate',
-              'digitalReleaseDate',
-              'physicalReleaseDate',
-              'lastPlayed',
-              'dateAdded',
-              'lastEpisodeAddedDate',
-            ].includes(segment.field);
+            const isDateField = isOverlayDateField(segment.field);
             if (
               isDateField &&
               (typeof value === 'string' || value instanceof Date)
@@ -247,7 +242,7 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
     return text;
   };
 
-  const displayText = getDisplayText();
+  const displayText = normaliseSingleLine(getDisplayText());
 
   return (
     <Group
@@ -312,32 +307,19 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
         listening={true}
       />
 
-      {/* Variable text */}
-      {fontLoaded &&
-        (() => {
-          // Konva expects fontStyle to include bold (e.g., "bold", "italic", "bold italic")
-          const fontStyle =
-            props.fontWeight === 'bold'
-              ? props.fontStyle === 'italic'
-                ? 'bold italic'
-                : 'bold'
-              : props.fontStyle;
-
-          return (
-            <Text
-              text={displayText}
-              fontSize={props.fontSize}
-              fontFamily={props.fontFamily}
-              fontStyle={fontStyle}
-              fill={props.color}
-              align={props.textAlign}
-              verticalAlign="middle"
-              width={element.width}
-              height={element.height}
-              listening={false}
-            />
-          );
-        })()}
+      {fontLoaded && (
+        <SingleLineText
+          text={displayText}
+          width={element.width}
+          height={element.height}
+          color={props.color}
+          textAlign={props.textAlign}
+          fontFamily={props.fontFamily}
+          fontSize={props.fontSize}
+          fontWeight={props.fontWeight}
+          fontStyle={props.fontStyle}
+        />
+      )}
 
       {/* Selection indicator */}
       {isSelected && (

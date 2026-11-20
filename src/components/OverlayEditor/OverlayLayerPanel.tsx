@@ -16,11 +16,15 @@ import {
   VariableIcon,
 } from '@heroicons/react/24/outline';
 import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
+import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
+import { DEFAULT_TILE_BORDER_COLOR } from '@server/lib/overlays/tileBorder';
 import { useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 import CollectionRankPicker from './CollectionRankPicker';
+import { colorScaleFieldOptions, parseScaleBound } from './colorScaleInputs';
+import { isResizable } from './elementTransform';
 import MappedIconMappingModal from './MappedIconMappingModal';
 import type {
   ColorScale,
@@ -719,10 +723,11 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                       onChange={(e) => updateScale({ field: e.target.value })}
                       className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
                     >
-                      <option value="imdbRating">IMDb Rating</option>
-                      <option value="tmdbRating">TMDB Rating</option>
-                      <option value="rtCriticsScore">RT Critic Score</option>
-                      <option value="rtAudienceScore">RT Audience Score</option>
+                      {colorScaleFieldOptions(scale.field).map((f) => (
+                        <option key={f.field} value={f.field}>
+                          {f.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <div className="flex gap-2">
@@ -732,7 +737,9 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                         type="number"
                         value={scale.min}
                         onChange={(e) =>
-                          updateScale({ min: Number(e.target.value) })
+                          updateScale({
+                            min: parseScaleBound(e.target.value, scale.min),
+                          })
                         }
                         className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
                       />
@@ -743,7 +750,9 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                         type="number"
                         value={scale.max}
                         onChange={(e) =>
-                          updateScale({ max: Number(e.target.value) })
+                          updateScale({
+                            max: parseScaleBound(e.target.value, scale.max),
+                          })
                         }
                         className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
                       />
@@ -794,7 +803,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             {intl.formatMessage(messages.borderColor)}
           </label>
           <ColorInput
-            value={props.borderColor || '#FFFFFF'}
+            value={props.borderColor || DEFAULT_TILE_BORDER_COLOR}
             onChange={(value) =>
               handleUpdateElement(element.id, {
                 properties: { ...props, borderColor: value },
@@ -1385,69 +1394,58 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                     )}
 
                     {/* Date format dropdown - show for date fields */}
-                    {segment.field &&
-                      [
-                        'releaseDate',
-                        'theatricalReleaseDate',
-                        'digitalReleaseDate',
-                        'physicalReleaseDate',
-                        'nextEpisodeAirDate',
-                        'nextSeasonAirDate',
-                        'lastPlayed',
-                        'dateAdded',
-                        'lastEpisodeAddedDate',
-                      ].includes(segment.field) && (
-                        <div className="mt-2">
-                          <label className="mb-1 block text-xs text-stone-400">
-                            {intl.formatMessage(messages.dateFormat)}
-                          </label>
-                          <select
-                            value={segment.format || 'MMM DD'}
-                            onChange={(e) =>
-                              handleUpdateSegment(index, {
-                                format: e.target.value,
-                              })
-                            }
-                            className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
-                          >
-                            <optgroup label="Short (No Year)">
-                              <option value="MMM DD">DEC 20</option>
-                              <option value="DD MMM">20 DEC</option>
-                            </optgroup>
-                            <optgroup label="Short (With Year)">
-                              <option value="MMM DD, YYYY">DEC 20, 2025</option>
-                              <option value="DD MMM YYYY">20 DEC 2025</option>
-                            </optgroup>
-                            <optgroup label="Full Month Name">
-                              <option value="MMMM DD, YYYY">
-                                December 20, 2025
-                              </option>
-                              <option value="DD MMMM YYYY">
-                                20 December 2025
-                              </option>
-                            </optgroup>
-                            <optgroup label="Numeric">
-                              <option value="YYYY-MM-DD">2025-12-20</option>
-                              <option value="YYYY/MM/DD">2025/12/20</option>
-                              <option value="MM/DD/YYYY">12/20/2025</option>
-                              <option value="DD/MM/YYYY">20/12/2025</option>
-                              <option value="DD-MM-YYYY">20-12-2025</option>
-                              <option value="DD/MM">20/12</option>
-                              <option value="D/M">5/12</option>
-                              <option value="MM/DD">12/20</option>
-                              <option value="M/D">12/5</option>
-                            </optgroup>
-                            <optgroup label="With Weekday">
-                              <option value="DDD DD/MM">MON 20/12</option>
-                              <option value="DDD D/M">MON 5/12</option>
-                              <option value="DDD MM/DD">MON 12/20</option>
-                              <option value="DDD M/D">MON 12/5</option>
-                              <option value="DDDD">MONDAY</option>
-                              <option value="DDD">MON</option>
-                            </optgroup>
-                          </select>
-                        </div>
-                      )}
+                    {isOverlayDateField(segment.field) && (
+                      <div className="mt-2">
+                        <label className="mb-1 block text-xs text-stone-400">
+                          {intl.formatMessage(messages.dateFormat)}
+                        </label>
+                        <select
+                          value={segment.format || 'MMM DD'}
+                          onChange={(e) =>
+                            handleUpdateSegment(index, {
+                              format: e.target.value,
+                            })
+                          }
+                          className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                        >
+                          <optgroup label="Short (No Year)">
+                            <option value="MMM DD">DEC 20</option>
+                            <option value="DD MMM">20 DEC</option>
+                          </optgroup>
+                          <optgroup label="Short (With Year)">
+                            <option value="MMM DD, YYYY">DEC 20, 2025</option>
+                            <option value="DD MMM YYYY">20 DEC 2025</option>
+                          </optgroup>
+                          <optgroup label="Full Month Name">
+                            <option value="MMMM DD, YYYY">
+                              December 20, 2025
+                            </option>
+                            <option value="DD MMMM YYYY">
+                              20 December 2025
+                            </option>
+                          </optgroup>
+                          <optgroup label="Numeric">
+                            <option value="YYYY-MM-DD">2025-12-20</option>
+                            <option value="YYYY/MM/DD">2025/12/20</option>
+                            <option value="MM/DD/YYYY">12/20/2025</option>
+                            <option value="DD/MM/YYYY">20/12/2025</option>
+                            <option value="DD-MM-YYYY">20-12-2025</option>
+                            <option value="DD/MM">20/12</option>
+                            <option value="D/M">5/12</option>
+                            <option value="MM/DD">12/20</option>
+                            <option value="M/D">12/5</option>
+                          </optgroup>
+                          <optgroup label="With Weekday">
+                            <option value="DDD DD/MM">MON 20/12</option>
+                            <option value="DDD D/M">MON 5/12</option>
+                            <option value="DDD MM/DD">MON 12/20</option>
+                            <option value="DDD M/D">MON 12/5</option>
+                            <option value="DDDD">MONDAY</option>
+                            <option value="DDD">MON</option>
+                          </optgroup>
+                        </select>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1674,13 +1672,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
 
         <div>
           <label className="mb-1 block text-xs text-stone-300">
-            {intl.formatMessage(messages.opacity)} ({props.opacity || 100}%)
+            {intl.formatMessage(messages.opacity)} ({props.opacity ?? 100}%)
           </label>
           <input
             type="range"
             min="0"
             max="100"
-            value={props.opacity || 100}
+            value={props.opacity ?? 100}
             onChange={(e) =>
               handleUpdateElement(element.id, {
                 properties: { ...props, opacity: parseInt(e.target.value) },
@@ -1733,13 +1731,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
 
         <div>
           <label className="mb-1 block text-xs text-stone-300">
-            {intl.formatMessage(messages.opacity)} ({props.opacity || 100}%)
+            {intl.formatMessage(messages.opacity)} ({props.opacity ?? 100}%)
           </label>
           <input
             type="range"
             min="0"
             max="100"
-            value={props.opacity || 100}
+            value={props.opacity ?? 100}
             onChange={(e) =>
               handleUpdateElement(element.id, {
                 properties: { ...props, opacity: parseInt(e.target.value) },
@@ -2224,38 +2222,42 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
               className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-stone-300">
-              {intl.formatMessage(messages.width)}
-            </label>
-            <input
-              type="number"
-              value={Math.round(element.width)}
-              onChange={(e) =>
-                handleUpdateElement(element.id, {
-                  width: parseInt(e.target.value) || 1,
-                })
-              }
-              min="1"
-              className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-stone-300">
-              {intl.formatMessage(messages.height)}
-            </label>
-            <input
-              type="number"
-              value={Math.round(element.height)}
-              onChange={(e) =>
-                handleUpdateElement(element.id, {
-                  height: parseInt(e.target.value) || 1,
-                })
-              }
-              min="1"
-              className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
-            />
-          </div>
+          {isResizable(element.type) && (
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-stone-300">
+                  {intl.formatMessage(messages.width)}
+                </label>
+                <input
+                  type="number"
+                  value={Math.round(element.width)}
+                  onChange={(e) =>
+                    handleUpdateElement(element.id, {
+                      width: parseInt(e.target.value) || 1,
+                    })
+                  }
+                  min="1"
+                  className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-stone-300">
+                  {intl.formatMessage(messages.height)}
+                </label>
+                <input
+                  type="number"
+                  value={Math.round(element.height)}
+                  onChange={(e) =>
+                    handleUpdateElement(element.id, {
+                      height: parseInt(e.target.value) || 1,
+                    })
+                  }
+                  min="1"
+                  className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
     );

@@ -2,7 +2,9 @@ import { fontLoader } from '@app/utils/fontLoader';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useEffect, useRef, useState } from 'react';
-import { Group, Rect, Shape } from 'react-konva';
+import { Group, Rect } from 'react-konva';
+import { SingleLineText } from './SingleLineText';
+import { normaliseSingleLine } from './singleLineText';
 import type { OverlayElement, OverlayTextElementProps } from './types';
 
 interface TextElementComponentProps {
@@ -44,38 +46,7 @@ export const TextElement: React.FC<TextElementComponentProps> = ({
   }, [props.fontFamily]);
 
   // Display text (overlays just have static text)
-  const displayText = (props.text || 'Sample Text')
-    .replace(/[\r\n]/g, '')
-    .replace(/[\t ]+/g, ' ')
-    .trim();
-
-  // Drawn like the server's SVG <text>: one line, text-anchor x, middle baseline at y=50%
-  const anchorX =
-    props.textAlign === 'center'
-      ? element.width / 2
-      : props.textAlign === 'right'
-      ? element.width
-      : 0;
-  const font = `${props.fontStyle === 'italic' ? 'italic ' : ''}${
-    props.fontWeight === 'bold' ? 'bold ' : ''
-  }${props.fontSize}px "${(props.fontFamily || '').replace(/['"]/g, '')}"`;
-
-  const [middleBaseline, setMiddleBaseline] = useState<number>();
-
-  useEffect(() => {
-    const family = (props.fontFamily || '').replace(/'/g, '');
-    let active = true;
-    const readMetrics = () => {
-      if (active) setMiddleBaseline(fontLoader.getMiddleBaseline(family));
-    };
-    readMetrics();
-    if (!fontLoader.isFontLoaded(family)) {
-      fontLoader.waitForFont(family, 30000).then(readMetrics);
-    }
-    return () => {
-      active = false;
-    };
-  }, [props.fontFamily]);
+  const displayText = normaliseSingleLine(props.text || 'Sample Text');
 
   const groupRef = useRef<Konva.Group | null>(null);
 
@@ -154,37 +125,18 @@ export const TextElement: React.FC<TextElementComponentProps> = ({
         listening={false}
       />
 
-      {/* Single line, centred and clipped to the box, as the server renders it */}
       {fontLoaded && (
-        <Group
-          clipX={0}
-          clipY={0}
-          clipWidth={element.width}
-          clipHeight={element.height}
-          listening={false}
-        >
-          <Shape
-            width={element.width}
-            height={element.height}
-            listening={false}
-            sceneFunc={(context) => {
-              context.setAttr('font', font);
-              context.setAttr('fillStyle', props.color);
-              context.setAttr('textAlign', props.textAlign || 'left');
-              if (middleBaseline === undefined) {
-                context.setAttr('textBaseline', 'middle');
-                context.fillText(displayText, anchorX, element.height / 2);
-              } else {
-                context.setAttr('textBaseline', 'alphabetic');
-                context.fillText(
-                  displayText,
-                  anchorX,
-                  element.height / 2 + middleBaseline * props.fontSize
-                );
-              }
-            }}
-          />
-        </Group>
+        <SingleLineText
+          text={displayText}
+          width={element.width}
+          height={element.height}
+          color={props.color}
+          textAlign={props.textAlign}
+          fontFamily={props.fontFamily}
+          fontSize={props.fontSize}
+          fontWeight={props.fontWeight}
+          fontStyle={props.fontStyle}
+        />
       )}
     </Group>
   );
