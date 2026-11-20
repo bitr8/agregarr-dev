@@ -4150,8 +4150,11 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       }
 
       // Calculate input hash for poster to check if regeneration needed
-      const { calculatePosterInputHash, posterTemplateReadsField } =
-        await import('@server/utils/metadataHashing');
+      const {
+        calculatePosterInputHash,
+        posterTemplateReadsField,
+        posterTemplateReadsCollectionType,
+      } = await import('@server/utils/metadataHashing');
       const posterInputHash = calculatePosterInputHash({
         templateId: config.autoPosterTemplate || null,
         templateData, // Include template content for change detection
@@ -4164,6 +4167,10 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         collectionSubtype: config.subtype,
         ...(posterTemplateReadsField(templateData, 'itemCount') && {
           itemCount: fullItemCount,
+        }),
+        ...(posterTemplateReadsCollectionType(templateData) && {
+          conditionCollectionType: config.type,
+          conditionCollectionSubtype: config.subtype,
         }),
       });
 

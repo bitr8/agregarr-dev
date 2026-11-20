@@ -773,8 +773,11 @@ export class HubSyncService {
               }
 
               // Calculate input hash based on what determines the poster content
-              const { calculatePosterInputHash, posterTemplateReadsField } =
-                await import('@server/utils/metadataHashing');
+              const {
+                calculatePosterInputHash,
+                posterTemplateReadsField,
+                posterTemplateReadsCollectionType,
+              } = await import('@server/utils/metadataHashing');
               posterInputHash = calculatePosterInputHash({
                 templateId: preExistingConfig.autoPosterTemplate || null,
                 templateData, // Include template content for change detection
@@ -799,6 +802,9 @@ export class HubSyncService {
                 collectionType: 'pre_existing',
                 ...(posterTemplateReadsField(templateData, 'itemCount') && {
                   itemCount: totalItemCount,
+                }),
+                ...(posterTemplateReadsCollectionType(templateData) && {
+                  conditionCollectionType: 'plex',
                 }),
               });
 

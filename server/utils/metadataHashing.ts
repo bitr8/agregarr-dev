@@ -213,6 +213,15 @@ export function posterTemplateReadsField(
   );
 }
 
+export function posterTemplateReadsCollectionType(
+  templateData: unknown
+): boolean {
+  return (
+    posterTemplateReadsField(templateData, 'collectionType') ||
+    posterTemplateReadsField(templateData, 'collectionSubtype')
+  );
+}
+
 /**
  * Calculate hash for auto-generated poster inputs
  * Includes item IDs so poster regenerates when collection contents change
@@ -229,6 +238,8 @@ export function calculatePosterInputHash(config: {
   additionalContext?: Record<string, unknown>;
   personImageUrl?: string;
   itemCount?: number;
+  conditionCollectionType?: string;
+  conditionCollectionSubtype?: string;
 }): string {
   return calculateInputHash({
     // Bump when render semantics change so affected posters regenerate once.
@@ -244,6 +255,12 @@ export function calculatePosterInputHash(config: {
     additionalContext: config.additionalContext,
     personImageUrl: config.personImageUrl,
     ...(config.itemCount !== undefined ? { itemCount: config.itemCount } : {}),
+    ...(config.conditionCollectionType !== undefined
+      ? { conditionCollectionType: config.conditionCollectionType }
+      : {}),
+    ...(config.conditionCollectionSubtype !== undefined
+      ? { conditionCollectionSubtype: config.conditionCollectionSubtype }
+      : {}),
   });
 }
 

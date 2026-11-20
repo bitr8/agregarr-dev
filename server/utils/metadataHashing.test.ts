@@ -4,6 +4,7 @@ import {
   calculateOverlayInputHash,
   calculatePosterInputHash,
   extractMappedIconFields,
+  posterTemplateReadsCollectionType,
   posterTemplateReadsField,
   templatesReadContextField,
 } from './metadataHashing';
@@ -482,5 +483,59 @@ describe('templatesReadContextField', () => {
       templatesReadContextField([mk(rule('imdbRating'))], 'collection')
     ).toBe(false);
     expect(templatesReadContextField([], 'collection')).toBe(false);
+  });
+});
+
+describe('poster condition collection type hashing', () => {
+  const tpl = (field: string) =>
+    JSON.stringify({
+      elements: [
+        {
+          id: 'a',
+          condition: {
+            sections: [{ rules: [{ field, operator: 'eq', value: 'x' }] }],
+          },
+        },
+      ],
+    });
+  const base = {
+    templateId: 1,
+    itemIds: ['a'],
+    collectionName: 'C',
+    collectionType: 'netflix',
+    collectionSubtype: 'netflix_top_10',
+  };
+
+  it('detects collection type and subtype rules only', () => {
+    expect(posterTemplateReadsCollectionType(tpl('collectionType'))).toBe(true);
+    expect(posterTemplateReadsCollectionType(tpl('collectionSubtype'))).toBe(
+      true
+    );
+    expect(posterTemplateReadsCollectionType(tpl('mediaType'))).toBe(false);
+    expect(posterTemplateReadsCollectionType(null)).toBe(false);
+  });
+
+  it('keeps the hash identical when no condition type is supplied', () => {
+    expect(
+      calculatePosterInputHash({
+        ...base,
+        conditionCollectionType: undefined,
+        conditionCollectionSubtype: undefined,
+      })
+    ).toBe(calculatePosterInputHash(base));
+  });
+
+  it('changes the hash when the condition type changes', () => {
+    expect(
+      calculatePosterInputHash({ ...base, conditionCollectionType: 'networks' })
+    ).not.toBe(calculatePosterInputHash(base));
+    expect(
+      calculatePosterInputHash({ ...base, conditionCollectionType: 'networks' })
+    ).not.toBe(
+      calculatePosterInputHash({
+        ...base,
+        conditionCollectionType: 'originals',
+      })
+    );
   });
 });
