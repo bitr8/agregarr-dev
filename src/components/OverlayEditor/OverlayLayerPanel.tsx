@@ -733,11 +733,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                   </label>
                   <div className="flex gap-2">
                     <ScaleBoundInput
+                      key={`${element.id}:min`}
                       label="Min"
                       value={scale.min}
                       onCommit={(min) => updateScale({ min })}
                     />
                     <ScaleBoundInput
+                      key={`${element.id}:max`}
                       label="Max"
                       value={scale.max}
                       onCommit={(max) => updateScale({ max })}

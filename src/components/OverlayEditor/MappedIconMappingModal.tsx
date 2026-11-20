@@ -156,7 +156,7 @@ const MappedIconMappingModal: React.FC<MappedIconMappingModalProps> = ({
       if (!response.ok) {
         throw new Error('Failed to save mappings');
       }
-      await mutate(overlayMappingsKey(fieldName));
+      void mutate(overlayMappingsKey(fieldName));
 
       // Call parent onSave to update the element
       onSave(validMappings);
@@ -187,7 +187,7 @@ const MappedIconMappingModal: React.FC<MappedIconMappingModalProps> = ({
         const data: MappingsResponse = await response.json();
         setLocalMappings(data.mappings);
         setIsUsingDefaults(true);
-        await mutate(overlayMappingsKey(fieldName));
+        void mutate(overlayMappingsKey(fieldName));
       }
     } catch (error) {
       addToast(intl.formatMessage(messages.failedToLoad), {
