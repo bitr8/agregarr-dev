@@ -205,10 +205,10 @@ interface PreviewPosterMetadata {
   director?: string;
   studio?: string;
   network?: string;
-  resolution: string;
-  audioFormat: string;
+  resolution?: string;
+  audioFormat?: string;
   audioProfile?: string;
-  videoCodec: string;
+  videoCodec?: string;
   edition?: string;
   status: string;
   daysUntilRelease?: number;
@@ -393,16 +393,11 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         rtAudienceScore,
         director,
         studio,
-        resolution: '4K', // Simulated technical info
-        audioFormat: 'Dolby Atmos',
-        audioProfile: 'truehd_atmos',
-        videoCodec: 'HEVC',
         edition: 'Extended Cut',
         status: 'Available',
         releaseDate: movieDetails.release_date,
         ...previewMovieReleaseStates(movieDetails.release_dates?.results),
         runtime: movieDetails.runtime,
-        daysUntilAction: 5, // Simulated Maintainerr data for preview
       };
     } else {
       // TV show
@@ -457,16 +452,11 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         rtCriticsScore,
         rtAudienceScore,
         network,
-        resolution: '1080p', // Simulated technical info
-        audioFormat: '5.1',
-        audioProfile: 'plus',
-        videoCodec: 'H.264',
         status:
           tvDetails.status === 'Ended' || tvDetails.status === 'Canceled'
             ? 'Ended'
             : 'Continuing',
         releaseDate: tvDetails.first_air_date,
-        daysUntilAction: 3, // Simulated Maintainerr data for preview
       };
     }
 
