@@ -1058,7 +1058,7 @@ class OverlayTemplateRendererService {
         inner.radii
       )}" fill="none" stroke="${
         props.borderColor || DEFAULT_TILE_BORDER_COLOR
-      }" stroke-width="${borderWidth}" />`;
+      }" stroke-width="${inner.strokeWidth}" />`;
     }
 
     const svg = `

@@ -226,4 +226,18 @@ describe('tile border', () => {
     const buffer = await render(bordered({ borderColor: undefined }), 20);
     expect(await pixel(buffer, 1, 10)).toEqual([255, 255, 255, 255]);
   });
+
+  it('keeps a border wider than the tile inside the tile', async () => {
+    const tile = {
+      ...bordered({ borderWidth: 30 }),
+      x: 20,
+      y: 20,
+      width: 10,
+      height: 10,
+    };
+    const buffer = await render(tile, 50);
+    const meta = await sharp(buffer).metadata();
+    expect([meta.width, meta.height]).toEqual([10, 10]);
+    expect(await pixel(buffer, 5, 5)).toEqual([0, 0, 255, 255]);
+  });
 });

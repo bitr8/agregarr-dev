@@ -320,3 +320,84 @@ describe('overlay input hashing', () => {
     expect(first).not.toBe(differentQuality);
   });
 });
+
+describe('render effects in the overlay input hash', () => {
+  const tpl = (
+    iconProps: object = {},
+    tileProps: object = {}
+  ): OverlayTemplateData => ({
+    width: 1000,
+    height: 1500,
+    elements: [
+      {
+        id: 's',
+        layerOrder: 0,
+        type: 'svg',
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 20,
+        properties: {
+          iconType: 'custom-icon',
+          iconPath: '/a.svg',
+          opacity: 100,
+          grayscale: false,
+          ...iconProps,
+        },
+      },
+      {
+        id: 't',
+        layerOrder: 1,
+        type: 'tile',
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 20,
+        properties: {
+          fillColor: '#000',
+          fillOpacity: 100,
+          borderWidth: 0,
+          ...tileProps,
+        },
+      },
+    ],
+  });
+  const hashOf = (t: OverlayTemplateData) =>
+    calculateOverlayInputHash({
+      templateIds: [1],
+      templateData: [t],
+      usedFields: new Set(['title']),
+      context: { title: 'x' },
+    });
+
+  it('keeps the hash of a template using only defaults', () => {
+    expect(hashOf(tpl())).toBe(
+      '8c9236d4093793958c27b7edfdc9d4656360292f2c9994fb7aeb03c806f18b31'
+    );
+  });
+
+  it('moves the hash off its previous value for templates using effects', () => {
+    const developHashes = [
+      '112b491a18ef253d352934b316407284f78de5680ff7693effeaa61259137381',
+      'f4400079cf425a3cfcfb9653672a082acf2557db09a668a25628cc62184184fc',
+      'f87eac10a9ecd1a292d9611521a7175c1b712be946e173d02164299b01e3e31f',
+      'c2d7d5859e01e26bac084827c0a023c6e1706e35ca31783190b10c55443026b5',
+    ];
+    const flat = {
+      colorScale: {
+        field: 'imdbRating',
+        min: 5,
+        max: 5,
+        fromColor: '#000000',
+        toColor: '#ffffff',
+      },
+    };
+    const now = [
+      hashOf(tpl({ opacity: 50 })),
+      hashOf(tpl({ grayscale: true })),
+      hashOf(tpl({}, { borderWidth: 4 })),
+      hashOf(tpl({}, flat)),
+    ];
+    now.forEach((hash, i) => expect(hash).not.toBe(developHashes[i]));
+  });
+});

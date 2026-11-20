@@ -239,6 +239,36 @@ export function calculateThemeInputHash(filename: string): string {
  *   fields matching mapped-icon elements use; omit when there are none so
  *   callers with no mapped-icon templates hash identically to before)
  */
+const RENDER_EFFECTS_VERSION = 1;
+
+export function usesRenderEffects(templates: OverlayTemplateData[]): boolean {
+  const faded = (opacity: number | undefined) =>
+    opacity !== undefined && opacity < 100;
+  return templates.some((t) =>
+    t.elements.some((el) => {
+      const p = el.properties as unknown as Record<string, unknown>;
+      switch (el.type) {
+        case 'svg':
+        case 'mapped-icon':
+          return faded(p.opacity as number | undefined) || !!p.grayscale;
+        case 'raster':
+          return faded(p.opacity as number | undefined);
+        case 'tile': {
+          const scale = p.colorScale as
+            | { min: number; max: number }
+            | undefined;
+          return (
+            Number(p.borderWidth ?? 0) > 0 ||
+            (!!scale && !(scale.max > scale.min))
+          );
+        }
+        default:
+          return false;
+      }
+    })
+  );
+}
+
 export function calculateOverlayInputHash(config: {
   templateIds: number[];
   templateData: OverlayTemplateData[];
@@ -261,6 +291,9 @@ export function calculateOverlayInputHash(config: {
 
   if (config.renderOptions) {
     input.renderOptions = config.renderOptions;
+  }
+  if (usesRenderEffects(config.templateData)) {
+    input.renderEffectsVersion = RENDER_EFFECTS_VERSION;
   }
   if (config.mappedIconMappings) {
     const sorted: Record<string, IconMapping[]> = {};
