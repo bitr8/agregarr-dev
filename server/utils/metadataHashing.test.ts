@@ -2,7 +2,9 @@ import type { OverlayTemplateData } from '@server/entity/OverlayTemplate';
 import { describe, expect, it } from 'vitest';
 import {
   calculateOverlayInputHash,
+  calculatePosterInputHash,
   extractMappedIconFields,
+  posterTemplateReadsField,
 } from './metadataHashing';
 
 const baseConfig = {
@@ -399,5 +401,33 @@ describe('render effects in the overlay input hash', () => {
       hashOf(tpl({}, flat)),
     ];
     now.forEach((hash, i) => expect(hash).not.toBe(developHashes[i]));
+  });
+});
+
+describe('poster item count hashing', () => {
+  const rule = (field: string) => ({
+    sections: [{ rules: [{ field, operator: 'gte', value: 10 }] }],
+  });
+  const tpl = (field: string) =>
+    JSON.stringify({ elements: [{ id: 'a', condition: rule(field) }] });
+  const base = { templateId: 1, itemIds: ['a'], collectionName: 'C' };
+
+  it('detects itemCount rules in templateData JSON', () => {
+    expect(posterTemplateReadsField(tpl('itemCount'), 'itemCount')).toBe(true);
+    expect(posterTemplateReadsField(tpl('mediaType'), 'itemCount')).toBe(false);
+    expect(posterTemplateReadsField('not json', 'itemCount')).toBe(false);
+    expect(posterTemplateReadsField(null, 'itemCount')).toBe(false);
+  });
+
+  it('leaves the hash unchanged when no count is supplied', () => {
+    expect(calculatePosterInputHash({ ...base, itemCount: undefined })).toBe(
+      calculatePosterInputHash(base)
+    );
+  });
+
+  it('changes the hash when the supplied count changes', () => {
+    expect(calculatePosterInputHash({ ...base, itemCount: 9 })).not.toBe(
+      calculatePosterInputHash({ ...base, itemCount: 10 })
+    );
   });
 });

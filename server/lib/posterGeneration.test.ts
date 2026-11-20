@@ -1,5 +1,6 @@
 import { loadIconFile } from '@server/lib/iconManager';
 import {
+  buildPosterConditionContext,
   embedSVGIconInSVG,
   generatePosterBuffer,
   renderSeasonBadge,
@@ -164,5 +165,55 @@ describe('embedSVGIconInSVG', () => {
     // Circle area at this scale is ~167k px; a stretched or clipped icon misses the band.
     expect(red).toBeGreaterThan(150_000);
     expect(red).toBeLessThan(185_000);
+  });
+});
+
+describe('poster condition context', () => {
+  const item = { title: 'A', type: 'movie' as const };
+
+  it('uses the full collection count, not the sliced grid items', () => {
+    const ctx = buildPosterConditionContext({
+      collectionName: 'C',
+      items: [item, item, item, item],
+      itemCount: 37,
+    });
+    expect(ctx.itemCount).toBe(37);
+  });
+
+  it('falls back to the items length when no count is given', () => {
+    const ctx = buildPosterConditionContext({
+      collectionName: 'C',
+      items: [item, item],
+    });
+    expect(ctx.itemCount).toBe(2);
+  });
+
+  it('keeps branding type separate from the condition type', () => {
+    const ctx = buildPosterConditionContext({
+      collectionName: 'C',
+      collectionType: 'netflix',
+      collectionSubtype: 'netflix_top_10',
+      conditionCollectionType: 'networks',
+      conditionCollectionSubtype: 'netflix_top_10',
+    });
+    expect(ctx.collectionType).toBe('networks');
+    expect(ctx.collectionSubtype).toBe('netflix_top_10');
+  });
+
+  it('passes itemCount and condition type through generatePosterBuffer', async () => {
+    vi.mocked(applyTemplate).mockClear();
+    await generatePosterBuffer({
+      collectionName: 'C',
+      autoPosterTemplate: 5,
+      itemCount: 12,
+      conditionCollectionType: 'plex',
+    });
+    expect(applyTemplate).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({
+        itemCount: 12,
+        conditionCollectionType: 'plex',
+      })
+    );
   });
 });

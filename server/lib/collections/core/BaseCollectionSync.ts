@@ -4148,9 +4148,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       }
 
       // Calculate input hash for poster to check if regeneration needed
-      const { calculatePosterInputHash } = await import(
-        '@server/utils/metadataHashing'
-      );
+      const { calculatePosterInputHash, posterTemplateReadsField } =
+        await import('@server/utils/metadataHashing');
       const posterInputHash = calculatePosterInputHash({
         templateId: config.autoPosterTemplate || null,
         templateData, // Include template content for change detection
@@ -4161,6 +4160,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         mediaType,
         collectionType: options?.collectionTypeOverride || config.type,
         collectionSubtype: config.subtype,
+        ...(posterTemplateReadsField(templateData, 'itemCount') && {
+          itemCount: items?.length ?? 0,
+        }),
       });
 
       // Check if regeneration needed using metadata tracking
@@ -4226,6 +4228,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           items: posterItems,
           autoPosterTemplate: config.autoPosterTemplate,
           libraryId: config.libraryId,
+          itemCount: items?.length ?? 0,
+          conditionCollectionType: config.type,
+          conditionCollectionSubtype: config.subtype,
           ...(options?.dynamicLogo && { dynamicLogo: options.dynamicLogo }),
           ...(options?.personImageUrl && {
             personImageUrl: options.personImageUrl,

@@ -177,6 +177,28 @@ function sortMappings(mappings: IconMapping[]): IconMapping[] {
   );
 }
 
+export function posterTemplateReadsField(
+  templateData: unknown,
+  field: string
+): boolean {
+  let data: unknown = templateData;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return false;
+    }
+  }
+  const elements = (data as { elements?: unknown } | null)?.elements;
+  if (!Array.isArray(elements)) return false;
+  return elements.some((el) =>
+    (
+      (el as { condition?: { sections?: { rules?: { field?: string }[] }[] } })
+        ?.condition?.sections ?? []
+    ).some((section) => (section.rules ?? []).some((r) => r.field === field))
+  );
+}
+
 /**
  * Calculate hash for auto-generated poster inputs
  * Includes item IDs so poster regenerates when collection contents change
@@ -192,6 +214,7 @@ export function calculatePosterInputHash(config: {
   collectionSubtype?: string;
   additionalContext?: Record<string, unknown>;
   personImageUrl?: string;
+  itemCount?: number;
 }): string {
   return calculateInputHash({
     // Bump when render semantics change so affected posters regenerate once.
@@ -206,6 +229,7 @@ export function calculatePosterInputHash(config: {
     collectionSubtype: config.collectionSubtype,
     additionalContext: config.additionalContext,
     personImageUrl: config.personImageUrl,
+    ...(config.itemCount !== undefined ? { itemCount: config.itemCount } : {}),
   });
 }
 

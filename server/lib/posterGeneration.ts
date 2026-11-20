@@ -99,6 +99,9 @@ export interface PosterGenerationConfig {
   dynamicLogo?: string; // Path to dynamic logo file
   personImageUrl?: string; // Dynamic person image (e.g., director portrait)
   libraryId?: string; // Library ID for per-library TMDB language setting
+  itemCount?: number; // Full collection size for conditions (items may be a slice)
+  conditionCollectionType?: string; // Collection Type seen by conditions (branding uses collectionType)
+  conditionCollectionSubtype?: string;
 }
 
 export interface CollectionItemWithPoster {
@@ -1824,6 +1827,19 @@ async function generateContentGridElement(
 /**
  * Generate SVG poster content with new unified layering system or legacy layout
  */
+export function buildPosterConditionContext(
+  config: PosterGenerationConfig
+): Record<string, unknown> {
+  return {
+    collectionName: config.collectionName,
+    collectionType: config.conditionCollectionType ?? config.collectionType,
+    collectionSubtype:
+      config.conditionCollectionSubtype ?? config.collectionSubtype,
+    mediaType: config.mediaType,
+    itemCount: config.itemCount ?? config.items?.length ?? 0,
+  };
+}
+
 export async function generatePosterSVG(
   config: PosterGenerationConfig
 ): Promise<string> {
@@ -1935,13 +1951,7 @@ export async function generatePosterSVG(
     itemsWithPosters,
     personImageBase64,
     config.personImageUrl,
-    {
-      collectionName,
-      collectionType,
-      collectionSubtype: config.collectionSubtype,
-      mediaType: config.mediaType,
-      itemCount: items.length,
-    }
+    buildPosterConditionContext(config)
   );
 
   return `
@@ -2023,6 +2033,9 @@ export async function generatePosterBuffer(
           items: config.items || [],
           dynamicLogo: config.dynamicLogo,
           personImageUrl: config.personImageUrl,
+          itemCount: config.itemCount,
+          conditionCollectionType: config.conditionCollectionType,
+          conditionCollectionSubtype: config.conditionCollectionSubtype,
         });
 
         logger.info('Poster generated successfully using template', {
