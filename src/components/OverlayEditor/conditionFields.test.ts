@@ -17,7 +17,9 @@ describe('condition field kinds', () => {
   });
 
   it('no field is both numeric and yes/no', () => {
-    for (const f of NUMERIC_FIELDS) expect(BOOLEAN_FIELDS.has(f)).toBe(false);
+    Array.from(NUMERIC_FIELDS).forEach((f) =>
+      expect(BOOLEAN_FIELDS.has(f)).toBe(false)
+    );
   });
 
   it('does not offer the Date fields', () => {
