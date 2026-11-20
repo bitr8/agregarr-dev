@@ -6,9 +6,11 @@ import {
   ArrowUpIcon,
   CodeBracketSquareIcon,
   DocumentTextIcon,
+  FunnelIcon,
   LanguageIcon,
   LockClosedIcon,
   LockOpenIcon,
+  PencilIcon,
   PhotoIcon,
   PlusIcon,
   Square3Stack3DIcon,
@@ -24,6 +26,8 @@ import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 import CollectionRankPicker from './CollectionRankPicker';
 import { colorScaleFieldOptions } from './colorScaleInputs';
+import ConditionDisplay from './ConditionDisplay';
+import ConditionEditorModal from './ConditionEditorModal';
 import { isResizable } from './elementTransform';
 import MappedIconMappingModal from './MappedIconMappingModal';
 import { ScaleBoundInput } from './ScaleBoundInput';
@@ -115,6 +119,17 @@ const messages = defineMessages({
   undo: 'Undo',
   redo: 'Redo',
   snapToGuides: 'Snap to Guides',
+  // Element condition
+  showConditionally: 'Show conditionally',
+  editConditions: 'Edit Conditions',
+  elementConditionTitle: 'Edit Element Conditions',
+  elementConditionDescription:
+    'Define when this element should be drawn. The element is skipped when its conditions are not met.',
+  elementConditionEnabled: 'Only show when:',
+  elementConditionDisabled: 'Always show (no condition)',
+  conditionalElement: 'Shown conditionally',
+  oneUnconditionalVariable:
+    'Only one unconditional variable element allowed per overlay',
   // Application condition
   applicationCondition: 'Application Condition',
   enableCondition: 'Only apply when:',
@@ -178,6 +193,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
+  const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
 
   const { data: fontsData } = useSWR<{ fonts: FontInfo[]; count: number }>(
     '/api/v1/fonts'
@@ -407,6 +423,30 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
   };
 
   const selectedElement = elements.find((el) => el.id === selectedElementId);
+
+  const wouldDuplicateUnconditionalVariable = (
+    element: OverlayElement,
+    condition: OverlayElement['condition']
+  ) =>
+    element.type === 'variable' &&
+    !condition &&
+    elements.some(
+      (el) => el.id !== element.id && el.type === 'variable' && !el.condition
+    );
+
+  const handleSetElementCondition = (
+    element: OverlayElement,
+    condition: OverlayElement['condition']
+  ) => {
+    if (wouldDuplicateUnconditionalVariable(element, condition)) {
+      addToast(intl.formatMessage(messages.oneUnconditionalVariable), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+      return;
+    }
+    handleUpdateElement(element.id, { condition });
+  };
 
   const getElementIcon = (type: OverlayElement['type']) => {
     switch (type) {
@@ -2288,6 +2328,22 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
       <>
         {renderPositionAndSizeProperties(selectedElement)}
         {typeSpecificProperties()}
+        <div className="mt-4 border-t border-stone-700 pt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <label className="block text-xs font-medium text-stone-300">
+              {intl.formatMessage(messages.showConditionally)}
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsConditionModalOpen(true)}
+              className="flex items-center space-x-1 rounded px-2 py-1 text-xs text-orange-400 hover:bg-stone-700 hover:text-orange-300"
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+              <span>{intl.formatMessage(messages.editConditions)}</span>
+            </button>
+          </div>
+          <ConditionDisplay condition={selectedElement.condition} />
+        </div>
       </>
     );
   };
@@ -2322,7 +2378,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             className="flex flex-col items-center rounded-lg bg-stone-700 p-2 text-xs text-stone-200 transition-colors hover:bg-stone-600 disabled:cursor-not-allowed disabled:opacity-50"
             title={
               elements.some((el) => el.type === 'variable' && !el.condition)
-                ? 'Only one unconditional variable element allowed per overlay'
+                ? intl.formatMessage(messages.oneUnconditionalVariable)
                 : undefined
             }
           >
@@ -2375,6 +2431,12 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             <div className="flex items-center justify-between">
               <span className="truncate text-sm">
                 {getElementIcon(element.type)} {getElementLabel(element)}
+                {element.condition && (
+                  <FunnelIcon
+                    className="ml-1 inline h-3 w-3 align-baseline"
+                    title={intl.formatMessage(messages.conditionalElement)}
+                  />
+                )}
               </span>
               <div className="flex shrink-0 space-x-1">
                 <button
@@ -2419,6 +2481,21 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
         </h4>
         {renderPropertiesPanel()}
       </div>
+
+      {isConditionModalOpen && selectedElement && (
+        <ConditionEditorModal
+          isOpen={isConditionModalOpen}
+          onClose={() => setIsConditionModalOpen(false)}
+          initialCondition={selectedElement.condition}
+          onSave={(condition) =>
+            handleSetElementCondition(selectedElement, condition)
+          }
+          title={intl.formatMessage(messages.elementConditionTitle)}
+          description={intl.formatMessage(messages.elementConditionDescription)}
+          enableLabel={intl.formatMessage(messages.elementConditionEnabled)}
+          disabledLabel={intl.formatMessage(messages.elementConditionDisabled)}
+        />
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@ import {
   SnapLines,
   useSnapToGuides,
 } from '@app/components/PosterEditor/useSnapToGuides';
+import { evaluateCondition } from '@server/lib/overlays/conditionEvaluator';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Box } from 'konva/lib/shapes/Transformer';
@@ -15,6 +16,7 @@ import {
   useState,
 } from 'react';
 import {
+  Group,
   Image as KonvaImage,
   Layer,
   Rect,
@@ -34,6 +36,8 @@ import type {
 } from './types';
 import { VariableElement } from './VariableElement';
 
+const UNMATCHED_SELECTED_OPACITY = 0.35;
+
 export interface OverlayCanvasRef {
   exportAsImage: () => Promise<string>;
 }
@@ -42,6 +46,7 @@ interface OverlayCanvasProps {
   overlayData: OverlayTemplateData;
   onChange: (data: OverlayTemplateData) => void;
   renderContext?: OverlayRenderContext;
+  conditionContext?: object;
   snapToGuides?: boolean;
   selectedElementId?: string;
   onElementSelect?: (elementId: string | undefined) => void;
@@ -84,6 +89,7 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
       overlayData,
       onChange,
       renderContext,
+      conditionContext,
       snapToGuides = false,
       selectedElementId,
       onElementSelect,
@@ -383,7 +389,21 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
               })}
 
               {/* Elements sorted by layer order */}
-              {sortedElements.map(renderElement)}
+              {sortedElements.map((element) => {
+                const matches =
+                  !element.condition ||
+                  !conditionContext ||
+                  evaluateCondition(element.condition, conditionContext);
+                if (!matches && element.id !== selectedElementId) return null;
+                return (
+                  <Group
+                    key={element.id}
+                    opacity={matches ? 1 : UNMATCHED_SELECTED_OPACITY}
+                  >
+                    {renderElement(element)}
+                  </Group>
+                );
+              })}
 
               {/* Snap-to-guide lines */}
               <SnapLines

@@ -15,6 +15,7 @@ import {
   setOverlayTargetTags,
   type OverlayArtworkTarget,
 } from '@server/lib/overlays/overlayTargets';
+import { createSampleOverlayContext } from '@server/lib/overlays/sampleOverlayContext';
 import type React from 'react';
 import {
   Fragment,
@@ -249,6 +250,26 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
     isOpen && currentPoster
       ? `/api/v1/overlay-templates/preview-metadata/${currentPoster.id}`
       : null
+  );
+
+  const conditionContext = useMemo(
+    () =>
+      createSampleOverlayContext(
+        currentPoster?.type === 'tv' ? 'show' : 'movie',
+        metadataResponse && {
+          title: metadataResponse.title,
+          year: metadataResponse.year,
+          imdbRating: metadataResponse.imdbRating,
+          tmdbRating: metadataResponse.tmdbRating,
+          tmdbVoteCount: metadataResponse.tmdbVoteCount,
+          rtCriticsScore: metadataResponse.rtCriticsScore,
+          rtAudienceScore: metadataResponse.rtAudienceScore,
+          studio: metadataResponse.studio,
+          streamingProvider: metadataResponse.streamingProvider,
+          streamingProviderId: metadataResponse.streamingProviderId,
+        }
+      ),
+    [currentPoster?.type, metadataResponse]
   );
 
   // Fetch available overlay templates for preview selection
@@ -807,6 +828,7 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                         onElementSelect={setSelectedElementId}
                         backgroundImageUrl={posterUrl}
                         renderContext={previewContext}
+                        conditionContext={conditionContext}
                         snapToGuides={snapToGuides}
                         previewOverlays={selectedPreviewOverlays}
                       />
