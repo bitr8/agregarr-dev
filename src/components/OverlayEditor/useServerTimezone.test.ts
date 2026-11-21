@@ -10,5 +10,6 @@ describe('resolveServerTimezone', () => {
     expect(resolveServerTimezone(undefined)).toBe('UTC');
     expect(resolveServerTimezone('')).toBe('UTC');
     expect(resolveServerTimezone('Not/AZone')).toBe('UTC');
+    expect(resolveServerTimezone('AEST-10')).toBe('UTC');
   });
 });

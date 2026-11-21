@@ -1,4 +1,4 @@
-import type { StatusResponse } from '@server/interfaces/api/settingsInterfaces';
+import type { TimezoneResponse } from '@server/interfaces/api/settingsInterfaces';
 import useSWR from 'swr';
 
 export const resolveServerTimezone = (tz?: string): string => {
@@ -12,6 +12,6 @@ export const resolveServerTimezone = (tz?: string): string => {
 };
 
 export const useServerTimezone = (): string => {
-  const { data } = useSWR<StatusResponse>('/api/v1/status');
+  const { data } = useSWR<TimezoneResponse>('/api/v1/status/timezone');
   return resolveServerTimezone(data?.tz);
 };

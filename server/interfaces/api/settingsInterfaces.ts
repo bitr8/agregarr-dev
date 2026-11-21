@@ -59,5 +59,8 @@ export interface StatusResponse {
   updateAvailable: boolean;
   commitsBehind: number;
   restartRequired: boolean;
+}
+
+export interface TimezoneResponse {
   tz: string;
 }

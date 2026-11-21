@@ -6829,9 +6829,22 @@ paths:
                     type: number
                   restartRequired:
                     type: boolean
+  /status/timezone:
+    get:
+      summary: Get the server timezone
+      description: Returns the server timezone for any authenticated user.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Server timezone
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
                   tz:
                     type: string
-                    description: Server timezone (IANA name)
                     example: Australia/Sydney
   /status/appdata:
     get:

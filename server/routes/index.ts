@@ -104,7 +104,6 @@ router.get('/status', async (_req, res) => {
     updateAvailable,
     commitsBehind,
     restartRequired: restartFlag.isSet(),
-    tz: process.env.TZ || 'UTC',
   });
 });
 
@@ -113,6 +112,10 @@ router.get('/status/appdata', (_req, res) => {
     appData: appDataStatus(),
     appDataPath: appDataPath(),
   });
+});
+
+router.get('/status/timezone', isAuthenticated(), (_req, res) => {
+  return res.status(200).json({ tz: process.env.TZ || 'UTC' });
 });
 
 router.get('/status/health', isAuthenticated(), (_req, res) => {
