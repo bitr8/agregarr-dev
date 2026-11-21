@@ -1311,7 +1311,10 @@ class OverlayLibraryService {
                   };
 
                   // Check for season premiere
-                  if (nextEpisode.episode_number === 1) {
+                  if (
+                    nextEpisode.episode_number === 1 &&
+                    nextEpisode.season_number > 0
+                  ) {
                     releaseDateInfo.nextSeasonAirDate = nextEpisode.air_date;
                   }
 
