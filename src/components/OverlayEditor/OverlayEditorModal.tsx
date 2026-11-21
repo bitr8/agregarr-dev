@@ -867,6 +867,7 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                         onChange={addToHistory}
                         selectedElementId={selectedElementId}
                         onElementSelect={setSelectedElementId}
+                        renderContext={previewContext}
                       />
                     </div>
                   </div>

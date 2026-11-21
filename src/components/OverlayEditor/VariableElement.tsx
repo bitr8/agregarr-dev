@@ -1,5 +1,4 @@
 import { fontLoader } from '@app/utils/fontLoader';
-import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useEffect, useRef, useState } from 'react';
@@ -11,7 +10,7 @@ import type {
   OverlayRenderContext,
   OverlayVariableElementProps,
 } from './types';
-import { AVAILABLE_VARIABLES, isCollectionRankField } from './types';
+import { buildVariableDisplayText } from './variableDisplayText';
 
 interface VariableElementComponentProps {
   element: OverlayElement;
@@ -54,195 +53,9 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
     }
   }, [props.fontFamily]);
 
-  // Format date based on format string
-  const formatDate = (date: Date | string, format: string): string => {
-    let dateObj: Date;
-    if (typeof date === 'string' && date.includes('T')) {
-      // Full ISO datetime (e.g. Sonarr "2026-06-28T23:00:00Z"):
-      // convert to browser's local calendar date so 23:00 UTC becomes
-      // the next day in UTC+1 timezones
-      const local = new Date(date);
-      dateObj = new Date(
-        Date.UTC(local.getFullYear(), local.getMonth(), local.getDate(), 12)
-      );
-    } else {
-      // Date-only (e.g. TMDB "2026-07-04") or Date object:
-      // noon UTC trick so timezone never shifts the calendar day
-      const dateOnly =
-        typeof date === 'string' ? date : date.toISOString().split('T')[0];
-      dateObj = new Date(dateOnly + 'T12:00:00.000Z');
-    }
-
-    const monthNames = [
-      'JAN',
-      'FEB',
-      'MAR',
-      'APR',
-      'MAY',
-      'JUN',
-      'JUL',
-      'AUG',
-      'SEP',
-      'OCT',
-      'NOV',
-      'DEC',
-    ];
-    const monthNamesFull = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    const dayNamesFull = [
-      'SUNDAY',
-      'MONDAY',
-      'TUESDAY',
-      'WEDNESDAY',
-      'THURSDAY',
-      'FRIDAY',
-      'SATURDAY',
-    ];
-
-    const year = dateObj.getUTCFullYear();
-    const month = dateObj.getUTCMonth() + 1;
-    const day = dateObj.getUTCDate();
-    const monthName = monthNames[dateObj.getUTCMonth()];
-    const monthNameFull = monthNamesFull[dateObj.getUTCMonth()];
-    const dayName = dayNames[dateObj.getUTCDay()];
-    const dayNameFull = dayNamesFull[dateObj.getUTCDay()];
-
-    const pad = (n: number) => String(n).padStart(2, '0');
-
-    switch (format) {
-      case 'YYYY-MM-DD':
-        return `${year}-${pad(month)}-${pad(day)}`;
-      case 'YYYY/MM/DD':
-        return `${year}/${pad(month)}/${pad(day)}`;
-      case 'DD-MM-YYYY':
-        return `${pad(day)}-${pad(month)}-${year}`;
-      case 'DD/MM/YYYY':
-        return `${pad(day)}/${pad(month)}/${year}`;
-      case 'MM/DD/YYYY':
-        return `${pad(month)}/${pad(day)}/${year}`;
-      case 'DD/MM':
-        return `${pad(day)}/${pad(month)}`;
-      case 'D/M':
-        return `${day}/${month}`;
-      case 'MM/DD':
-        return `${pad(month)}/${pad(day)}`;
-      case 'M/D':
-        return `${month}/${day}`;
-      case 'DDD DD/MM':
-        return `${dayName} ${pad(day)}/${pad(month)}`;
-      case 'DDD D/M':
-        return `${dayName} ${day}/${month}`;
-      case 'DDD MM/DD':
-        return `${dayName} ${pad(month)}/${pad(day)}`;
-      case 'DDD M/D':
-        return `${dayName} ${month}/${day}`;
-      case 'DDDD':
-        return dayNameFull;
-      case 'DDD':
-        return dayName;
-      case 'MMM DD':
-        return `${monthName} ${pad(day)}`;
-      case 'DD MMM':
-        return `${pad(day)} ${monthName}`;
-      case 'MMM DD, YYYY':
-        return `${monthName} ${pad(day)}, ${year}`;
-      case 'DD MMM YYYY':
-        return `${pad(day)} ${monthName} ${year}`;
-      case 'MMMM DD, YYYY':
-        return `${monthNameFull} ${pad(day)}, ${year}`;
-      case 'DD MMMM YYYY':
-        return `${pad(day)} ${monthNameFull} ${year}`;
-      default:
-        return `${monthName} ${pad(day)}`;
-    }
-  };
-
-  // Build display text from segments
-  const getDisplayText = (): string => {
-    let text = '';
-
-    // Build array of all available variables for lookup
-    const allVars = Object.values(AVAILABLE_VARIABLES).flat();
-
-    for (const segment of props.segments) {
-      if (segment.type === 'text') {
-        // Static text segment - use value as-is
-        text += segment.value || '';
-      } else if (segment.type === 'variable' && segment.field) {
-        // Variable segment - look up value in context
-        if (renderContext) {
-          const value = renderContext[segment.field];
-          if (value !== undefined && value !== null) {
-            // Check if this is a date field with custom format
-            const isDateField = isOverlayDateField(segment.field);
-            if (
-              isDateField &&
-              (typeof value === 'string' || value instanceof Date)
-            ) {
-              // Use specified format or default to 'MMM DD'
-              text += formatDate(value, segment.format || 'MMM DD');
-            } else if (typeof value === 'number') {
-              // Format numbers appropriately
-              if (
-                segment.field === 'imdbRating' ||
-                segment.field === 'tmdbRating'
-              ) {
-                // IMDb/TMDB ratings use a 0-10 decimal scale (e.g., 8.7)
-                text += value.toFixed(1);
-              } else if (
-                segment.field.includes('Score') ||
-                segment.field.includes('Rating')
-              ) {
-                // RT scores are percentages - no decimal needed (e.g., 89)
-                text += Math.round(value).toString();
-              } else {
-                text += value.toString();
-              }
-            } else {
-              text += String(value);
-            }
-          } else {
-            // Fallback to example value if available
-            const varInfo = allVars.find(
-              (v) =>
-                v.field ===
-                (isCollectionRankField(segment.field)
-                  ? 'collectionRank'
-                  : segment.field)
-            );
-            text += varInfo?.example || `{${segment.field}}`;
-          }
-        } else {
-          // No context - show example value instead of raw variable
-          const varInfo = allVars.find(
-            (v) =>
-              v.field ===
-              (isCollectionRankField(segment.field)
-                ? 'collectionRank'
-                : segment.field)
-          );
-          text += varInfo?.example || `{${segment.field}}`;
-        }
-      }
-    }
-
-    return text;
-  };
-
-  const displayText = normaliseSingleLine(getDisplayText());
+  const displayText = normaliseSingleLine(
+    buildVariableDisplayText(props, renderContext)
+  );
 
   return (
     <Group

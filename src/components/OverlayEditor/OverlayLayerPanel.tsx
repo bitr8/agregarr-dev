@@ -38,6 +38,7 @@ import type {
   OverlayElement,
   OverlayMappedIconElementProps,
   OverlayRasterElementProps,
+  OverlayRenderContext,
   OverlaySVGElementProps,
   OverlayTemplateData,
   OverlayTextElementProps,
@@ -51,6 +52,7 @@ import {
   isCollectionRankField,
   isSingleValueField,
 } from './types';
+import { buildVariableDisplayText } from './variableDisplayText';
 
 const messages = defineMessages({
   layers: 'Layers',
@@ -183,6 +185,7 @@ interface OverlayLayerPanelProps {
   onChange: (data: OverlayTemplateData) => void;
   selectedElementId?: string;
   onElementSelect: (elementId: string | undefined) => void;
+  renderContext?: OverlayRenderContext;
 }
 
 export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
@@ -190,6 +193,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
   onChange,
   selectedElementId,
   onElementSelect,
+  renderContext,
 }) => {
   const intl = useIntl();
   const { addToast } = useToasts();
@@ -500,27 +504,6 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
       default:
         return 'Unknown';
     }
-  };
-
-  const getVariablePreview = (props: OverlayVariableElementProps) => {
-    const allVars = Object.values(AVAILABLE_VARIABLES).flat();
-
-    // Build preview from segments
-    return props.segments
-      .map((seg) => {
-        if (seg.type === 'text') {
-          return seg.value || '';
-        } else if (seg.type === 'variable' && seg.field) {
-          const varInfo = allVars.find(
-            (v) =>
-              v.field ===
-              (isCollectionRankField(seg.field) ? 'collectionRank' : seg.field)
-          );
-          return varInfo?.example || `{${seg.field}}`;
-        }
-        return '';
-      })
-      .join('');
   };
 
   const renderTextProperties = (element: OverlayElement) => {
@@ -1513,7 +1496,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             {intl.formatMessage(messages.previewText)}
           </label>
           <div className="text-sm font-medium text-white">
-            {getVariablePreview(props)}
+            {buildVariableDisplayText(props, renderContext)}
           </div>
         </div>
 
