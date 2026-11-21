@@ -61,6 +61,18 @@ export function entityFromEpisode(
   return entity;
 }
 
+export function keepCachedDetail(
+  fresh: EpisodeMediaInfo[],
+  cachedByKey: Map<string, EpisodeMediaInfo>,
+  staleKeys: Set<string>
+): EpisodeMediaInfo[] {
+  return fresh.map((ep) =>
+    !staleKeys.has(ep.ratingKey) && cachedByKey.has(ep.ratingKey)
+      ? cachedByKey.get(ep.ratingKey)!
+      : ep
+  );
+}
+
 export class EpisodeMediaCacheService {
   async getCachedEpisodes(
     serverId: string,

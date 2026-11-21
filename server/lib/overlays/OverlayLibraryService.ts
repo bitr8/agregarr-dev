@@ -4526,7 +4526,7 @@ class OverlayLibraryService {
       await import('./PlexEpisodeMediaScanner');
     const { EpisodeMediaAggregator, mergedAddedAt, needsAddedAtResave } =
       await import('./EpisodeMediaAggregator');
-    const { EpisodeMediaCacheService } = await import(
+    const { EpisodeMediaCacheService, keepCachedDetail } = await import(
       './EpisodeMediaCacheService'
     );
 
@@ -4654,7 +4654,9 @@ class OverlayLibraryService {
       await cacheService.saveEpisodes(serverId, libraryId, episodes);
     } else {
       // No stream detail needed — use lightweight data
-      episodes = withFreshAddedAt(freshLightweight);
+      episodes = withFreshAddedAt(
+        keepCachedDetail(freshLightweight, cachedByKey, staleKeys)
+      );
       if (staleKeys.size > 0) {
         await cacheService.saveEpisodes(serverId, libraryId, episodes);
       }
