@@ -174,6 +174,11 @@ export function createSampleOverlayContext(
     context.streamingProviderId = tmdbOverrides.streamingProviderId;
   }
 
+  const daysBetween = (from: Date) =>
+    Math.floor((Date.now() - from.getTime()) / 86400000);
+  context.daysSinceAdded = daysBetween(context.dateAdded as Date);
+  context.daysSinceLastPlayed = daysBetween(context.lastPlayed as Date);
+
   if (mediaType === 'show') {
     Object.assign(context, EPISODE_AGGREGATION_FIELDS);
     // Computed per call (not in the static object above) so the preview's

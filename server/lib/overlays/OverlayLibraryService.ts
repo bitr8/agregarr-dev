@@ -3013,6 +3013,7 @@ class OverlayLibraryService {
           if (!fallbackMetadata) continue;
 
           const fallbackItem = {
+            ...fallbackMetadata,
             ratingKey: fallbackMetadata.ratingKey,
             title: fallbackMetadata.title,
             year: (fallbackMetadata as { year?: number }).year,
@@ -3118,6 +3119,7 @@ class OverlayLibraryService {
 
               // Convert to PlexLibraryItem format (cast to satisfy type requirements)
               const item = {
+                ...itemMetadata,
                 ratingKey: itemMetadata.ratingKey,
                 parentRatingKey: itemMetadata.parentRatingKey,
                 grandparentRatingKey: itemMetadata.grandparentRatingKey,
