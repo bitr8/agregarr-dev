@@ -63,6 +63,7 @@ type Internals = {
   refreshCollectionRanks: (api: unknown, templates: unknown[]) => Promise<void>;
   sonarrSeriesCache?: Map<string, unknown>;
   runningLibraries: Map<string, { state: string }>;
+  clearGlobalCachesIfIdle: () => void;
   applyOverlaysToItem: (...args: unknown[]) => Promise<unknown>;
   applyOverlaysToCollectionItems: (
     items: string[],
@@ -232,5 +233,50 @@ describe('standalone batch cache lifetime', () => {
       svc.runningLibraries.delete('other');
       svc.sonarrSeriesCache = undefined;
     }
+  });
+
+  it('does not clear while another overlapping batch is still running', async () => {
+    svc.sonarrSeriesCache = new Map();
+    let release: (v: undefined) => void = () => undefined;
+    mockFindOne.mockReturnValueOnce(
+      new Promise<undefined>((r) => {
+        release = r;
+      })
+    );
+    const first = svc
+      .applyOverlaysToCollectionItems(['a'], 'lib')
+      .catch(() => undefined);
+    await new Promise((r) => setImmediate(r));
+
+    mockFindOne.mockResolvedValueOnce(undefined);
+    await svc
+      .applyOverlaysToCollectionItems(['b'], 'lib2')
+      .catch(() => undefined);
+    expect(svc.sonarrSeriesCache).toBeDefined();
+
+    release(undefined);
+    await first;
+    expect(svc.sonarrSeriesCache).toBeUndefined();
+  });
+
+  it('a full job finishing does not clear under a running batch', async () => {
+    svc.sonarrSeriesCache = new Map();
+    let release: (v: undefined) => void = () => undefined;
+    mockFindOne.mockReturnValueOnce(
+      new Promise<undefined>((r) => {
+        release = r;
+      })
+    );
+    const batch = svc
+      .applyOverlaysToCollectionItems(['a'], 'lib')
+      .catch(() => undefined);
+    await new Promise((r) => setImmediate(r));
+
+    svc.clearGlobalCachesIfIdle();
+    expect(svc.sonarrSeriesCache).toBeDefined();
+
+    release(undefined);
+    await batch;
+    expect(svc.sonarrSeriesCache).toBeUndefined();
   });
 });

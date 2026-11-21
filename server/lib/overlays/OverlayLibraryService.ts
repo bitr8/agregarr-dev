@@ -323,6 +323,7 @@ class OverlayLibraryService {
   // Track running libraries with mutex-like behavior and detailed progress
   // Prevents concurrent processing of the same library
   private runningLibraries = new Map<string, LibraryProgress>();
+  private activeStandaloneBatches = 0;
 
   // Track libraries that have been requested to cancel
   private cancelledLibraries = new Set<string>();
@@ -559,9 +560,11 @@ class OverlayLibraryService {
    */
   private clearGlobalCachesIfIdle(): void {
     // Check if any library is currently running or cancelling
-    const hasActiveJobs = Array.from(this.runningLibraries.values()).some(
-      (p) => p.state === 'running' || p.state === 'cancelling'
-    );
+    const hasActiveJobs =
+      this.activeStandaloneBatches > 0 ||
+      Array.from(this.runningLibraries.values()).some(
+        (p) => p.state === 'running' || p.state === 'cancelling'
+      );
 
     if (!hasActiveJobs) {
       logger.debug('No active overlay jobs, clearing global caches', {
@@ -2660,6 +2663,7 @@ class OverlayLibraryService {
     libraryId: string,
     options: OverlayBatchOptions = {}
   ): Promise<void> {
+    this.activeStandaloneBatches++;
     try {
       // Initialize caches at start of job (creates if needed, doesn't clear existing)
       this.initializeCachesIfNeeded();
@@ -3268,6 +3272,7 @@ class OverlayLibraryService {
       });
       throw error;
     } finally {
+      this.activeStandaloneBatches--;
       this.clearGlobalCachesIfIdle();
     }
   }
