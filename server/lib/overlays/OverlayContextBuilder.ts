@@ -989,6 +989,9 @@ export async function buildRenderContext(
   if (item.Media?.[0]) {
     const media = item.Media[0];
 
+    context.versionCount = item.Media.length;
+    context.hasMultipleVersions = item.Media.length > 1;
+
     // Resolution - use raw value from Plex (e.g., "720", "1080", "4k")
     if (media.videoResolution) {
       context.resolution = media.videoResolution;

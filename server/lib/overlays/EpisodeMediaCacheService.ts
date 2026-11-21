@@ -23,6 +23,7 @@ export function episodeFromRow(row: EpisodeMediaCache): EpisodeMediaInfo {
     audioChannels: row.audioChannels,
     bitDepth: row.bitDepth,
     mediaHash: row.mediaHash,
+    versionCount: row.versionCount,
     hasStreamDetail: row.hasStreamDetail,
     addedAt: row.addedAt,
   };
@@ -55,6 +56,7 @@ export function entityFromEpisode(
   entity.audioChannels = ep.audioChannels;
   entity.bitDepth = ep.bitDepth;
   entity.mediaHash = ep.mediaHash;
+  entity.versionCount = ep.versionCount ?? null;
   entity.hasStreamDetail = ep.hasStreamDetail;
   entity.addedAt = ep.addedAt ?? null;
   entity.updatedAt = now;

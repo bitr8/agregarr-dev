@@ -149,4 +149,41 @@ describe('overlay context parity between full sync and collection-triggered appl
       expect(collection[field], field).toEqual(fullSync[field]);
     }
   });
+
+  it('carries the version count through both paths', async () => {
+    const multi = {
+      ...metadata,
+      type: 'movie',
+      Media: [
+        { videoResolution: '1080', Part: [{ file: '/m/a.mkv' }] },
+        { videoResolution: '1080', Part: [{ file: '/m/b.mkv' }] },
+      ],
+    };
+    mockFindOne.mockResolvedValue({
+      mediaType: 'movie',
+      enabledOverlays: [{ templateId: 1, enabled: true, layerOrder: 0 }],
+    });
+    mockGetMetadataBatch.mockResolvedValue(new Map([['10', multi]]));
+
+    const fullSync = await captureContext(() =>
+      svc.applyOverlaysToItem(
+        {},
+        { ...multi },
+        [template],
+        'movie',
+        'lib',
+        'Lib',
+        undefined,
+        { fallback: false }
+      )
+    );
+    const collection = await captureContext(() =>
+      svc.applyOverlaysToCollectionItems(['10'], 'lib')
+    );
+
+    expect(collection.versionCount).toBe(2);
+    expect(collection.hasMultipleVersions).toBe(true);
+    expect(fullSync.versionCount).toBe(2);
+    expect(fullSync.hasMultipleVersions).toBe(true);
+  });
 });

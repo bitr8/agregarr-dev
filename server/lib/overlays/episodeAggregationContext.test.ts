@@ -65,3 +65,41 @@ describe('buildEpisodeAggregationContext', () => {
     expect(ctx.daysSinceLastEpisodeAdded).toBe(3);
   });
 });
+
+describe('buildEpisodeAggregationContext multi-version', () => {
+  const withCount = (count: number | undefined): AggregatedMediaInfo => ({
+    ...agg,
+    episodeMultiVersionCount: count,
+  });
+
+  it('flags a show or season that holds a multi-version episode', () => {
+    const m = new Map([['100', withCount(2)]]);
+    for (const type of ['show', 'season']) {
+      const ctx = buildEpisodeAggregationContext(type, '100', base, m);
+      expect(ctx.episodeMultiVersionCount).toBe(2);
+      expect(ctx.hasMultipleVersions).toBe(true);
+    }
+  });
+
+  it('is a plain no when the count is zero', () => {
+    const ctx = buildEpisodeAggregationContext(
+      'season',
+      '100',
+      base,
+      new Map([['100', withCount(0)]])
+    );
+    expect(ctx.episodeMultiVersionCount).toBe(0);
+    expect(ctx.hasMultipleVersions).toBe(false);
+  });
+
+  it('sets neither when the count is unknown', () => {
+    const ctx = buildEpisodeAggregationContext(
+      'show',
+      '100',
+      base,
+      new Map([['100', withCount(undefined)]])
+    );
+    expect(ctx).not.toHaveProperty('episodeMultiVersionCount');
+    expect(ctx).not.toHaveProperty('hasMultipleVersions');
+  });
+});

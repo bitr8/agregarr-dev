@@ -146,12 +146,19 @@ describe('episode media cache round trip', () => {
       audioProfile: 'truehd_atmos',
       hdr10Plus: true,
       addedAt: 1700000000,
+      versionCount: 2,
     });
     expect(roundTrip(withProfile)).toEqual({
       ...withProfile,
       dolbyVisionProfile: undefined,
     });
     expect(roundTrip(episode('s', 'b')).audioProfile).toBeUndefined();
+  });
+
+  it('persists an unknown version count as explicit null', () => {
+    expect(
+      entityFromEpisode('srv', '3', episode('s', 'a'), now).versionCount
+    ).toBeNull();
   });
 
   it('gives the same overlay hash from a fresh scan and from cached rows', () => {

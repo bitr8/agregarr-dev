@@ -4524,8 +4524,13 @@ class OverlayLibraryService {
   ): Promise<void> {
     const { PlexEpisodeMediaScanner, resolveFetchedEpisodeDetail } =
       await import('./PlexEpisodeMediaScanner');
-    const { EpisodeMediaAggregator, mergedAddedAt, needsAddedAtResave } =
-      await import('./EpisodeMediaAggregator');
+    const {
+      EpisodeMediaAggregator,
+      mergedAddedAt,
+      mergedVersionCount,
+      needsAddedAtResave,
+      needsVersionCountResave,
+    } = await import('./EpisodeMediaAggregator');
     const { EpisodeMediaCacheService } = await import(
       './EpisodeMediaCacheService'
     );
@@ -4581,6 +4586,9 @@ class OverlayLibraryService {
     const freshAddedAtByKey = new Map(
       freshLightweight.map((ep) => [ep.ratingKey, ep.addedAt])
     );
+    const freshVersionCountByKey = new Map(
+      freshLightweight.map((ep) => [ep.ratingKey, ep.versionCount])
+    );
     const withFreshAddedAt = (eps: EpisodeMediaInfo[]): EpisodeMediaInfo[] =>
       eps.map((ep) => ({
         ...ep,
@@ -4588,6 +4596,11 @@ class OverlayLibraryService {
           ep.ratingKey,
           cachedByKey.get(ep.ratingKey)?.addedAt ?? ep.addedAt,
           freshAddedAtByKey
+        ),
+        versionCount: mergedVersionCount(
+          ep.ratingKey,
+          ep.versionCount,
+          freshVersionCountByKey
         ),
       }));
 
@@ -4615,9 +4628,19 @@ class OverlayLibraryService {
       const mergedAddedAtByKey = new Map(
         episodes.map((e) => [e.ratingKey, e.addedAt])
       );
-      if (needsAddedAtResave(cachedEpisodes, mergedAddedAtByKey, currentKeys)) {
+      const mergedVersionCountByKey = new Map(
+        episodes.map((e) => [e.ratingKey, e.versionCount])
+      );
+      if (
+        needsAddedAtResave(cachedEpisodes, mergedAddedAtByKey, currentKeys) ||
+        needsVersionCountResave(
+          cachedEpisodes,
+          mergedVersionCountByKey,
+          currentKeys
+        )
+      ) {
         await cacheService.saveEpisodes(serverId, libraryId, episodes);
-        logger.info('Resaved episode addedAt into cache', {
+        logger.info('Resaved episode addedAt and version count into cache', {
           label: 'EpisodeScanner',
           libraryId,
           count: episodes.length,

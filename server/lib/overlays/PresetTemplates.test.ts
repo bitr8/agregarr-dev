@@ -249,3 +249,117 @@ describe('Episode Info - Episode Card preset', () => {
     expect(used.has('imdbRating')).toBe(false);
   });
 });
+
+describe('Multiple Versions presets', () => {
+  const cases = [
+    {
+      name: 'Multiple Versions',
+      tag: undefined,
+      width: 1000,
+      height: 1500,
+      tile: { x: 880, y: 1060 },
+    },
+    {
+      name: 'Multiple Versions - Season Poster',
+      tag: 'target:season',
+      width: 1000,
+      height: 1500,
+      tile: { x: 880, y: 1060 },
+    },
+    {
+      name: 'Multiple Versions - Episode Card',
+      tag: 'target:episode',
+      width: 1920,
+      height: 1080,
+      tile: { x: 1143, y: 705 },
+    },
+  ];
+
+  it('are appended after the existing presets, in this order', () => {
+    const index = (n: string) =>
+      PRESET_TEMPLATES.findIndex((p) => p.name === n);
+    expect(index('Episode Info - Episode Card')).toBe(41);
+    expect(cases.map((c) => index(c.name))).toEqual([42, 43, 44]);
+    expect(PRESET_TEMPLATES).toHaveLength(45);
+  });
+
+  it('leave every earlier preset untouched by the new fields', () => {
+    for (const p of PRESET_TEMPLATES.slice(0, 42)) {
+      const used = extractUsedContextFields(
+        [p.templateData as never],
+        [p.applicationCondition as never]
+      );
+      for (const field of [
+        'versionCount',
+        'hasMultipleVersions',
+        'episodeMultiVersionCount',
+      ]) {
+        expect(used.has(field), `${p.name} ${field}`).toBe(false);
+      }
+    }
+  });
+
+  for (const c of cases) {
+    describe(c.name, () => {
+      const preset = PRESET_TEMPLATES.find((p) => p.name === c.name);
+
+      it('ships once on the right canvas and target', () => {
+        expect(PRESET_TEMPLATES.filter((p) => p.name === c.name)).toHaveLength(
+          1
+        );
+        expect(preset?.templateData).toMatchObject({
+          width: c.width,
+          height: c.height,
+        });
+        const targets = (preset?.tags ?? []).filter((t) =>
+          t.startsWith('target:')
+        );
+        expect(targets).toEqual(c.tag ? [c.tag] : []);
+      });
+
+      it('draws a 105 square rounded tile with the copy icon on it', () => {
+        const els = preset?.templateData.elements ?? [];
+        const tile = els.find((e) => e.type === 'tile');
+        const icon = els.find((e) => e.type === 'svg');
+        expect(tile).toMatchObject({ ...c.tile, width: 105, height: 105 });
+        expect(tile?.properties).toMatchObject({
+          fillColor: '#000000',
+          fillOpacity: 60,
+          borderRadiusTopLeft: 30,
+          borderRadiusTopRight: 30,
+          borderRadiusBottomLeft: 30,
+          borderRadiusBottomRight: 30,
+        });
+        expect(icon?.properties).toMatchObject({
+          iconType: 'custom-icon',
+          iconPath: '/api/v1/posters/icons/system/content-copy.svg',
+        });
+        expect(icon!.x).toBeGreaterThan(c.tile.x);
+        expect(icon!.x + icon!.width).toBeLessThan(c.tile.x + 105);
+        expect(icon!.y).toBeGreaterThan(c.tile.y);
+        expect(icon!.y + icon!.height).toBeLessThan(c.tile.y + 105);
+      });
+
+      it('applies only to items that have several versions', () => {
+        const cond = preset?.applicationCondition;
+        const base = { isPlaceholder: false, mediaType: 'movie' as const };
+        expect(
+          evaluateCondition(cond, { ...base, hasMultipleVersions: true })
+        ).toBe(true);
+        expect(
+          evaluateCondition(cond, { ...base, hasMultipleVersions: false })
+        ).toBe(false);
+        expect(evaluateCondition(cond, base)).toBe(false);
+      });
+
+      it('hashes on hasMultipleVersions only', () => {
+        const used = extractUsedContextFields(
+          [preset?.templateData as never],
+          [preset?.applicationCondition as never]
+        );
+        expect(used.has('hasMultipleVersions')).toBe(true);
+        expect(used.has('versionCount')).toBe(false);
+      });
+    });
+  }
+});

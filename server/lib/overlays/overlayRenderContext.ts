@@ -39,6 +39,9 @@ export interface OverlayRenderContext {
   height?: number; // Video height in pixels
   aspectRatio?: number; // Aspect ratio (e.g., 2.35)
 
+  versionCount?: number;
+  hasMultipleVersions?: boolean;
+
   // Video specs
   videoCodec?: string; // 'hevc', 'h264', 'av1'
   videoProfile?: string; // 'main', 'high'
@@ -159,6 +162,7 @@ export interface OverlayRenderContext {
   episodeDvCount?: number;
   episodeDvPercent?: number;
   episodeMediaSource?: 'aggregated' | 'show';
+  episodeMultiVersionCount?: number;
 
   // Item metadata
   isPlaceholder: boolean; // true = Coming Soon item, false = real item in Plex

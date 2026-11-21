@@ -50,6 +50,10 @@ export function buildEpisodeAggregationContext(
     episodeDvPercent: agg.episodeDvPercent,
     episodeMediaSource: 'aggregated',
   };
+  if (agg.episodeMultiVersionCount !== undefined) {
+    episodeAggregation.episodeMultiVersionCount = agg.episodeMultiVersionCount;
+    episodeAggregation.hasMultipleVersions = agg.episodeMultiVersionCount > 0;
+  }
   if (agg.lastEpisodeAddedAt !== undefined) {
     episodeAggregation.lastEpisodeAddedDate = new Date(
       agg.lastEpisodeAddedAt * 1000

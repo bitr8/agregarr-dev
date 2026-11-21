@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   EpisodeMediaAggregator,
   mergedAddedAt,
+  mergedVersionCount,
   needsAddedAtResave,
+  needsVersionCountResave,
   newestEpisodeAddedAtByShow,
 } from './EpisodeMediaAggregator';
 import type { EpisodeMediaInfo } from './episodeMediaTypes';
@@ -486,6 +488,93 @@ describe('EpisodeMediaAggregator', () => {
         hdr10Plus: true,
         episodeCount: 2,
       });
+    });
+  });
+});
+
+describe('multi-version episode counts', () => {
+  const aggregator = new EpisodeMediaAggregator();
+  const ep = (
+    ratingKey: string,
+    seasonNumber: number,
+    versionCount: number | null | undefined
+  ) =>
+    makeEpisode({
+      ratingKey,
+      showRatingKey: 'show-1',
+      seasonRatingKey: `season-${seasonNumber}`,
+      seasonNumber,
+      versionCount,
+    });
+
+  it('counts episodes with more than one version per show and season', () => {
+    const result = aggregator.aggregateByShowAndSeason([
+      ep('a', 1, 2),
+      ep('b', 1, 1),
+      ep('c', 2, 1),
+      ep('d', 2, 1),
+    ]);
+    expect(result.get('show-1')?.episodeMultiVersionCount).toBe(1);
+    expect(result.get('season-1')?.episodeMultiVersionCount).toBe(1);
+    expect(result.get('season-2')?.episodeMultiVersionCount).toBe(0);
+  });
+
+  it('leaves the count unset when no episode has a known value', () => {
+    const result = aggregator.aggregateByShowAndSeason([
+      ep('a', 1, null),
+      ep('b', 1, undefined),
+    ]);
+    expect(result.get('show-1')?.episodeMultiVersionCount).toBeUndefined();
+    expect(result.get('season-1')?.episodeMultiVersionCount).toBeUndefined();
+  });
+
+  it('counts only the episodes whose value is known', () => {
+    const result = aggregator.aggregateByShowAndSeason([
+      ep('a', 1, null),
+      ep('b', 1, 3),
+    ]);
+    expect(result.get('show-1')?.episodeMultiVersionCount).toBe(1);
+  });
+
+  it('keeps specials out of the show and season rollups', () => {
+    const result = aggregator.aggregateByShowAndSeason([
+      ep('s1', 0, 2),
+      ep('a', 1, 1),
+    ]);
+    expect(result.get('show-1')?.episodeMultiVersionCount).toBe(0);
+    expect(result.get('season-0')?.episodeMultiVersionCount).toBeUndefined();
+    expect(result.get('season-1')?.episodeMultiVersionCount).toBe(0);
+  });
+
+  it('does not badge a show that has only specials', () => {
+    const result = aggregator.aggregateByShowAndSeason([ep('s1', 0, 2)]);
+    expect(result.get('show-1')?.episodeMultiVersionCount).toBeUndefined();
+  });
+
+  describe('merge helpers', () => {
+    it('fresh value wins, an omitted one keeps the previous', () => {
+      expect(mergedVersionCount('a', null, new Map([['a', 2]]))).toBe(2);
+      expect(mergedVersionCount('a', 3, new Map())).toBe(3);
+      expect(mergedVersionCount('a', undefined, new Map())).toBeNull();
+    });
+
+    it('asks for a resave when a cached row has no count but the merge does', () => {
+      const cached = [ep('a', 1, null), ep('b', 1, 1)];
+      const merged = new Map<string, number | null>([
+        ['a', 2],
+        ['b', 1],
+      ]);
+      expect(needsVersionCountResave(cached, merged, new Set(['a', 'b']))).toBe(
+        true
+      );
+    });
+
+    it('does not resave when cache and merge agree, or the row is gone', () => {
+      const cached = [ep('a', 1, 2), ep('gone', 1, null)];
+      const merged = new Map<string, number | null>([['a', 2]]);
+      expect(needsVersionCountResave(cached, merged, new Set(['a']))).toBe(
+        false
+      );
     });
   });
 });

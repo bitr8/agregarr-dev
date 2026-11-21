@@ -3741,6 +3741,174 @@ export const PRESET_TEMPLATES: {
       ],
     },
   },
+
+  {
+    name: 'Multiple Versions',
+    description:
+      'Shows a stacked-pages badge on movies, and on shows that have a multi-version episode (needs Use episode files for quality badges). Matches the Kometa versions overlay.',
+    type: 'technical',
+    tags: ['Technical'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'hasMultipleVersions', operator: 'eq', value: true },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'versions-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 880,
+          y: 1060,
+          width: 105,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'versions-badge-icon',
+          layerOrder: 1,
+          type: 'svg',
+          x: 897.5,
+          y: 1077.5,
+          width: 70,
+          height: 70,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/content-copy.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'Multiple Versions - Season Poster',
+    description:
+      'Shows a stacked-pages badge on a season that has a multi-version episode. Needs Use episode files for quality badges.',
+    type: 'technical',
+    tags: ['Technical', 'target:season'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'hasMultipleVersions', operator: 'eq', value: true },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'versions-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 880,
+          y: 1060,
+          width: 105,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'versions-badge-icon',
+          layerOrder: 1,
+          type: 'svg',
+          x: 897.5,
+          y: 1077.5,
+          width: 70,
+          height: 70,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/content-copy.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'Multiple Versions - Episode Card',
+    description:
+      'Shows a stacked-pages badge on episode title cards that have more than one version.',
+    type: 'technical',
+    tags: ['Technical', 'target:episode'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'hasMultipleVersions', operator: 'eq', value: true },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'versions-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 1143,
+          y: 705,
+          width: 105,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'versions-badge-icon',
+          layerOrder: 1,
+          type: 'svg',
+          x: 1160.5,
+          y: 722.5,
+          width: 70,
+          height: 70,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/content-copy.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+      ],
+    },
+  },
 ];
 
 /**

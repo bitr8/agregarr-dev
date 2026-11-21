@@ -30,6 +30,8 @@ export const NUMBER_FORMAT_FIELDS: readonly string[] = [
   'episode4kCount',
   'episodeHdrCount',
   'episodeDvCount',
+  'episodeMultiVersionCount',
+  'versionCount',
   'daysAgo',
   'daysUntilRelease',
   'daysUntilNextEpisode',

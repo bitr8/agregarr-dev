@@ -26,6 +26,8 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   tvdbStatus: 'RETURNING',
 
   // Plex Media Info
+  versionCount: 2,
+  hasMultipleVersions: true,
   resolution: '4K',
   width: 3840,
   height: 2160,
@@ -135,6 +137,7 @@ const EPISODE_AGGREGATION_FIELDS: Partial<OverlayRenderContext> = {
   episodeHdrPercent: 67,
   episodeDvCount: 12,
   episodeDvPercent: 50,
+  episodeMultiVersionCount: 3,
   episodeMediaSource: 'aggregated' as const,
 };
 

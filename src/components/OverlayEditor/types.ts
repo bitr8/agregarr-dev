@@ -226,6 +226,9 @@ export interface OverlayRenderContext {
   height?: number; // Video height in pixels
   aspectRatio?: number; // Aspect ratio (e.g., 2.35)
 
+  versionCount?: number;
+  hasMultipleVersions?: boolean;
+
   // Video specs
   videoCodec?: string; // 'hevc', 'h264', 'av1'
   videoProfile?: string; // 'main', 'high'
@@ -343,6 +346,7 @@ export interface OverlayRenderContext {
   episodeHdrPercent?: number;
   episodeDvCount?: number;
   episodeDvPercent?: number;
+  episodeMultiVersionCount?: number;
   episodeMediaSource?: 'aggregated' | 'show';
 
   // Item metadata
@@ -439,6 +443,7 @@ export const AVAILABLE_VARIABLES = {
     },
   ],
   video: [
+    { field: 'versionCount', label: 'Versions', example: '2' },
     { field: 'resolution', label: 'Resolution', example: '4K' },
     { field: 'width', label: 'Width (px)', example: '3840' },
     { field: 'height', label: 'Height (px)', example: '2160' },
@@ -645,6 +650,11 @@ export const AVAILABLE_VARIABLES = {
     { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
     { field: 'episodeDvPercent', label: 'DV Episode %', example: '50' },
     {
+      field: 'episodeMultiVersionCount',
+      label: 'Multi-Version Episode Count',
+      example: '3',
+    },
+    {
       field: 'episodeMediaSource',
       label: 'Media Source',
       example: 'aggregated',
@@ -728,6 +738,12 @@ export const CONDITION_FIELD_CATEGORIES = {
     },
   ],
   'Plex Data': [
+    { field: 'versionCount', label: 'Versions', example: '2' },
+    {
+      field: 'hasMultipleVersions',
+      label: 'Has Multiple Versions',
+      example: 'true',
+    },
     { field: 'resolution', label: 'Resolution', example: '4K' },
     { field: 'width', label: 'Width (px)', example: '3840' },
     { field: 'height', label: 'Height (px)', example: '2160' },
@@ -941,6 +957,11 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
     { field: 'episodeDvPercent', label: 'DV Episode %', example: '50' },
     {
+      field: 'episodeMultiVersionCount',
+      label: 'Multi-Version Episode Count',
+      example: '3',
+    },
+    {
       field: 'episodeMediaSource',
       label: 'Media Source (aggregated/show)',
       example: 'aggregated',
@@ -1083,6 +1104,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     container: 'mkv',
     bitrate: 15000,
     fileSize: 4500000000,
+    versionCount: 2,
+    hasMultipleVersions: true,
     viewCount: 5,
     daysSinceAdded: 14,
     daysSinceLastPlayed: 3,
@@ -1210,6 +1233,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     episodeHdrPercent: 0,
     episodeDvCount: 0,
     episodeDvPercent: 0,
+    episodeMultiVersionCount: 3,
+    hasMultipleVersions: true,
     episodeMediaSource: 'aggregated',
   },
 };

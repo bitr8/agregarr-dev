@@ -70,6 +70,10 @@ export class EpisodeMediaCache {
   @Column()
   public mediaHash: string;
 
+  // Null for rows cached before this column existed, until the next scan.
+  @Column({ type: 'integer', nullable: true })
+  public versionCount: number | null;
+
   @Column({ type: 'boolean', default: false })
   public hasStreamDetail: boolean;
 
