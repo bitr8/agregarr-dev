@@ -168,4 +168,23 @@ describe('runEpisodeScan picks up version counts for cache rows that predate the
 
     expect(savedVersionCounts()).toEqual({ a: 2, c: 1 });
   });
+
+  it('keeps cached stream detail and takes the fresh count on a lightweight save', async () => {
+    state.fresh = [
+      row('a', { versionCount: 2 }),
+      row('c', { versionCount: 1 }),
+    ];
+    state.cached = [
+      row('a', { versionCount: null, hasStreamDetail: true, hdr: true }),
+    ];
+
+    await svc.runEpisodeScan({}, 'lib', new Set(), new Set());
+
+    const a = (state.saved.at(-1) as EpisodeMediaInfo[]).find(
+      (e) => e.ratingKey === 'a'
+    );
+    expect(a?.hasStreamDetail).toBe(true);
+    expect(a?.hdr).toBe(true);
+    expect(a?.versionCount).toBe(2);
+  });
 });

@@ -63,6 +63,28 @@ export function entityFromEpisode(
   return entity;
 }
 
+export function keepCachedDetail(
+  fresh: EpisodeMediaInfo[],
+  cachedByKey: Map<string, EpisodeMediaInfo>,
+  staleKeys: Set<string>
+): EpisodeMediaInfo[] {
+  return fresh.map((ep) => {
+    const cached = cachedByKey.get(ep.ratingKey);
+    if (staleKeys.has(ep.ratingKey) || !cached?.hasStreamDetail) return ep;
+    return {
+      ...ep,
+      hdr: cached.hdr,
+      dolbyVision: cached.dolbyVision,
+      dolbyVisionProfile: cached.dolbyVisionProfile,
+      hdr10Plus: cached.hdr10Plus,
+      audioProfile: cached.audioProfile,
+      audioChannels: cached.audioChannels,
+      bitDepth: cached.bitDepth,
+      hasStreamDetail: true,
+    };
+  });
+}
+
 export class EpisodeMediaCacheService {
   async getCachedEpisodes(
     serverId: string,
