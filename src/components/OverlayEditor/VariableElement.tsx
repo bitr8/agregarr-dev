@@ -10,6 +10,7 @@ import type {
   OverlayRenderContext,
   OverlayVariableElementProps,
 } from './types';
+import { useServerTimezone } from './useServerTimezone';
 import { buildVariableDisplayText } from './variableDisplayText';
 
 interface VariableElementComponentProps {
@@ -38,6 +39,7 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
   onTransformEnd,
 }) => {
   const props = element.properties as OverlayVariableElementProps;
+  const serverTimezone = useServerTimezone();
   const groupRef = useRef<Konva.Group | null>(null);
   const [fontLoaded, setFontLoaded] = useState(false);
 
@@ -54,7 +56,7 @@ export const VariableElement: React.FC<VariableElementComponentProps> = ({
   }, [props.fontFamily]);
 
   const displayText = normaliseSingleLine(
-    buildVariableDisplayText(props, renderContext)
+    buildVariableDisplayText(props, renderContext, serverTimezone)
   );
 
   return (

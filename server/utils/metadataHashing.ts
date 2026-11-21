@@ -7,6 +7,7 @@ import type {
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
+import { OVERLAY_DATE_FIELDS } from '@server/lib/overlays/overlayDateFields';
 import { createHash } from 'crypto';
 
 /**
@@ -295,6 +296,7 @@ export function calculateThemeInputHash(filename: string): string {
  *   callers with no mapped-icon templates hash identically to before)
  */
 const RENDER_EFFECTS_VERSION = 1;
+const DATE_RENDER_VERSION = 1;
 
 export function usesRenderEffects(templates: OverlayTemplateData[]): boolean {
   const faded = (opacity: number | undefined) =>
@@ -349,6 +351,12 @@ export function calculateOverlayInputHash(config: {
   }
   if (usesRenderEffects(config.templateData)) {
     input.renderEffectsVersion = RENDER_EFFECTS_VERSION;
+  }
+  if ([...config.usedFields].some((f) => OVERLAY_DATE_FIELDS.includes(f))) {
+    input.dateRender = {
+      version: DATE_RENDER_VERSION,
+      tz: process.env.TZ || 'UTC',
+    };
   }
   if (config.mappedIconMappings) {
     const sorted: Record<string, IconMapping[]> = {};

@@ -539,3 +539,32 @@ describe('poster condition collection type hashing', () => {
     );
   });
 });
+
+describe('date rendering in the overlay input hash', () => {
+  const withFields = (fields: string[]) =>
+    calculateOverlayInputHash({
+      ...baseConfig,
+      usedFields: new Set(fields),
+      context: { releaseDate: '2026-12-03', imdbRating: 8 },
+    });
+
+  it('changes with the server timezone when a date field is used', () => {
+    const prev = process.env.TZ;
+    process.env.TZ = 'Australia/Sydney';
+    const sydney = withFields(['releaseDate']);
+    process.env.TZ = 'Pacific/Auckland';
+    const auckland = withFields(['releaseDate']);
+    process.env.TZ = prev;
+    expect(sydney).not.toBe(auckland);
+  });
+
+  it('ignores the timezone when no date field is used', () => {
+    const prev = process.env.TZ;
+    process.env.TZ = 'Australia/Sydney';
+    const sydney = withFields(['imdbRating']);
+    process.env.TZ = 'Pacific/Auckland';
+    const auckland = withFields(['imdbRating']);
+    process.env.TZ = prev;
+    expect(sydney).toBe(auckland);
+  });
+});

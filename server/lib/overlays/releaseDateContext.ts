@@ -55,7 +55,7 @@ export function movieReleaseInfoFromTmdb(
 }
 
 // Radarr is the source of truth for a placeholder's date: its digital or
-// physical date wins over TMDB's region-preferred guess.
+// physical date wins over TMDB's region-preferred guess, per type.
 export function preferRadarrReleaseDate(
   info: ReleaseDateInfo | undefined,
   radarr: RadarrReleaseDates
@@ -68,8 +68,10 @@ export function preferRadarrReleaseDate(
   return {
     ...info,
     ...fromRadarr,
-    digitalRelease: dateOnly(radarr.radarrDigitalRelease),
-    physicalRelease: dateOnly(radarr.radarrPhysicalRelease),
+    digitalRelease:
+      dateOnly(radarr.radarrDigitalRelease) ?? info?.digitalRelease,
+    physicalRelease:
+      dateOnly(radarr.radarrPhysicalRelease) ?? info?.physicalRelease,
     releaseSource: homeReleaseSource(
       radarr.radarrDigitalRelease,
       radarr.radarrPhysicalRelease

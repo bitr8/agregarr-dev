@@ -21,6 +21,7 @@ import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
 import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
 import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
 import { DEFAULT_TILE_BORDER_COLOR } from '@server/lib/overlays/tileBorder';
+import { DATE_FORMATS } from '@server/utils/dateFormats';
 import { useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
@@ -52,6 +53,7 @@ import {
   isCollectionRankField,
   isSingleValueField,
 } from './types';
+import { useServerTimezone } from './useServerTimezone';
 import { buildVariableDisplayText } from './variableDisplayText';
 
 const messages = defineMessages({
@@ -196,6 +198,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
   renderContext,
 }) => {
   const intl = useIntl();
+  const serverTimezone = useServerTimezone();
   const { addToast } = useToasts();
   const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
   const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
@@ -1427,41 +1430,19 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                           }
                           className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
                         >
-                          <optgroup label="Short (No Year)">
-                            <option value="MMM DD">DEC 20</option>
-                            <option value="DD MMM">20 DEC</option>
-                          </optgroup>
-                          <optgroup label="Short (With Year)">
-                            <option value="MMM DD, YYYY">DEC 20, 2025</option>
-                            <option value="DD MMM YYYY">20 DEC 2025</option>
-                          </optgroup>
-                          <optgroup label="Full Month Name">
-                            <option value="MMMM DD, YYYY">
-                              December 20, 2025
-                            </option>
-                            <option value="DD MMMM YYYY">
-                              20 December 2025
-                            </option>
-                          </optgroup>
-                          <optgroup label="Numeric">
-                            <option value="YYYY-MM-DD">2025-12-20</option>
-                            <option value="YYYY/MM/DD">2025/12/20</option>
-                            <option value="MM/DD/YYYY">12/20/2025</option>
-                            <option value="DD/MM/YYYY">20/12/2025</option>
-                            <option value="DD-MM-YYYY">20-12-2025</option>
-                            <option value="DD/MM">20/12</option>
-                            <option value="D/M">5/12</option>
-                            <option value="MM/DD">12/20</option>
-                            <option value="M/D">12/5</option>
-                          </optgroup>
-                          <optgroup label="With Weekday">
-                            <option value="DDD DD/MM">MON 20/12</option>
-                            <option value="DDD D/M">MON 5/12</option>
-                            <option value="DDD MM/DD">MON 12/20</option>
-                            <option value="DDD M/D">MON 12/5</option>
-                            <option value="DDDD">MONDAY</option>
-                            <option value="DDD">MON</option>
-                          </optgroup>
+                          {Array.from(
+                            new Set(DATE_FORMATS.map((f) => f.group))
+                          ).map((group) => (
+                            <optgroup key={group} label={group}>
+                              {DATE_FORMATS.filter(
+                                (f) => f.group === group
+                              ).map((f) => (
+                                <option key={f.value} value={f.value}>
+                                  {f.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
                         </select>
                       </div>
                     )}
@@ -1496,7 +1477,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             {intl.formatMessage(messages.previewText)}
           </label>
           <div className="text-sm font-medium text-white">
-            {buildVariableDisplayText(props, renderContext)}
+            {buildVariableDisplayText(props, renderContext, serverTimezone)}
           </div>
         </div>
 

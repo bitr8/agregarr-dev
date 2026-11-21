@@ -1,128 +1,18 @@
 import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
+import {
+  DEFAULT_DATE_FORMAT,
+  formatDateInTimezone,
+} from '@server/utils/dateFormats';
 import type {
   OverlayRenderContext,
   OverlayVariableElementProps,
 } from './types';
 import { AVAILABLE_VARIABLES, isCollectionRankField } from './types';
 
-const formatDate = (date: Date | string, format: string): string => {
-  let dateObj: Date;
-  if (typeof date === 'string' && date.includes('T')) {
-    // Full ISO datetime (e.g. Sonarr "2026-06-28T23:00:00Z"):
-    // convert to browser's local calendar date so 23:00 UTC becomes
-    // the next day in UTC+1 timezones
-    const local = new Date(date);
-    dateObj = new Date(
-      Date.UTC(local.getFullYear(), local.getMonth(), local.getDate(), 12)
-    );
-  } else {
-    // Date-only (e.g. TMDB "2026-07-04") or Date object:
-    // noon UTC trick so timezone never shifts the calendar day
-    const dateOnly =
-      typeof date === 'string' ? date : date.toISOString().split('T')[0];
-    dateObj = new Date(dateOnly + 'T12:00:00.000Z');
-  }
-
-  const monthNames = [
-    'JAN',
-    'FEB',
-    'MAR',
-    'APR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AUG',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DEC',
-  ];
-  const monthNamesFull = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-  const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-  const dayNamesFull = [
-    'SUNDAY',
-    'MONDAY',
-    'TUESDAY',
-    'WEDNESDAY',
-    'THURSDAY',
-    'FRIDAY',
-    'SATURDAY',
-  ];
-
-  const year = dateObj.getUTCFullYear();
-  const month = dateObj.getUTCMonth() + 1;
-  const day = dateObj.getUTCDate();
-  const monthName = monthNames[dateObj.getUTCMonth()];
-  const monthNameFull = monthNamesFull[dateObj.getUTCMonth()];
-  const dayName = dayNames[dateObj.getUTCDay()];
-  const dayNameFull = dayNamesFull[dateObj.getUTCDay()];
-
-  const pad = (n: number) => String(n).padStart(2, '0');
-
-  switch (format) {
-    case 'YYYY-MM-DD':
-      return `${year}-${pad(month)}-${pad(day)}`;
-    case 'YYYY/MM/DD':
-      return `${year}/${pad(month)}/${pad(day)}`;
-    case 'DD-MM-YYYY':
-      return `${pad(day)}-${pad(month)}-${year}`;
-    case 'DD/MM/YYYY':
-      return `${pad(day)}/${pad(month)}/${year}`;
-    case 'MM/DD/YYYY':
-      return `${pad(month)}/${pad(day)}/${year}`;
-    case 'DD/MM':
-      return `${pad(day)}/${pad(month)}`;
-    case 'D/M':
-      return `${day}/${month}`;
-    case 'MM/DD':
-      return `${pad(month)}/${pad(day)}`;
-    case 'M/D':
-      return `${month}/${day}`;
-    case 'DDD DD/MM':
-      return `${dayName} ${pad(day)}/${pad(month)}`;
-    case 'DDD D/M':
-      return `${dayName} ${day}/${month}`;
-    case 'DDD MM/DD':
-      return `${dayName} ${pad(month)}/${pad(day)}`;
-    case 'DDD M/D':
-      return `${dayName} ${month}/${day}`;
-    case 'DDDD':
-      return dayNameFull;
-    case 'DDD':
-      return dayName;
-    case 'MMM DD':
-      return `${monthName} ${pad(day)}`;
-    case 'DD MMM':
-      return `${pad(day)} ${monthName}`;
-    case 'MMM DD, YYYY':
-      return `${monthName} ${pad(day)}, ${year}`;
-    case 'DD MMM YYYY':
-      return `${pad(day)} ${monthName} ${year}`;
-    case 'MMMM DD, YYYY':
-      return `${monthNameFull} ${pad(day)}, ${year}`;
-    case 'DD MMMM YYYY':
-      return `${pad(day)} ${monthNameFull} ${year}`;
-    default:
-      return `${monthName} ${pad(day)}`;
-  }
-};
-
 export const buildVariableDisplayText = (
   props: OverlayVariableElementProps,
-  renderContext?: OverlayRenderContext
+  renderContext?: OverlayRenderContext,
+  timeZone = 'UTC'
 ): string => {
   let text = '';
 
@@ -145,7 +35,11 @@ export const buildVariableDisplayText = (
             (typeof value === 'string' || value instanceof Date)
           ) {
             // Use specified format or default to 'MMM DD'
-            text += formatDate(value, segment.format || 'MMM DD');
+            text += formatDateInTimezone(
+              value,
+              segment.format || DEFAULT_DATE_FORMAT,
+              timeZone
+            );
           } else if (typeof value === 'number') {
             // Format numbers appropriately
             if (
