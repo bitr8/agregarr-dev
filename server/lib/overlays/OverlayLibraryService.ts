@@ -95,6 +95,7 @@ import {
 import {
   RELEASE_DATE_CONTEXT_FIELDS,
   shouldSkipOnReleaseDateFetchFailure,
+  usesSonarrPremiere,
 } from './releaseDateFetchPolicy';
 import {
   classifySeasonCleanupAction,
@@ -3444,7 +3445,8 @@ class OverlayLibraryService {
           actualMediaType,
           this.sonarrSeriesCache,
           this.preloadedTmdbReleaseDates,
-          releaseDateFetch
+          releaseDateFetch,
+          usesSonarrPremiere(this.requiredContextFieldsByLibrary.get(libraryId))
         );
 
         // fork#35 (Mechanism 2): a transient TMDB/Sonarr failure returns

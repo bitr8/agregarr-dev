@@ -51,3 +51,10 @@ export function shouldSkipOnReleaseDateFetchFailure(
   }
   return RELEASE_DATE_CONTEXT_FIELDS.some((field) => requiredFields.has(field));
 }
+
+/** Whether Sonarr's premiere list should source daysAgoNextSeason; undefined fields = could need it. */
+export function usesSonarrPremiere(
+  requiredFields: ReadonlySet<string> | undefined
+): boolean {
+  return !requiredFields || requiredFields.has('daysAgoNextSeason');
+}

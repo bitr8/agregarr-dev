@@ -29,6 +29,7 @@ import {
 } from './maintainerrCountdown';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 import {
+  latestAiredPremiere,
   latestAiredSeasonDate,
   movieReleaseInfoFromTmdb,
 } from './releaseDateContext';
@@ -1257,6 +1258,8 @@ export interface ReleaseDateInfo {
   nextSeasonAirDate?: string;
   // Fallback source for daysAgoNextSeason once next_episode_to_air moves on.
   lastSeasonAirDate?: string;
+  // Sonarr's premiere instant replaced TMDB's US calendar date in lastSeasonAirDate.
+  lastSeasonFromSonarr?: boolean;
   seasonNumber?: number;
   episodeNumber?: number;
   tvdbId?: number;
@@ -1317,7 +1320,8 @@ export async function fetchReleaseDateInfo(
   mediaType: 'movie' | 'show',
   sonarrCache?: Map<string, SonarrSeries[]>,
   preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>,
-  fetchStatus?: { failed: boolean }
+  fetchStatus?: { failed: boolean },
+  useSonarrPremiere = false
 ): Promise<ReleaseDateInfo | undefined> {
   // Check preloaded data first (batch prefetch optimization)
   if (preloadedTmdbReleaseDates) {
@@ -1353,7 +1357,13 @@ export async function fetchReleaseDateInfo(
           // let read-time clearing strip the overlay on a transient outage.
           fetchStatus.failed = true;
         }
-        return info;
+        if (!useSonarrPremiere || mediaType !== 'show') return info;
+        return applySonarrLastPremiere(
+          info,
+          preloaded.tvdbId,
+          sonarrCache,
+          fetchStatus
+        );
       } catch (error) {
         if (fetchStatus) {
           fetchStatus.failed = true;
@@ -1479,6 +1489,14 @@ export async function fetchReleaseDateInfo(
 
       if (result) {
         result.lastSeasonAirDate = latestAiredSeasonDate(showDetails.seasons);
+        if (useSonarrPremiere) {
+          result = await applySonarrLastPremiere(
+            result,
+            tvdbId,
+            sonarrCache,
+            fetchStatus
+          );
+        }
       }
 
       // A Sonarr failure that left us without an upcoming next episode must skip
@@ -1710,6 +1728,59 @@ async function applySonarrFirstNextEpisode(
   }
 
   return resolveSonarrFirstNextEpisode(base, sonarr);
+}
+
+/**
+ * When Sonarr tracks the show, its latest aired premiere instant replaces TMDB's
+ * season air_date (the network's calendar day, a day early east of the US).
+ * Untracked shows keep TMDB; a failed instance flags fetchStatus (fork#35).
+ */
+async function applySonarrLastPremiere(
+  info: ReleaseDateInfo,
+  tvdbId: number | undefined,
+  sonarrCache?: Map<string, SonarrSeries[]>,
+  fetchStatus?: { failed: boolean }
+): Promise<ReleaseDateInfo> {
+  if (!tvdbId) return info;
+  let tracked = false;
+  let anyInstanceFailed = false;
+  const premieres: string[] = [];
+  for (const sonarrSettings of getSettings().sonarr ?? []) {
+    if (!sonarrSettings.hostname) continue;
+    try {
+      const allSeries = await getSonarrSeries(sonarrSettings, sonarrCache);
+      const series = allSeries.find((s) => s.tvdbId === tvdbId);
+      if (!series) continue;
+      const episodes = await getSonarrEpisodes(
+        sonarrSettings,
+        series.id as number,
+        sonarrCache
+      );
+      tracked = true;
+      const premiere = latestAiredPremiere(episodes);
+      if (premiere) premieres.push(premiere);
+    } catch (error) {
+      anyInstanceFailed = true;
+      logger.debug('Failed to read Sonarr premieres', {
+        label: 'OverlayContextBuilder',
+        hostname: sonarrSettings.hostname,
+        tvdbId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (anyInstanceFailed) {
+    if (fetchStatus) fetchStatus.failed = true;
+    return info;
+  }
+  if (!tracked) return info;
+  return {
+    ...info,
+    lastSeasonAirDate: premieres.sort(
+      (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    )[premieres.length - 1],
+    lastSeasonFromSonarr: true,
+  };
 }
 
 // Sonarr episodeCount = (monitored AND aired) OR hasFile, so this survives unmonitored deletes

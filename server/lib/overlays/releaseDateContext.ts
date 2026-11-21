@@ -95,6 +95,25 @@ export function latestAiredSeasonDate(
   return latest;
 }
 
+/** Latest aired season-premiere instant in a Sonarr episode list; specials and undated episodes ignored. */
+export function latestAiredPremiere(
+  episodes: {
+    seasonNumber: number;
+    episodeNumber: number;
+    airDateUtc?: string;
+  }[]
+): string | undefined {
+  let latest: string | undefined;
+  for (const e of episodes) {
+    if (e.seasonNumber <= 0 || e.episodeNumber !== 1 || !e.airDateUtc) continue;
+    if (isAirDateUpcoming(e.airDateUtc)) continue;
+    if (!latest || new Date(e.airDateUtc) > new Date(latest)) {
+      latest = e.airDateUtc;
+    }
+  }
+  return latest;
+}
+
 /**
  * Derive the release-date render context (the day-count fields) from resolved
  * ReleaseDateInfo, applying the fork#35 read-time guarantee.
@@ -173,9 +192,15 @@ export function deriveReleaseDateContext(
   }
 
   // nextSeasonAirDate only holds a premiere until the pointer advances; lastSeasonAirDate outlives it.
-  const lastAiredSeasonDate = [pastSeasonAirDate, info.lastSeasonAirDate]
+  // A Sonarr premiere list replaces TMDB's bare dates but not a Sonarr instant that aired since the fetch.
+  const lastAiredSeasonDate = [
+    info.lastSeasonFromSonarr && !pastSeasonAirDate?.includes('T')
+      ? undefined
+      : pastSeasonAirDate,
+    info.lastSeasonAirDate,
+  ]
     .filter((d): d is string => !!d)
-    .sort()
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     .pop();
   if (lastAiredSeasonDate) {
     daysAgoNextSeason = calculateDaysSince(

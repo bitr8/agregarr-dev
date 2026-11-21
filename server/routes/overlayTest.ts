@@ -32,6 +32,7 @@ import {
   preferRadarrReleaseDate,
   type RadarrReleaseDates,
 } from '@server/lib/overlays/releaseDateContext';
+import { usesSonarrPremiere } from '@server/lib/overlays/releaseDateFetchPolicy';
 import { usesTmdbRatingFields } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -357,7 +358,14 @@ overlayTestRouter.post('/', async (req, res) => {
     let releaseDateContext: Partial<OverlayRenderContext> = {};
     let releaseDateInfo: ReleaseDateInfo | undefined;
     if (tmdbId) {
-      releaseDateInfo = await fetchReleaseDateInfo(tmdbId, actualMediaType);
+      releaseDateInfo = await fetchReleaseDateInfo(
+        tmdbId,
+        actualMediaType,
+        undefined,
+        undefined,
+        undefined,
+        usesSonarrPremiere(requiredContextFields)
+      );
 
       if (releaseDateInfo) {
         // Same shared read-time derivation as the overlay sync path, so the
