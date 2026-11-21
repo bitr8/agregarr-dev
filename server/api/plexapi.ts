@@ -100,6 +100,7 @@ export interface PlexMetadata {
   parentIndex?: number;
   leafCount: number;
   viewedLeafCount: number;
+  childCount?: number;
   userRating?: number;
   addedAt: number;
   updatedAt: number;
