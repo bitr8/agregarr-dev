@@ -203,8 +203,9 @@ export function calculateDaysSince(date: Date | string): number {
       : getCalendarDateInTimezone(date);
 
   const today = getNow();
-  const diffTime = today.getTime() - targetDate.getTime();
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const dayNumber = (d: Date) =>
+    Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+  return dayNumber(today) - dayNumber(targetDate);
 }
 
 /**
