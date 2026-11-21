@@ -62,7 +62,7 @@ describe('deriveReleaseDateContext', () => {
       },
       { radarrDigitalRelease: '2026-11-28T00:00:00Z' }
     );
-    const ctx = deriveReleaseDateContext(info!);
+    const ctx = deriveReleaseDateContext(info ?? {});
     expect(ctx.releaseDate).toBe('2026-11-28');
     expect(ctx.daysSinceHomeRelease).toBe(3);
   });
