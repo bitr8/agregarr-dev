@@ -22,6 +22,10 @@ import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
 import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
 import { DEFAULT_TILE_BORDER_COLOR } from '@server/lib/overlays/tileBorder';
 import { DATE_FORMATS } from '@server/utils/dateFormats';
+import {
+  mergeSegmentUpdate,
+  NUMBER_FORMATS,
+} from '@server/utils/numberFormats';
 import { useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
@@ -54,7 +58,10 @@ import {
   isSingleValueField,
 } from './types';
 import { useServerTimezone } from './useServerTimezone';
-import { buildVariableDisplayText } from './variableDisplayText';
+import {
+  buildVariableDisplayText,
+  isNumberFormatVariable,
+} from './variableDisplayText';
 
 const messages = defineMessages({
   layers: 'Layers',
@@ -109,6 +116,7 @@ const messages = defineMessages({
   variableSegment: 'Variable',
   segmentValue: 'Text Content',
   dateFormat: 'Date Format',
+  numberFormat: 'Number Format',
   // SVG properties
   selectIcon: 'Icon',
   grayscale: 'Grayscale',
@@ -1205,7 +1213,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
       updates: Partial<OverlayVariableSegment>
     ) => {
       const newSegments = [...props.segments];
-      newSegments[index] = { ...newSegments[index], ...updates };
+      newSegments[index] = mergeSegmentUpdate(newSegments[index], updates);
       handleUpdateElement(element.id, {
         properties: { ...props, segments: newSegments },
       });
@@ -1442,6 +1450,29 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                                 </option>
                               ))}
                             </optgroup>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {isNumberFormatVariable(segment.field) && (
+                      <div className="mt-2">
+                        <label className="mb-1 block text-xs text-stone-400">
+                          {intl.formatMessage(messages.numberFormat)}
+                        </label>
+                        <select
+                          value={segment.format || ''}
+                          onChange={(e) =>
+                            handleUpdateSegment(index, {
+                              format: e.target.value || undefined,
+                            })
+                          }
+                          className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                        >
+                          {NUMBER_FORMATS.map((f) => (
+                            <option key={f.value} value={f.value}>
+                              {f.label}
+                            </option>
                           ))}
                         </select>
                       </div>

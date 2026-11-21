@@ -183,3 +183,69 @@ describe('Awaiting Download preset', () => {
     expect(evaluateCondition(preset?.applicationCondition, context)).toBe(true);
   });
 });
+
+describe('Episode Info - Episode Card preset', () => {
+  const name = 'Episode Info - Episode Card';
+  const preset = PRESET_TEMPLATES.find((p) => p.name === name);
+
+  it('ships once, tagged for episode cards on a 1920x1080 canvas', () => {
+    expect(PRESET_TEMPLATES.filter((p) => p.name === name)).toHaveLength(1);
+    expect(preset?.tags).toContain('target:episode');
+    expect(preset?.templateData).toMatchObject({ width: 1920, height: 1080 });
+  });
+
+  it('leaves the existing presets at their display order', () => {
+    const index = (n: string) =>
+      PRESET_TEMPLATES.findIndex((p) => p.name === n);
+    expect(index('IMDb Rating')).toBe(0);
+    expect(index('IMDb Rating - Season Poster')).toBe(1);
+    expect(index('Resolution')).toBe(40);
+    expect(index(name)).toBe(41);
+  });
+
+  it('puts a badge bottom right that reads S01E01', () => {
+    const els = preset?.templateData.elements ?? [];
+    const tile = els.find((e) => e.type === 'tile');
+    const text = els.find((e) => e.type === 'variable');
+    expect(tile).toMatchObject({ x: 1600, y: 945, width: 305, height: 105 });
+    expect(tile?.properties).toMatchObject({
+      fillColor: '#000000',
+      fillOpacity: 60,
+    });
+    expect(text).toMatchObject({ x: 1600, y: 945, width: 305, height: 105 });
+    expect(text?.properties).toMatchObject({
+      fontSize: 55,
+      color: '#ffffff',
+      textAlign: 'center',
+      segments: [
+        { type: 'text', value: 'S' },
+        { type: 'variable', field: 'seasonNumber', format: 'pad2' },
+        { type: 'text', value: 'E' },
+        { type: 'variable', field: 'episodeNumber', format: 'pad2' },
+      ],
+    });
+  });
+
+  it('applies only when both numbers exist, specials included', () => {
+    const cond = preset?.applicationCondition;
+    const base = { isPlaceholder: false, mediaType: 'show' as const };
+    expect(
+      evaluateCondition(cond, { ...base, seasonNumber: 1, episodeNumber: 1 })
+    ).toBe(true);
+    expect(
+      evaluateCondition(cond, { ...base, seasonNumber: 0, episodeNumber: 1 })
+    ).toBe(true);
+    expect(evaluateCondition(cond, { ...base, seasonNumber: 1 })).toBe(false);
+    expect(evaluateCondition(cond, { ...base, episodeNumber: 1 })).toBe(false);
+  });
+
+  it('participates in the overlay input hash via season and episode numbers', () => {
+    const used = extractUsedContextFields(
+      [preset?.templateData as never],
+      [preset?.applicationCondition as never]
+    );
+    expect(used.has('seasonNumber')).toBe(true);
+    expect(used.has('episodeNumber')).toBe(true);
+    expect(used.has('imdbRating')).toBe(false);
+  });
+});

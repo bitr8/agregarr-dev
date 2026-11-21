@@ -11,6 +11,7 @@ import type {
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import logger from '@server/logger';
+import { formatNumberSegment } from '@server/utils/numberFormats';
 import fs from 'fs';
 import path from 'path';
 import sharp, { type OverlayOptions } from 'sharp';
@@ -640,7 +641,11 @@ class OverlayTemplateRendererService {
             // RT scores are percentages - no decimal needed (e.g., 89)
             formattedValue = Math.round(variableValue).toString();
           } else {
-            formattedValue = variableValue.toString();
+            formattedValue = formatNumberSegment(
+              variableValue,
+              segment.format,
+              segment.field
+            );
           }
         } else {
           formattedValue = String(variableValue);

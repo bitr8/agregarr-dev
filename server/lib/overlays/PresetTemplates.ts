@@ -3671,6 +3671,76 @@ export const PRESET_TEMPLATES: {
       ],
     },
   },
+
+  {
+    name: 'Episode Info - Episode Card',
+    description:
+      'Shows the season and episode code (S01E01) in the bottom-right corner of episode title cards',
+    type: 'metadata',
+    tags: ['Metadata', 'TV Shows', 'target:episode'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'seasonNumber', operator: 'exists', value: true },
+            {
+              ruleOperator: 'and',
+              field: 'episodeNumber',
+              operator: 'exists',
+              value: true,
+            },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'episode-info-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 1600,
+          y: 945,
+          width: 305,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'episode-info-code',
+          layerOrder: 1,
+          type: 'variable',
+          x: 1600,
+          y: 945,
+          width: 305,
+          height: 105,
+          properties: {
+            segments: [
+              { type: 'text', value: 'S' },
+              { type: 'variable', field: 'seasonNumber', format: 'pad2' },
+              { type: 'text', value: 'E' },
+              { type: 'variable', field: 'episodeNumber', format: 'pad2' },
+            ],
+            fontSize: 55,
+            fontFamily: 'Inter',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            textAlign: 'center',
+          },
+        },
+      ],
+    },
+  },
 ];
 
 /**

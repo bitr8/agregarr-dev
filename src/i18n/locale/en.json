@@ -985,6 +985,7 @@
   "components.OverlayEditor.noMappingsDesc": "Add mappings to display icons for specific field values",
   "components.OverlayEditor.noOtherOverlays": "No other overlay templates available",
   "components.OverlayEditor.normal": "Normal",
+  "components.OverlayEditor.numberFormat": "Number Format",
   "components.OverlayEditor.oneUnconditionalVariable": "Only one unconditional variable element allowed per overlay",
   "components.OverlayEditor.opBegins": "begins with",
   "components.OverlayEditor.opContains": "contains",

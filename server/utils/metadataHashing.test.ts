@@ -568,3 +568,43 @@ describe('date rendering in the overlay input hash', () => {
     expect(sydney).toBe(auckland);
   });
 });
+
+describe('characterisation: segment format is inside the hashed templateData', () => {
+  const variable = (format?: string) =>
+    ({
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'v1',
+          layerOrder: 0,
+          type: 'variable' as const,
+          x: 0,
+          y: 0,
+          width: 305,
+          height: 105,
+          properties: {
+            segments: [{ type: 'variable', field: 'episodeNumber', format }],
+            fontSize: 55,
+            fontFamily: 'Inter',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            color: '#fff',
+            textAlign: 'center',
+          },
+        },
+      ],
+    } as unknown as OverlayTemplateData);
+  const hash = (format?: string) =>
+    calculateOverlayInputHash({
+      templateIds: [1],
+      templateData: [variable(format)],
+      usedFields: new Set(['episodeNumber']),
+      context: { episodeNumber: 5 },
+    });
+
+  it('changes the hash when a segment format changes', () => {
+    expect(hash('pad2')).not.toBe(hash(undefined));
+    expect(hash('pad2')).not.toBe(hash('pad3'));
+  });
+});

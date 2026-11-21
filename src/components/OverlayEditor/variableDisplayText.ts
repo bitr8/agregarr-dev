@@ -3,11 +3,28 @@ import {
   DEFAULT_DATE_FORMAT,
   formatDateInTimezone,
 } from '@server/utils/dateFormats';
+import {
+  formatNumberSegment,
+  isOverlayNumberFormatField,
+} from '@server/utils/numberFormats';
 import type {
   OverlayRenderContext,
   OverlayVariableElementProps,
+  OverlayVariableSegment,
 } from './types';
 import { AVAILABLE_VARIABLES, isCollectionRankField } from './types';
+
+const sampleText = (
+  example: string | undefined,
+  segment: OverlayVariableSegment
+): string => {
+  if (!example) return `{${segment.field}}`;
+  return /^\d+$/.test(example)
+    ? formatNumberSegment(Number(example), segment.format, segment.field)
+    : example;
+};
+
+export const isNumberFormatVariable = isOverlayNumberFormatField;
 
 export const buildVariableDisplayText = (
   props: OverlayVariableElementProps,
@@ -55,7 +72,7 @@ export const buildVariableDisplayText = (
               // RT scores are percentages - no decimal needed (e.g., 89)
               text += Math.round(value).toString();
             } else {
-              text += value.toString();
+              text += formatNumberSegment(value, segment.format, segment.field);
             }
           } else {
             text += String(value);
@@ -69,7 +86,7 @@ export const buildVariableDisplayText = (
                 ? 'collectionRank'
                 : segment.field)
           );
-          text += varInfo?.example || `{${segment.field}}`;
+          text += sampleText(varInfo?.example, segment);
         }
       } else {
         // No context - show example value instead of raw variable
@@ -80,7 +97,7 @@ export const buildVariableDisplayText = (
               ? 'collectionRank'
               : segment.field)
         );
-        text += varInfo?.example || `{${segment.field}}`;
+        text += sampleText(varInfo?.example, segment);
       }
     }
   }
