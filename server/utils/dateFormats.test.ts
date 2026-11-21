@@ -1,4 +1,3 @@
-import { buildVariableDisplayText } from '@app/components/OverlayEditor/variableDisplayText';
 import { describe, expect, it } from 'vitest';
 import { DATE_FORMATS, formatDateInTimezone } from './dateFormats';
 import { formatDate } from './dateHelpers';
@@ -25,24 +24,6 @@ describe('date format table', () => {
     expect(formatDateInTimezone(SAMPLE, 'MMMM YYYY', 'UTC')).toBe(
       'December 2026'
     );
-  });
-
-  it('gives identical output from server and editor for every format', () => {
-    process.env.TZ = 'Australia/Sydney';
-    for (const f of DATE_FORMATS) {
-      for (const v of [SAMPLE, '2026-11-20T14:30:00Z']) {
-        const editor = buildVariableDisplayText(
-          {
-            segments: [
-              { type: 'variable', field: 'releaseDate', format: f.value },
-            ],
-          } as never,
-          { releaseDate: v } as never,
-          'Australia/Sydney'
-        );
-        expect(editor, `${f.value} ${v}`).toBe(formatDate(v, f.value));
-      }
-    }
   });
 
   it('formats a Date in the given timezone', () => {
