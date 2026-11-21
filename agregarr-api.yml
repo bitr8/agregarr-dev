@@ -6829,6 +6829,10 @@ paths:
                     type: number
                   restartRequired:
                     type: boolean
+                  tz:
+                    type: string
+                    description: Server timezone (IANA name)
+                    example: Australia/Sydney
   /status/appdata:
     get:
       summary: Get application data volume status

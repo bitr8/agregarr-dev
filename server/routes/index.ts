@@ -104,6 +104,7 @@ router.get('/status', async (_req, res) => {
     updateAvailable,
     commitsBehind,
     restartRequired: restartFlag.isSet(),
+    tz: process.env.TZ || 'UTC',
   });
 });
 
