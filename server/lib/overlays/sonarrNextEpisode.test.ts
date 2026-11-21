@@ -244,6 +244,7 @@ describe('fetchNextEpisodeFromSonarr aggregation', () => {
     expect(r.episode.seasonNumber).toBeUndefined();
     expect(r.episode.episodeNumber).toBeUndefined();
     expect(r.episode.nextSeasonAirDate).toBeUndefined();
+    expect(r.episode.numberingUnmatched).toBe(false);
 
     const { info } = resolveSonarrFirstNextEpisode(
       { nextEpisodeAirDate: '2026-07-18', seasonNumber: 0, episodeNumber: 1 },
@@ -251,6 +252,29 @@ describe('fetchNextEpisodeFromSonarr aggregation', () => {
     );
     expect(info.seasonNumber).toBeUndefined();
     expect(info.episodeNumber).toBeUndefined();
+  });
+
+  it('no episode matches nextAiring: TMDB numbering and premiere are kept', async () => {
+    mockGetSettings.mockReturnValue({ sonarr: [instance('a')] });
+    mockGetSeries.mockResolvedValueOnce([seriesWithUpcoming]);
+    mockGetEpisodes.mockResolvedValueOnce([ep(2, 3, '2026-07-11T09:00:00Z')]);
+    const r = await fetchNextEpisodeFromSonarr(123);
+    if (r.kind !== 'found') throw new Error('expected found');
+    expect(r.episode.numberingUnmatched).toBe(true);
+
+    const { info } = resolveSonarrFirstNextEpisode(
+      {
+        nextEpisodeAirDate: '2026-07-18',
+        nextSeasonAirDate: '2026-07-18',
+        seasonNumber: 3,
+        episodeNumber: 1,
+      },
+      r
+    );
+    expect(info.nextEpisodeAirDate).toBe('2026-07-18T09:00:00Z');
+    expect(info.seasonNumber).toBe(3);
+    expect(info.episodeNumber).toBe(1);
+    expect(info.nextSeasonAirDate).toBe('2026-07-18');
   });
 
   it('episode list fetch failure -> failed, not none', async () => {

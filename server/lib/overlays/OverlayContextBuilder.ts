@@ -1262,6 +1262,8 @@ type SonarrNextEpisode = {
   nextSeasonAirDate?: string;
   seasonNumber?: number;
   episodeNumber?: number;
+  // No episode matched nextAiring: leave the base (TMDB) numbering alone
+  numberingUnmatched?: boolean;
 };
 
 /**
@@ -1544,13 +1546,12 @@ export async function fetchNextEpisodeFromSonarr(
               series.id as number,
               cache
             );
-            const next = episodes
-              .filter(
-                (e) =>
-                  e.seasonNumber > 0 &&
-                  !!e.airDateUtc &&
-                  new Date(e.airDateUtc).getTime() === target
-              )
+            const matches = episodes.filter(
+              (e) =>
+                !!e.airDateUtc && new Date(e.airDateUtc).getTime() === target
+            );
+            const next = matches
+              .filter((e) => e.seasonNumber > 0)
               .sort(
                 (a, b) =>
                   a.seasonNumber - b.seasonNumber ||
@@ -1565,6 +1566,7 @@ export async function fetchNextEpisodeFromSonarr(
                   next?.episodeNumber === 1 ? series.nextAiring : undefined,
                 seasonNumber: next?.seasonNumber,
                 episodeNumber: next?.episodeNumber,
+                numberingUnmatched: matches.length === 0,
               },
             };
           }
@@ -1635,9 +1637,13 @@ export function resolveSonarrFirstNextEpisode(
         ...base,
         releaseDate: base.releaseDate || ep.nextEpisodeAirDate,
         nextEpisodeAirDate: ep.nextEpisodeAirDate,
-        nextSeasonAirDate: ep.nextSeasonAirDate,
-        seasonNumber: ep.seasonNumber,
-        episodeNumber: ep.episodeNumber,
+        ...(ep.numberingUnmatched
+          ? {}
+          : {
+              nextSeasonAirDate: ep.nextSeasonAirDate,
+              seasonNumber: ep.seasonNumber,
+              episodeNumber: ep.episodeNumber,
+            }),
       },
       sonarrFailed: false,
     };
