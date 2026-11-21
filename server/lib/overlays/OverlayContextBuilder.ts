@@ -1247,6 +1247,8 @@ export interface ReleaseDateInfo {
   theatricalRelease?: string;
   digitalRelease?: string;
   physicalRelease?: string;
+  // Earliest Radarr home date; when set, Days Since Home Release counts from it only.
+  radarrHomeRelease?: string;
   releaseSource?: 'digital' | 'physical' | 'estimate' | 'tmdb';
   nextEpisodeAirDate?: string;
   nextSeasonAirDate?: string;

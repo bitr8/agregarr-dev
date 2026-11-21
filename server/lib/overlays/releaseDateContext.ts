@@ -76,6 +76,7 @@ export function preferRadarrReleaseDate(
       radarr.radarrDigitalRelease,
       radarr.radarrPhysicalRelease
     ),
+    radarrHomeRelease: fromRadarr.releaseDate,
   };
 }
 
@@ -184,9 +185,11 @@ export function deriveReleaseDateContext(
 
   const daysSinceDate = (d: string | undefined) =>
     d ? calculateDaysSince(toServerCalendarDate(d)) : undefined;
-  const homeDates = [info.digitalRelease, info.physicalRelease]
-    .filter((d): d is string => !!d)
-    .sort();
+  const homeDates = info.radarrHomeRelease
+    ? [info.radarrHomeRelease]
+    : [info.digitalRelease, info.physicalRelease]
+        .filter((d): d is string => !!d)
+        .sort();
 
   return {
     releaseDate: info.releaseDate,
