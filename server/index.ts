@@ -81,6 +81,8 @@ app
     // Migrate placeholder settings from global to per-library format
     settings.migratePlaceholderSettingsToPerLibrary();
 
+    settings.stripUnsupportedTargetUsers();
+
     // Migrate single FlareSolverr URL to the cloudflareSolvers priority list
     settings.migrateFlareSolverrUrlToSolverList();
 

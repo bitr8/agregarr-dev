@@ -617,6 +617,16 @@ export class HubSyncService {
             // Use the collection name from Plex
             const collectionName = preExistingConfig.name;
 
+            const defaultTemplate = preExistingConfig.autoPosterTemplate
+              ? null
+              : await (
+                  await import('@server/lib/posterGeneration')
+                ).getDefaultPosterTemplate();
+            const effectiveTemplateId =
+              preExistingConfig.autoPosterTemplate ??
+              defaultTemplate?.id ??
+              null;
+
             // Fetch collection items from Plex for content grid
             let posterItems: CollectionItemWithPoster[] | undefined;
             let totalItemCount = 0;
@@ -625,19 +635,22 @@ export class HubSyncService {
               // Get template to determine how many items we need
               let maxItems = 12; // Default fallback
 
-              if (preExistingConfig.autoPosterTemplate) {
+              if (preExistingConfig.autoPosterTemplate || defaultTemplate) {
                 const { getRepository } = await import('@server/datasource');
                 const { PosterTemplate } = await import(
                   '@server/entity/PosterTemplate'
                 );
                 const templateRepository = getRepository(PosterTemplate);
 
-                const template = await templateRepository.findOne({
-                  where: {
-                    id: preExistingConfig.autoPosterTemplate,
-                    isActive: true,
-                  },
-                });
+                const explicitId = preExistingConfig.autoPosterTemplate;
+
+                const template =
+                  defaultTemplate ??
+                  (explicitId
+                    ? await templateRepository.findOne({
+                        where: { id: explicitId, isActive: true },
+                      })
+                    : null);
 
                 if (template) {
                   const templateData = template.getTemplateData();
@@ -760,7 +773,9 @@ export class HubSyncService {
             try {
               // Fetch template data for accurate change detection
               let templateData: unknown = null;
-              if (preExistingConfig.autoPosterTemplate) {
+              if (defaultTemplate) {
+                templateData = defaultTemplate.templateData;
+              } else if (preExistingConfig.autoPosterTemplate) {
                 const { getRepository } = await import('@server/datasource');
                 const { PosterTemplate } = await import(
                   '@server/entity/PosterTemplate'
@@ -778,15 +793,9 @@ export class HubSyncService {
                 posterTemplateReadsField,
                 posterTemplateReadsCollectionType,
               } = await import('@server/utils/metadataHashing');
-              const ruleTemplateData =
-                templateData ??
-                (preExistingConfig.autoPosterTemplate == null
-                  ? await (
-                      await import('@server/lib/posterGeneration')
-                    ).getDefaultPosterTemplateData()
-                  : null);
+              const ruleTemplateData = templateData;
               posterInputHash = calculatePosterInputHash({
-                templateId: preExistingConfig.autoPosterTemplate || null,
+                templateId: effectiveTemplateId,
                 templateData, // Include template content for change detection
                 itemIds: (posterItems || [])
                   .map((item) => {

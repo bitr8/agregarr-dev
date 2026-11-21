@@ -7,6 +7,10 @@ import {
   ArrowUturnRightIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
+import {
+  filterEssentialsValues,
+  resolveSelectionMode,
+} from '@server/utils/essentialsSelection';
 import type React from 'react';
 import {
   Fragment,
@@ -507,12 +511,15 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
   const essentialsPreviewValues = useMemo(() => {
     if (!selectedPreviewSource) return [];
     const all = essentialsValuesData?.values || [];
-    const selectionMode = selectedPreviewSource.selectionMode ?? 'include';
-    const includeValues = selectedPreviewSource.includeValues ?? [];
-    const excludeValues = selectedPreviewSource.excludeValues ?? [];
-    return selectionMode === 'include'
-      ? all.filter((v) => includeValues.includes(v.key))
-      : all.filter((v) => !excludeValues.includes(v.key));
+    return filterEssentialsValues(
+      all,
+      resolveSelectionMode(
+        selectedPreviewSource.selectionMode,
+        selectedPreviewSource.includeValues
+      ),
+      selectedPreviewSource.includeValues ?? [],
+      selectedPreviewSource.excludeValues ?? []
+    );
   }, [essentialsValuesData, selectedPreviewSource]);
 
   const [selectedPreviewValue, setSelectedPreviewValue] = useState('');

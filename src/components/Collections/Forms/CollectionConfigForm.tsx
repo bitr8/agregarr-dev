@@ -58,6 +58,11 @@ import WallpaperUploadSection from '@app/components/Collections/FormSections/Wal
 import PreviewCollectionModal from '@app/components/Collections/PreviewCollectionModal';
 import { COLLECTION_PRESETS } from '@app/utils/collectionPresets';
 import {
+  libraryIdsForPresetMediaType,
+  supportsTargetUser,
+  withDefaultInactiveVisibility,
+} from '@app/utils/collections/collectionFormRules';
+import {
   getLibraryEssentialsLabel,
   isEpisodeHub,
   isLibraryEssentialsPattern,
@@ -72,7 +77,14 @@ import {
   buildPromotedSortTitle,
   normalizeArticleForDisplay,
 } from '@app/utils/collections/sortTitle';
+import {
+  DATE_RANGE_ERROR,
+  getTimeRestrictionErrors,
+  NO_DAY_ERROR,
+  withoutBlankDateRanges,
+} from '@app/utils/collections/timeRestrictionValidation';
 import { placeholdersEnabled } from '@server/constants/placeholders';
+import { resolveSelectionMode } from '@server/utils/essentialsSelection';
 
 const SourceRankResetGuard = () => {
   const { values, setFieldValue } = useFormikContext<CollectionFormConfig>();
@@ -1086,15 +1098,26 @@ const CollectionFormConfigForm = ({
     }),
 
     // Time restriction validation
-    timeRestriction: Yup.object().shape({
-      alwaysActive: Yup.boolean(),
-      removeFromPlexWhenInactive: Yup.boolean(),
-      inactiveVisibilityConfig: Yup.object().shape({
-        usersHome: Yup.boolean(),
-        serverOwnerHome: Yup.boolean(),
-        libraryRecommended: Yup.boolean(),
-      }),
-    }),
+    timeRestriction: Yup.object()
+      .shape({
+        alwaysActive: Yup.boolean(),
+        removeFromPlexWhenInactive: Yup.boolean(),
+        inactiveVisibilityConfig: Yup.object().shape({
+          usersHome: Yup.boolean(),
+          serverOwnerHome: Yup.boolean(),
+          libraryRecommended: Yup.boolean(),
+        }),
+      })
+      .test(
+        'time-restriction-date-ranges',
+        DATE_RANGE_ERROR,
+        (value) => !getTimeRestrictionErrors(value).dateRanges
+      )
+      .test(
+        'time-restriction-days',
+        NO_DAY_ERROR,
+        (value) => !getTimeRestrictionErrors(value).weeklySchedule
+      ),
 
     // Custom sync schedule validation
     customSyncSchedule: Yup.object().shape({
@@ -2232,15 +2255,9 @@ const CollectionFormConfigForm = ({
           smartCollectionSort:
             (config as CollectionFormConfig).smartCollectionSort ??
             SMART_COLLECTION_SORT_OPTIONS[5], // Default to release date (newest first)
-          timeRestriction: config.timeRestriction || {
-            alwaysActive: true,
-            removeFromPlexWhenInactive: false,
-            inactiveVisibilityConfig: {
-              usersHome: false,
-              serverOwnerHome: false,
-              libraryRecommended: true,
-            },
-          },
+          timeRestriction: withDefaultInactiveVisibility(
+            config.timeRestriction
+          ),
           // Multi-source configuration - initialize properly based on existing config
           isMultiSource:
             (config as CollectionFormConfig).isMultiSource ?? false,
@@ -2295,8 +2312,10 @@ const CollectionFormConfigForm = ({
             startDate: '01-01',
             startTime: '09:00',
           },
-          selectionMode:
-            (config as CollectionFormConfig).selectionMode ?? 'exclude',
+          selectionMode: resolveSelectionMode(
+            (config as CollectionFormConfig).selectionMode,
+            (config as CollectionFormConfig).includeValues
+          ),
           excludeValues: (config as CollectionFormConfig).excludeValues ?? [],
           includeValues: (config as CollectionFormConfig).includeValues ?? [],
         }}
@@ -2439,6 +2458,8 @@ const CollectionFormConfigForm = ({
           );
           const isStandaloneSeparator =
             values.type === 'plex' && values.subtype === 'separator';
+          const targetUserApplies =
+            isCollection && supportsTargetUser(values.type, values.subtype);
           const defaultSeparatorTitle =
             values.subtype === 'actors'
               ? 'Actor Collections'
@@ -2533,6 +2554,7 @@ const CollectionFormConfigForm = ({
 
           const configToSave: CollectionFormConfig = {
             ...values,
+            timeRestriction: withoutBlankDateRanges(values.timeRestriction),
             // For multi-source collections, ensure type is set correctly
             type: values.isMultiSource ? 'multi-source' : values.type,
             subtype: finalSubtype,
@@ -2766,7 +2788,7 @@ const CollectionFormConfigForm = ({
                 ? values.comingSoonIncludeMidSeason
                 : undefined,
             selectionMode: isEssentials
-              ? values.selectionMode || 'exclude'
+              ? resolveSelectionMode(values.selectionMode, values.includeValues)
               : undefined,
             excludeValues: isEssentials
               ? values.excludeValues || []
@@ -2814,8 +2836,12 @@ const CollectionFormConfigForm = ({
               ? undefined
               : values.excludeLabels,
             // Target user restriction
-            targetUserId: optionalString(values.targetUserId),
-            targetUserLabel: optionalString(values.targetUserLabel),
+            targetUserId: targetUserApplies
+              ? optionalString(values.targetUserId)
+              : undefined,
+            targetUserLabel: targetUserApplies
+              ? optionalString(values.targetUserLabel)
+              : undefined,
             // Remove UI-only fields from the final config
             enableGrabMissingItems: undefined,
           };
@@ -3008,6 +3034,14 @@ const CollectionFormConfigForm = ({
                               setFieldValue(
                                 'createPlaceholdersForMissing',
                                 preset.config.type === 'comingsoon'
+                              );
+                              setFieldValue(
+                                'libraryIds',
+                                libraryIdsForPresetMediaType(
+                                  values.libraryIds || [],
+                                  libraries || [],
+                                  preset.mediaType
+                                )
                               );
                             }}
                           >
@@ -3493,6 +3527,7 @@ const CollectionFormConfigForm = ({
                                   )}
                                   currentUser={currentUser}
                                   libraries={libraries}
+                                  isEditing={Boolean(config.name)}
                                 />
                               </div>
                             </div>
@@ -3886,74 +3921,81 @@ const CollectionFormConfigForm = ({
                             </div>
 
                             {/* Target User */}
-                            <div className="form-row">
-                              <label
-                                htmlFor="targetUserId"
-                                className="text-label"
-                              >
-                                {intl.formatMessage(messages.targetUser)}
-                              </label>
-                              <div className="form-input-area">
-                                <div className="form-input-field">
-                                  <Field
-                                    as="select"
-                                    id="targetUserId"
-                                    name="targetUserId"
-                                    value={values.targetUserId || ''}
-                                    onChange={(
-                                      e: React.ChangeEvent<HTMLSelectElement>
-                                    ) => {
-                                      const selectedId = e.target.value;
-                                      if (selectedId) {
-                                        const user = plexUsers?.find(
-                                          (u) => u.id === selectedId
-                                        );
-                                        setFieldValue(
-                                          'targetUserId',
-                                          selectedId
-                                        );
-                                        setFieldValue(
-                                          'targetUserLabel',
-                                          user ? user.title : ''
-                                        );
-                                      } else {
-                                        setFieldValue(
-                                          'targetUserId',
-                                          undefined
-                                        );
-                                        setFieldValue(
-                                          'targetUserLabel',
-                                          undefined
-                                        );
-                                      }
-                                    }}
-                                  >
-                                    <option value="">
-                                      {intl.formatMessage(
-                                        messages.targetUserNone
-                                      )}
-                                    </option>
-                                    {plexUsers?.map((user) => (
-                                      <option key={user.id} value={user.id}>
-                                        {user.title}
+                            {supportsTargetUser(
+                              values.type,
+                              values.subtype
+                            ) && (
+                              <div className="form-row">
+                                <label
+                                  htmlFor="targetUserId"
+                                  className="text-label"
+                                >
+                                  {intl.formatMessage(messages.targetUser)}
+                                </label>
+                                <div className="form-input-area">
+                                  <div className="form-input-field">
+                                    <Field
+                                      as="select"
+                                      id="targetUserId"
+                                      name="targetUserId"
+                                      value={values.targetUserId || ''}
+                                      onChange={(
+                                        e: React.ChangeEvent<HTMLSelectElement>
+                                      ) => {
+                                        const selectedId = e.target.value;
+                                        if (selectedId) {
+                                          const user = plexUsers?.find(
+                                            (u) => u.id === selectedId
+                                          );
+                                          setFieldValue(
+                                            'targetUserId',
+                                            selectedId
+                                          );
+                                          setFieldValue(
+                                            'targetUserLabel',
+                                            user ? user.title : ''
+                                          );
+                                        } else {
+                                          setFieldValue(
+                                            'targetUserId',
+                                            undefined
+                                          );
+                                          setFieldValue(
+                                            'targetUserLabel',
+                                            undefined
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <option value="">
+                                        {intl.formatMessage(
+                                          messages.targetUserNone
+                                        )}
                                       </option>
-                                    ))}
-                                  </Field>
+                                      {plexUsers?.map((user) => (
+                                        <option key={user.id} value={user.id}>
+                                          {user.title}
+                                        </option>
+                                      ))}
+                                    </Field>
+                                  </div>
+                                  <p className="mt-1 text-sm text-gray-400">
+                                    {intl.formatMessage(
+                                      messages.targetUserHint
+                                    )}
+                                  </p>
+                                  {values.targetUserId &&
+                                    values.visibilityConfig?.usersHome && (
+                                      <div className="mt-2 rounded border border-orange-500/20 bg-orange-500/10 p-2 text-xs text-orange-300">
+                                        ⚠️{' '}
+                                        {intl.formatMessage(
+                                          messages.targetUserHomeConflict
+                                        )}
+                                      </div>
+                                    )}
                                 </div>
-                                <p className="mt-1 text-sm text-gray-400">
-                                  {intl.formatMessage(messages.targetUserHint)}
-                                </p>
-                                {values.targetUserId &&
-                                  values.visibilityConfig?.usersHome && (
-                                    <div className="mt-2 rounded border border-orange-500/20 bg-orange-500/10 p-2 text-xs text-orange-300">
-                                      ⚠️{' '}
-                                      {intl.formatMessage(
-                                        messages.targetUserHomeConflict
-                                      )}
-                                    </div>
-                                  )}
                               </div>
-                            </div>
+                            )}
 
                             {/* Randomize Home Order */}
                             <div className="form-input-area">
@@ -5396,70 +5438,6 @@ const CollectionFormConfigForm = ({
                                 restrictToLibraryOnly={false}
                                 restrictToServerOwnerOnly={false}
                               />
-                            </div>
-                          </div>
-
-                          {/* Target User */}
-                          <div className="form-row">
-                            <label
-                              htmlFor="targetUserId"
-                              className="text-label"
-                            >
-                              {intl.formatMessage(messages.targetUser)}
-                            </label>
-                            <div className="form-input-area">
-                              <div className="form-input-field">
-                                <Field
-                                  as="select"
-                                  id="targetUserId"
-                                  name="targetUserId"
-                                  value={values.targetUserId || ''}
-                                  onChange={(
-                                    e: React.ChangeEvent<HTMLSelectElement>
-                                  ) => {
-                                    const selectedId = e.target.value;
-                                    if (selectedId) {
-                                      const user = plexUsers?.find(
-                                        (u) => u.id === selectedId
-                                      );
-                                      setFieldValue('targetUserId', selectedId);
-                                      setFieldValue(
-                                        'targetUserLabel',
-                                        user ? user.title : ''
-                                      );
-                                    } else {
-                                      setFieldValue('targetUserId', undefined);
-                                      setFieldValue(
-                                        'targetUserLabel',
-                                        undefined
-                                      );
-                                    }
-                                  }}
-                                >
-                                  <option value="">
-                                    {intl.formatMessage(
-                                      messages.targetUserNone
-                                    )}
-                                  </option>
-                                  {plexUsers?.map((user) => (
-                                    <option key={user.id} value={user.id}>
-                                      {user.title}
-                                    </option>
-                                  ))}
-                                </Field>
-                              </div>
-                              <p className="mt-1 text-sm text-gray-400">
-                                {intl.formatMessage(messages.targetUserHint)}
-                              </p>
-                              {values.targetUserId &&
-                                values.visibilityConfig?.usersHome && (
-                                  <div className="mt-2 rounded border border-orange-500/20 bg-orange-500/10 p-2 text-xs text-orange-300">
-                                    ⚠️{' '}
-                                    {intl.formatMessage(
-                                      messages.targetUserHomeConflict
-                                    )}
-                                  </div>
-                                )}
                             </div>
                           </div>
 

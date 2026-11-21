@@ -41,6 +41,10 @@ import {
   type CollectionSortOrder,
 } from '@server/lib/settings';
 import logger from '@server/logger';
+import {
+  filterEssentialsValues,
+  resolveSelectionMode,
+} from '@server/utils/essentialsSelection';
 
 // Plex reshuffles a random smart collection on every fetch; a stable order keeps the poster hash steady
 export function posterSourceOrder<T extends { ratingKey: string }>(
@@ -591,6 +595,13 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
 
       const separatorRatingKey = ratingKey as string;
 
+      const uploadedPoster =
+        config.autoPoster === false && config.customPoster
+          ? typeof config.customPoster === 'string'
+            ? config.customPoster
+            : config.customPoster[config.libraryId]
+          : undefined;
+
       processedCollectionKeys?.add(separatorRatingKey);
 
       const visibilityConfig: CollectionVisibilityConfig = {
@@ -612,7 +623,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
         customLabel: separatorLabel,
         sortOrderLibrary: config.sortOrderLibrary,
         isLibraryPromoted: config.isLibraryPromoted,
-        customPoster: undefined,
+        customPoster: uploadedPoster ? config.customPoster : undefined,
         libraryKey: config.libraryId,
         config,
         existingTitle: existingCollection?.title,
@@ -666,8 +677,10 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       }
 
       // Generate poster via pipeline; use config template if set, fall back to built-in Separator
-      const separatorTemplateId =
-        config.autoPosterTemplate ?? (await this.resolveSeparatorTemplateId());
+      const separatorTemplateId = uploadedPoster
+        ? undefined
+        : config.autoPosterTemplate ??
+          (await this.resolveSeparatorTemplateId());
 
       if (separatorTemplateId) {
         try {
@@ -704,7 +717,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
             config,
           });
         }
-      } else {
+      } else if (!uploadedPoster) {
         await this.updateCollectionMetadata(plexClient, separatorRatingKey, {
           // Written above - see the note on the first call.
           skipSortTitle: true,
@@ -906,14 +919,12 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
         }
       }
 
-      const selectionMode = config.selectionMode ?? 'include';
-      const excludeValues = config.excludeValues ?? [];
-      const includeValues = config.includeValues ?? [];
-
-      const filteredValues =
-        selectionMode === 'include'
-          ? values.filter((v) => includeValues.includes(v.key))
-          : values.filter((v) => !excludeValues.includes(v.key));
+      const filteredValues = filterEssentialsValues(
+        values,
+        resolveSelectionMode(config.selectionMode, config.includeValues),
+        config.includeValues ?? [],
+        config.excludeValues ?? []
+      );
 
       let created = 0;
       let updated = 0;

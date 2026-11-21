@@ -972,3 +972,80 @@ describe('generateAutoPoster: Item Count is the collection size', () => {
     expect(hashes[0]).not.toBe(hashes[1]);
   });
 });
+
+describe('generateAutoPoster: null template resolves to the default', () => {
+  const grid = (columns: number, rows: number) => ({
+    elements: [{ type: 'content-grid', properties: { columns, rows } }],
+  });
+
+  const defaultRow = (id: number, columns: number, rows: number) => ({
+    id,
+    templateData: JSON.stringify({ id, columns, rows }),
+    getTemplateData: () => grid(columns, rows),
+  });
+
+  const captureHashes = async () => {
+    const metadata = (
+      await import('@server/lib/metadata/MetadataTrackingService')
+    ).default as unknown as {
+      shouldRegeneratePoster: (rk: string, hash: string) => Promise<boolean>;
+    };
+    const hashes: string[] = [];
+    const spy = vi
+      .spyOn(metadata, 'shouldRegeneratePoster')
+      .mockImplementation(async (_rk, hash) => {
+        hashes.push(hash);
+        return true;
+      });
+    return { hashes, spy };
+  };
+
+  const items = Array.from({ length: 12 }, (_, i) => ({
+    ratingKey: String(i),
+    tmdbId: i + 1,
+    title: `T${i}`,
+    type: 'movie' as const,
+  }));
+
+  const generate = (opts?: Record<string, unknown>) =>
+    (
+      new TestSync() as unknown as {
+        generateAutoPoster: (...args: unknown[]) => Promise<void>;
+      }
+    ).generateAutoPoster(
+      'Neon Noir',
+      config({ autoPosterTemplate: undefined }),
+      '900',
+      { getCurrentPosterUrl: async () => undefined },
+      items,
+      undefined,
+      opts
+    );
+
+  it('sizes the grid from the default template', async () => {
+    const { generatePoster } = await import('@server/lib/posterStorage');
+    vi.mocked(generatePoster).mockReset();
+    vi.mocked(generatePoster).mockRejectedValue(new Error('captured'));
+    vi.mocked(getRepository).mockReturnValue({
+      findOne: async () => defaultRow(5, 3, 3),
+    } as never);
+
+    await generate();
+
+    expect(vi.mocked(generatePoster).mock.calls[0][0].items).toHaveLength(9);
+  });
+
+  it('changes the hash when the default template changes', async () => {
+    const { hashes, spy } = await captureHashes();
+    for (const row of [defaultRow(5, 2, 2), defaultRow(6, 2, 2)]) {
+      vi.mocked(getRepository).mockReturnValue({
+        findOne: async () => row,
+      } as never);
+      await generate();
+    }
+    spy.mockRestore();
+
+    expect(hashes).toHaveLength(2);
+    expect(hashes[0]).not.toBe(hashes[1]);
+  });
+});

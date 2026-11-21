@@ -234,6 +234,34 @@ describe('random list exclusions', () => {
     }
   });
 
+  it('prefers the user tmdb.txt over the library pool when enabled', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'random-lists-'));
+    const userUrl = 'https://www.themoviedb.org/collection/777001';
+    const libraryUrl = 'https://www.themoviedb.org/collection/424242';
+    fs.writeFileSync(path.join(dir, 'tmdb.txt'), `enabled=true\n${userUrl}\n`);
+    internals.configDir = dir;
+    RandomListManager.clearCache();
+    const tmdb = RandomListManager as unknown as {
+      getTmdbCollectionsFromLibrary(): Promise<string[]>;
+      validateUrlForMediaType(): Promise<boolean>;
+    };
+    vi.spyOn(tmdb, 'getTmdbCollectionsFromLibrary').mockResolvedValue([
+      libraryUrl,
+    ]);
+    vi.spyOn(tmdb, 'validateUrlForMediaType').mockResolvedValue(true);
+    try {
+      for (let i = 0; i < 5; i++) {
+        RandomListManager.clearCache();
+        expect(
+          await RandomListManager.getRandomUrl('tmdb', 50, 'movie', {} as never)
+        ).toBe(userUrl);
+      }
+    } finally {
+      vi.restoreAllMocks();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('still uses the library pool when every discovered and built-in TMDB collection is excluded', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'random-lists-'));
     const discovered = 'https://www.themoviedb.org/collection/1570';

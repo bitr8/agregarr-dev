@@ -41,6 +41,7 @@ import type {
 import { getSettings } from '@server/lib/settings';
 import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
+import { targetedConfigs } from '@server/utils/targetUserSupport';
 import path from 'path';
 import { syncCacheService } from './SyncCacheService';
 
@@ -677,9 +678,7 @@ export class CollectionSyncService {
     );
 
     // Detect configs with targetUserId set (per-user targeted collections)
-    const targetUserConfigs = collectionConfigs.filter(
-      (config) => config.targetUserId !== undefined
-    );
+    const targetUserConfigs = targetedConfigs(collectionConfigs);
     const hasTargetUserConfigs = targetUserConfigs.length > 0;
 
     if (hasUsersConfig || hasServerOwnerConfig || hasTargetUserConfigs) {

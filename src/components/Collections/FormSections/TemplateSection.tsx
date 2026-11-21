@@ -4,9 +4,10 @@ import type {
   Library,
   TemplatePreset,
 } from '@app/types/collections';
+import { resolveTemplateFix } from '@app/utils/collections/collectionFormRules';
 import { Field, type FormikErrors, type FormikTouched } from 'formik';
 import type React from 'react';
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 
 const messages = defineMessages({
@@ -41,6 +42,7 @@ interface TemplateSectionProps {
     detectedMediaTypes: DetectedMediaTypes
   ) => TemplatePreset[];
   isVisible?: boolean;
+  isEditing?: boolean;
   currentUser?: {
     id: number;
     displayName: string;
@@ -98,6 +100,7 @@ const TemplateSection = ({
   detectedMediaTypes,
   getTemplatePresets,
   isVisible = true,
+  isEditing = false,
   libraries = [],
 }: TemplateSectionProps) => {
   const intl = useIntl();
@@ -120,6 +123,41 @@ const TemplateSection = ({
         : undefined,
     };
   }, [values.type, values.subtype, values.timePeriod, values.customDays]);
+
+  const presetValues = getTemplatePresets(
+    values,
+    fetchedTitles,
+    detectedMediaTypes
+  )
+    .map((p) => p.value)
+    .join('\u0000');
+
+  const editConversionPending = useRef(isEditing);
+  const initialSource = useRef(`${values.type}/${values.subtype}`);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    const selected = libraries.filter(
+      (lib) => values.libraryIds?.includes(lib.key) ?? false
+    );
+    const { fix, settled } = resolveTemplateFix({
+      template: values.template,
+      presetValues: presetValues ? presetValues.split('\u0000') : [],
+      hasMovieLib: selected.some((lib) => lib.type === 'movie'),
+      hasTVLib: selected.some((lib) => lib.type === 'show'),
+      pendingEditConversion: editConversionPending.current,
+      sourceChanged:
+        initialSource.current !== `${values.type}/${values.subtype}`,
+    });
+    if (settled) editConversionPending.current = false;
+    if (!fix) return;
+    setFieldValue('template', fix.template);
+    if (fix.customMovieTemplate !== undefined)
+      setFieldValue('customMovieTemplate', fix.customMovieTemplate);
+    if (fix.customTVTemplate !== undefined)
+      setFieldValue('customTVTemplate', fix.customTVTemplate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible, values.template, presetValues]);
 
   if (!isVisible) return null;
 
@@ -153,16 +191,6 @@ const TemplateSection = ({
               fetchedTitles,
               detectedMediaTypes
             );
-
-            // Auto-select the first available option if template is empty or not in current presets
-            // This handles cases like editing a multi-source collection that was previously
-            // single-source (e.g., template = 'Trending Anime' but multi-source only has 'custom')
-            const isTemplateValid =
-              values.template &&
-              templatePresets.some((p) => p.value === values.template);
-            if (!isTemplateValid && templatePresets.length > 0) {
-              setFieldValue('template', templatePresets[0].value);
-            }
 
             return templatePresets.map((preset) => (
               <option key={preset.value} value={preset.value}>

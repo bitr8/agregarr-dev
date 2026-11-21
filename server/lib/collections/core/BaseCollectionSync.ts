@@ -4064,19 +4064,32 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         mediaType,
       });
 
+      const defaultTemplate = config.autoPosterTemplate
+        ? null
+        : await (
+            await import('@server/lib/posterGeneration')
+          ).getDefaultPosterTemplate();
+      const effectiveTemplateId =
+        config.autoPosterTemplate ?? defaultTemplate?.id ?? null;
+
       // Convert items to poster format if available
       let posterItems: CollectionItemWithPoster[] | undefined;
       if (items && items.length > 0) {
         // Determine how many items we need based on the template's content grid
         let maxItems = 4; // Default fallback for old templates
 
-        if (config.autoPosterTemplate) {
+        if (config.autoPosterTemplate || defaultTemplate) {
           try {
             const templateRepository = getRepository(PosterTemplate);
+            const explicitId = config.autoPosterTemplate;
 
-            const template = await templateRepository.findOne({
-              where: { id: config.autoPosterTemplate, isActive: true },
-            });
+            const template =
+              defaultTemplate ??
+              (explicitId
+                ? await templateRepository.findOne({
+                    where: { id: explicitId, isActive: true },
+                  })
+                : null);
 
             if (template) {
               const templateData = template.getTemplateData();
@@ -4141,7 +4154,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
       // Fetch template data for accurate change detection
       let templateData: unknown = null;
-      if (config.autoPosterTemplate) {
+      if (defaultTemplate) {
+        templateData = defaultTemplate.templateData;
+      } else if (config.autoPosterTemplate) {
         const templateRepo = getRepository(PosterTemplate);
         const template = await templateRepo.findOne({
           where: { id: config.autoPosterTemplate },
@@ -4155,15 +4170,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         posterTemplateReadsField,
         posterTemplateReadsCollectionType,
       } = await import('@server/utils/metadataHashing');
-      const ruleTemplateData =
-        templateData ??
-        (config.autoPosterTemplate == null
-          ? await (
-              await import('@server/lib/posterGeneration')
-            ).getDefaultPosterTemplateData()
-          : null);
+      const ruleTemplateData = templateData;
       const posterInputHash = calculatePosterInputHash({
-        templateId: config.autoPosterTemplate || null,
+        templateId: effectiveTemplateId,
         templateData, // Include template content for change detection
         itemIds: (posterItems || [])
           .map((item) => item.tmdbId?.toString() || item.title)

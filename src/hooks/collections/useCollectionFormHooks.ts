@@ -134,9 +134,6 @@ export const useCollectionValidation = ({
         case 'maxSeasonsToRequest':
           return ValidationHelpers.validateAutoRequest(mutableValues);
 
-        case 'timeRestriction':
-          return ValidationHelpers.validateTimeRestrictions(mutableValues);
-
         default:
           return null;
       }

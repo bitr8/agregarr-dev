@@ -627,8 +627,16 @@ https://letterboxd.com/dave/list/imdb-top-250/
     configId?: string
   ): Promise<string | null> {
     const urls = await this.getRandomUrls(sourceType, targetMediaType);
+    const userConfig = this.readConfig(sourceType);
+    const hasUserUrls =
+      userConfig.enabled &&
+      this.applyExclusions(sourceType, userConfig.urls, userConfig.excludes)
+        .length > 0;
     const usesLibraryPool =
-      sourceType === 'tmdb' && !!libraryCache && targetMediaType === 'movie';
+      sourceType === 'tmdb' &&
+      !!libraryCache &&
+      targetMediaType === 'movie' &&
+      !hasUserUrls;
     const warnNoUrls = () =>
       logger.warn(`No random URLs available for source type: ${sourceType}`, {
         label: 'RandomListManager',
