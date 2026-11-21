@@ -1603,6 +1603,10 @@ export async function fetchNextEpisodeFromSonarr(
   }
 }
 
+function sameCalendarDay(a: string | undefined, b: string): boolean {
+  return !!a && toServerCalendarDate(a) === toServerCalendarDate(b);
+}
+
 /**
  * Pure Sonarr-first resolution of the volatile next-episode fields (fork#35),
  * given an already-fetched Sonarr result.
@@ -1638,7 +1642,13 @@ export function resolveSonarrFirstNextEpisode(
         releaseDate: base.releaseDate || ep.nextEpisodeAirDate,
         nextEpisodeAirDate: ep.nextEpisodeAirDate,
         ...(ep.numberingUnmatched
-          ? {}
+          ? sameCalendarDay(base.nextEpisodeAirDate, ep.nextEpisodeAirDate)
+            ? {}
+            : {
+                nextSeasonAirDate: undefined,
+                seasonNumber: undefined,
+                episodeNumber: undefined,
+              }
           : {
               nextSeasonAirDate: ep.nextSeasonAirDate,
               seasonNumber: ep.seasonNumber,
