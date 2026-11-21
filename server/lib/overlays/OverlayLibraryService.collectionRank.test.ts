@@ -61,6 +61,8 @@ import { overlayLibraryService } from './OverlayLibraryService';
 type Internals = {
   collectionRankCache: Map<string, Map<string, number>>;
   refreshCollectionRanks: (api: unknown, templates: unknown[]) => Promise<void>;
+  sonarrSeriesCache?: Map<string, unknown>;
+  runningLibraries: Map<string, { state: string }>;
   applyOverlaysToItem: (...args: unknown[]) => Promise<unknown>;
   applyOverlaysToCollectionItems: (
     items: string[],
@@ -202,5 +204,33 @@ describe('collection rank cache refresh', () => {
     expect(mockHash.mock.calls[0][0].context.collection).toEqual(['col-1']);
     expect(mockHash.mock.calls[1][0].context.collection).toBeUndefined();
     expect('collectionMembershipCache' in svc).toBe(false);
+  });
+});
+
+describe('standalone batch cache lifetime', () => {
+  const runBatch = () => {
+    mockFindOne.mockResolvedValue(undefined);
+    return svc
+      .applyOverlaysToCollectionItems(['a'], 'lib')
+      .catch(() => undefined);
+  };
+
+  it('drops the series cache when no other job is active', async () => {
+    svc.sonarrSeriesCache = new Map();
+    await runBatch();
+    expect(svc.sonarrSeriesCache).toBeUndefined();
+  });
+
+  it('keeps it while a full job is running', async () => {
+    const cache = new Map();
+    svc.sonarrSeriesCache = cache;
+    svc.runningLibraries.set('other', { state: 'running' });
+    try {
+      await runBatch();
+      expect(svc.sonarrSeriesCache).toBe(cache);
+    } finally {
+      svc.runningLibraries.delete('other');
+      svc.sonarrSeriesCache = undefined;
+    }
   });
 });

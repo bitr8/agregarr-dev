@@ -3267,6 +3267,8 @@ class OverlayLibraryService {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      this.clearGlobalCachesIfIdle();
     }
   }
 
