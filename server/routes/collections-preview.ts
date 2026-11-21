@@ -948,7 +948,7 @@ export async function processMultiSourcePreview(
 /**
  * Process preview asynchronously with progress updates
  */
-async function processPreviewAsync(
+export async function processPreviewAsync(
   sessionId: string,
   requestBody: {
     type: string;
@@ -1103,6 +1103,7 @@ async function processPreviewAsync(
         libraryRecommended: false,
       },
       maxItems: maxItems || 50,
+      sortOrder,
       template: '',
       isLibraryPromoted: false,
       everLibraryPromoted: false,
