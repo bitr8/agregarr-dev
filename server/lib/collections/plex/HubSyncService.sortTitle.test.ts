@@ -271,6 +271,25 @@ describe('" Collection" suffix rename', () => {
     expect(byId('switched-off')?.collectionSuffixRenameFailed).toBe(false);
   });
 
+  it('makes no rename call and writes no flag when no mode is set', async () => {
+    const { getSettings } = await import('@server/lib/settings');
+    const save = vi.spyOn(getSettings(), 'save');
+    const { updateCollectionTitle, byId } = await run([
+      {
+        ...base,
+        id: 'untouched',
+        name: 'Alien Collection',
+        collectionRatingKey: '40',
+      },
+    ]);
+    expect(updateCollectionTitle).not.toHaveBeenCalled();
+    expect(byId('untouched')?.name).toBe('Alien Collection');
+    expect(byId('untouched')).not.toHaveProperty(
+      'collectionSuffixRenameFailed'
+    );
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('only touches the requested collection on an individual sync', async () => {
     const { updateCollectionTitle, byId } = await run(
       [

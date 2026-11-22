@@ -73,7 +73,7 @@ const messages = defineMessages({
   collectionSyncStarted: 'Sync started',
   collectionSynced: 'Collection synced',
   collectionSyncedRenameFailed:
-    'Collection synced, but the title was not renamed. See the collection for details.',
+    'Collection synced, but the title was not renamed. Check the logs for details.',
   suffixRenameFailed: 'Rename failed',
   suffixRenameFailedHint:
     'The last sync could not rename this collection in Plex: the new name is already used in this library, or Plex refused it. Check the logs.',

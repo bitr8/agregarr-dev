@@ -703,7 +703,7 @@
   "components.Collections.Views.Library.bulkEdit": "Bulk Edit",
   "components.Collections.Views.Library.collectionSyncStarted": "Sync started",
   "components.Collections.Views.Library.collectionSynced": "Collection synced",
-  "components.Collections.Views.Library.collectionSyncedRenameFailed": "Collection synced, but the title was not renamed. See the collection for details.",
+  "components.Collections.Views.Library.collectionSyncedRenameFailed": "Collection synced, but the title was not renamed. Check the logs for details.",
   "components.Collections.Views.Library.itemCount": "{count} {count, plural, one {item} other {items}}",
   "components.Collections.Views.Library.orderingControlledInHome": "Ordering controlled in Home tab",
   "components.Collections.Views.Library.plexTitle": "Plex title: {template}",
