@@ -19,6 +19,7 @@ vi.mock('@server/api/servarr/sonarr', () => ({
 import {
   fetchNextEpisodeFromSonarr,
   fetchSonarrEpisodeContext,
+  resolveSonarrFirstNextEpisode,
 } from './OverlayContextBuilder';
 import { latestAiredPremiere } from './releaseDateContext';
 import {
@@ -168,5 +169,40 @@ describe('regressions', () => {
 
   it('a file with a past air date is unchanged', () => {
     expect(withEffectiveAirDates([s3])[0]).toBe(s3);
+  });
+});
+
+describe('TMDB countdown after an early arrival', () => {
+  const none = { kind: 'none' as const, earlyArrived: [PREMIERE] };
+  const tmdb = (nextEpisodeAirDate: string, episodeNumber = 1) => ({
+    releaseDate: '2021-11-14',
+    nextEpisodeAirDate,
+    nextSeasonAirDate: nextEpisodeAirDate,
+    seasonNumber: 4,
+    episodeNumber,
+  });
+
+  it('collects the scheduled instant when only early episodes remain', async () => {
+    mockGetEpisodes.mockResolvedValue([s3, early]);
+    expect(await fetchNextEpisodeFromSonarr(399731)).toEqual(none);
+  });
+
+  it.each(['2026-11-22', '2026-11-23'])('clears TMDB next dated %s', (date) => {
+    const { info } = resolveSonarrFirstNextEpisode(tmdb(date), none);
+    expect(info.nextEpisodeAirDate).toBeUndefined();
+    expect(info.nextSeasonAirDate).toBeUndefined();
+    expect(info.seasonNumber).toBeUndefined();
+  });
+
+  it('keeps TMDB when no episode arrived early', () => {
+    const base = tmdb('2026-11-22');
+    expect(resolveSonarrFirstNextEpisode(base, { kind: 'none' }).info).toEqual(
+      base
+    );
+  });
+
+  it('keeps TMDB when its next is a different later episode', () => {
+    const base = tmdb('2026-11-30', 2);
+    expect(resolveSonarrFirstNextEpisode(base, none).info).toEqual(base);
   });
 });

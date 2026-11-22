@@ -1292,7 +1292,7 @@ type SonarrNextEpisode = {
  */
 type SonarrNextEpisodeResult =
   | { kind: 'found'; episode: SonarrNextEpisode }
-  | { kind: 'none' }
+  | { kind: 'none'; earlyArrived?: string[] }
   | { kind: 'failed' };
 
 /**
@@ -1552,6 +1552,7 @@ export async function fetchNextEpisodeFromSonarr(
     // instance returned a 'found', a failure must not be reported as 'none',
     // because a failed instance could be the one holding the upcoming episode.
     let anyInstanceFailed = false;
+    const earlyArrived: string[] = [];
 
     // Check each Sonarr instance
     for (const sonarrSettings of settings.sonarr) {
@@ -1599,7 +1600,14 @@ export async function fetchNextEpisodeFromSonarr(
                     a.seasonNumber - b.seasonNumber ||
                     a.episodeNumber - b.episodeNumber
                 )[0];
-              if (!upcoming) continue;
+              if (!upcoming) {
+                earlyArrived.push(
+                  ...episodes.flatMap((e) =>
+                    e.scheduledAirDateUtc ? [e.scheduledAirDateUtc] : []
+                  )
+                );
+                continue;
+              }
               const airDate = upcoming.airDateUtc as string;
               return {
                 kind: 'found',
@@ -1654,7 +1662,10 @@ export async function fetchNextEpisodeFromSonarr(
     // reporting 'none' here would strip a countdown on a transient outage
     // (fork#35 Mechanism 2). Only when every instance responded is 'none'
     // authoritative.
-    return anyInstanceFailed ? { kind: 'failed' } : { kind: 'none' };
+    if (anyInstanceFailed) return { kind: 'failed' };
+    return earlyArrived.length > 0
+      ? { kind: 'none', earlyArrived }
+      : { kind: 'none' };
   } catch (error) {
     logger.debug('Failed to fetch next episode from Sonarr', {
       label: 'OverlayContextBuilder',
@@ -1663,6 +1674,17 @@ export async function fetchNextEpisodeFromSonarr(
     });
     return { kind: 'failed' };
   }
+}
+
+// TMDB dates are network-calendar days, often one day before Sonarr's instant.
+function matchesEarlyArrival(tmdbDate: string, scheduled: string[]): boolean {
+  const tmdbDay = toServerCalendarDate(tmdbDate);
+  return scheduled.some((instant) => {
+    const day = toServerCalendarDate(instant);
+    const prev = new Date(`${day}T00:00:00Z`);
+    prev.setUTCDate(prev.getUTCDate() - 1);
+    return tmdbDay === day || tmdbDay === prev.toISOString().slice(0, 10);
+  });
 }
 
 function sameCalendarDay(a: string | undefined, b: string): boolean {
@@ -1716,6 +1738,24 @@ export function resolveSonarrFirstNextEpisode(
               seasonNumber: ep.seasonNumber,
               episodeNumber: ep.episodeNumber,
             }),
+      },
+      sonarrFailed: false,
+    };
+  }
+
+  if (
+    sonarr.kind === 'none' &&
+    sonarr.earlyArrived &&
+    base.nextEpisodeAirDate &&
+    matchesEarlyArrival(base.nextEpisodeAirDate, sonarr.earlyArrived)
+  ) {
+    return {
+      info: {
+        ...base,
+        nextEpisodeAirDate: undefined,
+        nextSeasonAirDate: undefined,
+        seasonNumber: undefined,
+        episodeNumber: undefined,
       },
       sonarrFailed: false,
     };
