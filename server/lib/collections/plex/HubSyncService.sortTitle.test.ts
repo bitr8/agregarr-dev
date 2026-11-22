@@ -296,3 +296,66 @@ describe('" Collection" suffix rename', () => {
     expect(byId('two')?.name).toBe('Cars');
   });
 });
+
+describe('syncSinglePreExistingCollection', () => {
+  const setup = async () => {
+    const { getSettings } = await import('@server/lib/settings');
+    const settings = getSettings();
+    settings.plex.sortTitleArticleHandling = 'off';
+    settings.plex.preExistingCollectionConfigs = [
+      {
+        ...base,
+        id: 'one',
+        name: 'Shrek Collection',
+        collectionRatingKey: '19',
+        collectionSuffixMode: 'strip',
+      },
+      {
+        ...base,
+        id: 'two',
+        name: 'Cars Collection',
+        collectionRatingKey: '20',
+        collectionSuffixMode: 'strip',
+      },
+    ] as never;
+    const plexClient = {
+      updateHubVisibility: vi.fn().mockResolvedValue(undefined),
+      updateCollectionTitle: vi.fn().mockResolvedValue(undefined),
+      updateCollectionSortTitle: vi.fn().mockResolvedValue(undefined),
+    };
+    const { default: HubSyncService } = await import('./HubSyncService');
+    return {
+      plexClient,
+      sync: (id: string) =>
+        new HubSyncService().syncSinglePreExistingCollection(
+          plexClient as unknown as PlexAPI,
+          id
+        ),
+    };
+  };
+
+  it('runs the visibility pass and the title pass for that one collection', async () => {
+    const { plexClient, sync } = await setup();
+    expect(await sync('two')).toBe(true);
+    expect(plexClient.updateHubVisibility).toHaveBeenCalledTimes(1);
+    expect(plexClient.updateHubVisibility).toHaveBeenCalledWith(
+      '1',
+      'custom.collection.1.20',
+      expect.anything()
+    );
+    expect(plexClient.updateCollectionTitle).toHaveBeenCalledTimes(1);
+    expect(plexClient.updateCollectionTitle).toHaveBeenCalledWith(
+      '20',
+      'Cars',
+      '1',
+      'Cars Collection'
+    );
+  });
+
+  it('returns false and touches nothing for an unknown id', async () => {
+    const { plexClient, sync } = await setup();
+    expect(await sync('missing')).toBe(false);
+    expect(plexClient.updateHubVisibility).not.toHaveBeenCalled();
+    expect(plexClient.updateCollectionTitle).not.toHaveBeenCalled();
+  });
+});
