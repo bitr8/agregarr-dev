@@ -428,6 +428,47 @@ describe('two Sonarr instances', () => {
     expect(row.scheduledAirDateUtc).toBe(PREMIERE);
   });
 
+  it('without an early arrival the first instance date wins', () => {
+    const a = { ...s3(), airDateUtc: '2025-04-14T01:00:00Z' };
+    const b = { ...s3(), airDateUtc: '2025-04-13T01:00:00Z' };
+    expect(
+      mergeSonarrEpisodes<SonarrEpisodeRow>([[a], [b]])[0].airDateUtc
+    ).toBe(a.airDateUtc);
+    expect(
+      mergeSonarrEpisodes<SonarrEpisodeRow>([[b], [a]])[0].airDateUtc
+    ).toBe(b.airDateUtc);
+  });
+
+  it('an early copy overrides a later-dated normal copy only', () => {
+    const early1 = withEffectiveAirDates([early()]);
+    const normal = [{ ...rawEarly(), hasFile: false }];
+    expect(
+      mergeSonarrEpisodes<SonarrEpisodeRow>([normal, early1])[0].airDateUtc
+    ).toBe(ADDED);
+    expect(
+      mergeSonarrEpisodes<SonarrEpisodeRow>([early1, normal])[0].airDateUtc
+    ).toBe(ADDED);
+  });
+
+  it('two early copies: the premiere date is the earliest import', async () => {
+    const LATER = '2026-11-21T10:00:00Z';
+    instances.hd.files = { 501: { dateAdded: LATER } };
+    instances.hd.episodes = [s3(), rawEarly(), e2()];
+    instances.uhd.files = { 601: { dateAdded: ADDED } };
+    for (const hosts of [TWO_HOSTS, [...TWO_HOSTS].reverse()]) {
+      setHosts(hosts);
+      const info = await fetchReleaseDateInfo(
+        1,
+        'show',
+        new Map(),
+        undefined,
+        { failed: false },
+        true
+      );
+      expect(info?.lastSeasonAirDate).toBe(ADDED);
+    }
+  });
+
   it('a failed instance with no found is still failed', async () => {
     instances.hd.failSeries = true;
     instances.uhd.episodes = [s3(), rawEarly()];

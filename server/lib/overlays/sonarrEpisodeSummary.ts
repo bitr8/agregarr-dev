@@ -179,7 +179,7 @@ export function summariseSonarrEpisodes(
   return summary;
 }
 
-/** One row per season/episode across instances, keeping the earliest effective air date. */
+/** One row per season/episode across instances: first instance wins unless a later copy arrived early, then the earliest arrival. */
 export function mergeSonarrEpisodes<T extends SonarrEpisodeRow>(
   lists: readonly (readonly T[])[]
 ): T[] {
@@ -195,7 +195,10 @@ export function mergeSonarrEpisodes<T extends SonarrEpisodeRow>(
       ? new Date(existing.airDateUtc).getTime()
       : NaN;
     const b = e.airDateUtc ? new Date(e.airDateUtc).getTime() : NaN;
-    const earlier = Number.isNaN(a) || b < a ? e : existing;
+    const overrides =
+      !!e.scheduledAirDateUtc &&
+      (!existing.scheduledAirDateUtc || Number.isNaN(a) || b < a);
+    const earlier = overrides ? e : existing;
     byKey.set(key, {
       ...earlier,
       scheduledAirDateUtc:

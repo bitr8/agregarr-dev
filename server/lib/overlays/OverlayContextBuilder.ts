@@ -1898,7 +1898,7 @@ async function applySonarrLastPremiere(
   if (!tvdbId) return info;
   let tracked = false;
   let anyInstanceFailed = false;
-  const premieres: string[] = [];
+  const episodeLists: SonarrEpisode[][] = [];
   for (const sonarrSettings of getSettings().sonarr ?? []) {
     if (!sonarrSettings.hostname) continue;
     try {
@@ -1911,8 +1911,7 @@ async function applySonarrLastPremiere(
         sonarrCache
       );
       tracked = true;
-      const premiere = latestAiredPremiere(episodes);
-      if (premiere) premieres.push(premiere);
+      episodeLists.push(episodes);
     } catch (error) {
       anyInstanceFailed = true;
       logger.debug('Failed to read Sonarr premieres', {
@@ -1930,9 +1929,7 @@ async function applySonarrLastPremiere(
   if (!tracked) return info;
   return {
     ...info,
-    lastSeasonAirDate: premieres.sort(
-      (a, b) => new Date(a).getTime() - new Date(b).getTime()
-    )[premieres.length - 1],
+    lastSeasonAirDate: latestAiredPremiere(mergeSonarrEpisodes(episodeLists)),
     lastSeasonFromSonarr: true,
   };
 }
