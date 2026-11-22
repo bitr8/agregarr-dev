@@ -23,6 +23,7 @@ export function episodeFromRow(row: EpisodeMediaCache): EpisodeMediaInfo {
     audioChannels: row.audioChannels,
     bitDepth: row.bitDepth,
     mediaHash: row.mediaHash,
+    versionCount: row.versionCount,
     hasStreamDetail: row.hasStreamDetail,
     addedAt: row.addedAt,
   };
@@ -55,10 +56,33 @@ export function entityFromEpisode(
   entity.audioChannels = ep.audioChannels;
   entity.bitDepth = ep.bitDepth;
   entity.mediaHash = ep.mediaHash;
+  entity.versionCount = ep.versionCount ?? null;
   entity.hasStreamDetail = ep.hasStreamDetail;
   entity.addedAt = ep.addedAt ?? null;
   entity.updatedAt = now;
   return entity;
+}
+
+export function keepCachedDetail(
+  fresh: EpisodeMediaInfo[],
+  cachedByKey: Map<string, EpisodeMediaInfo>,
+  staleKeys: Set<string>
+): EpisodeMediaInfo[] {
+  return fresh.map((ep) => {
+    const cached = cachedByKey.get(ep.ratingKey);
+    if (staleKeys.has(ep.ratingKey) || !cached?.hasStreamDetail) return ep;
+    return {
+      ...ep,
+      hdr: cached.hdr,
+      dolbyVision: cached.dolbyVision,
+      dolbyVisionProfile: cached.dolbyVisionProfile,
+      hdr10Plus: cached.hdr10Plus,
+      audioProfile: cached.audioProfile,
+      audioChannels: cached.audioChannels,
+      bitDepth: cached.bitDepth,
+      hasStreamDetail: true,
+    };
+  });
 }
 
 export class EpisodeMediaCacheService {

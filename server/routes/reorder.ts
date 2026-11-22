@@ -13,6 +13,10 @@ import {
   partitionForReorder,
   type ReorderableConfig,
 } from '@server/utils/reorderPartition';
+import {
+  withoutTargetUser,
+  withSupportedTargetUser,
+} from '@server/utils/targetUserSupport';
 import { Router, type Response } from 'express';
 
 // Mixed item types from frontend (original config + metadata)
@@ -363,13 +367,16 @@ async function handleManualReordering(
 
   // Apply all changes to settings and save once
   if (finalCollectionConfigs) {
-    settings.plex.collectionConfigs = finalCollectionConfigs;
+    settings.plex.collectionConfigs = finalCollectionConfigs.map(
+      withSupportedTargetUser
+    );
   }
   if (finalHubConfigs) {
-    settings.plex.hubConfigs = finalHubConfigs;
+    settings.plex.hubConfigs = finalHubConfigs.map(withoutTargetUser);
   }
   if (finalPreExistingConfigs) {
-    settings.plex.preExistingCollectionConfigs = finalPreExistingConfigs;
+    settings.plex.preExistingCollectionConfigs =
+      finalPreExistingConfigs.map(withoutTargetUser);
   }
 
   // Single save operation for all changes

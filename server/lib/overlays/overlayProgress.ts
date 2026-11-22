@@ -54,3 +54,15 @@ export function recordOverlayTargetOutcome(
   else if (outcome === 'filtered') targetProgress.filteredCount++;
   else targetProgress.skippedCount++;
 }
+
+/** Appends an outcome; past `max`, evicts the oldest non-error (oldest error only if all are errors). */
+export function retainOverlayItemOutcome<T extends { outcome: string }>(
+  items: T[],
+  item: T,
+  max: number
+): T | undefined {
+  items.push(item);
+  if (items.length <= max) return undefined;
+  const index = items.findIndex((existing) => existing.outcome !== 'error');
+  return items.splice(index === -1 ? 0 : index, 1)[0];
+}

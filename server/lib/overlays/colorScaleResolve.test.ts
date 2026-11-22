@@ -45,3 +45,30 @@ describe('color scale on Rotten Tomatoes scores', () => {
     expect(extractUsedContextFields([data]).has('rtCriticsScore')).toBe(true);
   });
 });
+
+describe('color scale with Max at or below Min', () => {
+  const flat = (min: number, max: number): ColorScale => ({
+    field: 'imdbRating',
+    min,
+    max,
+    fromColor: '#000000',
+    toColor: '#ffffff',
+  });
+  const rating = (imdbRating: number) =>
+    ({ imdbRating } as OverlayRenderContext);
+
+  it('steps from Low to High at Min instead of returning NaN', () => {
+    expect(resolveColorScale(flat(5, 5), rating(5))).toBe('#ffffff');
+    expect(resolveColorScale(flat(5, 5), rating(7))).toBe('#ffffff');
+    expect(resolveColorScale(flat(5, 5), rating(4))).toBe('#000000');
+  });
+
+  it('treats Max below Min the same way', () => {
+    expect(resolveColorScale(flat(6, 2), rating(6))).toBe('#ffffff');
+    expect(resolveColorScale(flat(6, 2), rating(3))).toBe('#000000');
+  });
+
+  it('leaves a normal range untouched', () => {
+    expect(resolveColorScale(flat(0, 10), rating(5))).toBe('#808080');
+  });
+});

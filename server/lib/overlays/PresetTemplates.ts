@@ -1518,11 +1518,17 @@ export const PRESET_TEMPLATES: {
       sections: [
         {
           rules: [
-            { field: 'daysAgo', operator: 'eq', value: 0 },
+            { field: 'episodesAiringToday', operator: 'gt', value: 0 },
             {
               ruleOperator: 'and',
-              field: 'seasonNumber',
+              field: 'todaySeasonNumber',
               operator: 'gt',
+              value: 1,
+            },
+            {
+              ruleOperator: 'and',
+              field: 'todayEpisodeNumber',
+              operator: 'eq',
               value: 1,
             },
             {
@@ -1576,7 +1582,7 @@ export const PRESET_TEMPLATES: {
           properties: {
             segments: [
               { type: 'text', value: 'SEASON ' },
-              { type: 'variable', field: 'seasonNumber' },
+              { type: 'variable', field: 'todaySeasonNumber' },
               { type: 'text', value: ' TODAY' },
             ],
             fontSize: 74,
@@ -1600,9 +1606,9 @@ export const PRESET_TEMPLATES: {
     applicationCondition: {
       sections: [
         {
-          // (today AND S02+ AND show) AND NOT inSonarr
+          // Not in Sonarr: TMDB's premiere date is a bare date, so it holds all day
           rules: [
-            { field: 'daysAgo', operator: 'eq', value: 0 },
+            { field: 'daysUntilNextSeason', operator: 'eq', value: 0 },
             {
               ruleOperator: 'and',
               field: 'seasonNumber',
@@ -1624,14 +1630,20 @@ export const PRESET_TEMPLATES: {
           ],
         },
         {
-          // OR (today AND S02+ AND show) AND NOT monitored
+          // OR in Sonarr, unmonitored, premiering today
           sectionOperator: 'or',
           rules: [
-            { field: 'daysAgo', operator: 'eq', value: 0 },
+            { field: 'episodesAiringToday', operator: 'gt', value: 0 },
             {
               ruleOperator: 'and',
-              field: 'seasonNumber',
+              field: 'todaySeasonNumber',
               operator: 'gt',
+              value: 1,
+            },
+            {
+              ruleOperator: 'and',
+              field: 'todayEpisodeNumber',
+              operator: 'eq',
               value: 1,
             },
             {
@@ -1639,6 +1651,12 @@ export const PRESET_TEMPLATES: {
               field: 'mediaType',
               operator: 'eq',
               value: 'show',
+            },
+            {
+              ruleOperator: 'and',
+              field: 'inSonarr',
+              operator: 'eq',
+              value: true,
             },
             {
               ruleOperator: 'and',
@@ -1670,6 +1688,11 @@ export const PRESET_TEMPLATES: {
         },
         {
           id: 'season-today-text',
+          condition: {
+            sections: [
+              { rules: [{ field: 'inSonarr', operator: 'eq', value: false }] },
+            ],
+          },
           layerOrder: 1,
           type: 'variable',
           x: 0,
@@ -1680,6 +1703,33 @@ export const PRESET_TEMPLATES: {
             segments: [
               { type: 'text', value: 'SEASON ' },
               { type: 'variable', field: 'seasonNumber' },
+              { type: 'text', value: ' TODAY' },
+            ],
+            fontSize: 74,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#FFFFFF',
+            textAlign: 'center',
+          },
+        },
+        {
+          id: 'season-today-text-sonarr',
+          condition: {
+            sections: [
+              { rules: [{ field: 'inSonarr', operator: 'eq', value: true }] },
+            ],
+          },
+          layerOrder: 2,
+          type: 'variable',
+          x: 0,
+          y: 1382,
+          width: 1000,
+          height: 141,
+          properties: {
+            segments: [
+              { type: 'text', value: 'SEASON ' },
+              { type: 'variable', field: 'todaySeasonNumber' },
               { type: 'text', value: ' TODAY' },
             ],
             fontSize: 74,
@@ -3666,6 +3716,244 @@ export const PRESET_TEMPLATES: {
             maxIcons: 1,
             grayscale: false,
             opacity: 100,
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'Episode Info - Episode Card',
+    description:
+      'Shows the season and episode code (S01E01) in the bottom-right corner of episode title cards',
+    type: 'metadata',
+    tags: ['Metadata', 'TV Shows', 'target:episode'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'seasonNumber', operator: 'exists', value: true },
+            {
+              ruleOperator: 'and',
+              field: 'episodeNumber',
+              operator: 'exists',
+              value: true,
+            },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'episode-info-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 1600,
+          y: 945,
+          width: 305,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'episode-info-code',
+          layerOrder: 1,
+          type: 'variable',
+          x: 1600,
+          y: 945,
+          width: 305,
+          height: 105,
+          properties: {
+            segments: [
+              { type: 'text', value: 'S' },
+              { type: 'variable', field: 'seasonNumber', format: 'pad2' },
+              { type: 'text', value: 'E' },
+              { type: 'variable', field: 'episodeNumber', format: 'pad2' },
+            ],
+            fontSize: 55,
+            fontFamily: 'Inter',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            color: '#ffffff',
+            textAlign: 'center',
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'Multiple Versions',
+    description:
+      'Shows a stacked-pages badge on movies, and on shows that have a multi-version episode (needs Use episode files for quality badges). Matches the Kometa versions overlay.',
+    type: 'technical',
+    tags: ['Technical'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'hasMultipleVersions', operator: 'eq', value: true },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'versions-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 880,
+          y: 1060,
+          width: 105,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'versions-badge-icon',
+          layerOrder: 1,
+          type: 'svg',
+          x: 897.5,
+          y: 1077.5,
+          width: 70,
+          height: 70,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/content-copy.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'Multiple Versions - Season Poster',
+    description:
+      'Shows a stacked-pages badge on a season that has a multi-version episode. Needs Use episode files for quality badges.',
+    type: 'technical',
+    tags: ['Technical', 'target:season'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'hasMultipleVersions', operator: 'eq', value: true },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1000,
+      height: 1500,
+      elements: [
+        {
+          id: 'versions-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 880,
+          y: 1060,
+          width: 105,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'versions-badge-icon',
+          layerOrder: 1,
+          type: 'svg',
+          x: 897.5,
+          y: 1077.5,
+          width: 70,
+          height: 70,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/content-copy.svg',
+            opacity: 100,
+            grayscale: false,
+          },
+        },
+      ],
+    },
+  },
+
+  {
+    name: 'Multiple Versions - Episode Card',
+    description:
+      'Shows a stacked-pages badge on episode title cards that have more than one version.',
+    type: 'technical',
+    tags: ['Technical', 'target:episode'],
+    applicationCondition: {
+      sections: [
+        {
+          rules: [
+            { field: 'hasMultipleVersions', operator: 'eq', value: true },
+          ],
+        },
+      ],
+    },
+    templateData: {
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'versions-badge-bg',
+          layerOrder: 0,
+          type: 'tile',
+          x: 1143,
+          y: 705,
+          width: 105,
+          height: 105,
+          properties: {
+            fillColor: '#000000',
+            fillOpacity: 60,
+            borderRadiusBottomLeft: 30,
+            borderRadiusBottomRight: 30,
+            borderRadiusTopLeft: 30,
+            borderRadiusTopRight: 30,
+            lockCorners: true,
+          },
+        },
+        {
+          id: 'versions-badge-icon',
+          layerOrder: 1,
+          type: 'svg',
+          x: 1160.5,
+          y: 722.5,
+          width: 70,
+          height: 70,
+          properties: {
+            iconType: 'custom-icon',
+            iconPath: '/api/v1/posters/icons/system/content-copy.svg',
+            opacity: 100,
+            grayscale: false,
           },
         },
       ],

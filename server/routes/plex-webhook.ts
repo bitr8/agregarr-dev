@@ -163,7 +163,9 @@ async function isConfirmedPlaceholder(
     });
     if (row) return true;
     const metadata = await plexClient.getMetadata(ratingKey);
-    return !!metadata?.Label?.some((l) => l.tag === 'trailer-placeholder');
+    return !!metadata?.Label?.some(
+      (l) => l.tag?.toLowerCase() === 'trailer-placeholder'
+    );
   } catch {
     return false;
   }
@@ -270,14 +272,6 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
 
     if (!isPlaceholderMetadata(metadata)) return;
 
-    logger.info('Placeholder detected — calling unscrobble', {
-      label: 'PlexWebhook',
-      event,
-      ratingKey,
-      title: metadata.title,
-      editionTitle: metadata.editionTitle,
-    });
-
     const admin = await getPlexClient();
     if (!admin) return;
     // TV placeholders are recorded and labelled on the show, not the episode
@@ -287,14 +281,21 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
         ? grandparentKey
         : ratingKey;
     const confirmed = await isConfirmedPlaceholder(confirmKey, admin.client);
-    const resetProgress = confirmed && event !== 'media.play';
+    if (!confirmed) return;
+    logger.info('Placeholder detected — calling unscrobble', {
+      label: 'PlexWebhook',
+      event,
+      ratingKey,
+      title: metadata.title,
+      editionTitle: metadata.editionTitle,
+    });
+    const resetProgress = event !== 'media.play';
     await unscrobblePlaceholder(
       ratingKey,
       admin.client,
       'admin',
       resetProgress
     );
-    if (!confirmed) return;
 
     const accountId = Number(account?.id);
     // PMS reports the server owner as local account 1

@@ -1,9 +1,16 @@
+import { mappedIconContentSize } from '@server/lib/overlays/mappedIconLayout';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
-import { Group, Image, Rect } from 'react-konva';
-import { selectMappedIcons } from './mappedIconSelection';
+import { Group, Rect } from 'react-konva';
+import useSWR from 'swr';
+import { FilteredImage } from './FilteredImage';
+import {
+  overlayMappingsKey,
+  selectMappedIcons,
+  type IconMapping,
+} from './mappedIconSelection';
 import {
   isSingleValueField,
   type OverlayElement,
@@ -59,15 +66,28 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
   const isSingleField = isSingleValueField(props.field);
   const intl = useIntl();
 
+  const { data: fallbackData } = useSWR<{ mappings: IconMapping[] }>(
+    props.field ? overlayMappingsKey(props.field) : null
+  );
+  const fallbackMappings = fallbackData?.mappings;
+
   const { mappings: mappingsToShow, unmatchedValue } = useMemo(
     () =>
       selectMappedIcons(
         props.mappings,
         renderContext && props.field ? renderContext[props.field] : undefined,
         props.maxIcons,
-        isSingleField
+        isSingleField,
+        fallbackMappings
       ),
-    [renderContext, props.field, props.mappings, props.maxIcons, isSingleField]
+    [
+      renderContext,
+      props.field,
+      props.mappings,
+      props.maxIcons,
+      isSingleField,
+      fallbackMappings,
+    ]
   );
   const isUnmatched = unmatchedValue !== undefined;
   const setTooltip = (e: KonvaEventObject<MouseEvent>, title: string) => {
@@ -85,44 +105,22 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
     gridColumns = 3,
   } = props;
 
-  const contentBounds = useMemo(() => {
-    const count = mappingsToShow.length;
-
-    if (count === 0) return { width: iconSize, height: iconSize };
-
-    switch (layout) {
-      case 'horizontal':
-        return {
-          width: count * iconSize + (count - 1) * spacingX,
-          height: iconSize,
-        };
-      case 'vertical':
-        return {
-          width: iconSize,
-          height: count * iconSize + (count - 1) * spacingY,
-        };
-      case 'grid': {
-        const cols = Math.min(count, gridColumns);
-        const rows = Math.ceil(count / gridColumns);
-        return {
-          width: cols * iconSize + (cols - 1) * spacingX,
-          height: rows * iconSize + (rows - 1) * spacingY,
-        };
-      }
-      default:
-        return { width: iconSize, height: iconSize };
-    }
-  }, [
-    mappingsToShow.length,
-    iconSize,
-    spacingX,
-    spacingY,
-    layout,
-    gridColumns,
-  ]);
+  const contentBounds = useMemo(
+    () =>
+      mappedIconContentSize(
+        mappingsToShow.length,
+        iconSize,
+        spacingX,
+        spacingY,
+        layout,
+        gridColumns
+      ),
+    [mappingsToShow.length, iconSize, spacingX, spacingY, layout, gridColumns]
+  );
 
   // Load icons
   useEffect(() => {
+    let cancelled = false;
     if (mappingsToShow.length === 0) {
       setLoadedIcons([]);
       setIsLoading(false);
@@ -196,9 +194,14 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
     );
 
     Promise.all(loadPromises).then((results) => {
+      if (cancelled) return;
       setLoadedIcons(results.filter((r): r is LoadedIcon => r !== null));
       setIsLoading(false);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [mappingsToShow, iconSize, spacingX, spacingY, layout, gridColumns]);
 
   // Use content bounds for positioning
@@ -206,7 +209,7 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
   const boundsHeight = contentBounds.height;
 
   // Show placeholder when no mappings or still loading
-  if (props.mappings.length === 0 || isLoading) {
+  if (isLoading || (props.mappings.length === 0 && !fallbackMappings?.length)) {
     return (
       <Group
         ref={groupRef}
@@ -292,7 +295,7 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
 
       {/* Icons */}
       {loadedIcons.map((icon, index) => (
-        <Image
+        <FilteredImage
           key={index}
           image={icon.image}
           x={icon.x}
@@ -300,6 +303,7 @@ export const MappedIconElement: React.FC<MappedIconElementComponentProps> = ({
           width={icon.width}
           height={icon.height}
           opacity={((props.opacity ?? 100) / 100) * (isUnmatched ? 0.4 : 1)}
+          grayscale={props.grayscale}
           listening={false}
         />
       ))}

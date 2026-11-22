@@ -8,9 +8,14 @@ import type {
   RasterElementProps,
   SVGElementProps,
   TextElementProps,
+  TileElementProps,
 } from '@server/entity/PosterTemplate';
 import { PosterTemplate } from '@server/entity/PosterTemplate';
 import { evaluateCondition } from '@server/lib/overlays/OverlayTemplateRenderer';
+import {
+  resolveTileCornerRadii,
+  roundedRectPath,
+} from '@server/lib/overlays/roundedRect';
 import { getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
 import axios from 'axios';
@@ -94,6 +99,9 @@ export interface PosterGenerationConfig {
   dynamicLogo?: string; // Path to dynamic logo file
   personImageUrl?: string; // Dynamic person image (e.g., director portrait)
   libraryId?: string; // Library ID for per-library TMDB language setting
+  itemCount?: number; // Full collection size for conditions (items may be a slice)
+  conditionCollectionType?: string; // Collection Type seen by conditions (branding uses collectionType)
+  conditionCollectionSubtype?: string;
 }
 
 export interface CollectionItemWithPoster {
@@ -1580,6 +1588,13 @@ async function generateUnifiedLayeredElements(
           );
           break;
         }
+        case 'tile': {
+          elementContent = generateTileElement(
+            element,
+            element.properties as TileElementProps
+          );
+          break;
+        }
         case 'person': {
           const props = element.properties as PersonElementProps;
           elementContent = await generatePersonElement(
@@ -1614,6 +1629,56 @@ async function generateUnifiedLayeredElements(
   }
 
   return renderedElements.join('');
+}
+
+export function generateTileElement(
+  element: LayeredElement,
+  props: TileElementProps
+): string {
+  const num = (v: unknown, fallback = 0) =>
+    Number.isFinite(Number(v)) ? Number(v) : fallback;
+  const color = (v: unknown, fallback: string) =>
+    escapeXml(typeof v === 'string' && v ? v : fallback);
+
+  const { width, height } = element;
+  const radii = resolveTileCornerRadii({
+    borderRadius:
+      props.borderRadius === undefined ? undefined : num(props.borderRadius),
+    borderRadiusTopLeft: num(props.borderRadiusTopLeft),
+    borderRadiusTopRight: num(props.borderRadiusTopRight),
+    borderRadiusBottomRight: num(props.borderRadiusBottomRight),
+    borderRadiusBottomLeft: num(props.borderRadiusBottomLeft),
+    lockCorners: props.lockCorners,
+  });
+  const opacity = Math.max(0, Math.min(100, num(props.fillOpacity, 100))) / 100;
+  const borderWidth = num(props.borderWidth);
+  const paint = `fill="${color(
+    props.fillColor,
+    '#000000'
+  )}" fill-opacity="${opacity}"${
+    borderWidth > 0 && props.borderColor
+      ? ` stroke="${color(
+          props.borderColor,
+          '#ffffff'
+        )}" stroke-width="${borderWidth}"`
+      : ''
+  }`;
+  const transform = `transform="translate(${element.x} ${element.y})"`;
+
+  const r = radii.topLeft;
+  if (
+    radii.topRight === r &&
+    radii.bottomRight === r &&
+    radii.bottomLeft === r
+  ) {
+    const rx = Math.max(0, Math.min(r, width / 2, height / 2));
+    return `<rect ${transform} width="${width}" height="${height}" rx="${rx}" ry="${rx}" ${paint}/>`;
+  }
+  return `<path ${transform} d="${roundedRectPath(
+    width,
+    height,
+    radii
+  )}" ${paint}/>`;
 }
 
 /**
@@ -1762,6 +1827,19 @@ async function generateContentGridElement(
 /**
  * Generate SVG poster content with new unified layering system or legacy layout
  */
+export function buildPosterConditionContext(
+  config: PosterGenerationConfig
+): Record<string, unknown> {
+  return {
+    collectionName: config.collectionName,
+    collectionType: config.conditionCollectionType ?? config.collectionType,
+    collectionSubtype:
+      config.conditionCollectionSubtype ?? config.collectionSubtype,
+    mediaType: config.mediaType,
+    itemCount: config.itemCount ?? config.items?.length ?? 0,
+  };
+}
+
 export async function generatePosterSVG(
   config: PosterGenerationConfig
 ): Promise<string> {
@@ -1873,13 +1951,7 @@ export async function generatePosterSVG(
     itemsWithPosters,
     personImageBase64,
     config.personImageUrl,
-    {
-      collectionName,
-      collectionType,
-      collectionSubtype: config.collectionSubtype,
-      mediaType: config.mediaType,
-      itemCount: items.length,
-    }
+    buildPosterConditionContext(config)
   );
 
   return `
@@ -1961,6 +2033,9 @@ export async function generatePosterBuffer(
           items: config.items || [],
           dynamicLogo: config.dynamicLogo,
           personImageUrl: config.personImageUrl,
+          itemCount: config.itemCount,
+          conditionCollectionType: config.conditionCollectionType,
+          conditionCollectionSubtype: config.conditionCollectionSubtype,
         });
 
         logger.info('Poster generated successfully using template', {
@@ -2019,4 +2094,11 @@ export function getPosterCacheKey(config: PosterGenerationConfig): string {
   }
 
   return `generated_${Math.abs(hash).toString(36)}`;
+}
+
+export async function getDefaultPosterTemplate(): Promise<PosterTemplate | null> {
+  return getRepository(PosterTemplate).findOne({
+    where: { isDefault: true, isActive: true },
+    order: { updatedAt: 'DESC' },
+  });
 }

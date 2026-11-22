@@ -6839,6 +6839,23 @@ paths:
                     type: number
                   restartRequired:
                     type: boolean
+  /status/timezone:
+    get:
+      summary: Get the server timezone
+      description: Returns the server timezone for any authenticated user.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Server timezone
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tz:
+                    type: string
+                    example: Australia/Sydney
   /status/appdata:
     get:
       summary: Get application data volume status
@@ -13969,7 +13986,8 @@ paths:
                                     example: 20
                                   type:
                                     type: string
-                                    enum: [text, raster, svg, content-grid]
+                                    enum:
+                                      [text, raster, svg, content-grid, tile]
                                     example: 'text'
                                   x:
                                     type: number
@@ -14039,6 +14057,21 @@ paths:
                                             type: number
                                           cornerRadius:
                                             type: number
+                                      - type: object
+                                        title: 'Tile Element Properties'
+                                        properties:
+                                          fillColor:
+                                            type: string
+                                          fillOpacity:
+                                            type: number
+                                          borderColor:
+                                            type: string
+                                          borderWidth:
+                                            type: number
+                                          borderRadiusTopLeft:
+                                            type: number
+                                          lockCorners:
+                                            type: boolean
                             migrated:
                               type: boolean
                               description: 'Flag indicating if template has been migrated to unified layering system'
@@ -17251,7 +17284,7 @@ paths:
   /plex/library/{libraryId}/attributes/{attributeType}:
     get:
       summary: Discover library attribute values
-      description: Returns the distinct values for a given attribute type in a Plex library, plus any existing collections that would conflict with the rendered template.
+      description: Returns the distinct values for a given attribute type in a Plex library, plus the titles of existing collections in that library (excluding those owned by configId) and the library's media type.
       tags:
         - plex
       parameters:
@@ -17266,11 +17299,6 @@ paths:
           schema:
             type: string
             enum: [genre, decade, resolution, contentRating]
-        - name: template
-          in: query
-          required: false
-          schema:
-            type: string
         - name: configId
           in: query
           required: false
@@ -17295,15 +17323,13 @@ paths:
                           type: string
                         fastKey:
                           type: string
-                  conflicts:
+                  existingTitles:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        title:
-                          type: string
-                        ratingKey:
-                          type: string
+                      type: string
+                  mediaType:
+                    type: string
+                    enum: [movie, tv]
         '400':
           description: Invalid attribute type or library
         '401':

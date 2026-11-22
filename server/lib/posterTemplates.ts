@@ -156,7 +156,7 @@ export function validateTemplateData(
         errors.push(`Element ${index} missing required id`);
       }
       if (
-        !['text', 'raster', 'svg', 'content-grid', 'person'].includes(
+        !['text', 'raster', 'svg', 'content-grid', 'person', 'tile'].includes(
           element.type
         )
       ) {
@@ -241,6 +241,9 @@ export async function applyTemplate(
     items?: CollectionItemWithPoster[];
     dynamicLogo?: string;
     personImageUrl?: string;
+    itemCount?: number;
+    conditionCollectionType?: string;
+    conditionCollectionSubtype?: string;
   }
 ): Promise<Buffer> {
   const templateRepository = getRepository(PosterTemplate);
@@ -280,6 +283,9 @@ export async function applyTemplate(
     // Pass through dynamic logo if available
     dynamicLogo: config.dynamicLogo,
     personImageUrl: config.personImageUrl,
+    itemCount: config.itemCount,
+    conditionCollectionType: config.conditionCollectionType,
+    conditionCollectionSubtype: config.conditionCollectionSubtype,
   };
 
   // Generate poster directly using SVG system to avoid recursion

@@ -1,4 +1,5 @@
 import type PlexAPI from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import { getRepository } from '@server/datasource';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
@@ -407,10 +408,10 @@ export async function handlePlaceholderCleanup(
     configId: config.id,
     configName: config.name,
     createPlaceholdersForMissing: config.createPlaceholdersForMissing,
-    willDeleteAll: !config.createPlaceholdersForMissing,
+    willDeleteAll: !placeholdersEnabled(config),
   });
 
-  if (config.createPlaceholdersForMissing) {
+  if (placeholdersEnabled(config)) {
     // Setting enabled - run normal cleanup
     await cleanupPlaceholdersForConfig(
       config,
@@ -1610,7 +1611,7 @@ function hasPlaceholderFilters(config: CollectionConfig): boolean {
  * 2. Items no longer in source data (orphaned items)
  * 3. Active items with missing placeholder files (self-healing — clears DB record for re-creation)
  *
- * Released items are tracked for configured window (placeholderReleasedDays, default: 7 days),
+ * Orphaned items are kept for a fixed 7-day grace (PLACEHOLDER_ORPHAN_GRACE_DAYS),
  * then database records are removed and overlay system automatically updates posters.
  *
  * Works for ANY collection type that creates placeholders.
@@ -1707,7 +1708,7 @@ export async function cleanupPlaceholdersForConfig(
   let filterPassedTmdbIds: Set<number> | undefined;
 
   if (
-    config.createPlaceholdersForMissing &&
+    placeholdersEnabled(config) &&
     hasPlaceholderFilters(config) &&
     sourceTmdbIds &&
     sourceTmdbIds.size > 0
@@ -1988,9 +1989,9 @@ export async function cleanupPlaceholdersForConfig(
         // For orphaned items, check if past configured window
         if (isOrphaned) {
           // This handles items that fall off source lists (e.g., Trakt Trending)
-          // Keep them for placeholderReleasedDays from:
-          // - Release date (if released) - so users see "recently released" items
-          // - Creation date (if not released yet) - so users see upcoming items
+          // Keep them for the fixed 7-day orphan grace from:
+          // - Release date (if released)
+          // - Creation date (if not released yet)
 
           // Fetch release date from TMDB to determine window start
           const { placeholderContextService } = await import(

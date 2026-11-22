@@ -9,7 +9,6 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -23,11 +22,18 @@ import type {
   ConditionRule,
   ConditionSection,
 } from '@server/entity/OverlayTemplate';
+import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
 import { useEffect, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import Select from 'react-select';
 import useSWR from 'swr';
-import { isOperatorInvalidForField } from './conditionOperators';
+import { BOOLEAN_FIELDS, NUMERIC_FIELDS } from './conditionFields';
+import {
+  coerceValueForOperator,
+  isOperatorInvalidForField,
+  isOperatorOfferedForField,
+  reorderRules,
+} from './conditionOperators';
 import { CONDITION_FIELD_CATEGORIES } from './types';
 
 interface ArrTag {
@@ -67,61 +73,6 @@ const messages = defineMessages({
   false: 'false',
 });
 
-// List of numeric fields
-const NUMERIC_FIELDS = [
-  'imdbRating',
-  'tmdbRating',
-  'tmdbVoteCount',
-  'rtCriticsScore',
-  'rtAudienceScore',
-  'plexUserRating',
-  // 'metacriticScore', // TODO: Implement Metacritic integration
-  'year',
-  'runtime',
-  'daysUntilRelease',
-  'daysAgo',
-  'daysSinceTheatricalRelease',
-  'daysSinceDigitalRelease',
-  'daysSincePhysicalRelease',
-  'daysSinceHomeRelease',
-  'daysUntilNextSeason',
-  'daysAgoNextSeason',
-  'daysUntilNextEpisode',
-  'daysUntilAction',
-  'seasonNumber',
-  'episodeNumber',
-  'missingEpisodeCount',
-  'width',
-  'height',
-  'aspectRatio',
-  'bitDepth',
-  'audioChannels',
-  'bitrate',
-  'fileSize',
-  'viewCount',
-  'imdbTop250Rank',
-  'daysSinceAdded',
-  'daysSinceLastPlayed',
-  'daysSinceLastEpisodeAdded',
-];
-
-// List of boolean fields
-const BOOLEAN_FIELDS = [
-  'isPlaceholder',
-  'isMonitored',
-  'inRadarr',
-  'inSonarr',
-  'downloaded',
-  'hdr',
-  'dolbyVision',
-  'hdr10Plus',
-  'isImdbTop250',
-  'rtCertifiedFresh',
-  'rtVerifiedHot',
-  'hasSubtitles',
-  'isEstimatedReleaseDate',
-];
-
 // ============================================================================
 // RULE ITEM (Individual Condition)
 // ============================================================================
@@ -159,8 +110,8 @@ const RuleItem: React.FC<RuleItemProps> = ({
   const operator = rule.operator || 'eq';
   const value = rule.value ?? '';
 
-  const isNumeric = NUMERIC_FIELDS.includes(field);
-  const isBoolean = BOOLEAN_FIELDS.includes(field);
+  const isNumeric = NUMERIC_FIELDS.has(field);
+  const isBoolean = BOOLEAN_FIELDS.has(field);
   const isRadarrTags = field === 'radarrTags';
   const isSonarrTags = field === 'sonarrTags';
   const isTagField = isRadarrTags || isSonarrTags;
@@ -306,17 +257,20 @@ const RuleItem: React.FC<RuleItemProps> = ({
         value={field}
         onChange={(e) => {
           const newField = e.target.value;
-          const isNewFieldBoolean = BOOLEAN_FIELDS.includes(newField);
-          const isNewFieldNumeric = NUMERIC_FIELDS.includes(newField);
+          const isNewFieldBoolean = BOOLEAN_FIELDS.has(newField);
+          const isNewFieldNumeric = NUMERIC_FIELDS.has(newField);
           const isNewFieldCollection = newField === 'collection';
 
           // Determine if current operator is valid for new field type
-          const isCurrentOperatorInvalid = isOperatorInvalidForField(operator, {
-            isNumeric: isNewFieldNumeric,
-            isBoolean: isNewFieldBoolean,
-            isCollection: isNewFieldCollection,
-            isPlexLabels: newField === 'plexLabels',
-          });
+          const isCurrentOperatorInvalid = !isOperatorOfferedForField(
+            operator,
+            {
+              isNumeric: isNewFieldNumeric,
+              isBoolean: isNewFieldBoolean,
+              isCollection: isNewFieldCollection,
+              isPlexLabels: newField === 'plexLabels',
+            }
+          );
 
           // Reset to appropriate defaults when changing field
           onChange({
@@ -349,8 +303,10 @@ const RuleItem: React.FC<RuleItemProps> = ({
           onChange({
             ...rule,
             operator: newOperator,
-            // Set value to true when switching to 'exists' operator
-            value: newOperator === 'exists' ? true : rule.value,
+            value: coerceValueForOperator(operator, newOperator, rule.value, {
+              isNumeric,
+              isBoolean,
+            }) as ConditionRule['value'],
           });
         }}
         className="w-32 rounded border border-stone-600 bg-stone-700 px-2 py-1 text-sm text-white"
@@ -376,19 +332,31 @@ const RuleItem: React.FC<RuleItemProps> = ({
         {!isBoolean && !isCollectionField && !isPlexLabels && (
           <>
             <option value="in">{intl.formatMessage(messages.opIn)}</option>
-            <option value="contains">
-              {intl.formatMessage(messages.opContains)}
-            </option>
-            <option value="notContains">
-              {intl.formatMessage(messages.opNotContains)}
-            </option>
-            <option value="regex">
-              {intl.formatMessage(messages.opRegex)}
-            </option>
-            <option value="begins">
-              {intl.formatMessage(messages.opBegins)}
-            </option>
-            <option value="ends">{intl.formatMessage(messages.opEnds)}</option>
+            {(!isNumeric || operator === 'contains') && (
+              <option value="contains">
+                {intl.formatMessage(messages.opContains)}
+              </option>
+            )}
+            {(!isNumeric || operator === 'notContains') && (
+              <option value="notContains">
+                {intl.formatMessage(messages.opNotContains)}
+              </option>
+            )}
+            {(!isNumeric || operator === 'regex') && (
+              <option value="regex">
+                {intl.formatMessage(messages.opRegex)}
+              </option>
+            )}
+            {(!isNumeric || operator === 'begins') && (
+              <option value="begins">
+                {intl.formatMessage(messages.opBegins)}
+              </option>
+            )}
+            {(!isNumeric || operator === 'ends') && (
+              <option value="ends">
+                {intl.formatMessage(messages.opEnds)}
+              </option>
+            )}
           </>
         )}
         {!isCollectionField &&
@@ -698,7 +666,7 @@ const SectionComponent: React.FC<SectionComponentProps> = ({
     if (oldIndex !== -1 && newIndex !== -1) {
       onChange({
         ...section,
-        rules: arrayMove(section.rules, oldIndex, newIndex),
+        rules: reorderRules(section.rules, oldIndex, newIndex),
       });
     }
   };
@@ -801,11 +769,15 @@ const SectionComponent: React.FC<SectionComponentProps> = ({
 interface ConditionBuilderProps {
   condition: ApplicationCondition | undefined;
   onChange: (condition: ApplicationCondition | undefined) => void;
+  enableLabel?: string;
+  disabledLabel?: string;
 }
 
 const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
   condition,
   onChange,
+  enableLabel,
+  disabledLabel,
 }) => {
   const intl = useIntl();
 
@@ -880,8 +852,8 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
         />
         <span className="text-sm text-stone-300">
           {hasCondition
-            ? intl.formatMessage(messages.enableCondition)
-            : intl.formatMessage(messages.noCondition)}
+            ? enableLabel ?? intl.formatMessage(messages.enableCondition)
+            : disabledLabel ?? intl.formatMessage(messages.noCondition)}
         </span>
       </label>
 
@@ -951,7 +923,11 @@ interface ConditionEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialCondition: ApplicationCondition | undefined;
-  onSave: (condition: ApplicationCondition | undefined) => void;
+  onSave: (condition: ApplicationCondition | undefined) => boolean | void;
+  title?: string;
+  description?: string;
+  enableLabel?: string;
+  disabledLabel?: string;
 }
 
 export const ConditionEditorModal: React.FC<ConditionEditorModalProps> = ({
@@ -959,6 +935,10 @@ export const ConditionEditorModal: React.FC<ConditionEditorModalProps> = ({
   onClose,
   initialCondition,
   onSave,
+  title,
+  description,
+  enableLabel,
+  disabledLabel,
 }) => {
   const intl = useIntl();
   const [condition, setCondition] = useState<ApplicationCondition | undefined>(
@@ -972,7 +952,8 @@ export const ConditionEditorModal: React.FC<ConditionEditorModalProps> = ({
   }, [isOpen, initialCondition]);
 
   const handleSave = () => {
-    onSave(condition);
+    const toSave = hasEffectiveCondition(condition) ? condition : undefined;
+    if (onSave(toSave) === false) return;
     onClose();
   };
 
@@ -991,17 +972,22 @@ export const ConditionEditorModal: React.FC<ConditionEditorModalProps> = ({
         <Dialog.Panel className="w-full max-w-4xl rounded-lg bg-stone-800 p-4 shadow-xl ring-1 ring-gray-700">
           {/* Header */}
           <Dialog.Title className="text-agregarr mb-4 text-2xl font-bold">
-            {intl.formatMessage(messages.title)}
+            {title ?? intl.formatMessage(messages.title)}
           </Dialog.Title>
 
           {/* Content */}
           <div className="space-y-4">
             <p className="text-sm text-stone-400">
-              {intl.formatMessage(messages.description)}
+              {description ?? intl.formatMessage(messages.description)}
             </p>
 
             <div className="max-h-[600px] overflow-y-auto rounded border border-stone-700 bg-stone-900 p-4">
-              <ConditionBuilder condition={condition} onChange={setCondition} />
+              <ConditionBuilder
+                condition={condition}
+                onChange={setCondition}
+                enableLabel={enableLabel}
+                disabledLabel={disabledLabel}
+              />
             </div>
           </div>
 

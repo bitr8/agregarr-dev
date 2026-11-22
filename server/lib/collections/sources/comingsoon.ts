@@ -1,4 +1,9 @@
 import type PlexAPI from '@server/api/plexapi';
+import {
+  placeholdersEnabled,
+  resolvePlaceholderDaysAhead,
+  resolvePlaceholderReleasedDays,
+} from '@server/constants/placeholders';
 import { getRepository } from '@server/datasource';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
@@ -91,8 +96,7 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
 
       // Filter out Trakt items that are past the released window (cleanup old non-monitored items)
       const { calculateDaysSince } = await import('@server/utils/dateHelpers');
-      const releasedWindowDays =
-        config.placeholderReleasedDays || config.comingSoonReleasedDays || 14;
+      const releasedWindowDays = resolvePlaceholderReleasedDays(config);
       const originalCount = sourceData.length;
       sourceData = sourceData.filter((item) => {
         // Only filter Trakt items that are NOT monitored
@@ -201,7 +205,7 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
           libraryCache,
           sourceTmdbIds
         );
-        if (config.createPlaceholdersForMissing) {
+        if (placeholdersEnabled(config)) {
           placeholderItems.push(
             ...(await this.fillWithPlaceholders(
               present,
@@ -475,8 +479,8 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         // Enrich monitored items with TMDB release dates (adds 3-month estimate for theatrical-only releases)
         await enrichWithTMDBReleaseDates(
           upcomingItems,
-          config.placeholderDaysAhead || config.comingSoonDays || 360,
-          config.placeholderReleasedDays || config.comingSoonReleasedDays || 7
+          resolvePlaceholderDaysAhead(config),
+          resolvePlaceholderReleasedDays(config)
         );
         break;
       }
@@ -497,8 +501,8 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         // Cross-reference with Radarr/Sonarr to mark monitored status
         await markMonitoredStatus(
           upcomingItems,
-          config.placeholderDaysAhead || config.comingSoonDays || 360,
-          config.placeholderReleasedDays || config.comingSoonReleasedDays || 7
+          resolvePlaceholderDaysAhead(config),
+          resolvePlaceholderReleasedDays(config)
         );
         break;
       }
@@ -519,8 +523,8 @@ export class ComingSoonCollectionSync extends BaseCollectionSync<'comingsoon'> {
         // Cross-reference with Radarr/Sonarr to mark monitored status
         await markMonitoredStatus(
           upcomingItems,
-          config.placeholderDaysAhead || config.comingSoonDays || 360,
-          config.placeholderReleasedDays || config.comingSoonReleasedDays || 7
+          resolvePlaceholderDaysAhead(config),
+          resolvePlaceholderReleasedDays(config)
         );
         break;
       }

@@ -83,6 +83,7 @@ interface MediaProcessingResult {
 }
 // CollectionUpdateStrategy removed - logic moved inline below
 import type { PlexCollectionItem } from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 
 // Types moved from CollectionUpdateStrategy.ts
 interface CollectionUpdateOptions {
@@ -791,7 +792,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       config.maxItems && config.maxItems > 0 ? config.maxItems : undefined;
     if (
       !maxItems ||
-      !config.createPlaceholdersForMissing ||
+      !placeholdersEnabled(config) ||
       this.inSourceOrder(config)
     ) {
       return this.processMissingItems(
@@ -923,7 +924,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     let placeholderItems: CollectionItem[] = [];
 
     // Create placeholders if enabled
-    if (config.createPlaceholdersForMissing) {
+    if (placeholdersEnabled(config)) {
       // Apply missing item filters (rating, year, genre, etc.) before creating placeholders
       const { missingItemFilterService, buildPlaceholderFilterConfig } =
         await import('../services/MissingItemFilterService');
@@ -4050,10 +4051,12 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       collectionTypeOverride?: string; // For networks/originals to pass platform name
       dynamicLogo?: string; // For networks to pass extracted sprite logo
       personImageUrl?: string; // For person collections to pass TMDB profile image
+      itemCount?: number; // Full collection size when `items` is a slice
     }
   ): Promise<void> {
     try {
       const mediaType = getCollectionMediaType(config);
+      const fullItemCount = options?.itemCount ?? items?.length ?? 0;
 
       logger.info(`Auto-generating poster for collection: ${collectionName}`, {
         label: `${this.source} Collections`,
@@ -4061,19 +4064,32 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         mediaType,
       });
 
+      const defaultTemplate = config.autoPosterTemplate
+        ? null
+        : await (
+            await import('@server/lib/posterGeneration')
+          ).getDefaultPosterTemplate();
+      const effectiveTemplateId =
+        config.autoPosterTemplate ?? defaultTemplate?.id ?? null;
+
       // Convert items to poster format if available
       let posterItems: CollectionItemWithPoster[] | undefined;
       if (items && items.length > 0) {
         // Determine how many items we need based on the template's content grid
         let maxItems = 4; // Default fallback for old templates
 
-        if (config.autoPosterTemplate) {
+        if (config.autoPosterTemplate || defaultTemplate) {
           try {
             const templateRepository = getRepository(PosterTemplate);
+            const explicitId = config.autoPosterTemplate;
 
-            const template = await templateRepository.findOne({
-              where: { id: config.autoPosterTemplate, isActive: true },
-            });
+            const template =
+              defaultTemplate ??
+              (explicitId
+                ? await templateRepository.findOne({
+                    where: { id: explicitId, isActive: true },
+                  })
+                : null);
 
             if (template) {
               const templateData = template.getTemplateData();
@@ -4138,7 +4154,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
       // Fetch template data for accurate change detection
       let templateData: unknown = null;
-      if (config.autoPosterTemplate) {
+      if (defaultTemplate) {
+        templateData = defaultTemplate.templateData;
+      } else if (config.autoPosterTemplate) {
         const templateRepo = getRepository(PosterTemplate);
         const template = await templateRepo.findOne({
           where: { id: config.autoPosterTemplate },
@@ -4147,11 +4165,14 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       }
 
       // Calculate input hash for poster to check if regeneration needed
-      const { calculatePosterInputHash } = await import(
-        '@server/utils/metadataHashing'
-      );
+      const {
+        calculatePosterInputHash,
+        posterTemplateReadsField,
+        posterTemplateReadsCollectionType,
+      } = await import('@server/utils/metadataHashing');
+      const ruleTemplateData = templateData;
       const posterInputHash = calculatePosterInputHash({
-        templateId: config.autoPosterTemplate || null,
+        templateId: effectiveTemplateId,
         templateData, // Include template content for change detection
         itemIds: (posterItems || [])
           .map((item) => item.tmdbId?.toString() || item.title)
@@ -4160,6 +4181,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         mediaType,
         collectionType: options?.collectionTypeOverride || config.type,
         collectionSubtype: config.subtype,
+        ...(posterTemplateReadsField(ruleTemplateData, 'itemCount') && {
+          itemCount: fullItemCount,
+        }),
+        ...(posterTemplateReadsCollectionType(ruleTemplateData) && {
+          conditionCollectionType: config.type,
+          conditionCollectionSubtype: config.subtype,
+        }),
       });
 
       // Check if regeneration needed using metadata tracking
@@ -4225,6 +4253,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           items: posterItems,
           autoPosterTemplate: config.autoPosterTemplate,
           libraryId: config.libraryId,
+          itemCount: fullItemCount,
+          conditionCollectionType: config.type,
+          conditionCollectionSubtype: config.subtype,
           ...(options?.dynamicLogo && { dynamicLogo: options.dynamicLogo }),
           ...(options?.personImageUrl && {
             personImageUrl: options.personImageUrl,

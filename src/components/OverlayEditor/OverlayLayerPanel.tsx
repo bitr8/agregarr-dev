@@ -6,9 +6,11 @@ import {
   ArrowUpIcon,
   CodeBracketSquareIcon,
   DocumentTextIcon,
+  FunnelIcon,
   LanguageIcon,
   LockClosedIcon,
   LockOpenIcon,
+  PencilIcon,
   PhotoIcon,
   PlusIcon,
   Square3Stack3DIcon,
@@ -16,18 +18,32 @@ import {
   VariableIcon,
 } from '@heroicons/react/24/outline';
 import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
+import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
+import { isOverlayDateField } from '@server/lib/overlays/overlayDateFields';
+import { DEFAULT_TILE_BORDER_COLOR } from '@server/lib/overlays/tileBorder';
+import { DATE_FORMATS } from '@server/utils/dateFormats';
+import {
+  mergeSegmentUpdate,
+  NUMBER_FORMATS,
+} from '@server/utils/numberFormats';
 import { useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 import CollectionRankPicker from './CollectionRankPicker';
+import { colorScaleFieldOptions } from './colorScaleInputs';
+import ConditionDisplay from './ConditionDisplay';
+import ConditionEditorModal from './ConditionEditorModal';
+import { isResizable } from './elementTransform';
 import MappedIconMappingModal from './MappedIconMappingModal';
+import { ScaleBoundInput } from './ScaleBoundInput';
 import type {
   ColorScale,
   IconMapping,
   OverlayElement,
   OverlayMappedIconElementProps,
   OverlayRasterElementProps,
+  OverlayRenderContext,
   OverlaySVGElementProps,
   OverlayTemplateData,
   OverlayTextElementProps,
@@ -41,6 +57,11 @@ import {
   isCollectionRankField,
   isSingleValueField,
 } from './types';
+import { useServerTimezone } from './useServerTimezone';
+import {
+  buildVariableDisplayText,
+  isNumberFormatVariable,
+} from './variableDisplayText';
 
 const messages = defineMessages({
   layers: 'Layers',
@@ -95,6 +116,7 @@ const messages = defineMessages({
   variableSegment: 'Variable',
   segmentValue: 'Text Content',
   dateFormat: 'Date Format',
+  numberFormat: 'Number Format',
   // SVG properties
   selectIcon: 'Icon',
   grayscale: 'Grayscale',
@@ -110,6 +132,17 @@ const messages = defineMessages({
   undo: 'Undo',
   redo: 'Redo',
   snapToGuides: 'Snap to Guides',
+  // Element condition
+  showConditionally: 'Show conditionally',
+  editConditions: 'Edit Conditions',
+  elementConditionTitle: 'Edit Element Conditions',
+  elementConditionDescription:
+    'Define when this element should be drawn. The element is skipped when its conditions are not met.',
+  elementConditionEnabled: 'Only show when:',
+  elementConditionDisabled: 'Always show (no condition)',
+  conditionalElement: 'Shown conditionally',
+  oneUnconditionalVariable:
+    'Only one unconditional variable element allowed per overlay',
   // Application condition
   applicationCondition: 'Application Condition',
   enableCondition: 'Only apply when:',
@@ -162,6 +195,7 @@ interface OverlayLayerPanelProps {
   onChange: (data: OverlayTemplateData) => void;
   selectedElementId?: string;
   onElementSelect: (elementId: string | undefined) => void;
+  renderContext?: OverlayRenderContext;
 }
 
 export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
@@ -169,10 +203,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
   onChange,
   selectedElementId,
   onElementSelect,
+  renderContext,
 }) => {
   const intl = useIntl();
+  const serverTimezone = useServerTimezone();
   const { addToast } = useToasts();
   const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
+  const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
 
   const { data: fontsData } = useSWR<{ fonts: FontInfo[]; count: number }>(
     '/api/v1/fonts'
@@ -403,6 +440,38 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
 
   const selectedElement = elements.find((el) => el.id === selectedElementId);
 
+  const wouldDuplicateUnconditionalVariable = (
+    element: OverlayElement,
+    condition: OverlayElement['condition']
+  ) =>
+    element.type === 'variable' &&
+    !hasEffectiveCondition(condition) &&
+    elements.some(
+      (el) =>
+        el.id !== element.id &&
+        el.type === 'variable' &&
+        !hasEffectiveCondition(el.condition)
+    );
+
+  const hasUnconditionalVariable = elements.some(
+    (el) => el.type === 'variable' && !hasEffectiveCondition(el.condition)
+  );
+
+  const handleSetElementCondition = (
+    element: OverlayElement,
+    condition: OverlayElement['condition']
+  ): boolean => {
+    if (wouldDuplicateUnconditionalVariable(element, condition)) {
+      addToast(intl.formatMessage(messages.oneUnconditionalVariable), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+      return false;
+    }
+    handleUpdateElement(element.id, { condition });
+    return true;
+  };
+
   const getElementIcon = (type: OverlayElement['type']) => {
     switch (type) {
       case 'text':
@@ -446,27 +515,6 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
       default:
         return 'Unknown';
     }
-  };
-
-  const getVariablePreview = (props: OverlayVariableElementProps) => {
-    const allVars = Object.values(AVAILABLE_VARIABLES).flat();
-
-    // Build preview from segments
-    return props.segments
-      .map((seg) => {
-        if (seg.type === 'text') {
-          return seg.value || '';
-        } else if (seg.type === 'variable' && seg.field) {
-          const varInfo = allVars.find(
-            (v) =>
-              v.field ===
-              (isCollectionRankField(seg.field) ? 'collectionRank' : seg.field)
-          );
-          return varInfo?.example || `{${seg.field}}`;
-        }
-        return '';
-      })
-      .join('');
   };
 
   const renderTextProperties = (element: OverlayElement) => {
@@ -719,35 +767,26 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                       onChange={(e) => updateScale({ field: e.target.value })}
                       className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
                     >
-                      <option value="imdbRating">IMDb Rating</option>
-                      <option value="tmdbRating">TMDB Rating</option>
-                      <option value="rtCriticsScore">RT Critic Score</option>
-                      <option value="rtAudienceScore">RT Audience Score</option>
+                      {colorScaleFieldOptions(scale.field).map((f) => (
+                        <option key={f.field} value={f.field}>
+                          {f.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <div className="flex gap-2">
-                    <label className="flex-1 text-xs text-stone-400">
-                      Min
-                      <input
-                        type="number"
-                        value={scale.min}
-                        onChange={(e) =>
-                          updateScale({ min: Number(e.target.value) })
-                        }
-                        className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
-                      />
-                    </label>
-                    <label className="flex-1 text-xs text-stone-400">
-                      Max
-                      <input
-                        type="number"
-                        value={scale.max}
-                        onChange={(e) =>
-                          updateScale({ max: Number(e.target.value) })
-                        }
-                        className="mt-1 w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-stone-200"
-                      />
-                    </label>
+                    <ScaleBoundInput
+                      key={`${element.id}:min`}
+                      label="Min"
+                      value={scale.min}
+                      onCommit={(min) => updateScale({ min })}
+                    />
+                    <ScaleBoundInput
+                      key={`${element.id}:max`}
+                      label="Max"
+                      value={scale.max}
+                      onCommit={(max) => updateScale({ max })}
+                    />
                   </div>
                   <div className="flex gap-2">
                     <label className="flex-1 text-xs text-stone-400">
@@ -794,7 +833,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             {intl.formatMessage(messages.borderColor)}
           </label>
           <ColorInput
-            value={props.borderColor || '#FFFFFF'}
+            value={props.borderColor || DEFAULT_TILE_BORDER_COLOR}
             onChange={(value) =>
               handleUpdateElement(element.id, {
                 properties: { ...props, borderColor: value },
@@ -1174,7 +1213,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
       updates: Partial<OverlayVariableSegment>
     ) => {
       const newSegments = [...props.segments];
-      newSegments[index] = { ...newSegments[index], ...updates };
+      newSegments[index] = mergeSegmentUpdate(newSegments[index], updates);
       handleUpdateElement(element.id, {
         properties: { ...props, segments: newSegments },
       });
@@ -1385,69 +1424,59 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
                     )}
 
                     {/* Date format dropdown - show for date fields */}
-                    {segment.field &&
-                      [
-                        'releaseDate',
-                        'theatricalReleaseDate',
-                        'digitalReleaseDate',
-                        'physicalReleaseDate',
-                        'nextEpisodeAirDate',
-                        'nextSeasonAirDate',
-                        'lastPlayed',
-                        'dateAdded',
-                        'lastEpisodeAddedDate',
-                      ].includes(segment.field) && (
-                        <div className="mt-2">
-                          <label className="mb-1 block text-xs text-stone-400">
-                            {intl.formatMessage(messages.dateFormat)}
-                          </label>
-                          <select
-                            value={segment.format || 'MMM DD'}
-                            onChange={(e) =>
-                              handleUpdateSegment(index, {
-                                format: e.target.value,
-                              })
-                            }
-                            className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
-                          >
-                            <optgroup label="Short (No Year)">
-                              <option value="MMM DD">DEC 20</option>
-                              <option value="DD MMM">20 DEC</option>
+                    {isOverlayDateField(segment.field) && (
+                      <div className="mt-2">
+                        <label className="mb-1 block text-xs text-stone-400">
+                          {intl.formatMessage(messages.dateFormat)}
+                        </label>
+                        <select
+                          value={segment.format || 'MMM DD'}
+                          onChange={(e) =>
+                            handleUpdateSegment(index, {
+                              format: e.target.value,
+                            })
+                          }
+                          className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                        >
+                          {Array.from(
+                            new Set(DATE_FORMATS.map((f) => f.group))
+                          ).map((group) => (
+                            <optgroup key={group} label={group}>
+                              {DATE_FORMATS.filter(
+                                (f) => f.group === group
+                              ).map((f) => (
+                                <option key={f.value} value={f.value}>
+                                  {f.label}
+                                </option>
+                              ))}
                             </optgroup>
-                            <optgroup label="Short (With Year)">
-                              <option value="MMM DD, YYYY">DEC 20, 2025</option>
-                              <option value="DD MMM YYYY">20 DEC 2025</option>
-                            </optgroup>
-                            <optgroup label="Full Month Name">
-                              <option value="MMMM DD, YYYY">
-                                December 20, 2025
-                              </option>
-                              <option value="DD MMMM YYYY">
-                                20 December 2025
-                              </option>
-                            </optgroup>
-                            <optgroup label="Numeric">
-                              <option value="YYYY-MM-DD">2025-12-20</option>
-                              <option value="YYYY/MM/DD">2025/12/20</option>
-                              <option value="MM/DD/YYYY">12/20/2025</option>
-                              <option value="DD/MM/YYYY">20/12/2025</option>
-                              <option value="DD-MM-YYYY">20-12-2025</option>
-                              <option value="DD/MM">20/12</option>
-                              <option value="D/M">5/12</option>
-                              <option value="MM/DD">12/20</option>
-                              <option value="M/D">12/5</option>
-                            </optgroup>
-                            <optgroup label="With Weekday">
-                              <option value="DDD DD/MM">MON 20/12</option>
-                              <option value="DDD D/M">MON 5/12</option>
-                              <option value="DDD MM/DD">MON 12/20</option>
-                              <option value="DDD M/D">MON 12/5</option>
-                              <option value="DDDD">MONDAY</option>
-                              <option value="DDD">MON</option>
-                            </optgroup>
-                          </select>
-                        </div>
-                      )}
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {isNumberFormatVariable(segment.field) && (
+                      <div className="mt-2">
+                        <label className="mb-1 block text-xs text-stone-400">
+                          {intl.formatMessage(messages.numberFormat)}
+                        </label>
+                        <select
+                          value={segment.format || ''}
+                          onChange={(e) =>
+                            handleUpdateSegment(index, {
+                              format: e.target.value || undefined,
+                            })
+                          }
+                          className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                        >
+                          {NUMBER_FORMATS.map((f) => (
+                            <option key={f.value} value={f.value}>
+                              {f.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1479,7 +1508,7 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             {intl.formatMessage(messages.previewText)}
           </label>
           <div className="text-sm font-medium text-white">
-            {getVariablePreview(props)}
+            {buildVariableDisplayText(props, renderContext, serverTimezone)}
           </div>
         </div>
 
@@ -1674,13 +1703,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
 
         <div>
           <label className="mb-1 block text-xs text-stone-300">
-            {intl.formatMessage(messages.opacity)} ({props.opacity || 100}%)
+            {intl.formatMessage(messages.opacity)} ({props.opacity ?? 100}%)
           </label>
           <input
             type="range"
             min="0"
             max="100"
-            value={props.opacity || 100}
+            value={props.opacity ?? 100}
             onChange={(e) =>
               handleUpdateElement(element.id, {
                 properties: { ...props, opacity: parseInt(e.target.value) },
@@ -1733,13 +1762,13 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
 
         <div>
           <label className="mb-1 block text-xs text-stone-300">
-            {intl.formatMessage(messages.opacity)} ({props.opacity || 100}%)
+            {intl.formatMessage(messages.opacity)} ({props.opacity ?? 100}%)
           </label>
           <input
             type="range"
             min="0"
             max="100"
-            value={props.opacity || 100}
+            value={props.opacity ?? 100}
             onChange={(e) =>
               handleUpdateElement(element.id, {
                 properties: { ...props, opacity: parseInt(e.target.value) },
@@ -2224,38 +2253,42 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
               className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-stone-300">
-              {intl.formatMessage(messages.width)}
-            </label>
-            <input
-              type="number"
-              value={Math.round(element.width)}
-              onChange={(e) =>
-                handleUpdateElement(element.id, {
-                  width: parseInt(e.target.value) || 1,
-                })
-              }
-              min="1"
-              className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-stone-300">
-              {intl.formatMessage(messages.height)}
-            </label>
-            <input
-              type="number"
-              value={Math.round(element.height)}
-              onChange={(e) =>
-                handleUpdateElement(element.id, {
-                  height: parseInt(e.target.value) || 1,
-                })
-              }
-              min="1"
-              className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
-            />
-          </div>
+          {isResizable(element.type) && (
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-stone-300">
+                  {intl.formatMessage(messages.width)}
+                </label>
+                <input
+                  type="number"
+                  value={Math.round(element.width)}
+                  onChange={(e) =>
+                    handleUpdateElement(element.id, {
+                      width: parseInt(e.target.value) || 1,
+                    })
+                  }
+                  min="1"
+                  className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-stone-300">
+                  {intl.formatMessage(messages.height)}
+                </label>
+                <input
+                  type="number"
+                  value={Math.round(element.height)}
+                  onChange={(e) =>
+                    handleUpdateElement(element.id, {
+                      height: parseInt(e.target.value) || 1,
+                    })
+                  }
+                  min="1"
+                  className="w-full rounded border border-stone-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -2299,6 +2332,22 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
       <>
         {renderPositionAndSizeProperties(selectedElement)}
         {typeSpecificProperties()}
+        <div className="mt-4 border-t border-stone-700 pt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <label className="block text-xs font-medium text-stone-300">
+              {intl.formatMessage(messages.showConditionally)}
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsConditionModalOpen(true)}
+              className="flex items-center space-x-1 rounded px-2 py-1 text-xs text-orange-400 hover:bg-stone-700 hover:text-orange-300"
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+              <span>{intl.formatMessage(messages.editConditions)}</span>
+            </button>
+          </div>
+          <ConditionDisplay condition={selectedElement.condition} />
+        </div>
       </>
     );
   };
@@ -2327,13 +2376,11 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
           </button>
           <button
             onClick={handleAddVariable}
-            disabled={elements.some(
-              (el) => el.type === 'variable' && !el.condition
-            )}
+            disabled={hasUnconditionalVariable}
             className="flex flex-col items-center rounded-lg bg-stone-700 p-2 text-xs text-stone-200 transition-colors hover:bg-stone-600 disabled:cursor-not-allowed disabled:opacity-50"
             title={
-              elements.some((el) => el.type === 'variable' && !el.condition)
-                ? 'Only one unconditional variable element allowed per overlay'
+              hasUnconditionalVariable
+                ? intl.formatMessage(messages.oneUnconditionalVariable)
                 : undefined
             }
           >
@@ -2386,6 +2433,12 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
             <div className="flex items-center justify-between">
               <span className="truncate text-sm">
                 {getElementIcon(element.type)} {getElementLabel(element)}
+                {element.condition && (
+                  <FunnelIcon
+                    className="ml-1 inline h-3 w-3 align-baseline"
+                    title={intl.formatMessage(messages.conditionalElement)}
+                  />
+                )}
               </span>
               <div className="flex shrink-0 space-x-1">
                 <button
@@ -2430,6 +2483,21 @@ export const OverlayLayerPanel: React.FC<OverlayLayerPanelProps> = ({
         </h4>
         {renderPropertiesPanel()}
       </div>
+
+      {isConditionModalOpen && selectedElement && (
+        <ConditionEditorModal
+          isOpen={isConditionModalOpen}
+          onClose={() => setIsConditionModalOpen(false)}
+          initialCondition={selectedElement.condition}
+          onSave={(condition) =>
+            handleSetElementCondition(selectedElement, condition)
+          }
+          title={intl.formatMessage(messages.elementConditionTitle)}
+          description={intl.formatMessage(messages.elementConditionDescription)}
+          enableLabel={intl.formatMessage(messages.elementConditionEnabled)}
+          disabledLabel={intl.formatMessage(messages.elementConditionDisabled)}
+        />
+      )}
     </div>
   );
 };

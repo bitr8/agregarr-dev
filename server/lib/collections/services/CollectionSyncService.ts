@@ -2,6 +2,7 @@ import OverseerrAPI, {
   type OverseerrMediaRequest,
 } from '@server/api/overseerr';
 import type PlexAPI from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import { PlaceholderItem } from '@server/entity/PlaceholderItem';
 import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
@@ -40,6 +41,7 @@ import type {
 import { getSettings } from '@server/lib/settings';
 import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
+import { targetedConfigs } from '@server/utils/targetUserSupport';
 import path from 'path';
 import { syncCacheService } from './SyncCacheService';
 
@@ -169,8 +171,8 @@ export class CollectionSyncService {
     const movies: DiscoveredMoviePlaceholder[] = [];
 
     // Only run discovery if there are collections with placeholders enabled
-    const hasPlaceholderCollections = collectionConfigs.some(
-      (c) => c.createPlaceholdersForMissing
+    const hasPlaceholderCollections = collectionConfigs.some((c) =>
+      placeholdersEnabled(c)
     );
 
     if (!hasPlaceholderCollections) {
@@ -191,7 +193,7 @@ export class CollectionSyncService {
       ...new Set(
         collectionConfigs
           .filter((c) => {
-            if (!c.createPlaceholdersForMissing) return false;
+            if (!placeholdersEnabled(c)) return false;
             try {
               return getCollectionMediaType(c) === 'tv';
             } catch {
@@ -467,7 +469,7 @@ export class CollectionSyncService {
       ...new Set(
         collectionConfigs
           .filter((c) => {
-            if (!c.createPlaceholdersForMissing) return false;
+            if (!placeholdersEnabled(c)) return false;
             try {
               return getCollectionMediaType(c) === 'movie';
             } catch {
@@ -676,9 +678,7 @@ export class CollectionSyncService {
     );
 
     // Detect configs with targetUserId set (per-user targeted collections)
-    const targetUserConfigs = collectionConfigs.filter(
-      (config) => config.targetUserId !== undefined
-    );
+    const targetUserConfigs = targetedConfigs(collectionConfigs);
     const hasTargetUserConfigs = targetUserConfigs.length > 0;
 
     if (hasUsersConfig || hasServerOwnerConfig || hasTargetUserConfigs) {

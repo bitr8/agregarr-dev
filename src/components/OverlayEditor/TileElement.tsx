@@ -1,4 +1,12 @@
-import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
+import {
+  colorScaleContextField,
+  colorScaleFraction,
+} from '@server/lib/overlays/colorScaleField';
+import { resolveTileCornerRadii } from '@server/lib/overlays/roundedRect';
+import {
+  DEFAULT_TILE_BORDER_COLOR,
+  insetTileBorder,
+} from '@server/lib/overlays/tileBorder';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useRef } from 'react';
@@ -36,10 +44,7 @@ function resolveColorScale(
   const raw =
     context[colorScaleContextField(scale.field) as keyof OverlayRenderContext];
   if (typeof raw !== 'number') return null;
-  const t = Math.max(
-    0,
-    Math.min(1, (raw - scale.min) / (scale.max - scale.min))
-  );
+  const t = colorScaleFraction(raw, scale.min, scale.max);
   if (scale.midColor) {
     return t < 0.5
       ? lerpColor(scale.fromColor, scale.midColor, t * 2)
@@ -49,7 +54,10 @@ function resolveColorScale(
 }
 
 interface TileElementComponentProps {
-  element: OverlayElement;
+  element: Pick<
+    OverlayElement,
+    'id' | 'x' | 'y' | 'width' | 'height' | 'rotation'
+  > & { properties: object };
   isSelected: boolean;
   renderContext?: OverlayRenderContext;
   onSelect: (node: Konva.Node) => void;
@@ -95,6 +103,17 @@ export const TileElement: React.FC<TileElementComponentProps> = ({
       props.borderRadiusBottomLeft ?? 0,
     ];
   }
+
+  const borderWidth = props.borderWidth ?? 0;
+  const border =
+    borderWidth > 0
+      ? insetTileBorder(
+          element.width,
+          element.height,
+          resolveTileCornerRadii(props),
+          borderWidth
+        )
+      : null;
 
   return (
     <Group
@@ -156,11 +175,26 @@ export const TileElement: React.FC<TileElementComponentProps> = ({
         height={element.height}
         fill={fillColor}
         opacity={props.fillOpacity / 100}
-        stroke={props.borderColor}
-        strokeWidth={props.borderWidth || 0}
         cornerRadius={cornerRadius}
         listening={false}
       />
+      {border && (
+        <Rect
+          x={border.inset}
+          y={border.inset}
+          width={border.width}
+          height={border.height}
+          stroke={props.borderColor || DEFAULT_TILE_BORDER_COLOR}
+          strokeWidth={border.strokeWidth}
+          cornerRadius={[
+            border.radii.topLeft,
+            border.radii.topRight,
+            border.radii.bottomRight,
+            border.radii.bottomLeft,
+          ]}
+          listening={false}
+        />
+      )}
 
       {/* Selection indicator */}
       {isSelected && (

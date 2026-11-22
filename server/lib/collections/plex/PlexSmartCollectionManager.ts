@@ -354,7 +354,9 @@ class PlexSmartCollectionManager {
           mediaType === 'tv'
             ? 'episode.originallyAvailableAt:desc'
             : 'originallyAvailableAt:desc';
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
+        const upperBound =
+          mediaType === 'tv' ? '&episode.originallyAvailableAt<<=-0d' : '';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}${upperBound}&label!=${labelFilter}`;
       } else if (subtype === 'recently_released_episodes') {
         if (mediaType !== 'tv') {
           throw new Error(
@@ -914,7 +916,9 @@ class PlexSmartCollectionManager {
           mediaType === 'tv'
             ? 'episode.originallyAvailableAt:desc'
             : 'originallyAvailableAt:desc';
-        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}&label!=${labelFilter}`;
+        const upperBound =
+          mediaType === 'tv' ? '&episode.originallyAvailableAt<<=-0d' : '';
+        filterUri = `/library/sections/${libraryKey}/all?type=${type}&sort=${sortParam}${upperBound}&label!=${labelFilter}`;
       } else if (subtype === 'recently_released_episodes') {
         if (mediaType !== 'tv') {
           throw new Error(

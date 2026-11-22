@@ -41,3 +41,37 @@ describe('selectMappedIcons', () => {
     });
   });
 });
+
+describe('selectMappedIcons fallback mappings', () => {
+  const fallback = [
+    { value: '4K', iconPath: '/f4k.png' },
+    { value: 'IMAX', iconPath: '/fimax.png' },
+  ];
+
+  it('previews an icon for a value the element list misses', () => {
+    expect(
+      selectMappedIcons(mappings, '4k', undefined, true, fallback)
+    ).toEqual({ mappings: [fallback[0]] });
+  });
+
+  it('prefers the element mapping over the fallback', () => {
+    expect(
+      selectMappedIcons(mappings, 'IMAX', undefined, true, fallback)
+    ).toEqual({ mappings: [mappings[1]] });
+  });
+
+  it('previews icons for an element with an empty list', () => {
+    expect(selectMappedIcons([], '4K', undefined, true, fallback)).toEqual({
+      mappings: [fallback[0]],
+    });
+    expect(selectMappedIcons([], undefined, undefined, true, fallback)).toEqual(
+      { mappings: [fallback[0]] }
+    );
+  });
+
+  it('still flags a value neither list covers', () => {
+    expect(
+      selectMappedIcons(mappings, 'nope', undefined, true, fallback)
+    ).toEqual({ mappings: [mappings[0]], unmatchedValue: 'nope' });
+  });
+});

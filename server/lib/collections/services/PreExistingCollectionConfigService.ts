@@ -2,6 +2,7 @@ import type { PreExistingCollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { IdGenerator } from '@server/utils/idGenerator';
+import { withoutTargetUser } from '@server/utils/targetUserSupport';
 
 // Type for pre-existing collection configs during discovery (before isActive is set server-side)
 type DiscoveredPreExistingConfig = Omit<
@@ -107,7 +108,8 @@ export class PreExistingCollectionConfigService {
     const settings = getSettings();
 
     // Direct save since these are already in the correct format
-    settings.plex.preExistingCollectionConfigs = newConfigs;
+    settings.plex.preExistingCollectionConfigs =
+      newConfigs.map(withoutTargetUser);
     settings.save();
 
     logger.info('Pre-existing collection configurations saved', {
@@ -174,7 +176,7 @@ export class PreExistingCollectionConfigService {
       }
 
       // Merge settings while preserving computed fields
-      const updatedConfig: PreExistingCollectionConfig = {
+      const merged: PreExistingCollectionConfig = {
         ...configToUpdate, // Preserve all existing fields including computed ones
         ...safeSettings, // Apply user changes (with library-specific fields excluded for linked collections, including undefined values to clear fields)
         // Ensure computed fields stay computed:
@@ -183,6 +185,7 @@ export class PreExistingCollectionConfigService {
         collectionType: configToUpdate.collectionType, // Computed field
         // Note: isLinked, linkId, isUnlinked come from safeSettings spread above
       };
+      const updatedConfig = withoutTargetUser(merged);
 
       // Update the config in place
       configs[configIndex] = updatedConfig;

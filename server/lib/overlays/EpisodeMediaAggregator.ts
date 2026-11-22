@@ -106,6 +106,40 @@ export function needsAddedAtResave(
   });
 }
 
+function normalizeVersionCount(v: number | null | undefined): number | null {
+  return v ?? null;
+}
+
+// Fresh value wins; an omitted fresh value keeps the previous one.
+export function mergedVersionCount(
+  ratingKey: string,
+  previous: number | null | undefined,
+  freshVersionCountByKey: Map<string, number | null | undefined>
+): number | null {
+  return freshVersionCountByKey.get(ratingKey) ?? previous ?? null;
+}
+
+// Cached row disagrees with the merged value for a still-current episode.
+export function needsVersionCountResave(
+  cachedEpisodes: EpisodeMediaInfo[],
+  mergedVersionCountByKey: Map<string, number | null | undefined>,
+  currentKeys: Set<string>
+): boolean {
+  return cachedEpisodes.some((c) => {
+    if (!currentKeys.has(c.ratingKey)) return false;
+    return (
+      normalizeVersionCount(c.versionCount) !==
+      normalizeVersionCount(mergedVersionCountByKey.get(c.ratingKey))
+    );
+  });
+}
+
+function multiVersionCount(episodes: EpisodeMediaInfo[]): number | undefined {
+  const known = episodes.filter((ep) => ep.versionCount != null);
+  if (known.length === 0) return undefined;
+  return known.filter((ep) => (ep.versionCount as number) > 1).length;
+}
+
 export class EpisodeMediaAggregator {
   aggregateByShow(
     episodes: EpisodeMediaInfo[]
@@ -127,7 +161,10 @@ export class EpisodeMediaAggregator {
       const epsToAggregate =
         nonSpecials.length > 0 ? nonSpecials : showEpisodes;
 
-      result.set(showKey, this.aggregate(epsToAggregate));
+      const agg = this.aggregate(epsToAggregate);
+      agg.episodeMultiVersionCount =
+        nonSpecials.length > 0 ? multiVersionCount(nonSpecials) : undefined;
+      result.set(showKey, agg);
     }
 
     // Full `episodes`, specials included on purpose: a new special is still
@@ -168,7 +205,13 @@ export class EpisodeMediaAggregator {
 
     const result = new Map<string, AggregatedMediaInfo>();
     for (const [seasonKey, seasonEpisodes] of bySeason) {
-      result.set(seasonKey, this.aggregate(seasonEpisodes));
+      const agg = this.aggregate(seasonEpisodes);
+      agg.episodeMultiVersionCount = seasonEpisodes.some(
+        (ep) => ep.seasonNumber === 0
+      )
+        ? undefined
+        : multiVersionCount(seasonEpisodes);
+      result.set(seasonKey, agg);
     }
     return result;
   }

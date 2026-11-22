@@ -1,5 +1,4 @@
 import type {
-  ApplicationCondition,
   ColorScale,
   IconMapping,
   OverlayElement,
@@ -12,520 +11,30 @@ import type {
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import logger from '@server/logger';
+import { formatNumberSegment } from '@server/utils/numberFormats';
 import fs from 'fs';
 import path from 'path';
 import sharp, { type OverlayOptions } from 'sharp';
-import { colorScaleContextField } from './colorScaleField';
+import { colorScaleContextField, colorScaleFraction } from './colorScaleField';
+import { evaluateCondition } from './conditionEvaluator';
+import { mappedIconContentSize } from './mappedIconLayout';
+import { isOverlayDateField } from './overlayDateFields';
 import {
   DEFAULT_OVERLAY_JPEG_QUALITY,
   normalizeOverlayJpegQuality,
   overlayOutputFormat,
 } from './overlayOutputQuality';
+import type { OverlayRenderContext } from './overlayRenderContext';
 import { AGREGARR_OVERLAY_MARKER } from './posterOwnershipMetadata';
+import { resolveTileCornerRadii, roundedRectPath } from './roundedRect';
+import { DEFAULT_TILE_BORDER_COLOR, insetTileBorder } from './tileBorder';
 import { getMergedMappings } from './UserMappingsService';
 
-/**
- * Evaluate an application condition against the render context
- * Returns true if condition is met (or if no condition specified)
- *
- * Uses flat section/rule structure:
- * - Evaluate each section by combining its rules with their ruleOperators
- * - Combine sections using their sectionOperators
- */
-export function evaluateCondition(
-  condition: ApplicationCondition | undefined,
-  context: OverlayRenderContext
-): boolean {
-  if (!condition || !condition.sections || condition.sections.length === 0) {
-    return true; // No condition = always apply
-  }
-
-  // Evaluate first section
-  let result = evaluateSection(condition.sections[0], context);
-
-  // Combine remaining sections using their sectionOperators
-  for (let i = 1; i < condition.sections.length; i++) {
-    const section = condition.sections[i];
-    const sectionResult = evaluateSection(section, context);
-
-    if (section.sectionOperator === 'and') {
-      result = result && sectionResult;
-    } else {
-      // Default to OR if not specified
-      result = result || sectionResult;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Evaluate a single section by combining its rules
- */
-function evaluateSection(
-  section: {
-    rules: {
-      ruleOperator?: 'and' | 'or';
-      field: string;
-      operator: string;
-      value: unknown;
-    }[];
-  },
-  context: OverlayRenderContext
-): boolean {
-  if (!section.rules || section.rules.length === 0) {
-    return true; // Empty section = always true
-  }
-
-  // Evaluate first rule
-  let result = evaluateRule(section.rules[0], context);
-
-  // Combine remaining rules using their ruleOperators
-  for (let i = 1; i < section.rules.length; i++) {
-    const rule = section.rules[i];
-    const ruleResult = evaluateRule(rule, context);
-
-    if (rule.ruleOperator === 'or') {
-      result = result || ruleResult;
-    } else {
-      // Default to AND if not specified
-      result = result && ruleResult;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Evaluate condition and return detailed results for debugging
- * Returns the same boolean result as evaluateCondition, plus detailed evaluation info
- */
-export function evaluateConditionDetailed(
-  condition: ApplicationCondition | undefined,
-  context: OverlayRenderContext
-): {
-  matched: boolean;
-  sectionResults: {
-    sectionIndex: number;
-    sectionOperator?: 'and' | 'or';
-    matched: boolean;
-    ruleResults: {
-      ruleIndex: number;
-      ruleOperator?: 'and' | 'or';
-      field: string;
-      operator: string;
-      value: unknown;
-      actualValue: unknown;
-      matched: boolean;
-    }[];
-  }[];
-} {
-  if (!condition || !condition.sections || condition.sections.length === 0) {
-    return {
-      matched: true,
-      sectionResults: [],
-    };
-  }
-
-  const sectionResults = condition.sections.map((section, sectionIndex) => {
-    const ruleResults = section.rules.map((rule, ruleIndex) => {
-      const actualValue = context[rule.field];
-      const matched = evaluateRule(rule, context);
-
-      return {
-        ruleIndex,
-        ruleOperator: rule.ruleOperator,
-        field: rule.field,
-        operator: rule.operator,
-        value: rule.value,
-        actualValue,
-        matched,
-      };
-    });
-
-    // Determine section match based on rule operator logic
-    let sectionMatched = ruleResults[0]?.matched ?? true;
-    for (let i = 1; i < ruleResults.length; i++) {
-      const ruleResult = ruleResults[i];
-      if (ruleResult.ruleOperator === 'or') {
-        sectionMatched = sectionMatched || ruleResult.matched;
-      } else {
-        // Default to AND
-        sectionMatched = sectionMatched && ruleResult.matched;
-      }
-    }
-
-    return {
-      sectionIndex,
-      sectionOperator: section.sectionOperator,
-      matched: sectionMatched,
-      ruleResults,
-    };
-  });
-
-  // Determine overall match based on section operator logic
-  let overallMatched = sectionResults[0]?.matched ?? true;
-  for (let i = 1; i < sectionResults.length; i++) {
-    const sectionResult = sectionResults[i];
-    if (sectionResult.sectionOperator === 'and') {
-      overallMatched = overallMatched && sectionResult.matched;
-    } else {
-      // Default to OR
-      overallMatched = overallMatched || sectionResult.matched;
-    }
-  }
-
-  return {
-    matched: overallMatched,
-    sectionResults,
-  };
-}
-
-/**
- * Evaluate a single rule (field/operator/value comparison)
- */
-function evaluateRule(
-  rule: { field: string; operator: string; value: unknown },
-  context: OverlayRenderContext
-): boolean {
-  const value = context[rule.field];
-  const conditionValue = rule.value;
-
-  // Handle undefined/null values specially based on operator
-  if (value === undefined || value === null) {
-    // For 'neq' (not equal), missing/null IS different from any defined value
-    // e.g., "downloaded != true" should match when downloaded is undefined
-    if (rule.operator === 'neq') {
-      return conditionValue !== undefined && conditionValue !== null;
-    }
-    // For 'notContains', missing/null doesn't contain anything, so return true
-    // e.g., "filePath does not contain '2005'" should match when filePath is undefined
-    if (rule.operator === 'notContains') {
-      return true;
-    }
-    // For 'exists', we need to evaluate based on the presence/absence of value
-    if (rule.operator === 'exists') {
-      // value is null/undefined, so field does NOT exist
-      // Return true if conditionValue is false (checking for non-existence)
-      return conditionValue === false;
-    }
-    // For all other operators (eq, gt, gte, lt, lte, contains, in, etc.)
-    // undefined/null means the condition can't be evaluated, so false
-    return false;
-  }
-
-  switch (rule.operator) {
-    case 'eq':
-      // For array fields (like radarrTags/sonarrTags), check if array contains the value
-      if (Array.isArray(value) && typeof conditionValue === 'string') {
-        return value.some(
-          (item) =>
-            typeof item === 'string' &&
-            item.toLowerCase() === conditionValue.toLowerCase()
-        );
-      }
-      // Case-insensitive comparison for strings
-      if (typeof value === 'string' && typeof conditionValue === 'string') {
-        return value.toLowerCase() === conditionValue.toLowerCase();
-      }
-      return value === conditionValue;
-    case 'neq':
-      // For array fields, check if array does NOT contain the value
-      if (Array.isArray(value) && typeof conditionValue === 'string') {
-        return !value.some(
-          (item) =>
-            typeof item === 'string' &&
-            item.toLowerCase() === conditionValue.toLowerCase()
-        );
-      }
-      // Case-insensitive comparison for strings
-      if (typeof value === 'string' && typeof conditionValue === 'string') {
-        return value.toLowerCase() !== conditionValue.toLowerCase();
-      }
-      return value !== conditionValue;
-    case 'gt':
-      return (
-        typeof value === 'number' &&
-        typeof conditionValue === 'number' &&
-        value > conditionValue
-      );
-    case 'gte':
-      return (
-        typeof value === 'number' &&
-        typeof conditionValue === 'number' &&
-        value >= conditionValue
-      );
-    case 'lt':
-      return (
-        typeof value === 'number' &&
-        typeof conditionValue === 'number' &&
-        value < conditionValue
-      );
-    case 'lte':
-      return (
-        typeof value === 'number' &&
-        typeof conditionValue === 'number' &&
-        value <= conditionValue
-      );
-    case 'in':
-      // The condition editor saves `in` values as comma-separated text
-      if (
-        typeof conditionValue === 'string' ||
-        typeof conditionValue === 'number'
-      ) {
-        if (typeof value !== 'string' && typeof value !== 'number') {
-          return false;
-        }
-        const actual = String(value).toLowerCase();
-        return String(conditionValue)
-          .split(',')
-          .map((item) => item.trim().toLowerCase())
-          .some((item) => item !== '' && item === actual);
-      }
-      // Case-insensitive comparison for string arrays
-      if (typeof value === 'string' && Array.isArray(conditionValue)) {
-        return conditionValue.some(
-          (item) =>
-            typeof item === 'string' &&
-            item.toLowerCase() === value.toLowerCase()
-        );
-      }
-      return (
-        Array.isArray(conditionValue) &&
-        conditionValue.includes(value as string | number)
-      );
-    case 'contains':
-      // For array fields, check if array contains the value
-      if (Array.isArray(value) && typeof conditionValue === 'string') {
-        return value.some(
-          (item) =>
-            typeof item === 'string' &&
-            item.toLowerCase().includes(conditionValue.toLowerCase())
-        );
-      }
-      return (
-        typeof value === 'string' &&
-        typeof conditionValue === 'string' &&
-        value.toLowerCase().includes(conditionValue.toLowerCase())
-      );
-    case 'notContains':
-      // For array fields, check if array does NOT contain the value
-      if (Array.isArray(value) && typeof conditionValue === 'string') {
-        return !value.some(
-          (item) =>
-            typeof item === 'string' &&
-            item.toLowerCase().includes(conditionValue.toLowerCase())
-        );
-      }
-      return (
-        typeof value === 'string' &&
-        typeof conditionValue === 'string' &&
-        !value.toLowerCase().includes(conditionValue.toLowerCase())
-      );
-    case 'regex':
-      if (typeof value === 'string' && typeof conditionValue === 'string') {
-        try {
-          const regex = new RegExp(conditionValue, 'i');
-          return regex.test(value);
-        } catch {
-          return false;
-        }
-      }
-      return false;
-    case 'begins':
-      return (
-        typeof value === 'string' &&
-        typeof conditionValue === 'string' &&
-        value.toLowerCase().startsWith(conditionValue.toLowerCase())
-      );
-    case 'ends':
-      return (
-        typeof value === 'string' &&
-        typeof conditionValue === 'string' &&
-        value.toLowerCase().endsWith(conditionValue.toLowerCase())
-      );
-    case 'exists':
-      // Check if field has a non-null/undefined value
-      // conditionValue should be boolean: true = exists, false = not exists
-      if (typeof conditionValue === 'boolean') {
-        const hasValue = value !== undefined && value !== null;
-        return conditionValue ? hasValue : !hasValue;
-      }
-      return false;
-    default:
-      return false;
-  }
-}
-
-/**
- * Metadata context for dynamic field replacement
- */
-export interface OverlayRenderContext {
-  // Ratings (from IMDb API / TMDB / RT API / Plex)
-  imdbRating?: number;
-  tmdbRating?: number;
-  tmdbVoteCount?: number;
-  imdbTop250Rank?: number; // IMDb Top 250 ranking (1-250 for movies, 1-250 for TV)
-  isImdbTop250?: boolean; // True if item is in IMDb Top 250 list
-  rtCriticsScore?: number;
-  rtAudienceScore?: number;
-  rtCertifiedFresh?: boolean; // True if Rotten Tomatoes Certified Fresh
-  rtVerifiedHot?: boolean; // True if Rotten Tomatoes Verified Hot (audience badge)
-  plexUserRating?: number; // Plex user rating (0-10 scale where 10 = 5 stars)
-  // metacriticScore?: number; // TODO: Implement Metacritic integration
-
-  // TMDB Metadata
-  title?: string;
-  year?: number;
-  director?: string;
-  studio?: string;
-  network?: string; // For TV shows
-  genre?: string;
-  runtime?: number;
-  runtimeHHMM?: string; // Runtime formatted as "2h 16m"
-  tmdbStatus?: string; // TV show status: 'Returning Series', 'Planned', 'Pilot', 'In Production', 'Ended', 'Cancelled'
-  tvdbStatus?: string; // TV show status sourced from TVDB: 'RETURNING', 'AIRING', 'ENDED', 'PLANNED'
-
-  // Country/Origin (ISO 3166-1 alpha-2 codes like "US", "GB", "DE")
-  originCountry?: string; // Primary country of origin
-  originCountries?: string[]; // All countries of origin
-  productionCountry?: string; // Primary production country
-  productionCountries?: string[]; // All production countries
-
-  // Plex Media Info (from actual file analysis)
-  resolution?: string; // '4K', '1080p', '720p'
-  width?: number; // Video width in pixels
-  height?: number; // Video height in pixels
-  aspectRatio?: number; // Aspect ratio (e.g., 2.35)
-
-  // Video specs
-  videoCodec?: string; // 'hevc', 'h264', 'av1'
-  videoProfile?: string; // 'main', 'high'
-  videoFrameRate?: string; // '23.976', '24', '30'
-  bitDepth?: number; // 8, 10, 12
-  hdr?: boolean; // HDR10/HDR10+
-  dolbyVision?: boolean; // Dolby Vision
-  dolbyVisionProfile?: number; // Dolby Vision Profile (5, 7, 8, etc.)
-  hdr10Plus?: boolean; // HDR10+ dynamic metadata (Plex HDR10PlusPresent)
-  colorTrc?: string; // Color transfer characteristic (e.g., 'smpte2084' for HDR10, 'arib' for HLG)
-
-  // Audio specs
-  audioCodec?: string; // 'truehd', 'dts', 'aac'
-  audioProfile?: string; // Best-track token: 'truehd_atmos', 'plus_atmos', 'dtsx', 'ma', ...
-  audioChannels?: number; // 2, 6, 8
-  audioChannelLayout?: string; // '5.1', '7.1', 'stereo' (never 'atmos')
-  audioFormat?: string; // Full display title (e.g., 'English (Dolby TrueHD Atmos 7.1)')
-
-  // Audio language info
-  audioLanguage?: string; // Primary audio track language name (e.g., 'English', 'German')
-  audioLanguageCode?: string; // Primary audio track language code (e.g., 'en', 'de')
-  audioLanguages?: string[]; // Array of all audio track languages
-  audioLanguageCodes?: string[]; // Array of all audio track language codes
-
-  // Subtitle info
-  subtitleLanguages?: string[]; // Array of all subtitle languages
-  subtitleLanguageCodes?: string[]; // Array of all subtitle language codes
-  hasSubtitles?: boolean; // Whether any subtitle tracks are present
-
-  // File info
-  container?: string; // 'mkv', 'mp4'
-  bitrate?: number; // In kbps
-  fileSize?: number; // In bytes
-  filePath?: string; // Full file path
-
-  // Playback stats
-  viewCount?: number; // Number of times played
-  lastPlayed?: Date; // Last playback date
-  dateAdded?: Date; // Date added to Plex
-  lastEpisodeAddedDate?: Date; // Newest episode addedAt, needs episode scanning
-  daysSinceLastEpisodeAdded?: number;
-
-  // Status fields (for Coming Soon / New Release)
-  // PRIMARY RELEASE DATE - Smart calculated field
-  // MOVIES: Earliest of Digital/Physical > Theatrical (+90 days estimate)
-  // TV SHOWS: Series premiere date (NOT next episode!)
-  releaseDate?: string;
-  isEstimatedReleaseDate?: boolean; // releaseDate is the theatrical+90 estimate, not a published date
-  daysUntilRelease?: number; // Days until releaseDate
-  daysAgo?: number; // Days since releaseDate
-  // MOVIES: published per-type dates (region-preferred); negative daysSince = still in the future
-  theatricalReleaseDate?: string;
-  digitalReleaseDate?: string;
-  physicalReleaseDate?: string;
-  daysSinceTheatricalRelease?: number;
-  daysSinceDigitalRelease?: number;
-  daysSincePhysicalRelease?: number;
-  daysSinceHomeRelease?: number; // earliest of digital / physical
-  releaseDateSource?: string; // 'digital' | 'physical' | 'estimate' (theatrical+90) | 'tmdb'
-
-  // TV SHOWS - Episode/Season countdowns (separate from releaseDate)
-  nextEpisodeAirDate?: string; // Raw date for ANY next episode (including mid-season)
-  daysUntilNextEpisode?: number; // Calculated days until ANY next episode
-  nextSeasonAirDate?: string; // Raw date for SEASON PREMIERES only (episode 1)
-  daysUntilNextSeason?: number; // Calculated days until next SEASON PREMIERE only
-  daysAgoNextSeason?: number; // Days since the latest season premiered
-
-  totalSeasons?: number;
-  seasonsAvailable?: number;
-
-  // Episode information
-  seasonNumber?: number;
-  episodeNumber?: number;
-  episodeLabel?: string; // "SERIES FINALE", "SEASON FINALE", or "EPISODE X"
-
-  // Monitoring status
-  isMonitored?: boolean;
-  inRadarr?: boolean;
-  inSonarr?: boolean;
-  hasFile?: boolean; // Whether *arr reports item has files
-  downloaded?: boolean; // Derived from hasFile for monitored items, or !isPlaceholder for others
-  missingEpisodeCount?: number; // TV
-  radarrTags?: string[]; // Array of Radarr tag names
-  sonarrTags?: string[]; // Array of Sonarr tag names
-
-  // Maintainerr integration
-  daysUntilAction?: number; // Days until Maintainerr takes action (negative = overdue)
-  seasonsLeavingCount?: number;
-
-  // Collection membership (populated at runtime from Plex collection contents)
-  collection?: string[]; // Array of collection IDs this item belongs to
-
-  // Plex Labels (item-level tags applied in Plex)
-  plexLabels?: string[]; // Array of Plex label tags on this item
-
-  // Plex edition (editionTitle, else {edition-...} filename tag)
-  edition?: string;
-
-  // Streaming provider (from TMDB watch/providers, flatrate only)
-  streamingProvider?: string; // Top flatrate provider name by display_priority
-  streamingProviderId?: number; // Top flatrate provider ID (stable, for icon mapping)
-
-  // Episode aggregation (populated when enableEpisodeScanning is on for show libraries)
-  showResolution?: string;
-  showHdr?: boolean;
-  showDolbyVision?: boolean;
-  showDolbyVisionProfile?: number;
-  showAudioCodec?: string;
-  showAudioChannels?: number;
-  showVideoCodec?: string;
-  showBitDepth?: number;
-
-  episodeCount?: number;
-  episode4kCount?: number;
-  episode4kPercent?: number;
-  episodeHdrCount?: number;
-  episodeHdrPercent?: number;
-  episodeDvCount?: number;
-  episodeDvPercent?: number;
-  episodeMediaSource?: 'aggregated' | 'show';
-
-  // Item metadata
-  isPlaceholder: boolean; // true = Coming Soon item, false = real item in Plex
-  mediaType: 'movie' | 'show';
-
-  // Future extensibility
-  [key: string]: string | number | boolean | Date | string[] | undefined;
-}
+export {
+  evaluateCondition,
+  evaluateConditionDetailed,
+} from './conditionEvaluator';
+export type { OverlayRenderContext } from './overlayRenderContext';
 
 function parseHex(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
@@ -555,16 +64,40 @@ export function resolveColorScale(
 ): string | null {
   const raw = context[colorScaleContextField(scale.field)];
   if (typeof raw !== 'number') return null;
-  const t = Math.max(
-    0,
-    Math.min(1, (raw - scale.min) / (scale.max - scale.min))
-  );
+  const t = colorScaleFraction(raw, scale.min, scale.max);
   if (scale.midColor) {
     return t < 0.5
       ? lerpColor(scale.fromColor, scale.midColor, t * 2)
       : lerpColor(scale.midColor, scale.toColor, (t - 0.5) * 2);
   }
   return lerpColor(scale.fromColor, scale.toColor, t);
+}
+
+export async function applyOpacityAndGrayscale(
+  input: Buffer,
+  opacity: number | undefined,
+  grayscale: boolean | undefined
+): Promise<Buffer> {
+  const fade = opacity === undefined || opacity >= 100 ? 1 : opacity / 100;
+  if (fade === 1 && !grayscale) return input;
+
+  const source = grayscale
+    ? await sharp(input).grayscale().png().toBuffer()
+    : input;
+  const { data, info } = await sharp(source)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  if (fade !== 1) {
+    for (let i = info.channels - 1; i < data.length; i += info.channels) {
+      data[i] = Math.round(data[i] * Math.max(0, fade));
+    }
+  }
+  return await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: info.channels },
+  })
+    .png()
+    .toBuffer();
 }
 
 /**
@@ -1008,45 +541,30 @@ class OverlayTemplateRendererService {
       ? Math.round(props.borderWidth * scale)
       : 0;
 
-    // Determine corner radii (with backward compatibility)
-    let radiusTopLeft = 0;
-    let radiusTopRight = 0;
-    let radiusBottomLeft = 0;
-    let radiusBottomRight = 0;
-
-    if (props.lockCorners || props.borderRadius !== undefined) {
-      // Locked mode or legacy borderRadius - all corners same
-      const baseRadius = props.borderRadiusTopLeft ?? props.borderRadius ?? 0;
-      const scaledRadius = Math.round(baseRadius * scale);
-      radiusTopLeft = scaledRadius;
-      radiusTopRight = scaledRadius;
-      radiusBottomLeft = scaledRadius;
-      radiusBottomRight = scaledRadius;
-    } else {
-      // Unlocked mode - individual corners
-      radiusTopLeft = props.borderRadiusTopLeft
-        ? Math.round(props.borderRadiusTopLeft * scale)
-        : 0;
-      radiusTopRight = props.borderRadiusTopRight
-        ? Math.round(props.borderRadiusTopRight * scale)
-        : 0;
-      radiusBottomLeft = props.borderRadiusBottomLeft
-        ? Math.round(props.borderRadiusBottomLeft * scale)
-        : 0;
-      radiusBottomRight = props.borderRadiusBottomRight
-        ? Math.round(props.borderRadiusBottomRight * scale)
-        : 0;
-    }
-
-    // Create SVG path for rectangle with individual corner radii
-    const path = this.createRoundedRectPath(
+    const path = roundedRectPath(
       width,
       height,
-      radiusTopLeft,
-      radiusTopRight,
-      radiusBottomRight,
-      radiusBottomLeft
+      resolveTileCornerRadii(props, scale)
     );
+
+    let borderPath = '';
+    if (borderWidth > 0) {
+      const inner = insetTileBorder(
+        width,
+        height,
+        resolveTileCornerRadii(props, scale),
+        borderWidth
+      );
+      borderPath = `<path transform="translate(${inner.inset} ${
+        inner.inset
+      })" d="${roundedRectPath(
+        inner.width,
+        inner.height,
+        inner.radii
+      )}" fill="none" stroke="${
+        props.borderColor || DEFAULT_TILE_BORDER_COLOR
+      }" stroke-width="${inner.strokeWidth}" />`;
+    }
 
     const svg = `
       <svg width="${width}" height="${height}">
@@ -1054,63 +572,12 @@ class OverlayTemplateRendererService {
           d="${path}"
           fill="${fillColor}"
           fill-opacity="${props.fillOpacity / 100}"
-          ${
-            borderWidth > 0 && props.borderColor
-              ? `stroke="${props.borderColor}"`
-              : ''
-          }
-          ${borderWidth > 0 ? `stroke-width="${borderWidth}"` : ''}
         />
+        ${borderPath}
       </svg>
     `;
 
     return await sharp(Buffer.from(svg)).png().toBuffer();
-  }
-
-  /**
-   * Create SVG path for rounded rectangle with individual corner radii
-   */
-  private createRoundedRectPath(
-    width: number,
-    height: number,
-    radiusTopLeft: number,
-    radiusTopRight: number,
-    radiusBottomRight: number,
-    radiusBottomLeft: number
-  ): string {
-    // Clamp radii to not exceed half the width/height
-    const maxRadiusX = width / 2;
-    const maxRadiusY = height / 2;
-
-    const rtl = Math.min(radiusTopLeft, maxRadiusX, maxRadiusY);
-    const rtr = Math.min(radiusTopRight, maxRadiusX, maxRadiusY);
-    const rbr = Math.min(radiusBottomRight, maxRadiusX, maxRadiusY);
-    const rbl = Math.min(radiusBottomLeft, maxRadiusX, maxRadiusY);
-
-    // SVG path for rounded rectangle
-    // Move to top-left corner (after arc)
-    // Draw line to top-right corner arc
-    // Arc around top-right
-    // Draw line to bottom-right corner arc
-    // Arc around bottom-right
-    // Draw line to bottom-left corner arc
-    // Arc around bottom-left
-    // Draw line back to top-left arc
-    // Arc around top-left
-    // Close path
-
-    return `
-      M ${rtl} 0
-      L ${width - rtr} 0
-      Q ${width} 0 ${width} ${rtr}
-      L ${width} ${height - rbr}
-      Q ${width} ${height} ${width - rbr} ${height}
-      L ${rbl} ${height}
-      Q 0 ${height} 0 ${height - rbl}
-      L 0 ${rtl}
-      Q 0 0 ${rtl} 0
-      Z
-    `.trim();
   }
 
   /**
@@ -1147,17 +614,7 @@ class OverlayTemplateRendererService {
         let formattedValue = '';
 
         // Check if this is a date field with custom format
-        const isDateField = [
-          'releaseDate',
-          'theatricalReleaseDate',
-          'digitalReleaseDate',
-          'physicalReleaseDate',
-          'nextEpisodeAirDate',
-          'nextSeasonAirDate',
-          'lastPlayed',
-          'dateAdded',
-          'lastEpisodeAddedDate',
-        ].includes(segment.field);
+        const isDateField = isOverlayDateField(segment.field);
 
         if (
           isDateField &&
@@ -1184,7 +641,11 @@ class OverlayTemplateRendererService {
             // RT scores are percentages - no decimal needed (e.g., 89)
             formattedValue = Math.round(variableValue).toString();
           } else {
-            formattedValue = variableValue.toString();
+            formattedValue = formatNumberSegment(
+              variableValue,
+              segment.format,
+              segment.field
+            );
           }
         } else {
           formattedValue = String(variableValue);
@@ -1286,13 +747,18 @@ class OverlayTemplateRendererService {
           iconType as 'user' | 'system'
         );
 
-        return await sharp(svgBuffer)
+        const icon = await sharp(svgBuffer)
           .resize(width, height, {
             fit: 'contain',
             background: { r: 0, g: 0, b: 0, alpha: 0 },
           })
           .png()
           .toBuffer();
+        return await applyOpacityAndGrayscale(
+          icon,
+          props.opacity,
+          props.grayscale
+        );
       } catch (error) {
         logger.error('Failed to load SVG icon', {
           label: 'OverlayRenderer',
@@ -1354,13 +820,14 @@ class OverlayTemplateRendererService {
         );
 
         // Resize with 'contain' to maintain aspect ratio (match editor behavior)
-        return await sharp(imageBuffer)
+        const image = await sharp(imageBuffer)
           .resize(width, height, {
             fit: 'contain',
             background: { r: 0, g: 0, b: 0, alpha: 0 },
           })
           .png()
           .toBuffer();
+        return await applyOpacityAndGrayscale(image, props.opacity, false);
       } catch (error) {
         logger.error('Failed to load raster image', {
           label: 'OverlayRenderer',
@@ -1473,16 +940,10 @@ class OverlayTemplateRendererService {
     );
 
     // Calculate canvas size to fit all icons (auto-size to content)
-    const totalWidth = this.calculateContentWidth(
+    const { width: totalWidth, height: totalHeight } = mappedIconContentSize(
       iconsToRender.length,
       iconSize,
       spacingX,
-      props.layout,
-      props.gridColumns || 3
-    );
-    const totalHeight = this.calculateContentHeight(
-      iconsToRender.length,
-      iconSize,
       spacingY,
       props.layout,
       props.gridColumns || 3
@@ -1605,16 +1066,7 @@ class OverlayTemplateRendererService {
       .png()
       .toBuffer();
 
-    // Apply opacity if specified
-    if (props.opacity !== undefined && props.opacity < 100) {
-      // Apply opacity by reducing alpha channel
-      return await sharp(result)
-        .ensureAlpha(props.opacity / 100)
-        .png()
-        .toBuffer();
-    }
-
-    return result;
+    return await applyOpacityAndGrayscale(result, props.opacity, false);
   }
 
   /**
@@ -1656,58 +1108,6 @@ class OverlayTemplateRendererService {
     }
 
     return positions;
-  }
-
-  /**
-   * Calculate content width based on layout
-   */
-  private calculateContentWidth(
-    count: number,
-    iconSize: number,
-    spacingX: number,
-    layout: 'horizontal' | 'vertical' | 'grid',
-    gridColumns: number
-  ): number {
-    if (count === 0) return iconSize;
-
-    switch (layout) {
-      case 'horizontal':
-        return count * iconSize + (count - 1) * spacingX;
-      case 'vertical':
-        return iconSize;
-      case 'grid': {
-        const cols = Math.min(count, gridColumns);
-        return cols * iconSize + (cols - 1) * spacingX;
-      }
-      default:
-        return iconSize;
-    }
-  }
-
-  /**
-   * Calculate content height based on layout
-   */
-  private calculateContentHeight(
-    count: number,
-    iconSize: number,
-    spacingY: number,
-    layout: 'horizontal' | 'vertical' | 'grid',
-    gridColumns: number
-  ): number {
-    if (count === 0) return iconSize;
-
-    switch (layout) {
-      case 'horizontal':
-        return iconSize;
-      case 'vertical':
-        return count * iconSize + (count - 1) * spacingY;
-      case 'grid': {
-        const rows = Math.ceil(count / gridColumns);
-        return rows * iconSize + (rows - 1) * spacingY;
-      }
-      default:
-        return iconSize;
-    }
   }
 }
 

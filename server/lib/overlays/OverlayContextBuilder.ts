@@ -29,9 +29,15 @@ import {
 } from './maintainerrCountdown';
 import type { OverlayRenderContext } from './OverlayTemplateRenderer';
 import {
+  latestAiredPremiere,
   latestAiredSeasonDate,
   movieReleaseInfoFromTmdb,
 } from './releaseDateContext';
+import {
+  summariseSonarrEpisodes,
+  type SonarrEpisodeRow,
+  type SonarrEpisodeSummary,
+} from './sonarrEpisodeSummary';
 import { toTmdbRatingContext, usesTmdbRatingFields } from './tmdbRatingPolicy';
 
 // Captured defensively: the app replaces the global Intl with the andyearnshaw
@@ -210,6 +216,54 @@ async function getSonarrSeries(
   }
 
   return series;
+}
+
+type SonarrEpisode = SonarrEpisodeRow;
+
+// Lifetime follows the series cache the job already clears when idle.
+const episodeCaches = new WeakMap<
+  Map<string, SonarrSeries[]>,
+  Map<string, Promise<SonarrEpisode[]>>
+>();
+
+async function getSonarrEpisodes(
+  sonarrSettings: {
+    hostname: string;
+    port: number;
+    useSsl: boolean;
+    baseUrl?: string;
+    apiKey: string;
+  },
+  seriesId: number,
+  cache?: Map<string, SonarrSeries[]>
+): Promise<SonarrEpisode[]> {
+  const SonarrAPI = (await import('@server/api/servarr/sonarr')).default;
+  const protocol = sonarrSettings.useSsl ? 'https' : 'http';
+  const url = `${protocol}://${sonarrSettings.hostname}:${sonarrSettings.port}${
+    sonarrSettings.baseUrl || ''
+  }/api/v3`;
+  const fetchList = () =>
+    new SonarrAPI({ url, apiKey: sonarrSettings.apiKey }).getEpisodesBySeries(
+      seriesId
+    );
+  if (!cache) {
+    return fetchList();
+  }
+
+  let episodes = episodeCaches.get(cache);
+  if (!episodes) {
+    episodes = new Map();
+    episodeCaches.set(cache, episodes);
+  }
+  const key = `${url}#${seriesId}`;
+  let pending = episodes.get(key);
+  if (!pending) {
+    pending = fetchList();
+    episodes.set(key, pending);
+    const map = episodes;
+    pending.catch(() => map.delete(key));
+  }
+  return pending;
 }
 
 /**
@@ -937,6 +991,9 @@ export async function buildRenderContext(
   if (item.Media?.[0]) {
     const media = item.Media[0];
 
+    context.versionCount = item.Media.length;
+    context.hasMultipleVersions = item.Media.length > 1;
+
     // Resolution - use raw value from Plex (e.g., "720", "1080", "4k")
     if (media.videoResolution) {
       context.resolution = media.videoResolution;
@@ -1109,14 +1166,14 @@ export async function buildRenderContext(
       context.seasonsAvailable = item.childCount;
     }
 
-    // For episode-level items, use parentIndex for season
-    // For show-level items (placeholders/shows), parentIndex is undefined
-    if (item.parentIndex !== undefined) {
-      context.seasonNumber = item.parentIndex;
-    }
-
-    if (item.index !== undefined) {
-      context.episodeNumber = item.index;
+    // On a show or season, Plex's index is the item's own position, not an episode's
+    if (item.type === 'episode') {
+      if (item.parentIndex !== undefined) {
+        context.seasonNumber = item.parentIndex;
+      }
+      if (item.index !== undefined) {
+        context.episodeNumber = item.index;
+      }
     }
   }
 
@@ -1195,11 +1252,15 @@ export interface ReleaseDateInfo {
   theatricalRelease?: string;
   digitalRelease?: string;
   physicalRelease?: string;
+  // Earliest Radarr home date; when set, Days Since Home Release counts from it only.
+  radarrHomeRelease?: string;
   releaseSource?: 'digital' | 'physical' | 'estimate' | 'tmdb';
   nextEpisodeAirDate?: string;
   nextSeasonAirDate?: string;
   // Fallback source for daysAgoNextSeason once next_episode_to_air moves on.
   lastSeasonAirDate?: string;
+  // Sonarr's premiere instant replaced TMDB's US calendar date in lastSeasonAirDate.
+  lastSeasonFromSonarr?: boolean;
   seasonNumber?: number;
   episodeNumber?: number;
   tvdbId?: number;
@@ -1208,8 +1269,10 @@ export interface ReleaseDateInfo {
 type SonarrNextEpisode = {
   nextEpisodeAirDate: string;
   nextSeasonAirDate?: string;
-  seasonNumber: number;
-  episodeNumber: number;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  // No episode matched nextAiring: leave the base (TMDB) numbering alone
+  numberingUnmatched?: boolean;
 };
 
 /**
@@ -1258,7 +1321,8 @@ export async function fetchReleaseDateInfo(
   mediaType: 'movie' | 'show',
   sonarrCache?: Map<string, SonarrSeries[]>,
   preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>,
-  fetchStatus?: { failed: boolean }
+  fetchStatus?: { failed: boolean },
+  useSonarrPremiere = false
 ): Promise<ReleaseDateInfo | undefined> {
   // Check preloaded data first (batch prefetch optimization)
   if (preloadedTmdbReleaseDates) {
@@ -1294,7 +1358,13 @@ export async function fetchReleaseDateInfo(
           // let read-time clearing strip the overlay on a transient outage.
           fetchStatus.failed = true;
         }
-        return info;
+        if (!useSonarrPremiere || mediaType !== 'show') return info;
+        return applySonarrLastPremiere(
+          info,
+          preloaded.tvdbId,
+          sonarrCache,
+          fetchStatus
+        );
       } catch (error) {
         if (fetchStatus) {
           fetchStatus.failed = true;
@@ -1367,7 +1437,9 @@ export async function fetchReleaseDateInfo(
         tmdbBase.seasonNumber = nextEpisode.season_number;
         tmdbBase.episodeNumber = nextEpisode.episode_number;
         tmdbBase.nextSeasonAirDate =
-          nextEpisode.episode_number === 1 ? nextEpisode.air_date : undefined;
+          nextEpisode.episode_number === 1 && nextEpisode.season_number > 0
+            ? nextEpisode.air_date
+            : undefined;
       }
 
       // Sonarr-first: Sonarr's nextAiring + numbering wins when it tracks the
@@ -1399,6 +1471,7 @@ export async function fetchReleaseDateInfo(
               airDate: season.air_date,
             });
             result = {
+              tvdbId,
               releaseDate: showDetails.first_air_date || season.air_date,
               nextEpisodeAirDate: season.air_date,
               // Season air date = episode 1 air date, so this is a premiere.
@@ -1413,11 +1486,19 @@ export async function fetchReleaseDateInfo(
 
       // Fall back to first_air_date when nothing upcoming was found.
       if (!result && showDetails.first_air_date) {
-        result = { releaseDate: showDetails.first_air_date };
+        result = { tvdbId, releaseDate: showDetails.first_air_date };
       }
 
       if (result) {
         result.lastSeasonAirDate = latestAiredSeasonDate(showDetails.seasons);
+        if (useSonarrPremiere) {
+          result = await applySonarrLastPremiere(
+            result,
+            tvdbId,
+            sonarrCache,
+            fetchStatus
+          );
+        }
       }
 
       // A Sonarr failure that left us without an upcoming next episode must skip
@@ -1479,73 +1560,38 @@ export async function fetchNextEpisodeFromSonarr(
         const series = allSeries.find((s) => s.tvdbId === tvdbId);
 
         if (series && series.nextAiring) {
-          // Series has upcoming episode - find which season it belongs to
-          // Match by finding the season whose statistics.nextAiring matches series.nextAiring
-          let nextSeasonNumber = 1;
-          let nextEpisodeNumber = 1;
-
-          if (series.seasons && series.seasons.length > 0) {
-            // First, try to find season whose nextAiring matches series.nextAiring exactly
-            const matchingSeason = series.seasons.find(
-              (s) =>
-                s.monitored &&
-                s.seasonNumber > 0 &&
-                s.statistics?.nextAiring === series.nextAiring
-            );
-
-            if (matchingSeason) {
-              nextSeasonNumber = matchingSeason.seasonNumber;
-              const stats = matchingSeason.statistics;
-              // Episode number: if no files downloaded, it's episode 1 (season premiere)
-              // Otherwise, next episode is files + 1 (approximation for overlay purposes)
-              nextEpisodeNumber = stats ? (stats.episodeFileCount || 0) + 1 : 1;
-            } else {
-              // Fallback: find the latest monitored season with upcoming content
-              // Sort by season number ascending to find earliest upcoming season
-              const monitoredSeasons = series.seasons
-                .filter((s) => s.monitored && s.seasonNumber > 0)
-                .sort((a, b) => a.seasonNumber - b.seasonNumber);
-
-              for (const season of monitoredSeasons) {
-                const stats = season.statistics;
-                // A season is "upcoming" if it has a nextAiring date
-                // (handles both new seasons with 0 episodes and mid-season)
-                if (stats?.nextAiring) {
-                  nextSeasonNumber = season.seasonNumber;
-                  nextEpisodeNumber = (stats.episodeFileCount || 0) + 1;
-                  break;
-                }
-                // Also handle new seasons without episode counts yet
-                if (
-                  stats &&
-                  stats.totalEpisodeCount === 0 &&
-                  stats.episodeFileCount === 0
-                ) {
-                  // New season with no episodes yet - assume episode 1
-                  nextSeasonNumber = season.seasonNumber;
-                  nextEpisodeNumber = 1;
-                  // Don't break - keep looking for one with nextAiring
-                }
-              }
-            }
-          }
-
-          // nextSeasonAirDate is ONLY for season premieres (episode 1)
-          const nextSeasonAirDate =
-            nextEpisodeNumber === 1 ? series.nextAiring : undefined;
-
           // Only an UPCOMING nextAiring is authoritative. A stale/past nextAiring
           // (Sonarr not yet advanced past a just-aired episode) must not shadow
           // another instance that holds the real upcoming episode, so keep
           // looking rather than returning it.
           if (isAirDateUpcoming(series.nextAiring)) {
+            const target = new Date(series.nextAiring).getTime();
+            const episodes = await getSonarrEpisodes(
+              sonarrSettings,
+              series.id as number,
+              cache
+            );
+            const matches = episodes.filter(
+              (e) =>
+                !!e.airDateUtc && new Date(e.airDateUtc).getTime() === target
+            );
+            const next = matches
+              .filter((e) => e.seasonNumber > 0)
+              .sort(
+                (a, b) =>
+                  a.seasonNumber - b.seasonNumber ||
+                  a.episodeNumber - b.episodeNumber
+              )[0];
+
             return {
               kind: 'found',
               episode: {
                 nextEpisodeAirDate: series.nextAiring,
-                nextSeasonAirDate,
-                seasonNumber: nextSeasonNumber,
-                episodeNumber: nextEpisodeNumber,
+                nextSeasonAirDate:
+                  next?.episodeNumber === 1 ? series.nextAiring : undefined,
+                seasonNumber: next?.seasonNumber,
+                episodeNumber: next?.episodeNumber,
+                numberingUnmatched: matches.length === 0,
               },
             };
           }
@@ -1582,6 +1628,10 @@ export async function fetchNextEpisodeFromSonarr(
   }
 }
 
+function sameCalendarDay(a: string | undefined, b: string): boolean {
+  return !!a && toServerCalendarDate(a) === toServerCalendarDate(b);
+}
+
 /**
  * Pure Sonarr-first resolution of the volatile next-episode fields (fork#35),
  * given an already-fetched Sonarr result.
@@ -1616,9 +1666,19 @@ export function resolveSonarrFirstNextEpisode(
         ...base,
         releaseDate: base.releaseDate || ep.nextEpisodeAirDate,
         nextEpisodeAirDate: ep.nextEpisodeAirDate,
-        nextSeasonAirDate: ep.nextSeasonAirDate,
-        seasonNumber: ep.seasonNumber,
-        episodeNumber: ep.episodeNumber,
+        ...(ep.numberingUnmatched
+          ? sameCalendarDay(base.nextEpisodeAirDate, ep.nextEpisodeAirDate)
+            ? {}
+            : {
+                nextSeasonAirDate: undefined,
+                seasonNumber: undefined,
+                episodeNumber: undefined,
+              }
+          : {
+              nextSeasonAirDate: ep.nextSeasonAirDate,
+              seasonNumber: ep.seasonNumber,
+              episodeNumber: ep.episodeNumber,
+            }),
       },
       sonarrFailed: false,
     };
@@ -1670,6 +1730,111 @@ async function applySonarrFirstNextEpisode(
   }
 
   return resolveSonarrFirstNextEpisode(base, sonarr);
+}
+
+/**
+ * When Sonarr tracks the show, its latest aired premiere instant replaces TMDB's
+ * season air_date (the network's calendar day, a day early east of the US).
+ * Untracked shows keep TMDB; a failed instance flags fetchStatus (fork#35).
+ */
+async function applySonarrLastPremiere(
+  info: ReleaseDateInfo,
+  tvdbId: number | undefined,
+  sonarrCache?: Map<string, SonarrSeries[]>,
+  fetchStatus?: { failed: boolean }
+): Promise<ReleaseDateInfo> {
+  if (!tvdbId) return info;
+  let tracked = false;
+  let anyInstanceFailed = false;
+  const premieres: string[] = [];
+  for (const sonarrSettings of getSettings().sonarr ?? []) {
+    if (!sonarrSettings.hostname) continue;
+    try {
+      const allSeries = await getSonarrSeries(sonarrSettings, sonarrCache);
+      const series = allSeries.find((s) => s.tvdbId === tvdbId);
+      if (!series) continue;
+      const episodes = await getSonarrEpisodes(
+        sonarrSettings,
+        series.id as number,
+        sonarrCache
+      );
+      tracked = true;
+      const premiere = latestAiredPremiere(episodes);
+      if (premiere) premieres.push(premiere);
+    } catch (error) {
+      anyInstanceFailed = true;
+      logger.debug('Failed to read Sonarr premieres', {
+        label: 'OverlayContextBuilder',
+        hostname: sonarrSettings.hostname,
+        tvdbId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (anyInstanceFailed) {
+    if (fetchStatus) fetchStatus.failed = true;
+    return info;
+  }
+  if (!tracked) return info;
+  return {
+    ...info,
+    lastSeasonAirDate: premieres.sort(
+      (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    )[premieres.length - 1],
+    lastSeasonFromSonarr: true,
+  };
+}
+
+/**
+ * Today's, last and next episode plus finale fields from Sonarr's episode list.
+ * Untracked shows get nothing; a failed instance flags fetchStatus (fork#35).
+ */
+export async function fetchSonarrEpisodeContext(
+  tmdbId: number,
+  tvdbId: number | undefined,
+  sonarrCache?: Map<string, SonarrSeries[]>,
+  fetchStatus?: { failed: boolean }
+): Promise<SonarrEpisodeSummary> {
+  const instances = (getSettings().sonarr ?? []).filter((s) => s.hostname);
+  if (instances.length === 0) return {};
+  let resolvedTvdbId = tvdbId;
+  if (!resolvedTvdbId) {
+    try {
+      const show = await new TheMovieDb().getTvShow({ tvId: tmdbId });
+      resolvedTvdbId = show.external_ids?.tvdb_id;
+    } catch {
+      if (fetchStatus) fetchStatus.failed = true;
+      return {};
+    }
+  }
+  if (!resolvedTvdbId) return {};
+  let tracked = false;
+  const episodes: SonarrEpisode[] = [];
+  for (const sonarrSettings of instances) {
+    try {
+      const allSeries = await getSonarrSeries(sonarrSettings, sonarrCache);
+      const series = allSeries.find((s) => s.tvdbId === resolvedTvdbId);
+      if (!series) continue;
+      episodes.push(
+        ...(await getSonarrEpisodes(
+          sonarrSettings,
+          series.id as number,
+          sonarrCache
+        ))
+      );
+      tracked = true;
+    } catch (error) {
+      logger.debug('Failed to read Sonarr episode list', {
+        label: 'OverlayContextBuilder',
+        hostname: sonarrSettings.hostname,
+        tvdbId: resolvedTvdbId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (fetchStatus) fetchStatus.failed = true;
+      return {};
+    }
+  }
+  return tracked ? summariseSonarrEpisodes(episodes) : {};
 }
 
 // Sonarr episodeCount = (monitored AND aired) OR hasFile, so this survives unmonitored deletes

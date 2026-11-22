@@ -1,4 +1,5 @@
 import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import { getRepository } from '@server/datasource';
 import { CollectionMissingItems } from '@server/entity/CollectionMissingItems';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
@@ -477,7 +478,7 @@ class CollectionsQuickSync {
     const libraryMediaType: 'movie' | 'tv' =
       library?.type === 'show' ? 'tv' : 'movie';
     const collectionsForLibrary = settings.plex.collectionConfigs?.filter(
-      (c) => c.libraryId === libraryId && c.createPlaceholdersForMissing
+      (c) => c.libraryId === libraryId && placeholdersEnabled(c)
     );
 
     if (!collectionsForLibrary || collectionsForLibrary.length === 0) {
@@ -577,9 +578,25 @@ class CollectionsQuickSync {
 
       // Get ALL placeholder records for this TMDB ID across all collections,
       // scoped to this library's media type (C5).
-      const allPlaceholderRecords = await placeholderRepository.find({
+      const matchedRecords = await placeholderRepository.find({
         where: { tmdbId, mediaType: libraryMediaType },
       });
+
+      // TV edition placeholders are handed over by full sync, which deletes
+      // them only once every collection holds the real show.
+      const allPlaceholderRecords = matchedRecords.filter(
+        (r) =>
+          !(
+            libraryMediaType === 'tv' && r.placeholderPath.includes('{edition-')
+          )
+      );
+      if (allPlaceholderRecords.length < matchedRecords.length) {
+        logger.debug('Leaving TV edition placeholder for full sync hand-over', {
+          label: 'Collections Quick Sync',
+          title: recentItem.title,
+          tmdbId,
+        });
+      }
 
       if (allPlaceholderRecords.length === 0) {
         continue;

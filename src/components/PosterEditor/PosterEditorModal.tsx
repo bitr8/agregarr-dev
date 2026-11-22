@@ -7,6 +7,10 @@ import {
   ArrowUturnRightIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
+import {
+  filterEssentialsValues,
+  resolveSelectionMode,
+} from '@server/utils/essentialsSelection';
 import type React from 'react';
 import {
   Fragment,
@@ -52,7 +56,7 @@ export type EditorMode =
 export interface LayeredElement {
   id: string;
   layerOrder: number; // 0 = bottom, higher = top
-  type: 'text' | 'raster' | 'svg' | 'content-grid' | 'person';
+  type: 'text' | 'raster' | 'svg' | 'content-grid' | 'person' | 'tile';
 
   // Common properties
   x: number;
@@ -68,7 +72,8 @@ export interface LayeredElement {
     | RasterElementProps
     | SVGElementProps
     | ContentGridProps
-    | PersonElementProps;
+    | PersonElementProps
+    | TileElementProps;
 }
 
 export interface TextElementProps {
@@ -100,6 +105,15 @@ export interface SVGElementProps {
   iconType: 'source-logo' | 'svg-icon' | 'custom-icon';
   iconPath?: string; // For custom icons, service logo is dynamic
   grayscale?: boolean;
+}
+
+export interface TileElementProps {
+  fillColor: string;
+  fillOpacity: number; // 0-100
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadiusTopLeft?: number;
+  lockCorners?: boolean;
 }
 
 export interface ContentGridProps {
@@ -497,12 +511,15 @@ export const PosterEditorModal: React.FC<PosterEditorModalProps> = ({
   const essentialsPreviewValues = useMemo(() => {
     if (!selectedPreviewSource) return [];
     const all = essentialsValuesData?.values || [];
-    const selectionMode = selectedPreviewSource.selectionMode ?? 'include';
-    const includeValues = selectedPreviewSource.includeValues ?? [];
-    const excludeValues = selectedPreviewSource.excludeValues ?? [];
-    return selectionMode === 'include'
-      ? all.filter((v) => includeValues.includes(v.key))
-      : all.filter((v) => !excludeValues.includes(v.key));
+    return filterEssentialsValues(
+      all,
+      resolveSelectionMode(
+        selectedPreviewSource.selectionMode,
+        selectedPreviewSource.includeValues
+      ),
+      selectedPreviewSource.includeValues ?? [],
+      selectedPreviewSource.excludeValues ?? []
+    );
   }, [essentialsValuesData, selectedPreviewSource]);
 
   const [selectedPreviewValue, setSelectedPreviewValue] = useState('');

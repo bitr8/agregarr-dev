@@ -122,14 +122,14 @@ describe('deriveReleaseDateContext per-type states', () => {
 });
 
 describe('placeholder Radarr override keeps the states consistent', () => {
-  it('takes digital and physical from Radarr and keeps TMDB theatrical', () => {
+  it('takes Radarr digital, keeps TMDB physical and theatrical', () => {
     const tmdb = movieReleaseInfoFromTmdb(results, 'US')!;
     const merged = preferRadarrReleaseDate(tmdb, {
       radarrDigitalRelease: '2026-09-01T00:00:00Z',
     })!;
     expect(merged.releaseDate).toBe('2026-09-01');
     expect(merged.digitalRelease).toBe('2026-09-01');
-    expect(merged.physicalRelease).toBeUndefined();
+    expect(merged.physicalRelease).toBe('2026-08-01');
     expect(merged.theatricalRelease).toBe('2026-03-01');
     expect(merged.releaseSource).toBe('digital');
   });

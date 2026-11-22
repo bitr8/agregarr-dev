@@ -581,21 +581,7 @@ class CollectionsSync {
 
       const duration = Date.now() - startTime;
 
-      // Randomize home order for collections with randomizeHomeOrder enabled
-      try {
-        this.setStage('Randomizing home order...');
-        collectionSyncProgress.setDetail('Randomizing home order...');
-        const randomizeHomeOrder = (
-          await import('@server/lib/randomizeHomeOrder')
-        ).default;
-        await randomizeHomeOrder.run();
-      } catch (error) {
-        logger.warn('Failed to randomize home order', {
-          label: 'Collections Sync',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Don't fail the sync if randomization fails
-      }
+      await this.randomizeHomeOrderStep();
 
       const writeSummary = plexClient.getWriteSummary();
       logger.info(
@@ -675,6 +661,22 @@ class CollectionsSync {
    * Remove collections for items that are no longer requested
    * Delegates to CollectionCleanupService
    */
+  private async randomizeHomeOrderStep(): Promise<void> {
+    try {
+      this.setStage('Randomizing home order...');
+      collectionSyncProgress.setDetail('Randomizing home order...');
+      const randomizeHomeOrder = (
+        await import('@server/lib/randomizeHomeOrder')
+      ).default;
+      await randomizeHomeOrder.run({ fromCollectionsSync: true });
+    } catch (error) {
+      logger.warn('Failed to randomize home order', {
+        label: 'Collections Sync',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   public async cleanupCollections(): Promise<void> {
     const plexClient = await this.getPlexClient();
     await this.cleanupService.cleanupCollections(plexClient);

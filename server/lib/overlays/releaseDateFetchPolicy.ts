@@ -1,3 +1,5 @@
+import { SONARR_EPISODE_SUMMARY_FIELDS } from './sonarrEpisodeSummary';
+
 /**
  * Context fields whose values are produced by fetchReleaseDateInfo (TMDB, with a
  * Sonarr fallback for TV). If a library's enabled overlays require any of these,
@@ -49,5 +51,25 @@ export function shouldSkipOnReleaseDateFetchFailure(
   if (!requiredFields) {
     return true;
   }
-  return RELEASE_DATE_CONTEXT_FIELDS.some((field) => requiredFields.has(field));
+  return [
+    ...RELEASE_DATE_CONTEXT_FIELDS,
+    ...SONARR_EPISODE_SUMMARY_FIELDS,
+  ].some((field) => requiredFields.has(field));
+}
+
+/** Whether Sonarr's premiere list should source daysAgoNextSeason; undefined fields = could need it. */
+export function usesSonarrPremiere(
+  requiredFields: ReadonlySet<string> | undefined
+): boolean {
+  return !requiredFields || requiredFields.has('daysAgoNextSeason');
+}
+
+/** Whether a library reads any Sonarr episode-list field; undefined fields = could need it. */
+export function usesSonarrEpisodeSummary(
+  requiredFields: ReadonlySet<string> | undefined
+): boolean {
+  return (
+    !requiredFields ||
+    SONARR_EPISODE_SUMMARY_FIELDS.some((field) => requiredFields.has(field))
+  );
 }

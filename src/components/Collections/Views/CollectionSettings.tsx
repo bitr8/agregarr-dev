@@ -20,6 +20,10 @@ import {
   buildSelectionFieldsPayload,
   saveIndividualConfigs,
 } from '@app/utils/collections/apiHandlers';
+import {
+  getPlaceholderHubSubtypes,
+  getSuggestedFilteredHubLabel,
+} from '@app/utils/collections/collectionFormRules';
 import { prepareLinkedConfigForEditing } from '@app/utils/collections/collectionUtils';
 import { discoverPlexHubs } from '@app/utils/collections/discoveryHandlers';
 import {
@@ -36,6 +40,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
 } from '@heroicons/react/24/solid';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import type {
   OverseerrSettings,
   PlexHubConfig,
@@ -125,26 +130,10 @@ const checkPlaceholderHubWarning = (
 
   const libraryIssues: LibraryIssue[] = [];
 
-  // Map hub identifiers to required filtered hub subtypes
-  // Note: There are only 4 Plex default hubs that can show placeholders:
-  // - movie.recentlyadded, movie.recentlyreleased (Movies)
-  // - tv.recentlyadded, tv.recentlyaired (TV)
-  // There is NO tv.recentlyreleased hub (recently_released for TV is user-created only)
-  const hubSubtypeMapping: Record<string, string[]> = {
-    'movie.recentlyadded': ['recently_added'],
-    'movie.recentlyreleased': ['recently_released'],
-    'tv.recentlyadded': ['recently_added'],
-    'tv.recentlyaired': [
-      'recently_released_episodes',
-      'recently_aired_episodes',
-    ],
-  };
-
   libs.forEach((library) => {
     // 1. Check if library has any collection with placeholders enabled
     const hasPlaceholders = collections.some(
-      (c) =>
-        c.libraryId === library.key && c.createPlaceholdersForMissing === true
+      (c) => c.libraryId === library.key && placeholdersEnabled(c)
     );
 
     if (!hasPlaceholders) return;
@@ -152,7 +141,7 @@ const checkPlaceholderHubWarning = (
     // 2. Find which specific default hubs are enabled for this library
     const enabledHubs = hubs.filter((hub) => {
       if (hub.libraryId !== library.key) return false;
-      if (!hubSubtypeMapping[hub.hubIdentifier]) return false;
+      if (!getPlaceholderHubSubtypes(hub.hubIdentifier)) return false;
 
       const { visibilityConfig } = hub;
       return (
@@ -178,7 +167,7 @@ const checkPlaceholderHubWarning = (
     const problematicHubs: HubIssue[] = [];
 
     enabledHubs.forEach((hub) => {
-      const filteredSubtypes = hubSubtypeMapping[hub.hubIdentifier];
+      const filteredSubtypes = getPlaceholderHubSubtypes(hub.hubIdentifier);
       if (!filteredSubtypes) return;
 
       // Check if a filtered hub with the required subtype exists and get its name
@@ -193,7 +182,9 @@ const checkPlaceholderHubWarning = (
       // For filtered hub type, use the actual filtered hub's name if it exists
       problematicHubs.push({
         hubName: hub.name,
-        filteredHubType: filteredHubName || hub.name,
+        filteredHubType:
+          filteredHubName ||
+          getSuggestedFilteredHubLabel(hub.hubIdentifier, hub.name),
         hasFilteredHub,
       });
     });

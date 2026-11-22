@@ -569,31 +569,32 @@ const CollectionTypeSection = ({
           {
             value: 'recently_added',
             label: 'Recently Added',
-            description: 'Replaces Recently Added hub (sorted by date added)',
+            description:
+              'Recently added, without placeholders (sorted by date added)',
           },
           {
             value: 'recently_released',
             label: 'Recently Released',
             description:
-              'Replaces Recently Released hub (sorted by release date)',
+              'Recently released, without placeholders (sorted by release date)',
           },
           {
             value: 'recently_released_episodes',
             label: 'Recently Added Episodes',
             description:
-              'Shows sorted by most recent episode added (TV libraries only)',
+              'Shows with recently added episodes, without placeholders (TV libraries only)',
           },
           {
             value: 'recently_added_episodes',
             label: 'Recently Added Episodes (Individual)',
             description:
-              'Individual episodes sorted by date added (TV libraries only)',
+              'Recently added episodes, without placeholders (TV libraries only)',
           },
           {
             value: 'recently_aired_episodes',
             label: 'Recently Released Episodes (Individual)',
             description:
-              'Individual episodes sorted by air date, future episodes excluded (TV libraries only)',
+              'Recently aired episodes, without placeholders (TV libraries only)',
           },
         ];
       default:
@@ -907,7 +908,10 @@ const CollectionTypeSection = ({
           defaultTitle={`${getLibraryEssentialsLabel(
             values.subtype
           )} Collections`}
-          typeLabel={values.subtype || 'attribute'}
+          typeLabel={
+            getLibraryEssentialsLabel(values.subtype).toLowerCase() ||
+            'attribute'
+          }
         />
       )}
 

@@ -1,4 +1,5 @@
 import type {
+  ApplicationCondition,
   IconMapping,
   OverlayMappedIconElementProps,
   OverlayTemplateData,
@@ -6,6 +7,7 @@ import type {
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
 import { colorScaleContextField } from '@server/lib/overlays/colorScaleField';
+import { OVERLAY_DATE_FIELDS } from '@server/lib/overlays/overlayDateFields';
 import { createHash } from 'crypto';
 
 /**
@@ -141,6 +143,19 @@ export function extractUsedContextFields(
   return usedFields;
 }
 
+export function templatesReadContextField(
+  templates: {
+    getTemplateData(): OverlayTemplateData;
+    getApplicationCondition(): ApplicationCondition | null | undefined;
+  }[],
+  field: string
+): boolean {
+  return extractUsedContextFields(
+    templates.map((t) => t.getTemplateData()),
+    templates.map((t) => t.getApplicationCondition())
+  ).has(field);
+}
+
 /**
  * Extract the distinct context fields read by mapped-icon elements.
  * Used to scope which fields' effective icon mappings must enter the
@@ -177,6 +192,37 @@ function sortMappings(mappings: IconMapping[]): IconMapping[] {
   );
 }
 
+export function posterTemplateReadsField(
+  templateData: unknown,
+  field: string
+): boolean {
+  let data: unknown = templateData;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return false;
+    }
+  }
+  const elements = (data as { elements?: unknown } | null)?.elements;
+  if (!Array.isArray(elements)) return false;
+  return elements.some((el) =>
+    (
+      (el as { condition?: { sections?: { rules?: { field?: string }[] }[] } })
+        ?.condition?.sections ?? []
+    ).some((section) => (section.rules ?? []).some((r) => r.field === field))
+  );
+}
+
+export function posterTemplateReadsCollectionType(
+  templateData: unknown
+): boolean {
+  return (
+    posterTemplateReadsField(templateData, 'collectionType') ||
+    posterTemplateReadsField(templateData, 'collectionSubtype')
+  );
+}
+
 /**
  * Calculate hash for auto-generated poster inputs
  * Includes item IDs so poster regenerates when collection contents change
@@ -192,6 +238,9 @@ export function calculatePosterInputHash(config: {
   collectionSubtype?: string;
   additionalContext?: Record<string, unknown>;
   personImageUrl?: string;
+  itemCount?: number;
+  conditionCollectionType?: string;
+  conditionCollectionSubtype?: string;
 }): string {
   return calculateInputHash({
     // Bump when render semantics change so affected posters regenerate once.
@@ -206,6 +255,13 @@ export function calculatePosterInputHash(config: {
     collectionSubtype: config.collectionSubtype,
     additionalContext: config.additionalContext,
     personImageUrl: config.personImageUrl,
+    ...(config.itemCount !== undefined ? { itemCount: config.itemCount } : {}),
+    ...(config.conditionCollectionType !== undefined
+      ? { conditionCollectionType: config.conditionCollectionType }
+      : {}),
+    ...(config.conditionCollectionSubtype !== undefined
+      ? { conditionCollectionSubtype: config.conditionCollectionSubtype }
+      : {}),
   });
 }
 
@@ -239,6 +295,37 @@ export function calculateThemeInputHash(filename: string): string {
  *   fields matching mapped-icon elements use; omit when there are none so
  *   callers with no mapped-icon templates hash identically to before)
  */
+const RENDER_EFFECTS_VERSION = 1;
+const DATE_RENDER_VERSION = 1;
+
+export function usesRenderEffects(templates: OverlayTemplateData[]): boolean {
+  const faded = (opacity: number | undefined) =>
+    opacity !== undefined && opacity < 100;
+  return templates.some((t) =>
+    t.elements.some((el) => {
+      const p = el.properties as unknown as Record<string, unknown>;
+      switch (el.type) {
+        case 'svg':
+        case 'mapped-icon':
+          return faded(p.opacity as number | undefined) || !!p.grayscale;
+        case 'raster':
+          return faded(p.opacity as number | undefined);
+        case 'tile': {
+          const scale = p.colorScale as
+            | { min: number; max: number }
+            | undefined;
+          return (
+            Number(p.borderWidth ?? 0) > 0 ||
+            (!!scale && !(scale.max > scale.min))
+          );
+        }
+        default:
+          return false;
+      }
+    })
+  );
+}
+
 export function calculateOverlayInputHash(config: {
   templateIds: number[];
   templateData: OverlayTemplateData[];
@@ -261,6 +348,15 @@ export function calculateOverlayInputHash(config: {
 
   if (config.renderOptions) {
     input.renderOptions = config.renderOptions;
+  }
+  if (usesRenderEffects(config.templateData)) {
+    input.renderEffectsVersion = RENDER_EFFECTS_VERSION;
+  }
+  if ([...config.usedFields].some((f) => OVERLAY_DATE_FIELDS.includes(f))) {
+    input.dateRender = {
+      version: DATE_RENDER_VERSION,
+      tz: process.env.TZ || 'UTC',
+    };
   }
   if (config.mappedIconMappings) {
     const sorted: Record<string, IconMapping[]> = {};

@@ -2,7 +2,11 @@ import type { OverlayTemplateData } from '@server/entity/OverlayTemplate';
 import { describe, expect, it } from 'vitest';
 import {
   calculateOverlayInputHash,
+  calculatePosterInputHash,
   extractMappedIconFields,
+  posterTemplateReadsCollectionType,
+  posterTemplateReadsField,
+  templatesReadContextField,
 } from './metadataHashing';
 
 const baseConfig = {
@@ -318,5 +322,289 @@ describe('overlay input hashing', () => {
 
     expect(first).toBe(reordered);
     expect(first).not.toBe(differentQuality);
+  });
+});
+
+describe('render effects in the overlay input hash', () => {
+  const tpl = (
+    iconProps: object = {},
+    tileProps: object = {}
+  ): OverlayTemplateData => ({
+    width: 1000,
+    height: 1500,
+    elements: [
+      {
+        id: 's',
+        layerOrder: 0,
+        type: 'svg',
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 20,
+        properties: {
+          iconType: 'custom-icon',
+          iconPath: '/a.svg',
+          opacity: 100,
+          grayscale: false,
+          ...iconProps,
+        },
+      },
+      {
+        id: 't',
+        layerOrder: 1,
+        type: 'tile',
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 20,
+        properties: {
+          fillColor: '#000',
+          fillOpacity: 100,
+          borderWidth: 0,
+          ...tileProps,
+        },
+      },
+    ],
+  });
+  const hashOf = (t: OverlayTemplateData) =>
+    calculateOverlayInputHash({
+      templateIds: [1],
+      templateData: [t],
+      usedFields: new Set(['title']),
+      context: { title: 'x' },
+    });
+
+  it('keeps the hash of a template using only defaults', () => {
+    expect(hashOf(tpl())).toBe(
+      '8c9236d4093793958c27b7edfdc9d4656360292f2c9994fb7aeb03c806f18b31'
+    );
+  });
+
+  it('moves the hash off its previous value for templates using effects', () => {
+    const developHashes = [
+      '112b491a18ef253d352934b316407284f78de5680ff7693effeaa61259137381',
+      'f4400079cf425a3cfcfb9653672a082acf2557db09a668a25628cc62184184fc',
+      'f87eac10a9ecd1a292d9611521a7175c1b712be946e173d02164299b01e3e31f',
+      'c2d7d5859e01e26bac084827c0a023c6e1706e35ca31783190b10c55443026b5',
+    ];
+    const flat = {
+      colorScale: {
+        field: 'imdbRating',
+        min: 5,
+        max: 5,
+        fromColor: '#000000',
+        toColor: '#ffffff',
+      },
+    };
+    const now = [
+      hashOf(tpl({ opacity: 50 })),
+      hashOf(tpl({ grayscale: true })),
+      hashOf(tpl({}, { borderWidth: 4 })),
+      hashOf(tpl({}, flat)),
+    ];
+    now.forEach((hash, i) => expect(hash).not.toBe(developHashes[i]));
+  });
+});
+
+describe('poster item count hashing', () => {
+  const rule = (field: string) => ({
+    sections: [{ rules: [{ field, operator: 'gte', value: 10 }] }],
+  });
+  const tpl = (field: string) =>
+    JSON.stringify({ elements: [{ id: 'a', condition: rule(field) }] });
+  const base = { templateId: 1, itemIds: ['a'], collectionName: 'C' };
+
+  it('detects itemCount rules in templateData JSON', () => {
+    expect(posterTemplateReadsField(tpl('itemCount'), 'itemCount')).toBe(true);
+    expect(posterTemplateReadsField(tpl('mediaType'), 'itemCount')).toBe(false);
+    expect(posterTemplateReadsField('not json', 'itemCount')).toBe(false);
+    expect(posterTemplateReadsField(null, 'itemCount')).toBe(false);
+  });
+
+  it('leaves the hash unchanged when no count is supplied', () => {
+    expect(calculatePosterInputHash({ ...base, itemCount: undefined })).toBe(
+      calculatePosterInputHash(base)
+    );
+  });
+
+  it('changes the hash when the supplied count changes', () => {
+    expect(calculatePosterInputHash({ ...base, itemCount: 9 })).not.toBe(
+      calculatePosterInputHash({ ...base, itemCount: 10 })
+    );
+  });
+});
+
+describe('templatesReadContextField', () => {
+  const mk = (
+    elementCondition?: unknown,
+    appCondition?: unknown
+  ): Parameters<typeof templatesReadContextField>[0][number] => ({
+    getTemplateData: () =>
+      ({
+        width: 1,
+        height: 1,
+        elements: [
+          {
+            id: 'e',
+            layerOrder: 0,
+            type: 'tile',
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            properties: {},
+            condition: elementCondition,
+          },
+        ],
+      } as unknown as OverlayTemplateData),
+    getApplicationCondition: () => appCondition as never,
+  });
+  const rule = (field: string) => ({
+    sections: [{ rules: [{ field, operator: 'eq', value: 'x' }] }],
+  });
+
+  it('sees a collection rule on an element condition', () => {
+    expect(
+      templatesReadContextField([mk(rule('collection'))], 'collection')
+    ).toBe(true);
+  });
+
+  it('sees a collection rule on an application condition', () => {
+    expect(
+      templatesReadContextField(
+        [mk(undefined, rule('collection'))],
+        'collection'
+      )
+    ).toBe(true);
+  });
+
+  it('is false when no condition reads it', () => {
+    expect(
+      templatesReadContextField([mk(rule('imdbRating'))], 'collection')
+    ).toBe(false);
+    expect(templatesReadContextField([], 'collection')).toBe(false);
+  });
+});
+
+describe('poster condition collection type hashing', () => {
+  const tpl = (field: string) =>
+    JSON.stringify({
+      elements: [
+        {
+          id: 'a',
+          condition: {
+            sections: [{ rules: [{ field, operator: 'eq', value: 'x' }] }],
+          },
+        },
+      ],
+    });
+  const base = {
+    templateId: 1,
+    itemIds: ['a'],
+    collectionName: 'C',
+    collectionType: 'netflix',
+    collectionSubtype: 'netflix_top_10',
+  };
+
+  it('detects collection type and subtype rules only', () => {
+    expect(posterTemplateReadsCollectionType(tpl('collectionType'))).toBe(true);
+    expect(posterTemplateReadsCollectionType(tpl('collectionSubtype'))).toBe(
+      true
+    );
+    expect(posterTemplateReadsCollectionType(tpl('mediaType'))).toBe(false);
+    expect(posterTemplateReadsCollectionType(null)).toBe(false);
+  });
+
+  it('keeps the hash identical when no condition type is supplied', () => {
+    expect(
+      calculatePosterInputHash({
+        ...base,
+        conditionCollectionType: undefined,
+        conditionCollectionSubtype: undefined,
+      })
+    ).toBe(calculatePosterInputHash(base));
+  });
+
+  it('changes the hash when the condition type changes', () => {
+    expect(
+      calculatePosterInputHash({ ...base, conditionCollectionType: 'networks' })
+    ).not.toBe(calculatePosterInputHash(base));
+    expect(
+      calculatePosterInputHash({ ...base, conditionCollectionType: 'networks' })
+    ).not.toBe(
+      calculatePosterInputHash({
+        ...base,
+        conditionCollectionType: 'originals',
+      })
+    );
+  });
+});
+
+describe('date rendering in the overlay input hash', () => {
+  const withFields = (fields: string[]) =>
+    calculateOverlayInputHash({
+      ...baseConfig,
+      usedFields: new Set(fields),
+      context: { releaseDate: '2026-12-03', imdbRating: 8 },
+    });
+
+  it('changes with the server timezone when a date field is used', () => {
+    const prev = process.env.TZ;
+    process.env.TZ = 'Australia/Sydney';
+    const sydney = withFields(['releaseDate']);
+    process.env.TZ = 'Pacific/Auckland';
+    const auckland = withFields(['releaseDate']);
+    process.env.TZ = prev;
+    expect(sydney).not.toBe(auckland);
+  });
+
+  it('ignores the timezone when no date field is used', () => {
+    const prev = process.env.TZ;
+    process.env.TZ = 'Australia/Sydney';
+    const sydney = withFields(['imdbRating']);
+    process.env.TZ = 'Pacific/Auckland';
+    const auckland = withFields(['imdbRating']);
+    process.env.TZ = prev;
+    expect(sydney).toBe(auckland);
+  });
+});
+
+describe('characterisation: segment format is inside the hashed templateData', () => {
+  const variable = (format?: string) =>
+    ({
+      width: 1920,
+      height: 1080,
+      elements: [
+        {
+          id: 'v1',
+          layerOrder: 0,
+          type: 'variable' as const,
+          x: 0,
+          y: 0,
+          width: 305,
+          height: 105,
+          properties: {
+            segments: [{ type: 'variable', field: 'episodeNumber', format }],
+            fontSize: 55,
+            fontFamily: 'Inter',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            color: '#fff',
+            textAlign: 'center',
+          },
+        },
+      ],
+    } as unknown as OverlayTemplateData);
+  const hash = (format?: string) =>
+    calculateOverlayInputHash({
+      templateIds: [1],
+      templateData: [variable(format)],
+      usedFields: new Set(['episodeNumber']),
+      context: { episodeNumber: 5 },
+    });
+
+  it('changes the hash when a segment format changes', () => {
+    expect(hash('pad2')).not.toBe(hash(undefined));
+    expect(hash('pad2')).not.toBe(hash('pad3'));
   });
 });

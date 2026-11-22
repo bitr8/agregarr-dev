@@ -4,6 +4,8 @@
  * Release dates from TMDB are UTC midnight - we convert them to server timezone for comparison
  */
 
+import { formatDateInTimezone } from '@server/utils/dateFormats';
+
 /**
  * Get the server timezone from TZ environment variable
  */
@@ -35,18 +37,16 @@ function getCalendarDateInTimezone(date: Date): Date {
 }
 
 /**
- * Parse ISO date string (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:MM:SSZ) as UTC noon, then convert to server timezone
- * Using noon UTC ensures the calendar date is preserved for timezones UTC-12 through UTC+11.
- * For UTC+12/+13 (NZ, Fiji) it shifts to the next day.
- * Example: "2025-12-03" = Dec 3 noon UTC = Dec 4 1AM in NZ = Dec 3 4AM in LA
- * Example: "2025-12-03T15:30:00Z" = Dec 3 noon UTC (time component stripped)
+ * Parse a bare date (YYYY-MM-DD) as that calendar date with no timezone shift.
+ * A datetime (YYYY-MM-DDTHH:MM:SSZ) keeps its date part, as before.
  */
 function parseDate(isoString: string): Date {
-  // Extract just the date part (YYYY-MM-DD) if a datetime string is provided
+  const bare = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoString);
+  if (bare) {
+    return new Date(Number(bare[1]), Number(bare[2]) - 1, Number(bare[3]));
+  }
   const dateOnly = isoString.split('T')[0];
-  // Parse as UTC noon to prevent timezone conversion from shifting the calendar date
   const utcDate = new Date(dateOnly + 'T12:00:00.000Z');
-  // Convert to calendar date in server timezone
   return getCalendarDateInTimezone(utcDate);
 }
 
@@ -203,8 +203,9 @@ export function calculateDaysSince(date: Date | string): number {
       : getCalendarDateInTimezone(date);
 
   const today = getNow();
-  const diffTime = today.getTime() - targetDate.getTime();
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const dayNumber = (d: Date) =>
+    Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+  return dayNumber(today) - dayNumber(targetDate);
 }
 
 /**
@@ -214,119 +215,7 @@ export function calculateDaysSince(date: Date | string): number {
  * @returns Formatted date string
  */
 export function formatDate(date: Date | string, format: string): string {
-  let dateObj: Date;
-  if (typeof date === 'string') {
-    if (date.includes('T')) {
-      // Full ISO datetime (e.g. Sonarr "2026-06-28T23:00:00Z"):
-      // convert to server timezone so 23:00 UTC becomes the next calendar day in UTC+1
-      dateObj = getCalendarDateInTimezone(new Date(date));
-    } else {
-      // Date-only (e.g. TMDB "2026-07-04"):
-      // nominal date — use noon UTC trick so timezone never shifts the calendar day
-      dateObj = parseDate(date);
-    }
-  } else {
-    dateObj = getCalendarDateInTimezone(date);
-  }
-
-  // Month names for formatting
-  const monthNames = [
-    'JAN',
-    'FEB',
-    'MAR',
-    'APR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AUG',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DEC',
-  ];
-  const monthNamesFull = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-  const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-  const dayNamesFull = [
-    'SUNDAY',
-    'MONDAY',
-    'TUESDAY',
-    'WEDNESDAY',
-    'THURSDAY',
-    'FRIDAY',
-    'SATURDAY',
-  ];
-
-  const year = dateObj.getFullYear();
-  const month = dateObj.getMonth() + 1;
-  const day = dateObj.getDate();
-  const monthName = monthNames[dateObj.getMonth()];
-  const monthNameFull = monthNamesFull[dateObj.getMonth()];
-  const dayName = dayNames[dateObj.getDay()];
-  const dayNameFull = dayNamesFull[dateObj.getDay()];
-
-  // Pad with leading zeros
-  const pad = (n: number) => String(n).padStart(2, '0');
-
-  switch (format) {
-    case 'YYYY-MM-DD':
-      return `${year}-${pad(month)}-${pad(day)}`;
-    case 'YYYY/MM/DD':
-      return `${year}/${pad(month)}/${pad(day)}`;
-    case 'DD-MM-YYYY':
-      return `${pad(day)}-${pad(month)}-${year}`;
-    case 'DD/MM/YYYY':
-      return `${pad(day)}/${pad(month)}/${year}`;
-    case 'MM/DD/YYYY':
-      return `${pad(month)}/${pad(day)}/${year}`;
-    case 'DD/MM':
-      return `${pad(day)}/${pad(month)}`;
-    case 'D/M':
-      return `${day}/${month}`;
-    case 'MM/DD':
-      return `${pad(month)}/${pad(day)}`;
-    case 'M/D':
-      return `${month}/${day}`;
-    case 'DDD DD/MM':
-      return `${dayName} ${pad(day)}/${pad(month)}`;
-    case 'DDD D/M':
-      return `${dayName} ${day}/${month}`;
-    case 'DDD MM/DD':
-      return `${dayName} ${pad(month)}/${pad(day)}`;
-    case 'DDD M/D':
-      return `${dayName} ${month}/${day}`;
-    case 'DDDD':
-      return dayNameFull;
-    case 'DDD':
-      return dayName;
-    case 'MMM DD':
-      return `${monthName} ${pad(day)}`;
-    case 'DD MMM':
-      return `${pad(day)} ${monthName}`;
-    case 'MMM DD, YYYY':
-      return `${monthName} ${pad(day)}, ${year}`;
-    case 'DD MMM YYYY':
-      return `${pad(day)} ${monthName} ${year}`;
-    case 'MMMM DD, YYYY':
-      return `${monthNameFull} ${pad(day)}, ${year}`;
-    case 'DD MMMM YYYY':
-      return `${pad(day)} ${monthNameFull} ${year}`;
-    default:
-      // Default to MMM DD if unknown format
-      return `${monthName} ${pad(day)}`;
-  }
+  return formatDateInTimezone(date, format, getServerTimezone());
 }
 
 /**

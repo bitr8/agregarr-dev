@@ -1,4 +1,5 @@
 import type { CollectionFormConfig } from '@app/types/collections';
+import { resolveDisplayedPosterTemplateId } from '@app/utils/collections/collectionFormRules';
 import { isEpisodeHub } from '@app/utils/collections/collectionUtils';
 import { Menu, Transition } from '@headlessui/react';
 import { ChevronDownIcon, PlusIcon } from '@heroicons/react/24/solid';
@@ -132,8 +133,11 @@ const PosterUploadSection = ({
   const defaultTemplate =
     templates?.find((t) => t.isDefault) ||
     templates?.find((t) => t.name === 'Default Agregarr Template');
-  const selectedTemplateId =
-    values.autoPosterTemplate || defaultTemplate?.id || null;
+  const selectedTemplateId = resolveDisplayedPosterTemplateId(
+    values.autoPosterTemplate,
+    values.subtype === 'separator',
+    templates
+  );
   const selectedTemplate = templates?.find((t) => t.id === selectedTemplateId);
 
   const handleAutoPosterChange = (enabled: boolean) => {

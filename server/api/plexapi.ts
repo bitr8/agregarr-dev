@@ -100,6 +100,7 @@ export interface PlexMetadata {
   parentIndex?: number;
   leafCount: number;
   viewedLeafCount: number;
+  childCount?: number;
   userRating?: number;
   addedAt: number;
   updatedAt: number;
@@ -1822,8 +1823,9 @@ class PlexAPI {
           }
         }
 
-        // Check if label already exists
-        if (existingLabels.includes(label)) {
+        if (
+          existingLabels.some((l) => l.toLowerCase() === label.toLowerCase())
+        ) {
           logger.debug('Label already exists on item', {
             label: 'Plex API',
             ratingKey,

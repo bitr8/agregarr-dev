@@ -299,21 +299,19 @@ type AttributeType = (typeof ATTRIBUTE_TYPES)[number];
 
 /**
  * Discover attribute values (genre/decade/resolution/contentRating) for a library,
- * with rendered-name conflict detection against existing collections
- * GET /api/v1/plex/library/:libraryId/attributes/:attributeType?template=...&configId=...
+ * plus the library's existing collection titles (excluding this config's own)
+ * GET /api/v1/plex/library/:libraryId/attributes/:attributeType?configId=...
  */
 searchRouter.get(
   '/library/:libraryId/attributes/:attributeType',
   async (req, res) => {
     const { libraryId, attributeType } = req.params;
-    const template = req.query.template as string | undefined;
     const configId = req.query.configId as string | undefined;
 
     logger.debug('Library attribute discovery requested', {
       label: 'PlexLibraryAttributes',
       libraryId,
       attributeType,
-      hasTemplate: !!template,
       configId,
     });
 
@@ -390,27 +388,13 @@ searchRouter.get(
           })
         : libraryCollections;
 
-      const conflicts: { title: string; ratingKey: string }[] = [];
+      const existingTitles = relevantCollections.map((c) => c.title);
 
-      for (const value of values) {
-        const renderedTitle = template
-          ? template.replace('{value}', value.title)
-          : value.title;
-
-        const conflict = relevantCollections.find(
-          (collection) =>
-            collection.title.toLowerCase() === renderedTitle.toLowerCase()
-        );
-
-        if (conflict) {
-          conflicts.push({
-            title: conflict.title,
-            ratingKey: conflict.ratingKey,
-          });
-        }
-      }
-
-      return res.status(200).json({ values, conflicts });
+      return res.status(200).json({
+        values,
+        existingTitles,
+        mediaType: library.type === 'show' ? 'tv' : 'movie',
+      });
     } catch (error) {
       logger.error('Failed to discover library attributes', {
         label: 'PlexLibraryAttributes',

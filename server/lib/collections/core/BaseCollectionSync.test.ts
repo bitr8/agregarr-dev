@@ -22,6 +22,9 @@ vi.mock('@server/lib/collections/services/ServiceUserManager', () => ({
 vi.mock('@server/lib/collections/utils/TemplateEngine', () => ({
   templateEngine: {},
 }));
+vi.mock('@server/lib/metadata/MetadataTrackingService', () => ({
+  default: { shouldRegeneratePoster: async () => true },
+}));
 vi.mock('@server/logger', () => ({
   default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -877,5 +880,172 @@ describe('handlePlaceholdersAndMissingItems candidate limit', () => {
 
   it('passes every missing item through in source order', async () => {
     expect(await run(undefined, 4)).toEqual([5, 2, 9]);
+  });
+});
+
+describe('generateAutoPoster: Item Count is the collection size', () => {
+  it('uses the full count when the items handed in are a slice', async () => {
+    const { generatePoster } = await import('@server/lib/posterStorage');
+    Object.assign(settings.plex, { libraries: [{ key: '4', type: 'movie' }] });
+    vi.mocked(generatePoster).mockRejectedValue(new Error('captured'));
+    vi.mocked(getRepository).mockReturnValue({
+      findOne: async () => ({
+        templateData: JSON.stringify({
+          elements: [
+            {
+              condition: {
+                sections: [{ rules: [{ field: 'itemCount', operator: 'gt' }] }],
+              },
+            },
+          ],
+        }),
+        getTemplateData: () => ({ elements: [] }),
+      }),
+    } as never);
+
+    const sync = new TestSync() as unknown as {
+      generateAutoPoster: (...args: unknown[]) => Promise<void>;
+    };
+    await sync.generateAutoPoster(
+      'Neon Noir',
+      config({ autoPosterTemplate: 7 }),
+      '900',
+      {
+        getCurrentPosterUrl: async () => undefined,
+      },
+      [{ ratingKey: '1', title: 'A', type: 'movie' }],
+      undefined,
+      { itemCount: 40 }
+    );
+
+    expect(vi.mocked(generatePoster).mock.calls[0][0].itemCount).toBe(40);
+  });
+
+  it('reads the default template rules when no template is picked', async () => {
+    const metadata = (
+      await import('@server/lib/metadata/MetadataTrackingService')
+    ).default as unknown as {
+      shouldRegeneratePoster: (rk: string, hash: string) => Promise<boolean>;
+    };
+    const hashes: string[] = [];
+    const spy = vi
+      .spyOn(metadata, 'shouldRegeneratePoster')
+      .mockImplementation(async (_rk, hash) => {
+        hashes.push(hash);
+        return true;
+      });
+    Object.assign(settings.plex, { libraries: [{ key: '4', type: 'movie' }] });
+    vi.mocked(getRepository).mockReturnValue({
+      findOne: async () => ({
+        templateData: JSON.stringify({
+          elements: [
+            {
+              condition: {
+                sections: [
+                  { rules: [{ field: 'itemCount', operator: 'gte' }] },
+                ],
+              },
+            },
+          ],
+        }),
+        getTemplateData: () => ({ elements: [] }),
+      }),
+    } as never);
+
+    const sync = new TestSync() as unknown as {
+      generateAutoPoster: (...args: unknown[]) => Promise<void>;
+    };
+    for (const itemCount of [9, 10]) {
+      await sync.generateAutoPoster(
+        'Neon Noir',
+        config({ autoPosterTemplate: undefined }),
+        '900',
+        { getCurrentPosterUrl: async () => undefined },
+        [{ ratingKey: '1', title: 'A', type: 'movie' }],
+        undefined,
+        { itemCount }
+      );
+    }
+    spy.mockRestore();
+
+    expect(hashes).toHaveLength(2);
+    expect(hashes[0]).not.toBe(hashes[1]);
+  });
+});
+
+describe('generateAutoPoster: null template resolves to the default', () => {
+  const grid = (columns: number, rows: number) => ({
+    elements: [{ type: 'content-grid', properties: { columns, rows } }],
+  });
+
+  const defaultRow = (id: number, columns: number, rows: number) => ({
+    id,
+    templateData: JSON.stringify({ id, columns, rows }),
+    getTemplateData: () => grid(columns, rows),
+  });
+
+  const captureHashes = async () => {
+    const metadata = (
+      await import('@server/lib/metadata/MetadataTrackingService')
+    ).default as unknown as {
+      shouldRegeneratePoster: (rk: string, hash: string) => Promise<boolean>;
+    };
+    const hashes: string[] = [];
+    const spy = vi
+      .spyOn(metadata, 'shouldRegeneratePoster')
+      .mockImplementation(async (_rk, hash) => {
+        hashes.push(hash);
+        return true;
+      });
+    return { hashes, spy };
+  };
+
+  const items = Array.from({ length: 12 }, (_, i) => ({
+    ratingKey: String(i),
+    tmdbId: i + 1,
+    title: `T${i}`,
+    type: 'movie' as const,
+  }));
+
+  const generate = (opts?: Record<string, unknown>) =>
+    (
+      new TestSync() as unknown as {
+        generateAutoPoster: (...args: unknown[]) => Promise<void>;
+      }
+    ).generateAutoPoster(
+      'Neon Noir',
+      config({ autoPosterTemplate: undefined }),
+      '900',
+      { getCurrentPosterUrl: async () => undefined },
+      items,
+      undefined,
+      opts
+    );
+
+  it('sizes the grid from the default template', async () => {
+    const { generatePoster } = await import('@server/lib/posterStorage');
+    vi.mocked(generatePoster).mockReset();
+    vi.mocked(generatePoster).mockRejectedValue(new Error('captured'));
+    vi.mocked(getRepository).mockReturnValue({
+      findOne: async () => defaultRow(5, 3, 3),
+    } as never);
+
+    await generate();
+
+    expect(vi.mocked(generatePoster).mock.calls[0][0].items).toHaveLength(9);
+  });
+
+  it('changes the hash when the default template changes', async () => {
+    const { hashes, spy } = await captureHashes();
+    for (const row of [defaultRow(5, 2, 2), defaultRow(6, 2, 2)]) {
+      vi.mocked(getRepository).mockReturnValue({
+        findOne: async () => row,
+      } as never);
+      await generate();
+    }
+    spy.mockRestore();
+
+    expect(hashes).toHaveLength(2);
+    expect(hashes[0]).not.toBe(hashes[1]);
   });
 });

@@ -125,3 +125,141 @@ describe('posterSourceOrder', () => {
     expect(posterSourceOrder(items, 'date_added_desc')).toBe(items);
   });
 });
+
+describe('separator poster', () => {
+  const makeSync = () => {
+    const sync = new PlexLibraryCollectionSync();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = sync as any;
+    s.getSeparatorLabel = () => 'AgregarrSeparator-test';
+    s.getSeparatorTitle = () => 'Genre Collections';
+    s.buildSeparatorSortTitle = () => 'Genre Collections';
+    s.resolveSeparatorTemplateId = vi.fn().mockResolvedValue(7);
+    s.updateCollectionMetadata = vi.fn().mockResolvedValue(undefined);
+    s.generateAutoPoster = vi.fn().mockResolvedValue(undefined);
+    const plexClient = {
+      createEmptyCollection: vi.fn().mockResolvedValue('rk-sep'),
+      getCollectionByName: vi.fn().mockResolvedValue(null),
+      updateCollectionMode: vi.fn(),
+      updateCollectionSortTitle: vi.fn(),
+    } as unknown as PlexAPI;
+    return { s, plexClient };
+  };
+
+  const baseConfig = {
+    id: 'sep-1',
+    subtype: 'separator',
+    libraryId: '3',
+    visibilityConfig: {},
+  };
+
+  it('uploads the custom poster instead of generating when auto-generate is off', async () => {
+    const { s, plexClient } = makeSync();
+    await s.syncSeparatorCollection(
+      { ...baseConfig, autoPoster: false, customPoster: { '3': 'sep.png' } },
+      plexClient,
+      [],
+      'movie'
+    );
+    expect(s.generateAutoPoster).not.toHaveBeenCalled();
+    expect(s.updateCollectionMetadata).toHaveBeenCalledWith(
+      plexClient,
+      'rk-sep',
+      expect.objectContaining({ customPoster: { '3': 'sep.png' } })
+    );
+  });
+
+  it('still generates the template poster when auto-generate is on', async () => {
+    const { s, plexClient } = makeSync();
+    await s.syncSeparatorCollection(
+      { ...baseConfig, autoPoster: true, customPoster: { '3': 'sep.png' } },
+      plexClient,
+      [],
+      'movie'
+    );
+    expect(s.generateAutoPoster).toHaveBeenCalledTimes(1);
+  });
+
+  it('generates when auto-generate is off but no upload exists for the library', async () => {
+    const { s, plexClient } = makeSync();
+    await s.syncSeparatorCollection(
+      { ...baseConfig, autoPoster: false, customPoster: { '9': 'x.png' } },
+      plexClient,
+      [],
+      'movie'
+    );
+    expect(s.generateAutoPoster).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('essentials selection mode default', () => {
+  it('creates every value when selectionMode is missing', async () => {
+    const sync = new PlexLibraryCollectionSync();
+    const plexClient = {
+      getLibraryAttributes: vi.fn().mockResolvedValue([
+        { key: 'g1', title: 'Alpha' },
+        { key: 'g2', title: 'Beta' },
+      ]),
+      createAttributeCollection: vi.fn().mockResolvedValue('rk-new'),
+      addLabelToCollection: vi.fn(),
+    } as unknown as PlexAPI;
+    const config = {
+      id: 'ess-1',
+      subtype: 'genre',
+      libraryId: '3',
+      template: '{value}',
+      autoPoster: false,
+    } as unknown as CollectionConfig;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = sync as any;
+    s.cleanupSeparatorCollection = vi.fn();
+    s.updateCollectionMetadata = vi.fn();
+    await s.processEssentialsConfiguration(
+      config,
+      plexClient,
+      [],
+      'movie',
+      'genre'
+    );
+
+    expect(plexClient.createAttributeCollection).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a missing selectionMode with includeValues as include', async () => {
+    const sync = new PlexLibraryCollectionSync();
+    const plexClient = {
+      getLibraryAttributes: vi.fn().mockResolvedValue([
+        { key: 'g1', title: 'Alpha' },
+        { key: 'g2', title: 'Beta' },
+      ]),
+      createAttributeCollection: vi.fn().mockResolvedValue('rk-new'),
+      addLabelToCollection: vi.fn(),
+    } as unknown as PlexAPI;
+    const config = {
+      id: 'ess-2',
+      subtype: 'genre',
+      libraryId: '3',
+      template: '{value}',
+      autoPoster: false,
+      includeValues: ['g2'],
+    } as unknown as CollectionConfig;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = sync as any;
+    s.cleanupSeparatorCollection = vi.fn();
+    s.updateCollectionMetadata = vi.fn();
+    await s.processEssentialsConfiguration(
+      config,
+      plexClient,
+      [],
+      'movie',
+      'genre'
+    );
+
+    expect(plexClient.createAttributeCollection).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(plexClient.createAttributeCollection).mock.calls[0][4]
+    ).toBe('g2');
+  });
+});

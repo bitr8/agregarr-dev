@@ -1,3 +1,4 @@
+import { elementMatchesContext } from '@app/components/OverlayEditor/editorPreviewContext';
 import { useCanvasHandlers } from '@app/components/PosterEditor/PosterCanvas';
 import {
   SnapLines,
@@ -15,12 +16,14 @@ import {
   useState,
 } from 'react';
 import {
+  Group,
   Image as KonvaImage,
   Layer,
   Rect,
   Stage,
   Transformer,
 } from 'react-konva';
+import { isResizable } from './elementTransform';
 import { MappedIconElement } from './MappedIconElement';
 import { RasterElement } from './RasterElement';
 import { SVGElement } from './SVGElement';
@@ -33,6 +36,8 @@ import type {
 } from './types';
 import { VariableElement } from './VariableElement';
 
+const UNMATCHED_SELECTED_OPACITY = 0.35;
+
 export interface OverlayCanvasRef {
   exportAsImage: () => Promise<string>;
 }
@@ -41,6 +46,7 @@ interface OverlayCanvasProps {
   overlayData: OverlayTemplateData;
   onChange: (data: OverlayTemplateData) => void;
   renderContext?: OverlayRenderContext;
+  conditionContext?: object;
   snapToGuides?: boolean;
   selectedElementId?: string;
   onElementSelect?: (elementId: string | undefined) => void;
@@ -83,6 +89,7 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
       overlayData,
       onChange,
       renderContext,
+      conditionContext,
       snapToGuides = false,
       selectedElementId,
       onElementSelect,
@@ -203,9 +210,13 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
         const shouldLockAspectRatio = aspectRatioLocked[elementId] ?? true;
 
         transformerRef.current.keepRatio(shouldLockAspectRatio);
+        const selectedType = elements.find((e) => e.id === elementId)?.type;
+        transformerRef.current.resizeEnabled(
+          !selectedType || isResizable(selectedType)
+        );
         transformerRef.current.getLayer()?.batchDraw();
       }
-    }, [selectedShapeRef, aspectRatioLocked]);
+    }, [selectedShapeRef, aspectRatioLocked, elements]);
 
     // Expose export method via ref
     useImperativeHandle(
@@ -372,13 +383,31 @@ export const OverlayCanvas = forwardRef<OverlayCanvasRef, OverlayCanvasProps>(
                 const sortedPreviewElements = [...overlay.elements].sort(
                   (a, b) => a.layerOrder - b.layerOrder
                 );
-                return sortedPreviewElements.map((element) =>
-                  renderPreviewElement(element, overlayIndex)
-                );
+                return sortedPreviewElements
+                  .filter((element) =>
+                    elementMatchesContext(element.condition, conditionContext)
+                  )
+                  .map((element) =>
+                    renderPreviewElement(element, overlayIndex)
+                  );
               })}
 
               {/* Elements sorted by layer order */}
-              {sortedElements.map(renderElement)}
+              {sortedElements.map((element) => {
+                const matches = elementMatchesContext(
+                  element.condition,
+                  conditionContext
+                );
+                if (!matches && element.id !== selectedElementId) return null;
+                return (
+                  <Group
+                    key={element.id}
+                    opacity={matches ? 1 : UNMATCHED_SELECTED_OPACITY}
+                  >
+                    {renderElement(element)}
+                  </Group>
+                );
+              })}
 
               {/* Snap-to-guide lines */}
               <SnapLines
