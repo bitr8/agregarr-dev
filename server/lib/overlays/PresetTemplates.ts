@@ -1518,11 +1518,17 @@ export const PRESET_TEMPLATES: {
       sections: [
         {
           rules: [
-            { field: 'daysAgo', operator: 'eq', value: 0 },
+            { field: 'episodesAiringToday', operator: 'gt', value: 0 },
             {
               ruleOperator: 'and',
-              field: 'seasonNumber',
+              field: 'todaySeasonNumber',
               operator: 'gt',
+              value: 1,
+            },
+            {
+              ruleOperator: 'and',
+              field: 'todayEpisodeNumber',
+              operator: 'eq',
               value: 1,
             },
             {
@@ -1576,7 +1582,7 @@ export const PRESET_TEMPLATES: {
           properties: {
             segments: [
               { type: 'text', value: 'SEASON ' },
-              { type: 'variable', field: 'seasonNumber' },
+              { type: 'variable', field: 'todaySeasonNumber' },
               { type: 'text', value: ' TODAY' },
             ],
             fontSize: 74,
@@ -1600,9 +1606,9 @@ export const PRESET_TEMPLATES: {
     applicationCondition: {
       sections: [
         {
-          // (today AND S02+ AND show) AND NOT inSonarr
+          // Not in Sonarr: TMDB's premiere date is a bare date, so it holds all day
           rules: [
-            { field: 'daysAgo', operator: 'eq', value: 0 },
+            { field: 'daysUntilNextSeason', operator: 'eq', value: 0 },
             {
               ruleOperator: 'and',
               field: 'seasonNumber',
@@ -1624,14 +1630,20 @@ export const PRESET_TEMPLATES: {
           ],
         },
         {
-          // OR (today AND S02+ AND show) AND NOT monitored
+          // OR in Sonarr, unmonitored, premiering today
           sectionOperator: 'or',
           rules: [
-            { field: 'daysAgo', operator: 'eq', value: 0 },
+            { field: 'episodesAiringToday', operator: 'gt', value: 0 },
             {
               ruleOperator: 'and',
-              field: 'seasonNumber',
+              field: 'todaySeasonNumber',
               operator: 'gt',
+              value: 1,
+            },
+            {
+              ruleOperator: 'and',
+              field: 'todayEpisodeNumber',
+              operator: 'eq',
               value: 1,
             },
             {
@@ -1639,6 +1651,12 @@ export const PRESET_TEMPLATES: {
               field: 'mediaType',
               operator: 'eq',
               value: 'show',
+            },
+            {
+              ruleOperator: 'and',
+              field: 'inSonarr',
+              operator: 'eq',
+              value: true,
             },
             {
               ruleOperator: 'and',
@@ -1670,6 +1688,11 @@ export const PRESET_TEMPLATES: {
         },
         {
           id: 'season-today-text',
+          condition: {
+            sections: [
+              { rules: [{ field: 'inSonarr', operator: 'eq', value: false }] },
+            ],
+          },
           layerOrder: 1,
           type: 'variable',
           x: 0,
@@ -1680,6 +1703,33 @@ export const PRESET_TEMPLATES: {
             segments: [
               { type: 'text', value: 'SEASON ' },
               { type: 'variable', field: 'seasonNumber' },
+              { type: 'text', value: ' TODAY' },
+            ],
+            fontSize: 74,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#FFFFFF',
+            textAlign: 'center',
+          },
+        },
+        {
+          id: 'season-today-text-sonarr',
+          condition: {
+            sections: [
+              { rules: [{ field: 'inSonarr', operator: 'eq', value: true }] },
+            ],
+          },
+          layerOrder: 2,
+          type: 'variable',
+          x: 0,
+          y: 1382,
+          width: 1000,
+          height: 141,
+          properties: {
+            segments: [
+              { type: 'text', value: 'SEASON ' },
+              { type: 'variable', field: 'todaySeasonNumber' },
               { type: 'text', value: ' TODAY' },
             ],
             fontSize: 74,

@@ -363,3 +363,102 @@ describe('Multiple Versions presets', () => {
     });
   }
 });
+
+describe('Returning Today presets', () => {
+  const monitored = PRESET_TEMPLATES.find(
+    (p) => p.name === 'Returning Today (Monitored)'
+  );
+  const unmonitored = PRESET_TEMPLATES.find(
+    (p) => p.name === 'Returning Today (Unmonitored)'
+  );
+  // Yellowjackets on 23/11/2026 after the 13:00 S4E1 premiere: the next
+  // episode pointer has moved to S4E2 and daysAgo counts from 2021.
+  const premiereDay = {
+    isPlaceholder: false,
+    mediaType: 'show' as const,
+    inSonarr: true,
+    isMonitored: true,
+    episodesAiringToday: 1,
+    todaySeasonNumber: 4,
+    todayEpisodeNumber: 1,
+    seasonNumber: 4,
+    episodeNumber: 2,
+    daysAgo: 1835,
+  };
+  const shownField = (
+    preset: typeof monitored,
+    context: Record<string, unknown>
+  ) => {
+    const els = (preset?.templateData.elements ?? []).filter(
+      (el) =>
+        el.type === 'variable' &&
+        evaluateCondition(el.condition, context as never)
+    );
+    expect(els).toHaveLength(1);
+    const field = (
+      els[0].properties as { segments: { type: string; field?: string }[] }
+    ).segments.find((s) => s.type === 'variable')?.field;
+    expect(field && context[field]).toBeDefined();
+    return field;
+  };
+
+  it('matches a returning season all of premiere day, after airtime too', () => {
+    expect(
+      evaluateCondition(monitored?.applicationCondition, premiereDay)
+    ).toBe(true);
+    expect(shownField(monitored, premiereDay)).toBe('todaySeasonNumber');
+    expect(
+      evaluateCondition(unmonitored?.applicationCondition, premiereDay)
+    ).toBe(false);
+  });
+
+  it('still has a season number after a whole season dropped at once', () => {
+    const batch = {
+      ...premiereDay,
+      episodesAiringToday: 8,
+      seasonNumber: undefined,
+      episodeNumber: undefined,
+    };
+    expect(evaluateCondition(monitored?.applicationCondition, batch)).toBe(
+      true
+    );
+    expect(shownField(monitored, batch)).toBe('todaySeasonNumber');
+  });
+
+  it('ignores ordinary episode days and brand-new shows', () => {
+    for (const ctx of [
+      { ...premiereDay, todayEpisodeNumber: 5 },
+      { ...premiereDay, todaySeasonNumber: 1 },
+      { ...premiereDay, episodesAiringToday: 0, todaySeasonNumber: undefined },
+    ]) {
+      expect(evaluateCondition(monitored?.applicationCondition, ctx)).toBe(
+        false
+      );
+    }
+  });
+
+  it('matches an unmonitored Sonarr show on its premiere day', () => {
+    const ctx = { ...premiereDay, isMonitored: false };
+    expect(evaluateCondition(unmonitored?.applicationCondition, ctx)).toBe(
+      true
+    );
+    expect(shownField(unmonitored, ctx)).toBe('todaySeasonNumber');
+  });
+
+  it('matches a show Sonarr does not have from its TMDB premiere date', () => {
+    const ctx = {
+      isPlaceholder: false,
+      mediaType: 'show' as const,
+      inSonarr: false,
+      isMonitored: false,
+      daysUntilNextSeason: 0,
+      seasonNumber: 3,
+      daysAgo: 1200,
+    };
+    expect(evaluateCondition(unmonitored?.applicationCondition, ctx)).toBe(
+      true
+    );
+    expect(shownField(unmonitored, ctx)).toBe('seasonNumber');
+    expect(evaluateCondition(monitored?.applicationCondition, ctx)).toBe(false);
+  });
+});
