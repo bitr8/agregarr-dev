@@ -507,6 +507,9 @@ const AllCollectionsView: React.FC = () => {
         ...(preExistingConfig.sortTitleOverride !== undefined && {
           sortTitleOverride: preExistingConfig.sortTitleOverride,
         }),
+        ...(preExistingConfig.collectionSuffixMode && {
+          collectionSuffixMode: preExistingConfig.collectionSuffixMode,
+        }),
         ...(preExistingConfig.customTheme && {
           customTheme: preExistingConfig.customTheme,
         }),
