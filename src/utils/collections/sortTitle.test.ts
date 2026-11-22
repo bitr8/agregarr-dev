@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { plexTitleTemplate } from './sortTitle';
+import { pendingCollectionName, plexTitleTemplate } from './sortTitle';
 
 describe('plexTitleTemplate', () => {
   it("returns the media type's custom template", () => {
@@ -48,5 +48,28 @@ describe('plexTitleTemplate', () => {
         'movie'
       )
     ).toBeUndefined();
+  });
+});
+
+describe('pendingCollectionName', () => {
+  it('shows the target until a rename has failed, then the stored name', () => {
+    expect(pendingCollectionName('Alien Collection', 'strip', undefined)).toBe(
+      'Alien'
+    );
+    expect(pendingCollectionName('Alien Collection', 'strip', true)).toBe(
+      'Alien Collection'
+    );
+  });
+
+  it('applies the shared suffix rules', () => {
+    expect(pendingCollectionName('Star Wars collection', 'strip', false)).toBe(
+      'Star Wars'
+    );
+    expect(pendingCollectionName('Collection', 'add', false)).toBe(
+      'Collection'
+    );
+    expect(
+      pendingCollectionName('Alien Collection Collection', 'strip', false)
+    ).toBe('Alien');
   });
 });

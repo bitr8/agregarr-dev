@@ -28,4 +28,27 @@ describe('applyCollectionSuffix', () => {
     expect(applyCollectionSuffix('Collection', 'strip')).toBe('Collection');
     expect(applyCollectionSuffix('', 'add')).toBe('');
   });
+
+  it('matches the suffix in any case', () => {
+    expect(applyCollectionSuffix('Star Wars collection', 'strip')).toBe(
+      'Star Wars'
+    );
+    expect(applyCollectionSuffix('Star Wars COLLECTION', 'add')).toBe(
+      'Star Wars COLLECTION'
+    );
+  });
+
+  it('strips every trailing suffix in one pass', () => {
+    expect(applyCollectionSuffix('Alien Collection Collection', 'strip')).toBe(
+      'Alien'
+    );
+    expect(applyCollectionSuffix('Alien collection Collection ', 'strip')).toBe(
+      'Alien'
+    );
+  });
+
+  it('does not add a suffix to a title that is just the word', () => {
+    expect(applyCollectionSuffix('Collection', 'add')).toBe('Collection');
+    expect(applyCollectionSuffix('collection', 'add')).toBe('collection');
+  });
 });
