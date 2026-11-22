@@ -217,7 +217,11 @@ describe('" Collection" suffix rename', () => {
   it('keeps the old name and carries on when Plex refuses the rename', async () => {
     const updateCollectionTitle = vi
       .fn()
-      .mockRejectedValueOnce(new Error('Request failed with status code 409'))
+      .mockRejectedValueOnce(
+        new Error(
+          'Plex Server didnt respond with a valid 2xx status code, response code: 409'
+        )
+      )
       .mockResolvedValue(undefined);
     const { byId } = await run(
       [

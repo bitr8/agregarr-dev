@@ -1,4 +1,5 @@
 import type PlexAPI from '@server/api/plexapi';
+import { isPlexConflictError } from '@server/api/plexMetadataClassify';
 import { applyCollectionSuffix } from '@server/constants/sortTitle';
 import {
   buildPromotedSortTitle,
@@ -1992,7 +1993,7 @@ export class HubSyncService {
     } catch (error) {
       const message = extractErrorMessage(error);
       // 409: a deleted collection still holds the name until the library's trash is emptied; retried every sync.
-      if (message.includes('409')) {
+      if (isPlexConflictError(message)) {
         logger.warn(
           `Plex refused to rename "${config.name}" to "${target}" (409). Empty the library's trash in Plex and it will apply on the next sync`,
           logMeta
