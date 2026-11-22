@@ -13,6 +13,7 @@ export interface SonarrEpisodeRow {
   airDateUtc?: string;
   finaleType?: string | null;
   hasFile?: boolean;
+  episodeFileId?: number;
   episodeFile?: { dateAdded?: string };
   scheduledAirDateUtc?: string;
 }
@@ -176,4 +177,31 @@ export function summariseSonarrEpisodes(
   }
 
   return summary;
+}
+
+/** One row per season/episode across instances, keeping the earliest effective air date. */
+export function mergeSonarrEpisodes<T extends SonarrEpisodeRow>(
+  lists: readonly (readonly T[])[]
+): T[] {
+  const byKey = new Map<string, T>();
+  for (const e of lists.flat()) {
+    const key = `${e.seasonNumber}:${e.episodeNumber}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, e);
+      continue;
+    }
+    const a = existing.airDateUtc
+      ? new Date(existing.airDateUtc).getTime()
+      : NaN;
+    const b = e.airDateUtc ? new Date(e.airDateUtc).getTime() : NaN;
+    const earlier = Number.isNaN(a) || b < a ? e : existing;
+    byKey.set(key, {
+      ...earlier,
+      scheduledAirDateUtc:
+        existing.scheduledAirDateUtc ?? e.scheduledAirDateUtc,
+      finaleType: existing.finaleType ?? e.finaleType,
+    });
+  }
+  return [...byKey.values()];
 }
