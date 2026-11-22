@@ -30,16 +30,17 @@ interface PlexMetadataContainerShape {
  * unrelated failure can never be misread as a deletion. The caller
  * (getMetadataSafe) gates a destructive cleanup on this.
  */
-export function isPlexConflictError(errorMessage: string): boolean {
-  return errorMessage.match(/response code:\s*(\d+)/i)?.[1] === '409';
-}
-
 export function isPlexNotFoundError(errorMessage: string): boolean {
   // Capture the FULL run of digits (not a fixed 3) so a hypothetical malformed
   // "response code: 4040" compares as "4040" !== "404" rather than substring
   // matching "404".
   const statusMatch = errorMessage.match(/response code:\s*(\d+)/i);
   return statusMatch?.[1] === '404';
+}
+
+/** True only when a plex-api error message reports an HTTP 409. */
+export function isPlexConflictError(errorMessage: string): boolean {
+  return errorMessage.match(/response code:\s*(\d+)/i)?.[1] === '409';
 }
 
 /**
