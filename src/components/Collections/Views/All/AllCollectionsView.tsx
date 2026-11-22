@@ -29,7 +29,7 @@ import {
   linkCollectionConfig,
   unlinkCollectionConfig,
 } from '@app/utils/collections/linkingHandlers';
-import { applyCollectionSuffix } from '@app/utils/collections/sortTitle';
+import { pendingCollectionName } from '@app/utils/collections/sortTitle';
 import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
@@ -234,9 +234,10 @@ const AllCollectionsView: React.FC = () => {
 
         collections.push({
           id: `preExisting-${preExistingConfig.id}`,
-          name: applyCollectionSuffix(
+          name: pendingCollectionName(
             preExistingConfig.name,
-            preExistingConfig.collectionSuffixMode
+            preExistingConfig.collectionSuffixMode,
+            preExistingConfig.collectionSuffixRenameFailed
           ),
           type: 'preExisting',
           configType: 'preExisting',

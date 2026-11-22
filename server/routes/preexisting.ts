@@ -48,6 +48,7 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       .find((c) => c.id === id);
     delete req.body.sortTitleOverrideIsFullTitle;
     delete req.body.sortTitleResetRequested;
+    delete req.body.collectionSuffixRenameFailed;
     // The name comes from Plex and the suffix rename, so the form's loaded copy can be stale.
     delete req.body.name;
     if (
@@ -55,6 +56,13 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       !['leave', 'strip', 'add'].includes(req.body.collectionSuffixMode)
     ) {
       return res.status(400).json({ error: 'Invalid collection suffix mode' });
+    }
+    if (
+      req.body.collectionSuffixMode !== undefined &&
+      req.body.collectionSuffixMode !==
+        (existingConfig?.collectionSuffixMode ?? 'leave')
+    ) {
+      req.body.collectionSuffixRenameFailed = false;
     }
     const { isSortTitleOverrideEdit, isSortTitleResetRequest } = await import(
       '@server/lib/collections/core/CollectionUtilities'
@@ -576,7 +584,10 @@ preExistingRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
       collectionId: id,
     });
 
-    return res.status(200).json({ preExistingCollectionConfig: updated });
+    return res.status(200).json({
+      preExistingCollectionConfig: updated,
+      renameFailed: updated?.collectionSuffixRenameFailed === true,
+    });
   } catch (error) {
     logger.error('Failed to sync pre-existing collection', {
       label: 'Pre-existing Collections API',

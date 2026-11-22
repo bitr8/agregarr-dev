@@ -75,9 +75,9 @@ import {
 import type { SortTitleArticleMode } from '@app/utils/collections/sortTitle';
 import {
   agregarrOwnsSortTitle,
-  applyCollectionSuffix,
   buildPromotedSortTitle,
   normalizeArticleForDisplay,
+  pendingCollectionName,
 } from '@app/utils/collections/sortTitle';
 import {
   DATE_RANGE_ERROR,
@@ -3014,9 +3014,14 @@ const CollectionFormConfigForm = ({
                         <div className="mb-6">
                           <h2 className="text-lg font-medium text-white">
                             {(isPreExisting
-                              ? applyCollectionSuffix(
+                              ? pendingCollectionName(
                                   values.name ?? '',
-                                  values.collectionSuffixMode
+                                  values.collectionSuffixMode,
+                                  (config as PreExistingCollectionConfig)
+                                    .collectionSuffixRenameFailed &&
+                                    values.collectionSuffixMode ===
+                                      (config as PreExistingCollectionConfig)
+                                        .collectionSuffixMode
                                 )
                               : values.name) || 'Collection Settings'}
                           </h2>

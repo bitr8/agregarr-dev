@@ -1954,7 +1954,10 @@ export class HubSyncService {
       config.name,
       config.collectionSuffixMode
     );
-    if (target === config.name) return config.name;
+    if (target === config.name) {
+      this.setSuffixRenameFailed(config, false);
+      return config.name;
+    }
 
     const logMeta = {
       label: 'Hub Sync Service',
@@ -1967,6 +1970,7 @@ export class HubSyncService {
         `Skipping " Collection" suffix change for "${config.name}": "${target}" already exists in this library`,
         logMeta
       );
+      this.setSuffixRenameFailed(config, true);
       return config.name;
     }
 
@@ -1977,7 +1981,10 @@ export class HubSyncService {
         config.libraryId,
         config.name
       );
-      this.updatePreExistingConfigField(config.id, { name: target });
+      this.updatePreExistingConfigField(config.id, {
+        name: target,
+        collectionSuffixRenameFailed: false,
+      });
       namesInLibrary?.delete(config.name);
       namesInLibrary?.add(target);
       logger.debug(`Renamed "${config.name}" to "${target}"`, logMeta);
@@ -1996,8 +2003,19 @@ export class HubSyncService {
           logMeta
         );
       }
+      this.setSuffixRenameFailed(config, true);
       return config.name;
     }
+  }
+
+  private setSuffixRenameFailed(
+    config: PreExistingCollectionConfig,
+    failed: boolean
+  ): void {
+    if ((config.collectionSuffixRenameFailed ?? false) === failed) return;
+    this.updatePreExistingConfigField(config.id, {
+      collectionSuffixRenameFailed: failed,
+    });
   }
 
   /**

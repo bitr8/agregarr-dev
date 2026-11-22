@@ -3452,6 +3452,9 @@ components:
           enum: [leave, strip, add]
           description: '" Collection" suffix on the Plex title. leave (default) never renames; strip removes it; add appends it.'
           example: 'leave'
+        collectionSuffixRenameFailed:
+          type: boolean
+          description: 'Set by the sync when the last suffix rename was skipped or refused. Read-only.'
         collectionRatingKey:
           type: string
           description: 'Plex collection rating key'
@@ -9328,6 +9331,9 @@ paths:
                 properties:
                   preExistingCollectionConfig:
                     $ref: '#/components/schemas/PreExistingCollectionConfig'
+                  renameFailed:
+                    type: boolean
+                    description: 'True when the suffix rename was skipped or refused'
         '404':
           description: Pre-existing collection not found
         '409':

@@ -108,6 +108,33 @@ describe('pre-existing suffix and individual sync routes', () => {
     expect(syncSingle).toHaveBeenCalledWith(expect.anything(), stored.id);
   });
 
+  it('reports a rename the sync could not apply', async () => {
+    syncSingle.mockResolvedValue(true);
+    const clean = await (await sync(stored.id)).json();
+    expect(clean.renameFailed).toBe(false);
+
+    Object.assign(stored, { collectionSuffixRenameFailed: true });
+    try {
+      const failed = await (await sync(stored.id)).json();
+      expect(failed.renameFailed).toBe(true);
+    } finally {
+      delete (stored as { collectionSuffixRenameFailed?: boolean })
+        .collectionSuffixRenameFailed;
+    }
+  });
+
+  it('never accepts the failed flag from a client, and clears it when the mode changes', async () => {
+    await put({ collectionSuffixRenameFailed: true });
+    expect(updateSettings.mock.calls[0][1]).not.toHaveProperty(
+      'collectionSuffixRenameFailed'
+    );
+
+    await put({ collectionSuffixMode: 'add' });
+    expect(updateSettings.mock.calls[1][1]).toMatchObject({
+      collectionSuffixRenameFailed: false,
+    });
+  });
+
   it('answers 404 for an unknown collection', async () => {
     syncSingle.mockResolvedValue(false);
     expect((await sync('missing')).status).toBe(404);

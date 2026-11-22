@@ -111,6 +111,7 @@ export interface PreExistingCollectionConfig {
   sortTitleResetRequested?: boolean; // One-shot: the user cleared the Sort Title field, asking Agregarr to take the sort title back. Consumed and cleared by the next sync
   sortTitleArticleNormalized?: boolean; // True while this collection's sortTitle is an article-normalized value Agregarr wrote
   collectionSuffixMode?: CollectionSuffixMode; // " Collection" suffix on the Plex title: absent or 'leave' never renames
+  collectionSuffixRenameFailed?: boolean; // Set by the sync when the last rename was skipped or refused; the stored name is then what Plex has
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
     usersHome: boolean;

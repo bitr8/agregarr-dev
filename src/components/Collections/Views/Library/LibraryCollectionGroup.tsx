@@ -24,8 +24,8 @@ import type {
 } from '@app/types/collections';
 import {
   agregarrOwnsSortTitle,
-  applyCollectionSuffix,
   normalizeArticleForDisplay,
+  pendingCollectionName,
   plexTitleTemplate,
 } from '@app/utils/collections/sortTitle';
 import {
@@ -72,6 +72,11 @@ const messages = defineMessages({
   bulkEdit: 'Bulk Edit',
   collectionSyncStarted: 'Sync started',
   collectionSynced: 'Collection synced',
+  collectionSyncedRenameFailed:
+    'Collection synced, but the title was not renamed. See the collection for details.',
+  suffixRenameFailed: 'Rename failed',
+  suffixRenameFailedHint:
+    'The last sync could not rename this collection in Plex: the new name is already used in this library, or Plex refused it. Check the logs.',
   plexTitle: 'Plex title: {template}',
   userCollectionPositionWarning:
     'Library Recommended is enabled. This will show one collection per user on the Recommended screen. To avoid blocking other content, place this at the bottom of the list, or use Users Home only.',
@@ -380,10 +385,12 @@ const SortableItem = ({
                 )
               ) : (
                 (isPreExisting
-                  ? applyCollectionSuffix(
+                  ? pendingCollectionName(
                       config.name,
                       (config as PreExistingCollectionConfig)
-                        .collectionSuffixMode
+                        .collectionSuffixMode,
+                      (config as PreExistingCollectionConfig)
+                        .collectionSuffixRenameFailed
                     )
                   : config.name) || 'Unnamed Collection'
               )}
@@ -420,6 +427,17 @@ const SortableItem = ({
             {/* Collection Type Badge - Removed for Agregarr collections */}
             {isHub && <PlexDefaultBadge />}
             {isPreExisting && <PreExistingBadge />}
+            {isPreExisting &&
+              (config as PreExistingCollectionConfig)
+                .collectionSuffixRenameFailed && (
+                <span
+                  title={intl.formatMessage(messages.suffixRenameFailedHint)}
+                >
+                  <Badge badgeType="warning" className="!bg-opacity-40">
+                    {intl.formatMessage(messages.suffixRenameFailed)}
+                  </Badge>
+                </span>
+              )}
 
             {/* Enhanced Source & Subtype Badge (for regular collections only) */}
             {isCollection && (config as CollectionFormConfig).type && (
@@ -759,12 +777,21 @@ const LibraryCollectionGroup = ({
     // Pre-existing syncs are quick enough for the route to finish before it answers.
     if (configType === 'preExisting') {
       try {
-        await axios.post(`/api/v1/preexisting/${collectionId}/sync`);
+        const { data } = await axios.post<{ renameFailed?: boolean }>(
+          `/api/v1/preexisting/${collectionId}/sync`
+        );
         await revalidatePreExisting();
-        addToast(intl.formatMessage(messages.collectionSynced), {
-          appearance: 'success',
-          autoDismiss: true,
-        });
+        addToast(
+          intl.formatMessage(
+            data?.renameFailed
+              ? messages.collectionSyncedRenameFailed
+              : messages.collectionSynced
+          ),
+          {
+            appearance: data?.renameFailed ? 'warning' : 'success',
+            autoDismiss: true,
+          }
+        );
       } catch (error) {
         addToast(
           `Failed to sync collection: ${

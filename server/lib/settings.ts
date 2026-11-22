@@ -452,6 +452,7 @@ export interface PreExistingCollectionConfig {
   sortTitleOverride?: string; // User-provided sort title written verbatim to Plex (blank = auto)
   sortTitleOverrideIsFullTitle?: boolean; // Set when the override was written through the Sort Title field, which accepts a complete title. Absent on anything saved earlier, which always had the collection name appended - see buildSortTitleFromOverride
   collectionSuffixMode?: CollectionSuffixMode; // " Collection" suffix on the Plex title: absent or 'leave' never renames
+  collectionSuffixRenameFailed?: boolean; // Set by the sync when the last rename was skipped or refused; the stored name is then what Plex has
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
     usersHome: boolean;

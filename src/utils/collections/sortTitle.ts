@@ -15,8 +15,19 @@ import {
   LEADING_PUNCTUATION_PATTERN,
 } from '@server/constants/sortTitle';
 
-// Shown before the sync renames the collection in Plex.
-export { applyCollectionSuffix } from '@server/constants/sortTitle';
+import type { CollectionSuffixMode } from '@server/constants/sortTitle';
+import { applyCollectionSuffix } from '@server/constants/sortTitle';
+
+export { applyCollectionSuffix };
+
+/** The target name until a sync has tried the rename; the stored name once it was skipped or refused. */
+export function pendingCollectionName(
+  name: string,
+  mode: CollectionSuffixMode | undefined,
+  renameFailed: boolean | undefined
+): string {
+  return renameFailed ? name : applyCollectionSuffix(name, mode);
+}
 
 // Must match PROMOTED_SORT_TITLE_RANK_WIDTH in CollectionUtilities.ts. 3
 // digits matches Kometa's !010_/!020_ convention; see that constant for why

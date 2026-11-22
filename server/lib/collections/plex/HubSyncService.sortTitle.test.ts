@@ -210,6 +210,8 @@ describe('" Collection" suffix rename', () => {
     expect(byId('blocked')?.name).toBe('Scream Collection');
     expect(updateCollectionTitle).toHaveBeenCalledTimes(1);
     expect(byId('other-library')?.name).toBe('Scream');
+    expect(byId('blocked')?.collectionSuffixRenameFailed).toBe(true);
+    expect(byId('other-library')?.collectionSuffixRenameFailed).toBeFalsy();
   });
 
   it('keeps the old name and carries on when Plex refuses the rename', async () => {
@@ -237,7 +239,32 @@ describe('" Collection" suffix rename', () => {
       { updateCollectionTitle }
     );
     expect(byId('refused')?.name).toBe('Rocky Collection');
+    expect(byId('refused')?.collectionSuffixRenameFailed).toBe(true);
     expect(byId('next')?.name).toBe('Creed');
+  });
+
+  it('clears the failed flag once the rename succeeds or nothing is left to rename', async () => {
+    const { byId } = await run([
+      {
+        ...base,
+        id: 'retry',
+        name: 'Heat Collection',
+        collectionRatingKey: '30',
+        collectionSuffixMode: 'strip',
+        collectionSuffixRenameFailed: true,
+      },
+      {
+        ...base,
+        id: 'switched-off',
+        name: 'Ronin Collection',
+        collectionRatingKey: '31',
+        collectionSuffixMode: 'leave',
+        collectionSuffixRenameFailed: true,
+      },
+    ]);
+    expect(byId('retry')?.name).toBe('Heat');
+    expect(byId('retry')?.collectionSuffixRenameFailed).toBe(false);
+    expect(byId('switched-off')?.collectionSuffixRenameFailed).toBe(false);
   });
 
   it('only touches the requested collection on an individual sync', async () => {
