@@ -22,7 +22,7 @@ const updateSettings = vi.fn((_id: string, body: object) => ({
   ...stored,
   ...body,
 }));
-const syncState = { running: false };
+const syncState = { running: false, pending: false };
 const syncSingle = vi.fn();
 
 vi.mock('@server/middleware/auth', () => ({
@@ -73,6 +73,7 @@ describe('pre-existing suffix and individual sync routes', () => {
     updateSettings.mockClear();
     syncSingle.mockReset();
     syncState.running = false;
+    syncState.pending = false;
   });
 
   const put = (body: object) =>
@@ -142,6 +143,12 @@ describe('pre-existing suffix and individual sync routes', () => {
 
   it('refuses while a full sync is running', async () => {
     syncState.running = true;
+    expect((await sync(stored.id)).status).toBe(409);
+    expect(syncSingle).not.toHaveBeenCalled();
+  });
+
+  it('refuses while a full sync is pending', async () => {
+    syncState.pending = true;
     expect((await sync(stored.id)).status).toBe(409);
     expect(syncSingle).not.toHaveBeenCalled();
   });

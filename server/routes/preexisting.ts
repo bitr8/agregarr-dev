@@ -539,11 +539,11 @@ preExistingRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
   try {
     const collectionsSync = (await import('@server/lib/collectionsSync'))
       .default;
-    if (collectionsSync.running) {
+    if (collectionsSync.running || collectionsSync.pending) {
       return res.status(409).json({
         error: 'Sync in progress',
         message:
-          'Cannot start individual collection sync while a full sync is running. Please wait for the full sync to complete.',
+          'Cannot start individual collection sync while a full sync is running or queued. Please wait for the full sync to complete.',
       });
     }
 

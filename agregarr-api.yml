@@ -9310,7 +9310,7 @@ paths:
   /preexisting/{id}/sync:
     post:
       summary: Sync individual pre-existing collection
-      description: Applies one pre-existing collection's visibility, artwork, title and sort title to Plex now instead of waiting for the next full sync. Refuses with 409 while a full sync is running.
+      description: Applies one pre-existing collection's visibility, artwork, title and sort title to Plex now instead of waiting for the next full sync. Refuses with 409 while a full sync is running or pending.
       tags:
         - pre-existing-collections
       parameters:
@@ -9337,7 +9337,7 @@ paths:
         '404':
           description: Pre-existing collection not found
         '409':
-          description: A full sync is running
+          description: A full sync is running or pending
         '500':
           description: Failed to sync collection
   /preexisting/{id}/promote:
