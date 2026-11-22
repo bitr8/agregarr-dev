@@ -33,6 +33,11 @@ import {
   latestAiredSeasonDate,
   movieReleaseInfoFromTmdb,
 } from './releaseDateContext';
+import {
+  summariseSonarrEpisodes,
+  type SonarrEpisodeRow,
+  type SonarrEpisodeSummary,
+} from './sonarrEpisodeSummary';
 import { toTmdbRatingContext, usesTmdbRatingFields } from './tmdbRatingPolicy';
 
 // Captured defensively: the app replaces the global Intl with the andyearnshaw
@@ -213,11 +218,7 @@ async function getSonarrSeries(
   return series;
 }
 
-type SonarrEpisode = {
-  seasonNumber: number;
-  episodeNumber: number;
-  airDateUtc?: string;
-};
+type SonarrEpisode = SonarrEpisodeRow;
 
 // Lifetime follows the series cache the job already clears when idle.
 const episodeCaches = new WeakMap<
@@ -1470,6 +1471,7 @@ export async function fetchReleaseDateInfo(
               airDate: season.air_date,
             });
             result = {
+              tvdbId,
               releaseDate: showDetails.first_air_date || season.air_date,
               nextEpisodeAirDate: season.air_date,
               // Season air date = episode 1 air date, so this is a premiere.
@@ -1484,7 +1486,7 @@ export async function fetchReleaseDateInfo(
 
       // Fall back to first_air_date when nothing upcoming was found.
       if (!result && showDetails.first_air_date) {
-        result = { releaseDate: showDetails.first_air_date };
+        result = { tvdbId, releaseDate: showDetails.first_air_date };
       }
 
       if (result) {
@@ -1781,6 +1783,58 @@ async function applySonarrLastPremiere(
     )[premieres.length - 1],
     lastSeasonFromSonarr: true,
   };
+}
+
+/**
+ * Today's, last and next episode plus finale fields from Sonarr's episode list.
+ * Untracked shows get nothing; a failed instance flags fetchStatus (fork#35).
+ */
+export async function fetchSonarrEpisodeContext(
+  tmdbId: number,
+  tvdbId: number | undefined,
+  sonarrCache?: Map<string, SonarrSeries[]>,
+  fetchStatus?: { failed: boolean }
+): Promise<SonarrEpisodeSummary> {
+  const instances = (getSettings().sonarr ?? []).filter((s) => s.hostname);
+  if (instances.length === 0) return {};
+  let resolvedTvdbId = tvdbId;
+  if (!resolvedTvdbId) {
+    try {
+      const show = await new TheMovieDb().getTvShow({ tvId: tmdbId });
+      resolvedTvdbId = show.external_ids?.tvdb_id;
+    } catch {
+      if (fetchStatus) fetchStatus.failed = true;
+      return {};
+    }
+  }
+  if (!resolvedTvdbId) return {};
+  let tracked = false;
+  const episodes: SonarrEpisode[] = [];
+  for (const sonarrSettings of instances) {
+    try {
+      const allSeries = await getSonarrSeries(sonarrSettings, sonarrCache);
+      const series = allSeries.find((s) => s.tvdbId === resolvedTvdbId);
+      if (!series) continue;
+      episodes.push(
+        ...(await getSonarrEpisodes(
+          sonarrSettings,
+          series.id as number,
+          sonarrCache
+        ))
+      );
+      tracked = true;
+    } catch (error) {
+      logger.debug('Failed to read Sonarr episode list', {
+        label: 'OverlayContextBuilder',
+        hostname: sonarrSettings.hostname,
+        tvdbId: resolvedTvdbId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (fetchStatus) fetchStatus.failed = true;
+      return {};
+    }
+  }
+  return tracked ? summariseSonarrEpisodes(episodes) : {};
 }
 
 // Sonarr episodeCount = (monitored AND aired) OR hasFile, so this survives unmonitored deletes

@@ -50,6 +50,7 @@ import {
   buildRenderContext,
   checkMonitoringStatus,
   fetchReleaseDateInfo,
+  fetchSonarrEpisodeContext,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
 import { getOverlayLibraryType } from './overlayLibraryType';
@@ -95,6 +96,7 @@ import {
 import {
   RELEASE_DATE_CONTEXT_FIELDS,
   shouldSkipOnReleaseDateFetchFailure,
+  usesSonarrEpisodeSummary,
   usesSonarrPremiere,
 } from './releaseDateFetchPolicy';
 import {
@@ -3494,6 +3496,34 @@ class OverlayLibraryService {
         }
       }
 
+      let sonarrEpisodeContext: Partial<OverlayRenderContext> = {};
+      if (
+        tmdbId &&
+        actualMediaType === 'show' &&
+        usesSonarrEpisodeSummary(
+          this.requiredContextFieldsByLibrary.get(libraryId)
+        )
+      ) {
+        const episodeFetch = { failed: false };
+        sonarrEpisodeContext = await fetchSonarrEpisodeContext(
+          tmdbId,
+          releaseDateInfo?.tvdbId,
+          this.sonarrSeriesCache,
+          episodeFetch
+        );
+        if (episodeFetch.failed) {
+          logger.info(
+            'Skipping overlay application - Sonarr episode list fetch failed',
+            {
+              label: 'OverlayLibrary',
+              itemTitle: item.title,
+              ratingKey: item.ratingKey,
+            }
+          );
+          return { skipped: true };
+        }
+      }
+
       // Check monitoring status for ALL items with TMDB ID
       let monitoringContext: Partial<OverlayRenderContext> = {};
       let radarrDates: RadarrReleaseDates = {};
@@ -3553,6 +3583,7 @@ class OverlayLibraryService {
         ...episodeAggregation,
         ...contextOverrides,
         ...releaseDateContext,
+        ...sonarrEpisodeContext,
         ...monitoringContext,
         ...(collection ? { collection } : {}),
         ...buildItemRankContext(item.ratingKey, this.collectionRankCache),

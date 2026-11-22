@@ -108,6 +108,23 @@ export interface OverlayRenderContext {
   nextSeasonAirDate?: string; // Raw date for SEASON PREMIERES only (episode 1)
   daysUntilNextSeason?: number; // Calculated days until next SEASON PREMIERE only
   daysAgoNextSeason?: number; // Days since the latest season premiered
+  episodesAiringToday?: number;
+  todaySeasonNumber?: number;
+  todayEpisodeNumber?: number;
+  lastAiredEpisodeDate?: string;
+  daysSinceLastAiredEpisode?: number;
+  lastAiredSeasonNumber?: number;
+  lastAiredEpisodeNumber?: number;
+  lastAiredEpisodeCount?: number;
+  nextEpisodeCount?: number;
+  nextFinaleType?: string;
+  nextFinaleDate?: string;
+  daysUntilNextFinale?: number;
+  nextFinaleSeasonNumber?: number;
+  nextFinaleEpisodeNumber?: number;
+  lastFinaleType?: string;
+  lastFinaleDate?: string;
+  daysSinceLastFinale?: number;
 
   totalSeasons?: number;
   seasonsAvailable?: number;

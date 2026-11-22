@@ -10,6 +10,7 @@ import {
   buildRenderContext,
   checkMonitoringStatus,
   fetchReleaseDateInfo,
+  fetchSonarrEpisodeContext,
   type ReleaseDateInfo,
 } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayLibraryService } from '@server/lib/overlays/OverlayLibraryService';
@@ -32,7 +33,10 @@ import {
   preferRadarrReleaseDate,
   type RadarrReleaseDates,
 } from '@server/lib/overlays/releaseDateContext';
-import { usesSonarrPremiere } from '@server/lib/overlays/releaseDateFetchPolicy';
+import {
+  usesSonarrEpisodeSummary,
+  usesSonarrPremiere,
+} from '@server/lib/overlays/releaseDateFetchPolicy';
 import { usesTmdbRatingFields } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -375,6 +379,30 @@ overlayTestRouter.post('/', async (req, res) => {
       }
     }
 
+    const episodeFetch = { failed: false };
+    const sonarrEpisodeContext: Partial<OverlayRenderContext> =
+      tmdbId &&
+      actualMediaType === 'show' &&
+      usesSonarrEpisodeSummary(requiredContextFields)
+        ? await fetchSonarrEpisodeContext(
+            tmdbId,
+            releaseDateInfo?.tvdbId,
+            undefined,
+            episodeFetch
+          )
+        : {};
+    if (episodeFetch.failed) {
+      // A real sync would skip this item and keep its poster.
+      logger.warn(
+        'Sonarr episode list fetch failed during overlay test - proceeding anyway',
+        {
+          label: 'OverlayTest',
+          itemTitle: item.title,
+          ratingKey: item.ratingKey,
+        }
+      );
+    }
+
     // Check monitoring status if TMDB ID available
     let monitoringContext: Partial<OverlayRenderContext> = {};
     let radarrDates: RadarrReleaseDates = {};
@@ -478,6 +506,7 @@ overlayTestRouter.post('/', async (req, res) => {
       downloaded,
       ...episodeAggregation,
       ...releaseDateContext,
+      ...sonarrEpisodeContext,
       ...monitoringContext,
       collection: collectionIds,
       ...rankContext,

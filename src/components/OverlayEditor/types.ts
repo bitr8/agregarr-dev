@@ -296,6 +296,23 @@ export interface OverlayRenderContext {
   nextSeasonAirDate?: string; // Raw date for SEASON PREMIERES only (episode 1)
   daysUntilNextSeason?: number; // Calculated days until next SEASON PREMIERE only
   daysAgoNextSeason?: number; // Days since the latest season premiered
+  episodesAiringToday?: number;
+  todaySeasonNumber?: number;
+  todayEpisodeNumber?: number;
+  lastAiredEpisodeDate?: string;
+  daysSinceLastAiredEpisode?: number;
+  lastAiredSeasonNumber?: number;
+  lastAiredEpisodeNumber?: number;
+  lastAiredEpisodeCount?: number;
+  nextEpisodeCount?: number;
+  nextFinaleType?: string;
+  nextFinaleDate?: string;
+  daysUntilNextFinale?: number;
+  nextFinaleSeasonNumber?: number;
+  nextFinaleEpisodeNumber?: number;
+  lastFinaleType?: string;
+  lastFinaleDate?: string;
+  daysSinceLastFinale?: number;
 
   totalSeasons?: number;
   seasonsAvailable?: number;
@@ -613,6 +630,91 @@ export const AVAILABLE_VARIABLES = {
       label: 'Days Since Next Season Premiered (TV)',
       example: '7',
     },
+    {
+      field: 'episodesAiringToday',
+      label: 'Episodes Airing Today (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'todaySeasonNumber',
+      label: "Today's Season Number (TV) - Show Poster",
+      example: '4',
+    },
+    {
+      field: 'todayEpisodeNumber',
+      label: "Today's Episode Number (TV) - Show Poster",
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeDate',
+      label: 'Last Aired Episode Date (TV) - Show Poster',
+      example: 'NOV 23',
+    },
+    {
+      field: 'daysSinceLastAiredEpisode',
+      label: 'Days Since Last Episode Aired (TV) - Show Poster',
+      example: '0',
+    },
+    {
+      field: 'lastAiredSeasonNumber',
+      label: 'Last Aired Season Number (TV) - Show Poster',
+      example: '4',
+    },
+    {
+      field: 'lastAiredEpisodeNumber',
+      label: 'Last Aired Episode Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeCount',
+      label: 'Episodes on Last Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextEpisodeCount',
+      label: 'Episodes on Next Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextFinaleType',
+      label: 'Next Finale Type (TV) - Show Poster',
+      example: 'season',
+    },
+    {
+      field: 'nextFinaleDate',
+      label: 'Next Finale Date (TV) - Show Poster',
+      example: 'NOV 28',
+    },
+    {
+      field: 'daysUntilNextFinale',
+      label: 'Days Until Next Finale (TV) - Show Poster',
+      example: '6',
+    },
+    {
+      field: 'nextFinaleSeasonNumber',
+      label: 'Next Finale Season Number (TV) - Show Poster',
+      example: '2',
+    },
+    {
+      field: 'nextFinaleEpisodeNumber',
+      label: 'Next Finale Episode Number (TV) - Show Poster',
+      example: '10',
+    },
+    {
+      field: 'lastFinaleType',
+      label: 'Last Finale Type (TV) - Show Poster',
+      example: 'series',
+    },
+    {
+      field: 'lastFinaleDate',
+      label: 'Last Finale Date (TV) - Show Poster',
+      example: 'APR 14',
+    },
+    {
+      field: 'daysSinceLastFinale',
+      label: 'Days Since Last Finale (TV) - Show Poster',
+      example: '220',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
@@ -926,6 +1028,91 @@ export const CONDITION_FIELD_CATEGORIES = {
       label: 'Days Since Next Season Premiered (TV)',
       example: '7',
     },
+    {
+      field: 'episodesAiringToday',
+      label: 'Episodes Airing Today (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'todaySeasonNumber',
+      label: "Today's Season Number (TV) - Show Poster",
+      example: '4',
+    },
+    {
+      field: 'todayEpisodeNumber',
+      label: "Today's Episode Number (TV) - Show Poster",
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeDate',
+      label: 'Last Aired Episode Date (TV) - Show Poster',
+      example: 'NOV 23',
+    },
+    {
+      field: 'daysSinceLastAiredEpisode',
+      label: 'Days Since Last Episode Aired (TV) - Show Poster',
+      example: '0',
+    },
+    {
+      field: 'lastAiredSeasonNumber',
+      label: 'Last Aired Season Number (TV) - Show Poster',
+      example: '4',
+    },
+    {
+      field: 'lastAiredEpisodeNumber',
+      label: 'Last Aired Episode Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeCount',
+      label: 'Episodes on Last Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextEpisodeCount',
+      label: 'Episodes on Next Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextFinaleType',
+      label: 'Next Finale Type (TV) - Show Poster',
+      example: 'season',
+    },
+    {
+      field: 'nextFinaleDate',
+      label: 'Next Finale Date (TV) - Show Poster',
+      example: 'NOV 28',
+    },
+    {
+      field: 'daysUntilNextFinale',
+      label: 'Days Until Next Finale (TV) - Show Poster',
+      example: '6',
+    },
+    {
+      field: 'nextFinaleSeasonNumber',
+      label: 'Next Finale Season Number (TV) - Show Poster',
+      example: '2',
+    },
+    {
+      field: 'nextFinaleEpisodeNumber',
+      label: 'Next Finale Episode Number (TV) - Show Poster',
+      example: '10',
+    },
+    {
+      field: 'lastFinaleType',
+      label: 'Last Finale Type (TV) - Show Poster',
+      example: 'series',
+    },
+    {
+      field: 'lastFinaleDate',
+      label: 'Last Finale Date (TV) - Show Poster',
+      example: 'APR 14',
+    },
+    {
+      field: 'daysSinceLastFinale',
+      label: 'Days Since Last Finale (TV) - Show Poster',
+      example: '220',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
@@ -1202,6 +1389,23 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     nextSeasonAirDate: '2025-02-05', // Next SEASON premiere (episode 1 only)
     daysUntilNextSeason: 45, // Days until next season
     daysAgoNextSeason: undefined, // Not set when season hasn't aired yet
+    episodesAiringToday: 1,
+    todaySeasonNumber: 2,
+    todayEpisodeNumber: 5,
+    lastAiredEpisodeDate: '2025-01-08T01:00:00Z',
+    daysSinceLastAiredEpisode: 7,
+    lastAiredSeasonNumber: 2,
+    lastAiredEpisodeNumber: 4,
+    lastAiredEpisodeCount: 1,
+    nextEpisodeCount: 1,
+    nextFinaleType: 'season',
+    nextFinaleDate: '2025-02-12T01:00:00Z',
+    daysUntilNextFinale: 28,
+    nextFinaleSeasonNumber: 2,
+    nextFinaleEpisodeNumber: 10,
+    lastFinaleType: 'season',
+    lastFinaleDate: '2024-03-20T01:00:00Z',
+    daysSinceLastFinale: 300,
     daysAgo: 0,
     isMonitored: true,
     inSonarr: true,

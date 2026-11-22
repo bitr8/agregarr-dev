@@ -245,6 +245,8 @@ const SCALAR_STRING_FIELDS = new Set([
   'container',
   'tmdbStatus',
   'tvdbStatus',
+  'nextFinaleType',
+  'lastFinaleType',
   'streamingProvider',
   'showResolution',
   'showVideoCodec',
