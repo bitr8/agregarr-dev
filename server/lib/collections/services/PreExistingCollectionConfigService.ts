@@ -71,6 +71,9 @@ export class PreExistingCollectionConfigService {
           // Preserve poster template settings from existing config
           autoPoster: existingConfig?.autoPoster,
           autoPosterTemplate: existingConfig?.autoPosterTemplate,
+          collectionSuffixMode: existingConfig?.collectionSuffixMode,
+          collectionSuffixRenameFailed:
+            existingConfig?.collectionSuffixRenameFailed,
         };
       }
     );
