@@ -12,6 +12,36 @@ export interface SonarrEpisodeRow {
   episodeNumber: number;
   airDateUtc?: string;
   finaleType?: string | null;
+  hasFile?: boolean;
+  episodeFile?: { dateAdded?: string };
+  scheduledAirDateUtc?: string;
+}
+
+/** Air instant for overlays: a future-dated episode already in the library counts from its file's dateAdded. */
+export function effectiveAirDateUtc(
+  e: Pick<SonarrEpisodeRow, 'airDateUtc' | 'hasFile' | 'episodeFile'>,
+  now: number = Date.now()
+): string | undefined {
+  if (!e.airDateUtc || !e.hasFile) return e.airDateUtc;
+  const scheduled = new Date(e.airDateUtc).getTime();
+  const added = e.episodeFile?.dateAdded
+    ? new Date(e.episodeFile.dateAdded).getTime()
+    : NaN;
+  if (Number.isNaN(scheduled) || Number.isNaN(added)) return e.airDateUtc;
+  if (scheduled <= now || added >= scheduled) return e.airDateUtc;
+  return e.episodeFile?.dateAdded;
+}
+
+export function withEffectiveAirDates<T extends SonarrEpisodeRow>(
+  episodes: readonly T[],
+  now: number = Date.now()
+): T[] {
+  return episodes.map((e) => {
+    const effective = effectiveAirDateUtc(e, now);
+    return effective === e.airDateUtc
+      ? e
+      : { ...e, airDateUtc: effective, scheduledAirDateUtc: e.airDateUtc };
+  });
 }
 
 export type SonarrEpisodeSummary = {

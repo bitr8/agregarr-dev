@@ -40,6 +40,7 @@ interface EpisodeResult {
   hasFile: boolean;
   monitored: boolean;
   finaleType?: string | null;
+  episodeFile?: { dateAdded?: string };
   absoluteEpisodeNumber: number;
   unverifiedSceneNumbering: boolean;
   id: number;
@@ -242,11 +243,15 @@ class SonarrAPI extends ServarrBase<{
   /**
    * Get episodes for a series
    */
-  public async getEpisodesBySeries(seriesId: number): Promise<EpisodeResult[]> {
+  public async getEpisodesBySeries(
+    seriesId: number,
+    options?: { includeEpisodeFile?: boolean }
+  ): Promise<EpisodeResult[]> {
     try {
       const response = await this.axios.get<EpisodeResult[]>('/episode', {
         params: {
           seriesId,
+          ...(options?.includeEpisodeFile ? { includeEpisodeFile: true } : {}),
         },
       });
 

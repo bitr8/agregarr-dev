@@ -35,6 +35,7 @@ import {
 } from './releaseDateContext';
 import {
   summariseSonarrEpisodes,
+  withEffectiveAirDates,
   type SonarrEpisodeRow,
   type SonarrEpisodeSummary,
 } from './sonarrEpisodeSummary';
@@ -242,9 +243,12 @@ async function getSonarrEpisodes(
   const url = `${protocol}://${sonarrSettings.hostname}:${sonarrSettings.port}${
     sonarrSettings.baseUrl || ''
   }/api/v3`;
-  const fetchList = () =>
-    new SonarrAPI({ url, apiKey: sonarrSettings.apiKey }).getEpisodesBySeries(
-      seriesId
+  const fetchList = async () =>
+    withEffectiveAirDates(
+      await new SonarrAPI({
+        url,
+        apiKey: sonarrSettings.apiKey,
+      }).getEpisodesBySeries(seriesId, { includeEpisodeFile: true })
     );
   if (!cache) {
     return fetchList();
@@ -1575,6 +1579,39 @@ export async function fetchNextEpisodeFromSonarr(
               (e) =>
                 !!e.airDateUtc && new Date(e.airDateUtc).getTime() === target
             );
+            const arrivedEarly = episodes.some(
+              (e) =>
+                !!e.scheduledAirDateUtc &&
+                new Date(e.scheduledAirDateUtc).getTime() === target
+            );
+            if (matches.length === 0 && arrivedEarly) {
+              const upcoming = episodes
+                .filter(
+                  (e) =>
+                    e.seasonNumber > 0 &&
+                    !!e.airDateUtc &&
+                    isAirDateUpcoming(e.airDateUtc)
+                )
+                .sort(
+                  (a, b) =>
+                    new Date(a.airDateUtc as string).getTime() -
+                      new Date(b.airDateUtc as string).getTime() ||
+                    a.seasonNumber - b.seasonNumber ||
+                    a.episodeNumber - b.episodeNumber
+                )[0];
+              if (!upcoming) continue;
+              const airDate = upcoming.airDateUtc as string;
+              return {
+                kind: 'found',
+                episode: {
+                  nextEpisodeAirDate: airDate,
+                  nextSeasonAirDate:
+                    upcoming.episodeNumber === 1 ? airDate : undefined,
+                  seasonNumber: upcoming.seasonNumber,
+                  episodeNumber: upcoming.episodeNumber,
+                },
+              };
+            }
             const next = matches
               .filter((e) => e.seasonNumber > 0)
               .sort(
