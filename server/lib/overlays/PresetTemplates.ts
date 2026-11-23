@@ -3477,6 +3477,15 @@ export const PRESET_TEMPLATES: {
         },
         {
           id: 'maintainerr-deleting-text',
+          condition: {
+            sections: [
+              {
+                rules: [
+                  { field: 'daysUntilAction', operator: 'gte', value: 2 },
+                ],
+              },
+            ],
+          },
           layerOrder: 1,
           type: 'variable',
           x: 0,
@@ -3489,6 +3498,56 @@ export const PRESET_TEMPLATES: {
               { type: 'variable', field: 'daysUntilAction' },
               { type: 'text', value: ' DAYS' },
             ],
+            fontSize: 74,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#FFFFFF',
+            textAlign: 'center',
+          },
+        },
+        {
+          id: 'maintainerr-deleting-tomorrow',
+          condition: {
+            sections: [
+              {
+                rules: [{ field: 'daysUntilAction', operator: 'eq', value: 1 }],
+              },
+            ],
+          },
+          layerOrder: 1,
+          type: 'text',
+          x: 0,
+          y: 1382,
+          width: 1000,
+          height: 141,
+          properties: {
+            text: 'DELETING TOMORROW',
+            fontSize: 74,
+            fontFamily: 'Inter',
+            fontWeight: 'bold',
+            fontStyle: 'normal',
+            color: '#FFFFFF',
+            textAlign: 'center',
+          },
+        },
+        {
+          id: 'maintainerr-deleting-today',
+          condition: {
+            sections: [
+              {
+                rules: [{ field: 'daysUntilAction', operator: 'eq', value: 0 }],
+              },
+            ],
+          },
+          layerOrder: 1,
+          type: 'text',
+          x: 0,
+          y: 1382,
+          width: 1000,
+          height: 141,
+          properties: {
+            text: 'DELETING TODAY',
             fontSize: 74,
             fontFamily: 'Inter',
             fontWeight: 'bold',
