@@ -315,6 +315,10 @@ export interface OverlayRenderContext {
   daysSinceLastFinale?: number;
   nextEpisodeDownloaded?: boolean;
   nextSeasonDownloaded?: boolean;
+  nextUndownloadedEpisodeDate?: string;
+  daysUntilNextUndownloadedEpisode?: number;
+  nextUndownloadedSeasonNumber?: number;
+  nextUndownloadedEpisodeNumber?: number;
 
   totalSeasons?: number;
   seasonsAvailable?: number;
@@ -727,6 +731,26 @@ export const AVAILABLE_VARIABLES = {
       label: 'Next Season Already Downloaded (TV) - Show Poster',
       example: 'false',
     },
+    {
+      field: 'nextUndownloadedEpisodeDate',
+      label: 'Next Undownloaded Episode Date (TV) - Show Poster',
+      example: 'DEC 07',
+    },
+    {
+      field: 'daysUntilNextUndownloadedEpisode',
+      label: 'Days Until Next Undownloaded Episode (TV) - Show Poster',
+      example: '11',
+    },
+    {
+      field: 'nextUndownloadedSeasonNumber',
+      label: 'Next Undownloaded Season Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'nextUndownloadedEpisodeNumber',
+      label: 'Next Undownloaded Episode Number (TV) - Show Poster',
+      example: '3',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
@@ -1135,6 +1159,26 @@ export const CONDITION_FIELD_CATEGORIES = {
       label: 'Next Season Already Downloaded (TV) - Show Poster',
       example: 'false',
     },
+    {
+      field: 'nextUndownloadedEpisodeDate',
+      label: 'Next Undownloaded Episode Date (TV) - Show Poster',
+      example: 'DEC 07',
+    },
+    {
+      field: 'daysUntilNextUndownloadedEpisode',
+      label: 'Days Until Next Undownloaded Episode (TV) - Show Poster',
+      example: '11',
+    },
+    {
+      field: 'nextUndownloadedSeasonNumber',
+      label: 'Next Undownloaded Season Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'nextUndownloadedEpisodeNumber',
+      label: 'Next Undownloaded Episode Number (TV) - Show Poster',
+      example: '3',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
@@ -1430,6 +1474,10 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     daysSinceLastFinale: 300,
     nextEpisodeDownloaded: false,
     nextSeasonDownloaded: false,
+    nextUndownloadedEpisodeDate: '2025-02-19T01:00:00Z',
+    daysUntilNextUndownloadedEpisode: 11,
+    nextUndownloadedSeasonNumber: 1,
+    nextUndownloadedEpisodeNumber: 3,
     daysAgo: 0,
     isMonitored: true,
     inSonarr: true,

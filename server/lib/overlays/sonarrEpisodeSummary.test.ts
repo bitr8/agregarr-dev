@@ -348,6 +348,7 @@ describe('SONARR_EPISODE_SUMMARY_FIELDS', () => {
           seasonNumber: 5,
           episodeNumber: 1,
           airDateUtc: '2026-11-28T10:00:00Z',
+          monitored: true,
         },
       ])
     );

@@ -92,13 +92,17 @@ describe('usesSonarrNextEpisode', () => {
 });
 
 describe('usesSonarrEpisodeSummary', () => {
-  it.each(['nextEpisodeDownloaded', 'nextSeasonDownloaded'])(
-    'is on for %s',
-    (field) => {
-      expect(usesSonarrEpisodeSummary(new Set([field]))).toBe(true);
-      expect(shouldSkipOnReleaseDateFetchFailure(new Set([field]))).toBe(true);
-    }
-  );
+  it.each([
+    'nextEpisodeDownloaded',
+    'nextSeasonDownloaded',
+    'nextUndownloadedEpisodeDate',
+    'daysUntilNextUndownloadedEpisode',
+    'nextUndownloadedSeasonNumber',
+    'nextUndownloadedEpisodeNumber',
+  ])('is on for %s', (field) => {
+    expect(usesSonarrEpisodeSummary(new Set([field]))).toBe(true);
+    expect(shouldSkipOnReleaseDateFetchFailure(new Set([field]))).toBe(true);
+  });
 
   it('is off for a library that reads none of them', () => {
     expect(usesSonarrEpisodeSummary(new Set(['daysUntilNextSeason']))).toBe(

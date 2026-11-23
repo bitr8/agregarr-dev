@@ -364,3 +364,102 @@ describe('two Sonarr instances', () => {
     expect((await fetchNextEpisodeFromSonarr(399731)).kind).toBe('failed');
   });
 });
+
+describe('next undownloaded episode', () => {
+  const DAY = 86400000;
+  const row = (
+    episodeNumber: number,
+    inDays: number,
+    extra: Partial<SonarrEpisodeRow> = {}
+  ): SonarrEpisodeRow => ({
+    seasonNumber: 1,
+    episodeNumber,
+    airDateUtc: new Date(Date.now() + inDays * DAY).toISOString(),
+    hasFile: false,
+    monitored: true,
+    ...extra,
+  });
+
+  it('skips the next episode when it has a file: E2 in 4 days downloaded, E3 in 11 days missing', () => {
+    const s = summariseSonarrEpisodes([
+      row(1, -3, { hasFile: true }),
+      row(2, 4, { hasFile: true }),
+      row(3, 11),
+    ]);
+    expect(s.nextEpisodeDownloaded).toBe(true);
+    expect(s.daysUntilNextUndownloadedEpisode).toBe(11);
+    expect(s.nextUndownloadedSeasonNumber).toBe(1);
+    expect(s.nextUndownloadedEpisodeNumber).toBe(3);
+    expect(s.nextUndownloadedEpisodeDate).toBe(
+      new Date(Date.now() + 11 * DAY).toISOString()
+    );
+  });
+
+  it('skips an unmonitored episode', () => {
+    const s = summariseSonarrEpisodes([
+      row(2, 4, { hasFile: true }),
+      row(3, 11, { monitored: false }),
+      row(4, 18),
+    ]);
+    expect(s.nextUndownloadedEpisodeNumber).toBe(4);
+    expect(s.daysUntilNextUndownloadedEpisode).toBe(18);
+  });
+
+  it('an undownloaded episode scheduled today is 0 all day, past its air time too', () => {
+    const rows = [
+      {
+        ...row(5, 0),
+        airDateUtc: '2026-11-22T09:00:00Z', // 20:00 AEDT
+      },
+      row(6, 7),
+    ];
+    for (const [now, days] of [
+      ['2026-11-21T12:00:00Z', 1], // 23:00 AEDT the day before
+      ['2026-11-21T14:00:00Z', 0], // 01:00 AEDT
+      ['2026-11-22T12:59:00Z', 0], // 23:59 AEDT, after air time
+    ] as const) {
+      vi.setSystemTime(new Date(now));
+      expect(
+        summariseSonarrEpisodes(rows).daysUntilNextUndownloadedEpisode
+      ).toBe(days);
+    }
+    vi.setSystemTime(new Date('2026-11-22T13:01:00Z'));
+    expect(summariseSonarrEpisodes(rows).nextUndownloadedEpisodeNumber).toBe(6);
+  });
+
+  it('is undefined when every upcoming episode is downloaded, unmonitored, or already aired', () => {
+    const s = summariseSonarrEpisodes([
+      row(1, -9),
+      row(2, 4, { hasFile: true }),
+      row(3, 11, { monitored: false }),
+      { seasonNumber: 0, episodeNumber: 1, airDateUtc: row(1, 2).airDateUtc },
+      { ...row(4, 20), airDateUtc: undefined },
+    ]);
+    expect(s.nextUndownloadedEpisodeDate).toBeUndefined();
+    expect(s.daysUntilNextUndownloadedEpisode).toBeUndefined();
+    expect(s.nextUndownloadedSeasonNumber).toBeUndefined();
+    expect(s.nextUndownloadedEpisodeNumber).toBeUndefined();
+  });
+
+  it('is empty for a show Sonarr does not track', async () => {
+    instances.hd.series = [];
+    expect(await fetchSonarrEpisodeContext(1, 399731)).toEqual({});
+  });
+
+  it('a file on the second instance counts as downloaded', async () => {
+    setHosts(TWO_HOSTS);
+    const pre = (extra: Partial<SonarrEpisodeRow>) => [
+      { ...e1(false), monitored: true, ...extra },
+      { ...e2(), monitored: true },
+    ];
+    instances = {
+      hd: { series: [SERIES()], episodes: pre({}) },
+      uhd: { series: [SERIES()], episodes: pre({ hasFile: true }) },
+    };
+    for (const hosts of [TWO_HOSTS, [...TWO_HOSTS].reverse()]) {
+      setHosts(hosts);
+      const ctx = await fetchSonarrEpisodeContext(1, 399731);
+      expect(ctx.nextUndownloadedEpisodeNumber).toBe(2);
+    }
+  });
+});

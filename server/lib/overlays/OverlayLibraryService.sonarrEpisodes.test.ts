@@ -274,4 +274,52 @@ describe('scheduled air dates and call budget', () => {
       )
     ).toBe(true);
   });
+
+  it('next undownloaded episode skips the downloaded next episode, in the same context', async () => {
+    const DAY = 86400000;
+    const at = (days: number) =>
+      new Date(Date.now() + days * DAY).toISOString();
+    mockGetSeries.mockResolvedValue([
+      { id: 66, tvdbId: 399731, monitored: true, nextAiring: at(4) },
+    ]);
+    mockGetEpisodes.mockResolvedValue([
+      {
+        seasonNumber: 1,
+        episodeNumber: 1,
+        airDateUtc: at(-3),
+        hasFile: true,
+        monitored: true,
+      },
+      {
+        seasonNumber: 1,
+        episodeNumber: 2,
+        airDateUtc: at(4),
+        hasFile: true,
+        monitored: true,
+      },
+      {
+        seasonNumber: 1,
+        episodeNumber: 3,
+        airDateUtc: at(11),
+        hasFile: false,
+        monitored: true,
+      },
+    ]);
+    const { config } = await run([
+      'daysUntilNextEpisode',
+      'nextEpisodeDownloaded',
+      'daysUntilNextUndownloadedEpisode',
+      'nextUndownloadedSeasonNumber',
+      'nextUndownloadedEpisodeNumber',
+    ]);
+    expect(config?.context).toMatchObject({
+      daysUntilNextEpisode: 4,
+      nextEpisodeDownloaded: true,
+      daysUntilNextUndownloadedEpisode: 11,
+      nextUndownloadedSeasonNumber: 1,
+      nextUndownloadedEpisodeNumber: 3,
+    });
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
 });

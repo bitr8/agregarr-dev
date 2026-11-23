@@ -13,6 +13,7 @@ export interface SonarrEpisodeRow {
   airDateUtc?: string;
   finaleType?: string | null;
   hasFile?: boolean;
+  monitored?: boolean;
 }
 
 export type SonarrEpisodeSummary = {
@@ -35,6 +36,10 @@ export type SonarrEpisodeSummary = {
   daysSinceLastFinale?: number;
   nextEpisodeDownloaded?: boolean;
   nextSeasonDownloaded?: boolean;
+  nextUndownloadedEpisodeDate?: string;
+  daysUntilNextUndownloadedEpisode?: number;
+  nextUndownloadedSeasonNumber?: number;
+  nextUndownloadedEpisodeNumber?: number;
 };
 
 export const SONARR_EPISODE_SUMMARY_FIELDS = [
@@ -57,6 +62,10 @@ export const SONARR_EPISODE_SUMMARY_FIELDS = [
   'daysSinceLastFinale',
   'nextEpisodeDownloaded',
   'nextSeasonDownloaded',
+  'nextUndownloadedEpisodeDate',
+  'daysUntilNextUndownloadedEpisode',
+  'nextUndownloadedSeasonNumber',
+  'nextUndownloadedEpisodeNumber',
 ] as const satisfies readonly (keyof SonarrEpisodeSummary)[];
 
 interface DatedEpisode {
@@ -69,6 +78,7 @@ interface DatedEpisode {
   aired: boolean;
   finaleType?: SonarrFinaleType;
   hasFile: boolean;
+  monitored: boolean;
 }
 
 const byAirOrder = (a: DatedEpisode, b: DatedEpisode) =>
@@ -92,6 +102,7 @@ export function summariseSonarrEpisodes(
     if (existing) {
       existing.finaleType ??= finaleType;
       existing.hasFile ||= !!e.hasFile;
+      existing.monitored ||= !!e.monitored;
       continue;
     }
     const day = toServerCalendarDate(e.airDateUtc);
@@ -105,6 +116,7 @@ export function summariseSonarrEpisodes(
       aired: instant <= now,
       finaleType,
       hasFile: !!e.hasFile,
+      monitored: !!e.monitored,
     });
   }
   const dated = [...byKey.values()].sort(byAirOrder);
@@ -137,6 +149,16 @@ export function summariseSonarrEpisodes(
     ).length;
     summary.nextEpisodeDownloaded = next.hasFile;
     if (next.episode === 1) summary.nextSeasonDownloaded = next.hasFile;
+  }
+
+  const undownloaded = dated.find(
+    (e) => e.daysSince <= 0 && e.monitored && !e.hasFile
+  );
+  if (undownloaded) {
+    summary.nextUndownloadedEpisodeDate = undownloaded.airDateUtc;
+    summary.daysUntilNextUndownloadedEpisode = Math.abs(undownloaded.daysSince);
+    summary.nextUndownloadedSeasonNumber = undownloaded.season;
+    summary.nextUndownloadedEpisodeNumber = undownloaded.episode;
   }
 
   const nextFinale = dated.find((e) => e.finaleType && e.daysSince <= 0);
@@ -174,6 +196,7 @@ export function mergeSonarrEpisodes<T extends SonarrEpisodeRow>(
       ...existing,
       finaleType: existing.finaleType ?? e.finaleType,
       hasFile: existing.hasFile || e.hasFile,
+      monitored: existing.monitored || e.monitored,
     });
   }
   return [...byKey.values()];

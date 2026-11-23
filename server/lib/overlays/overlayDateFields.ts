@@ -11,6 +11,7 @@ export const OVERLAY_DATE_FIELDS: readonly string[] = [
   'lastPlayed',
   'dateAdded',
   'lastEpisodeAddedDate',
+  'nextUndownloadedEpisodeDate',
 ];
 
 export function isOverlayDateField(field: string | undefined): boolean {

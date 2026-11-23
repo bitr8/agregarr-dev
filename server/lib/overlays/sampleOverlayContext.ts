@@ -216,6 +216,12 @@ export function createSampleOverlayContext(
     context.daysSinceLastFinale = 300;
     context.nextEpisodeDownloaded = false;
     context.nextSeasonDownloaded = false;
+    context.nextUndownloadedEpisodeDate = new Date(
+      Date.now() + 7 * 86400000
+    ).toISOString();
+    context.daysUntilNextUndownloadedEpisode = 7;
+    context.nextUndownloadedSeasonNumber = 2;
+    context.nextUndownloadedEpisodeNumber = 6;
     // Only movies get a theatrical+90 estimate, so deriveReleaseDateContext
     // leaves this undefined for shows. Previewing it as false would let a
     // condition match here and never match live.
