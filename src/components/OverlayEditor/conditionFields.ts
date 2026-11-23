@@ -27,6 +27,9 @@ export const NUMERIC_FIELDS: ReadonlySet<string> = new Set([
   'nextFinaleSeasonNumber',
   'nextFinaleEpisodeNumber',
   'daysSinceLastFinale',
+  'daysUntilNextUndownloadedEpisode',
+  'nextUndownloadedSeasonNumber',
+  'nextUndownloadedEpisodeNumber',
   'daysUntilNextEpisode',
   'daysUntilAction',
   'seasonNumber',
@@ -82,6 +85,8 @@ export const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   'rtVerifiedHot',
   'hasSubtitles',
   'isEstimatedReleaseDate',
+  'nextEpisodeDownloaded',
+  'nextSeasonDownloaded',
   'showHdr',
   'showDolbyVision',
 ]);

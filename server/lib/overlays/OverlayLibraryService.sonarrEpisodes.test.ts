@@ -28,10 +28,12 @@ vi.mock('@server/api/themoviedb', () => ({
 
 const mockGetSeries = vi.fn();
 const mockGetEpisodes = vi.fn();
+const mockGetEpisodeFile = vi.fn();
 vi.mock('@server/api/servarr/sonarr', () => ({
   default: class {
     getSeries = mockGetSeries;
     getEpisodesBySeries = mockGetEpisodes;
+    getEpisodeFile = mockGetEpisodeFile;
     getTags = () => Promise.resolve([]);
   },
 }));
@@ -44,6 +46,8 @@ vi.mock('@server/utils/metadataHashing', async (importOriginal) => ({
 
 import type { calculateOverlayInputHash } from '@server/utils/metadataHashing';
 import { overlayLibraryService } from './OverlayLibraryService';
+import { evaluateCondition } from './OverlayTemplateRenderer';
+import { PRESET_TEMPLATES } from './PresetTemplates';
 
 type Internals = {
   applyOverlaysToItem: (...args: unknown[]) => Promise<unknown>;
@@ -75,14 +79,18 @@ const EPISODES = [
   { seasonNumber: 4, episodeNumber: 2, airDateUtc: '2026-11-30T02:00:00Z' },
 ];
 
-const templateReading = (field: string) => ({
+const templateReading = (fieldOrFields: string | string[]) => ({
   id: 1,
   getTags: () => ['main'],
   getTemplateData: () => ({
     elements: [
       {
         type: 'variable',
-        properties: { segments: [{ type: 'variable', field }] },
+        properties: {
+          segments: [fieldOrFields]
+            .flat()
+            .map((field) => ({ type: 'variable', field })),
+        },
       },
     ],
   }),
@@ -101,8 +109,19 @@ const show = {
   childCount: 4,
 };
 
-const run = async (field: string) => {
-  svc.requiredContextFieldsByLibrary.set('lib', new Set([field]));
+const run = async (
+  fieldOrFields: string | string[],
+  opts: {
+    templates?: unknown[];
+    libraryFields?: string[];
+    item?: Record<string, unknown>;
+  } = {}
+) => {
+  const fields = [fieldOrFields].flat();
+  svc.requiredContextFieldsByLibrary.set(
+    'lib',
+    new Set(opts.libraryFields ?? fields)
+  );
   mockHash.mockImplementation((config: unknown) => {
     throw Object.assign(new Error('captured'), { config });
   });
@@ -110,8 +129,8 @@ const run = async (field: string) => {
   const result = await svc
     .applyOverlaysToItem(
       {},
-      { ...show },
-      [templateReading(field)],
+      { ...show, ...opts.item },
+      opts.templates ?? [templateReading(fields)],
       'show',
       'lib',
       'Lib',
@@ -178,5 +197,203 @@ describe('Sonarr episode fields on show posters', () => {
     expect(before.config?.context.episodesAiringToday).toBe(1);
     expect(after.config?.context.episodesAiringToday).toBe(0);
     expect(hash(after.config as never)).not.toBe(hash(before.config as never));
+  });
+});
+
+describe('scheduled air dates and call budget', () => {
+  const PREMIERE = '2026-11-23T02:00:00Z';
+  const E2 = '2026-11-30T02:00:00Z';
+  const early = [
+    {
+      seasonNumber: 4,
+      episodeNumber: 1,
+      airDateUtc: PREMIERE,
+      hasFile: true,
+      monitored: true,
+      episodeFileId: 501,
+    },
+    {
+      seasonNumber: 4,
+      episodeNumber: 2,
+      airDateUtc: E2,
+      hasFile: false,
+      monitored: true,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.setSystemTime(new Date('2026-11-22T12:45:00Z')); // 23:45 AEDT 22/11
+    mockGetSeries.mockResolvedValue([
+      { id: 66, tvdbId: 399731, monitored: true, nextAiring: PREMIERE },
+    ]);
+    mockGetEpisodes.mockResolvedValue(early);
+    mockGetEpisodeFile.mockResolvedValue({
+      dateAdded: '2026-11-20T08:16:27Z',
+    });
+  });
+
+  it('makes no episode-list or file calls when no schedule field is read', async () => {
+    const { config } = await run('title');
+    expect(config).toBeDefined();
+    expect(mockGetEpisodes).not.toHaveBeenCalled();
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('counts down to a premiere that already has a file, without any file lookup', async () => {
+    const { config } = await run('daysUntilNextSeason');
+    expect(config?.context).toMatchObject({
+      daysUntilNextSeason: 1,
+      nextSeasonAirDate: PREMIERE,
+    });
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('one list and no file lookups for the Sonarr episode fields', async () => {
+    await run(['episodesAiringToday', 'nextSeasonDownloaded']);
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('flags the early premiere and Returning Tomorrow stays off the poster', async () => {
+    const fields = [
+      'daysUntilNextSeason',
+      'seasonNumber',
+      'mediaType',
+      'inSonarr',
+      'isMonitored',
+      'nextSeasonDownloaded',
+    ];
+    const tomorrow = PRESET_TEMPLATES.find(
+      (p) => p.name === 'Returning Tomorrow (Monitored)'
+    );
+    const downloaded = await run(fields);
+    expect(downloaded.config?.context).toMatchObject({
+      daysUntilNextSeason: 1,
+      nextSeasonDownloaded: true,
+      seasonNumber: 4,
+    });
+    expect(
+      evaluateCondition(
+        tomorrow?.applicationCondition,
+        downloaded.config?.context as never
+      )
+    ).toBe(false);
+
+    mockGetEpisodes.mockResolvedValue([
+      { ...early[0], hasFile: false },
+      early[1],
+    ]);
+    svc.sonarrSeriesCache = new Map();
+    const missing = await run(fields);
+    expect(missing.config?.context.nextSeasonDownloaded).toBe(false);
+    expect(
+      evaluateCondition(
+        tomorrow?.applicationCondition,
+        missing.config?.context as never
+      )
+    ).toBe(true);
+  });
+
+  it('next undownloaded episode skips the downloaded next episode, in the same context', async () => {
+    const DAY = 86400000;
+    const at = (days: number) =>
+      new Date(Date.now() + days * DAY).toISOString();
+    mockGetSeries.mockResolvedValue([
+      { id: 66, tvdbId: 399731, monitored: true, nextAiring: at(4) },
+    ]);
+    mockGetEpisodes.mockResolvedValue([
+      {
+        seasonNumber: 1,
+        episodeNumber: 1,
+        airDateUtc: at(-3),
+        hasFile: true,
+        monitored: true,
+      },
+      {
+        seasonNumber: 1,
+        episodeNumber: 2,
+        airDateUtc: at(4),
+        hasFile: true,
+        monitored: true,
+      },
+      {
+        seasonNumber: 1,
+        episodeNumber: 3,
+        airDateUtc: at(11),
+        hasFile: false,
+        monitored: true,
+      },
+    ]);
+    const { config } = await run([
+      'daysUntilNextEpisode',
+      'nextEpisodeDownloaded',
+      'daysUntilNextUndownloadedEpisode',
+      'nextUndownloadedSeasonNumber',
+      'nextUndownloadedEpisodeNumber',
+    ]);
+    expect(config?.context).toMatchObject({
+      daysUntilNextEpisode: 4,
+      nextEpisodeDownloaded: true,
+      daysUntilNextUndownloadedEpisode: 11,
+      nextUndownloadedSeasonNumber: 1,
+      nextUndownloadedEpisodeNumber: 3,
+    });
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('three tracked shows, one with an upcoming episode: the Returning Tomorrow preset costs one list call', async () => {
+    const preset = PRESET_TEMPLATES.find(
+      (p) => p.name === 'Returning Tomorrow (Monitored)'
+    );
+    const template = {
+      id: 1,
+      getTags: () => ['main'],
+      getTemplateData: () => preset?.templateData,
+      getApplicationCondition: () => preset?.applicationCondition,
+    };
+    const { extractUsedContextFields } = await import(
+      '@server/utils/metadataHashing'
+    );
+    const fields = extractUsedContextFields(
+      [preset?.templateData as never],
+      [preset?.applicationCondition]
+    );
+    expect(fields.has('nextSeasonDownloaded')).toBe(true);
+
+    mockGetTvShow.mockImplementation(({ tvId }: { tvId: number }) =>
+      Promise.resolve({
+        name: `Show ${tvId}`,
+        first_air_date: '2020-01-01',
+        external_ids: { tvdb_id: tvId - 100 },
+        seasons: [],
+        ...(tvId === 101
+          ? { next_episode_to_air: TMDB_SHOW.next_episode_to_air }
+          : {}),
+      })
+    );
+    mockGetSeries.mockResolvedValue([
+      { id: 1, tvdbId: 1, monitored: true, nextAiring: PREMIERE },
+      { id: 2, tvdbId: 2, monitored: true },
+      { id: 3, tvdbId: 3, monitored: true },
+    ]);
+    for (const n of [101, 102, 103]) {
+      await run([...fields], {
+        templates: [template],
+        item: { Guid: [{ id: `tmdb://${n}` }] },
+      });
+    }
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodes).toHaveBeenCalledWith(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('season and episode templates in the library do not turn on the show poster episode lists', async () => {
+    const { config } = await run('title', {
+      libraryFields: ['title', 'seasonNumber', 'episodeNumber'],
+    });
+    expect(config).toBeDefined();
+    expect(mockGetEpisodes).not.toHaveBeenCalled();
   });
 });

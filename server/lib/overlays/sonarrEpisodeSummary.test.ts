@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   SONARR_EPISODE_SUMMARY_FIELDS,
+  summariseSonarrEpisodeLists,
   summariseSonarrEpisodes,
   type SonarrEpisodeRow,
 } from './sonarrEpisodeSummary';
@@ -341,7 +342,24 @@ describe('SONARR_EPISODE_SUMMARY_FIELDS', () => {
     vi.useFakeTimers();
     at('2026-11-28T09:00:00Z');
     const produced = Object.keys(
-      summariseSonarrEpisodes([...outlanderBomS2, ...yellowjackets])
+      summariseSonarrEpisodeLists(
+        [
+          [
+            ...outlanderBomS2,
+            ...yellowjackets,
+            {
+              seasonNumber: 5,
+              episodeNumber: 1,
+              airDateUtc: '2026-11-28T10:00:00Z',
+              monitored: true,
+            },
+          ],
+        ],
+        {
+          nextEpisode: { seasonNumber: 5, episodeNumber: 1 },
+          nextSeason: { seasonNumber: 5, episodeNumber: 1 },
+        }
+      )
     );
     vi.useRealTimers();
     expect([...produced].sort()).toEqual(

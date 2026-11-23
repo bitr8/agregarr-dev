@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldSkipOnReleaseDateFetchFailure } from './releaseDateFetchPolicy';
+import {
+  needsSonarrEpisodeList,
+  shouldSkipOnReleaseDateFetchFailure,
+  usesSonarrEpisodeSummary,
+  usesSonarrNextEpisode,
+} from './releaseDateFetchPolicy';
 
 describe('shouldSkipOnReleaseDateFetchFailure', () => {
   it('skips conservatively when required fields are unknown', () => {
@@ -61,5 +66,74 @@ describe('shouldSkipOnReleaseDateFetchFailure', () => {
         new Set(['imdbRating', 'resolution', 'daysUntilNextEpisode'])
       )
     ).toBe(true);
+  });
+});
+
+describe('usesSonarrNextEpisode', () => {
+  it('is on when the fields are unknown', () => {
+    expect(usesSonarrNextEpisode(undefined)).toBe(true);
+  });
+
+  it('is off for a library that reads no schedule field', () => {
+    expect(usesSonarrNextEpisode(new Set(['imdbRating', 'resolution']))).toBe(
+      false
+    );
+    expect(usesSonarrNextEpisode(new Set(['episodesAiringToday']))).toBe(false);
+  });
+
+  it.each([
+    'daysUntilNextSeason',
+    'daysUntilNextEpisode',
+    'nextSeasonAirDate',
+    'seasonNumber',
+    'daysAgo',
+  ])('is on for %s', (field) => {
+    expect(usesSonarrNextEpisode(new Set([field]))).toBe(true);
+  });
+});
+
+describe('usesSonarrEpisodeSummary', () => {
+  it.each([
+    'nextEpisodeDownloaded',
+    'nextSeasonDownloaded',
+    'nextUndownloadedEpisodeDate',
+    'daysUntilNextUndownloadedEpisode',
+    'nextUndownloadedSeasonNumber',
+    'nextUndownloadedEpisodeNumber',
+  ])('is on for %s', (field) => {
+    expect(usesSonarrEpisodeSummary(new Set([field]))).toBe(true);
+    expect(shouldSkipOnReleaseDateFetchFailure(new Set([field]))).toBe(true);
+  });
+
+  it('is off for a library that reads none of them', () => {
+    expect(usesSonarrEpisodeSummary(new Set(['daysUntilNextSeason']))).toBe(
+      false
+    );
+  });
+});
+
+describe('needsSonarrEpisodeList', () => {
+  const flags = new Set(['nextSeasonDownloaded', 'daysUntilNextSeason']);
+
+  it('the downloaded flags alone need the list only when something is upcoming', () => {
+    expect(needsSonarrEpisodeList(flags, false)).toBe(false);
+    expect(needsSonarrEpisodeList(flags, true)).toBe(true);
+  });
+
+  it('any other summary field always needs it', () => {
+    expect(
+      needsSonarrEpisodeList(new Set(['episodesAiringToday']), false)
+    ).toBe(true);
+    expect(
+      needsSonarrEpisodeList(
+        new Set(['nextSeasonDownloaded', 'nextUndownloadedEpisodeNumber']),
+        false
+      )
+    ).toBe(true);
+  });
+
+  it('no summary field never needs it; unknown fields always do', () => {
+    expect(needsSonarrEpisodeList(new Set(['title']), true)).toBe(false);
+    expect(needsSonarrEpisodeList(undefined, false)).toBe(true);
   });
 });

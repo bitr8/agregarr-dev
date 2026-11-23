@@ -37,8 +37,8 @@ import {
 } from './releaseDateContext';
 import {
   mergeSonarrEpisodes,
-  summariseSonarrEpisodes,
-  withEffectiveAirDates,
+  summariseSonarrEpisodeLists,
+  type NextEpisodeTargets,
   type SonarrEpisodeRow,
   type SonarrEpisodeSummary,
 } from './sonarrEpisodeSummary';
@@ -230,9 +230,6 @@ const episodeCaches = new WeakMap<
   Map<string, Promise<SonarrEpisode[]>>
 >();
 
-// Only recently aired or upcoming episodes can have arrived early; older ones skip the file lookup.
-const EARLY_ARRIVAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-
 async function getSonarrEpisodes(
   sonarrSettings: {
     hostname: string;
@@ -249,31 +246,10 @@ async function getSonarrEpisodes(
   const url = `${protocol}://${sonarrSettings.hostname}:${sonarrSettings.port}${
     sonarrSettings.baseUrl || ''
   }/api/v3`;
-  const fetchList = async () => {
-    const api = new SonarrAPI({ url, apiKey: sonarrSettings.apiKey });
-    const rows = await api.getEpisodesBySeries(seriesId);
-    const now = Date.now();
-    const withFiles = await Promise.all(
-      rows.map(async (e): Promise<SonarrEpisode> => {
-        if (
-          !e.hasFile ||
-          !e.episodeFileId ||
-          !e.airDateUtc ||
-          new Date(e.airDateUtc).getTime() <= now - EARLY_ARRIVAL_WINDOW_MS
-        ) {
-          return e;
-        }
-        try {
-          const file = await api.getEpisodeFile(e.episodeFileId);
-          return { ...e, episodeFile: { dateAdded: file.dateAdded } };
-        } catch {
-          // Unknown arrival time: fall back to the scheduled air date rather than failing the show.
-          return e;
-        }
-      })
+  const fetchList = () =>
+    new SonarrAPI({ url, apiKey: sonarrSettings.apiKey }).getEpisodesBySeries(
+      seriesId
     );
-    return withEffectiveAirDates(withFiles);
-  };
   if (!cache) {
     return fetchList();
   }
@@ -1294,12 +1270,6 @@ export interface ReleaseDateInfo {
   tvdbId?: number;
 }
 
-type EarlyArrival = {
-  seasonNumber: number;
-  episodeNumber: number;
-  scheduledAirDateUtc: string;
-};
-
 type SonarrNextEpisode = {
   nextEpisodeAirDate: string;
   nextSeasonAirDate?: string;
@@ -1321,8 +1291,8 @@ type SonarrNextEpisode = {
  *              episode" - a transient outage would otherwise strip a countdown.
  */
 type SonarrNextEpisodeResult =
-  | { kind: 'found'; episode: SonarrNextEpisode; earlyArrived?: EarlyArrival[] }
-  | { kind: 'none'; earlyArrived?: EarlyArrival[] }
+  | { kind: 'found'; episode: SonarrNextEpisode }
+  | { kind: 'none' }
   | { kind: 'failed' };
 
 /**
@@ -1356,7 +1326,8 @@ export async function fetchReleaseDateInfo(
   sonarrCache?: Map<string, SonarrSeries[]>,
   preloadedTmdbReleaseDates?: Map<string, ReleaseDateInfo | null>,
   fetchStatus?: { failed: boolean },
-  useSonarrPremiere = false
+  useSonarrPremiere = false,
+  useSonarrNextEpisode = true
 ): Promise<ReleaseDateInfo | undefined> {
   // Check preloaded data first (batch prefetch optimization)
   if (preloadedTmdbReleaseDates) {
@@ -1385,7 +1356,8 @@ export async function fetchReleaseDateInfo(
         const { info, sonarrFailed } = await applySonarrFirstNextEpisode(
           preloaded,
           preloaded.tvdbId,
-          sonarrCache
+          sonarrCache,
+          useSonarrNextEpisode
         );
         if (sonarrFailed && fetchStatus && !hasUpcomingNextEpisode(info)) {
           // Sonarr blipped and no source has an upcoming date: skip rather than
@@ -1480,8 +1452,12 @@ export async function fetchReleaseDateInfo(
       // show; TMDB is kept otherwise. This subsumes the old date-only "enhance
       // with Sonarr air time" path and the separate Sonarr fallback into one
       // authority (fork#35).
-      const { info, sonarrFailed, earlyArrived } =
-        await applySonarrFirstNextEpisode(tmdbBase, tvdbId, sonarrCache);
+      const { info, sonarrFailed } = await applySonarrFirstNextEpisode(
+        tmdbBase,
+        tvdbId,
+        sonarrCache,
+        useSonarrNextEpisode
+      );
 
       let result: ReleaseDateInfo | undefined;
       if (info.nextEpisodeAirDate) {
@@ -1494,15 +1470,7 @@ export async function fetchReleaseDateInfo(
           .filter((s) => s.season_number > 0) // Exclude specials
           .sort((a, b) => a.season_number - b.season_number);
         for (const season of sortedSeasons) {
-          const premiereArrived = earlyArrived?.some(
-            (a) =>
-              a.seasonNumber === season.season_number && a.episodeNumber === 1
-          );
-          if (
-            season.air_date &&
-            !premiereArrived &&
-            isDateInFuture(season.air_date)
-          ) {
+          if (season.air_date && isDateInFuture(season.air_date)) {
             logger.debug('Using TMDB seasons fallback for next season data', {
               label: 'OverlayContextBuilder',
               tmdbId,
@@ -1588,18 +1556,57 @@ export async function fetchNextEpisodeFromSonarr(
     // because a failed instance could be the one holding the upcoming episode.
     let anyInstanceFailed = false;
 
-    const tracking: {
-      sonarrSettings: (typeof settings.sonarr)[number];
-      series: SonarrSeries;
-    }[] = [];
+    // Check each Sonarr instance
     for (const sonarrSettings of settings.sonarr) {
       if (!sonarrSettings.hostname) {
         continue;
       }
+
       try {
         const allSeries = await getSonarrSeries(sonarrSettings, cache);
         const series = allSeries.find((s) => s.tvdbId === tvdbId);
-        if (series) tracking.push({ sonarrSettings, series });
+
+        if (series && series.nextAiring) {
+          // Only an UPCOMING nextAiring is authoritative. A stale/past nextAiring
+          // (Sonarr not yet advanced past a just-aired episode) must not shadow
+          // another instance that holds the real upcoming episode, so keep
+          // looking rather than returning it.
+          if (isAirDateUpcoming(series.nextAiring)) {
+            const target = new Date(series.nextAiring).getTime();
+            const episodes = await getSonarrEpisodes(
+              sonarrSettings,
+              series.id as number,
+              cache
+            );
+            const matches = episodes.filter(
+              (e) =>
+                !!e.airDateUtc && new Date(e.airDateUtc).getTime() === target
+            );
+            const next = matches
+              .filter((e) => e.seasonNumber > 0)
+              .sort(
+                (a, b) =>
+                  a.seasonNumber - b.seasonNumber ||
+                  a.episodeNumber - b.episodeNumber
+              )[0];
+
+            return {
+              kind: 'found',
+              episode: {
+                nextEpisodeAirDate: series.nextAiring,
+                nextSeasonAirDate:
+                  next?.episodeNumber === 1 ? series.nextAiring : undefined,
+                seasonNumber: next?.seasonNumber,
+                episodeNumber: next?.episodeNumber,
+                numberingUnmatched: matches.length === 0,
+              },
+            };
+          }
+        }
+        // A responding instance without the series, with no upcoming episode, or
+        // with only a stale/past nextAiring, is 'nothing next' for that instance
+        // - no bookkeeping needed; it only matters that no instance FAILED
+        // (checked below).
       } catch (error) {
         anyInstanceFailed = true;
         logger.debug('Failed to check Sonarr instance for next episode', {
@@ -1608,118 +1615,8 @@ export async function fetchNextEpisodeFromSonarr(
           tvdbId,
           error: error instanceof Error ? error.message : String(error),
         });
-      }
-    }
-
-    // Only an UPCOMING nextAiring is authoritative. A stale/past nextAiring
-    // (Sonarr not yet advanced past a just-aired episode) must not shadow
-    // another instance that holds the real upcoming episode.
-    const hasUpcoming = tracking.some(
-      (t) => t.series.nextAiring && isAirDateUpcoming(t.series.nextAiring)
-    );
-    if (!hasUpcoming) {
-      return anyInstanceFailed ? { kind: 'failed' } : { kind: 'none' };
-    }
-
-    // Every tracking instance is read: a file on any instance means the episode
-    // has arrived, whichever instance announced the upcoming air date.
-    const loaded = new Map<SonarrSeries, SonarrEpisode[]>();
-    for (const { sonarrSettings, series } of tracking) {
-      try {
-        loaded.set(
-          series,
-          await getSonarrEpisodes(sonarrSettings, series.id as number, cache)
-        );
-      } catch (error) {
-        anyInstanceFailed = true;
-        logger.debug('Failed to read Sonarr episodes for next episode', {
-          label: 'OverlayContextBuilder',
-          hostname: sonarrSettings.hostname,
-          tvdbId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    const episodes = mergeSonarrEpisodes([...loaded.values()]);
-    const earlyArrived: EarlyArrival[] = episodes
-      .filter(
-        (e) =>
-          e.seasonNumber > 0 &&
-          !!e.scheduledAirDateUtc &&
-          isAirDateUpcoming(e.scheduledAirDateUtc)
-      )
-      .map((e) => ({
-        seasonNumber: e.seasonNumber,
-        episodeNumber: e.episodeNumber,
-        scheduledAirDateUtc: e.scheduledAirDateUtc as string,
-      }));
-    const arrivals = earlyArrived.length > 0 ? { earlyArrived } : {};
-
-    for (const { series } of tracking) {
-      if (
-        !loaded.has(series) ||
-        !series.nextAiring ||
-        !isAirDateUpcoming(series.nextAiring)
-      ) {
         continue;
       }
-      const target = new Date(series.nextAiring).getTime();
-      const matches = episodes.filter(
-        (e) => !!e.airDateUtc && new Date(e.airDateUtc).getTime() === target
-      );
-      const arrivedEarly = episodes.some(
-        (e) =>
-          !!e.scheduledAirDateUtc &&
-          new Date(e.scheduledAirDateUtc).getTime() === target
-      );
-      if (matches.length === 0 && arrivedEarly) {
-        const upcoming = episodes
-          .filter(
-            (e) =>
-              e.seasonNumber > 0 &&
-              !!e.airDateUtc &&
-              isAirDateUpcoming(e.airDateUtc)
-          )
-          .sort(
-            (a, b) =>
-              new Date(a.airDateUtc as string).getTime() -
-                new Date(b.airDateUtc as string).getTime() ||
-              a.seasonNumber - b.seasonNumber ||
-              a.episodeNumber - b.episodeNumber
-          )[0];
-        if (!upcoming) continue;
-        const airDate = upcoming.airDateUtc as string;
-        return {
-          kind: 'found',
-          episode: {
-            nextEpisodeAirDate: airDate,
-            nextSeasonAirDate:
-              upcoming.episodeNumber === 1 ? airDate : undefined,
-            seasonNumber: upcoming.seasonNumber,
-            episodeNumber: upcoming.episodeNumber,
-          },
-          ...arrivals,
-        };
-      }
-      const next = matches
-        .filter((e) => e.seasonNumber > 0)
-        .sort(
-          (a, b) =>
-            a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber
-        )[0];
-
-      return {
-        kind: 'found',
-        episode: {
-          nextEpisodeAirDate: series.nextAiring,
-          nextSeasonAirDate:
-            next?.episodeNumber === 1 ? series.nextAiring : undefined,
-          seasonNumber: next?.seasonNumber,
-          episodeNumber: next?.episodeNumber,
-          numberingUnmatched: matches.length === 0,
-        },
-        ...arrivals,
-      };
     }
 
     // No instance returned a 'found'. If any instance errored, the answer is
@@ -1727,8 +1624,7 @@ export async function fetchNextEpisodeFromSonarr(
     // reporting 'none' here would strip a countdown on a transient outage
     // (fork#35 Mechanism 2). Only when every instance responded is 'none'
     // authoritative.
-    if (anyInstanceFailed) return { kind: 'failed' };
-    return { kind: 'none', ...arrivals };
+    return anyInstanceFailed ? { kind: 'failed' } : { kind: 'none' };
   } catch (error) {
     logger.debug('Failed to fetch next episode from Sonarr', {
       label: 'OverlayContextBuilder',
@@ -1737,33 +1633,6 @@ export async function fetchNextEpisodeFromSonarr(
     });
     return { kind: 'failed' };
   }
-}
-
-// TMDB dates are network-calendar days, often one day before Sonarr's instant.
-function matchesEarlyArrival(
-  base: ReleaseDateInfo,
-  arrivals: EarlyArrival[]
-): boolean {
-  if (
-    !base.nextEpisodeAirDate ||
-    base.seasonNumber === undefined ||
-    base.episodeNumber === undefined
-  ) {
-    return false;
-  }
-  const tmdbDay = toServerCalendarDate(base.nextEpisodeAirDate);
-  return arrivals.some((a) => {
-    if (
-      a.seasonNumber !== base.seasonNumber ||
-      a.episodeNumber !== base.episodeNumber
-    ) {
-      return false;
-    }
-    const day = toServerCalendarDate(a.scheduledAirDateUtc);
-    const prev = new Date(`${day}T00:00:00Z`);
-    prev.setUTCDate(prev.getUTCDate() - 1);
-    return tmdbDay === day || tmdbDay === prev.toISOString().slice(0, 10);
-  });
 }
 
 // TMDB first_air_date is the network's calendar day, a day early east of the US.
@@ -1838,23 +1707,6 @@ export function resolveSonarrFirstNextEpisode(
     };
   }
 
-  if (
-    sonarr.kind === 'none' &&
-    sonarr.earlyArrived &&
-    matchesEarlyArrival(base, sonarr.earlyArrived)
-  ) {
-    return {
-      info: {
-        ...base,
-        nextEpisodeAirDate: undefined,
-        nextSeasonAirDate: undefined,
-        seasonNumber: undefined,
-        episodeNumber: undefined,
-      },
-      sonarrFailed: false,
-    };
-  }
-
   // found-but-past (stale Sonarr) or none: keep TMDB. failed: keep TMDB but flag
   // it so the caller skips only when nothing upcoming exists from any source.
   return { info: base, sonarrFailed: sonarr.kind === 'failed' };
@@ -1869,13 +1721,10 @@ export function resolveSonarrFirstNextEpisode(
 async function applySonarrFirstNextEpisode(
   base: ReleaseDateInfo,
   tvdbId: number | undefined,
-  sonarrCache?: Map<string, SonarrSeries[]>
-): Promise<{
-  info: ReleaseDateInfo;
-  sonarrFailed: boolean;
-  earlyArrived?: EarlyArrival[];
-}> {
-  if (!tvdbId) {
+  sonarrCache?: Map<string, SonarrSeries[]>,
+  useSonarrNextEpisode = true
+): Promise<{ info: ReleaseDateInfo; sonarrFailed: boolean }> {
+  if (!tvdbId || !useSonarrNextEpisode) {
     return { info: base, sonarrFailed: false };
   }
 
@@ -1904,10 +1753,7 @@ async function applySonarrFirstNextEpisode(
     }
   }
 
-  return {
-    ...resolveSonarrFirstNextEpisode(base, sonarr),
-    earlyArrived: sonarr.kind === 'failed' ? undefined : sonarr.earlyArrived,
-  };
+  return resolveSonarrFirstNextEpisode(base, sonarr);
 }
 
 /**
@@ -1965,6 +1811,30 @@ async function applySonarrLastPremiere(
   };
 }
 
+/** The episodes the next-episode and next-season countdowns resolved to, by season and episode number. */
+export function nextEpisodeTargets(
+  info: ReleaseDateInfo | undefined
+): NextEpisodeTargets {
+  if (
+    !info ||
+    info.seasonNumber === undefined ||
+    info.episodeNumber === undefined
+  ) {
+    return {};
+  }
+  const { seasonNumber, episodeNumber } = info;
+  return {
+    nextEpisode:
+      info.nextEpisodeAirDate && isAirDateUpcoming(info.nextEpisodeAirDate)
+        ? { seasonNumber, episodeNumber }
+        : undefined,
+    nextSeason:
+      info.nextSeasonAirDate && isAirDateUpcoming(info.nextSeasonAirDate)
+        ? { seasonNumber, episodeNumber: 1 }
+        : undefined,
+  };
+}
+
 /**
  * Today's, last and next episode plus finale fields from Sonarr's episode list.
  * Untracked shows get nothing; a failed instance flags fetchStatus (fork#35).
@@ -1973,7 +1843,8 @@ export async function fetchSonarrEpisodeContext(
   tmdbId: number,
   tvdbId: number | undefined,
   sonarrCache?: Map<string, SonarrSeries[]>,
-  fetchStatus?: { failed: boolean }
+  fetchStatus?: { failed: boolean },
+  targets?: NextEpisodeTargets
 ): Promise<SonarrEpisodeSummary> {
   const instances = (getSettings().sonarr ?? []).filter((s) => s.hostname);
   if (instances.length === 0) return {};
@@ -1989,18 +1860,22 @@ export async function fetchSonarrEpisodeContext(
   }
   if (!resolvedTvdbId) return {};
   let tracked = false;
-  const episodes: SonarrEpisode[] = [];
+  const lists: SonarrEpisode[][] = [];
   for (const sonarrSettings of instances) {
     try {
       const allSeries = await getSonarrSeries(sonarrSettings, sonarrCache);
       const series = allSeries.find((s) => s.tvdbId === resolvedTvdbId);
       if (!series) continue;
-      episodes.push(
-        ...(await getSonarrEpisodes(
-          sonarrSettings,
-          series.id as number,
-          sonarrCache
-        ))
+      const rows = await getSonarrEpisodes(
+        sonarrSettings,
+        series.id as number,
+        sonarrCache
+      );
+      lists.push(
+        rows.map((e) => ({
+          ...e,
+          monitored: !!e.monitored && series.monitored,
+        }))
       );
       tracked = true;
     } catch (error) {
@@ -2014,9 +1889,7 @@ export async function fetchSonarrEpisodeContext(
       return {};
     }
   }
-  return tracked
-    ? summariseSonarrEpisodes(mergeSonarrEpisodes([episodes]))
-    : {};
+  return tracked ? summariseSonarrEpisodeLists(lists, targets) : {};
 }
 
 // Sonarr episodeCount = (monitored AND aired) OR hasFile, so this survives unmonitored deletes

@@ -10,8 +10,8 @@ describe('overlay date fields', () => {
     expect(isOverlayDateField('lastFinaleDate')).toBe(true);
   });
 
-  it('lists the twelve fields the format dropdown is offered on', () => {
-    expect(OVERLAY_DATE_FIELDS).toHaveLength(12);
+  it('lists the thirteen fields the format dropdown is offered on', () => {
+    expect(OVERLAY_DATE_FIELDS).toHaveLength(13);
   });
 
   it('rejects other fields', () => {
