@@ -195,3 +195,89 @@ describe('Sonarr premiere edge cases', () => {
     expect(ctx.daysAgoNextSeason).toBe(644);
   });
 });
+
+// Blade Runner 2099, live TMDB and Sonarr 23/11/2026: TMDB first_air_date is the
+// US day (24/11); all eight episodes drop 21:00 ET = 13:00 AEDT 25/11.
+describe.each([
+  ['direct', false],
+  ['preloaded', true],
+])('series premiere releaseDate from Sonarr (%s path)', (_name, preload) => {
+  const DROP = '2026-11-25T02:00:00Z';
+  const episodes = Array.from({ length: 8 }, (_, i) => ({
+    seasonNumber: 1,
+    episodeNumber: i + 1,
+    airDateUtc: DROP,
+  }));
+
+  async function at(iso: string) {
+    const aired = new Date(iso) >= new Date(DROP);
+    mockGetTvShow.mockResolvedValue({
+      first_air_date: '2026-11-24',
+      external_ids: { tvdb_id: 424855 },
+      next_episode_to_air: aired
+        ? undefined
+        : { season_number: 1, episode_number: 1, air_date: '2026-11-24' },
+      seasons: [{ season_number: 1, air_date: '2026-11-24' }],
+    });
+    mockGetSeries.mockResolvedValue([
+      { id: 1099, tvdbId: 424855, nextAiring: aired ? undefined : DROP },
+    ]);
+    mockGetEpisodes.mockResolvedValue(episodes);
+    vi.setSystemTime(new Date(iso));
+    const preloadMap = preload
+      ? new Map([
+          [
+            '171802:show',
+            {
+              releaseDate: '2026-11-24',
+              tvdbId: 424855,
+              ...(aired
+                ? {}
+                : {
+                    nextEpisodeAirDate: '2026-11-24',
+                    nextSeasonAirDate: '2026-11-24',
+                    seasonNumber: 1,
+                    episodeNumber: 1,
+                  }),
+            },
+          ],
+        ])
+      : undefined;
+    const info = await fetchReleaseDateInfo(
+      171802,
+      'show',
+      new Map(),
+      preloadMap,
+      { failed: false },
+      usesSonarrPremiere(new Set(['daysUntilRelease']))
+    );
+    if (!info) throw new Error('expected release info');
+    return deriveReleaseDateContext(info);
+  }
+
+  it('23/11 00:06 AEDT: 2 days out, not 1', async () => {
+    expect((await at('2026-11-22T13:06:00Z')).daysUntilRelease).toBe(2);
+  });
+
+  it('24/11: tomorrow, not today', async () => {
+    expect((await at('2026-11-23T13:06:00Z')).daysUntilRelease).toBe(1);
+  });
+
+  it('25/11 after the drop: released today, not yesterday', async () => {
+    const ctx = await at('2026-11-25T03:00:00Z');
+    expect(ctx.daysAgo).toBe(0);
+    expect(ctx.releaseDate).toBe('2026-11-25');
+  });
+
+  it('26/11: released 1 day ago', async () => {
+    expect((await at('2026-11-25T13:06:00Z')).daysAgo).toBe(1);
+  });
+});
+
+describe('usesSonarrPremiere for release fields', () => {
+  it('fetches premieres when a library reads releaseDate fields', () => {
+    expect(usesSonarrPremiere(new Set(['daysUntilRelease']))).toBe(true);
+    expect(usesSonarrPremiere(new Set(['daysAgo']))).toBe(true);
+    expect(usesSonarrPremiere(new Set(['releaseDate']))).toBe(true);
+  });
+});

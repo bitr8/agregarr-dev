@@ -95,6 +95,18 @@ export function latestAiredSeasonDate(
   return latest;
 }
 
+/** S01E01 air instant in a Sonarr episode list. */
+export function seriesPremiereAirDate(
+  episodes: {
+    seasonNumber: number;
+    episodeNumber: number;
+    airDateUtc?: string;
+  }[]
+): string | undefined {
+  return episodes.find((e) => e.seasonNumber === 1 && e.episodeNumber === 1)
+    ?.airDateUtc;
+}
+
 /** Latest aired season-premiere instant in a Sonarr episode list; specials and undated episodes ignored. */
 export function latestAiredPremiere(
   episodes: {

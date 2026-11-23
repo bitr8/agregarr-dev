@@ -57,11 +57,16 @@ export function shouldSkipOnReleaseDateFetchFailure(
   ].some((field) => requiredFields.has(field));
 }
 
-/** Whether Sonarr's premiere list should source daysAgoNextSeason; undefined fields = could need it. */
+/** Whether Sonarr's premiere list should source daysAgoNextSeason and a show's releaseDate; undefined fields = could need it. */
 export function usesSonarrPremiere(
   requiredFields: ReadonlySet<string> | undefined
 ): boolean {
-  return !requiredFields || requiredFields.has('daysAgoNextSeason');
+  return (
+    !requiredFields ||
+    ['daysAgoNextSeason', 'releaseDate', 'daysUntilRelease', 'daysAgo'].some(
+      (field) => requiredFields.has(field)
+    )
+  );
 }
 
 /** Whether a library reads any Sonarr episode-list field; undefined fields = could need it. */

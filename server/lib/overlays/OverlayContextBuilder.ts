@@ -32,6 +32,7 @@ import {
   latestAiredPremiere,
   latestAiredSeasonDate,
   movieReleaseInfoFromTmdb,
+  seriesPremiereAirDate,
 } from './releaseDateContext';
 import {
   mergeSonarrEpisodes,
@@ -1771,10 +1772,14 @@ function isUpcomingSeriesPremiere(
 ): boolean {
   if (ep.numberingUnmatched || ep.seasonNumber !== 1 || ep.episodeNumber !== 1)
     return false;
-  if (!releaseDate) return true;
+  return isSamePremiere(releaseDate, ep.nextEpisodeAirDate);
+}
+
+function isSamePremiere(tmdbDate: string | undefined, sonarrDate: string) {
+  if (!tmdbDate) return true;
   const gapMs = Math.abs(
-    new Date(toServerCalendarDate(releaseDate)).getTime() -
-      new Date(toServerCalendarDate(ep.nextEpisodeAirDate)).getTime()
+    new Date(toServerCalendarDate(tmdbDate)).getTime() -
+      new Date(toServerCalendarDate(sonarrDate)).getTime()
   );
   return gapMs <= 2 * 24 * 60 * 60 * 1000;
 }
@@ -1952,9 +1957,14 @@ async function applySonarrLastPremiere(
     return info;
   }
   if (!tracked) return info;
+  const episodes = mergeSonarrEpisodes(episodeLists);
+  const premiere = seriesPremiereAirDate(episodes);
   return {
     ...info,
-    lastSeasonAirDate: latestAiredPremiere(mergeSonarrEpisodes(episodeLists)),
+    ...(premiere && isSamePremiere(info.releaseDate, premiere)
+      ? { releaseDate: toServerCalendarDate(premiere) }
+      : {}),
+    lastSeasonAirDate: latestAiredPremiere(episodes),
     lastSeasonFromSonarr: true,
   };
 }
