@@ -359,6 +359,11 @@ export interface OverlayRenderContext {
   episodeCount?: number;
   episode4kCount?: number;
   episode4kPercent?: number;
+  episodeHdCount?: number;
+  episodeHdPercent?: number;
+  episodeSdCount?: number;
+  episodeSdPercent?: number;
+  episodeUnknownResolutionCount?: number;
   episodeHdrCount?: number;
   episodeHdrPercent?: number;
   episodeDvCount?: number;
@@ -747,6 +752,15 @@ export const AVAILABLE_VARIABLES = {
     { field: 'episodeCount', label: 'Episode Count', example: '24' },
     { field: 'episode4kCount', label: '4K Episode Count', example: '18' },
     { field: 'episode4kPercent', label: '4K Episode %', example: '75' },
+    { field: 'episodeHdCount', label: 'HD Episode Count', example: '6' },
+    { field: 'episodeHdPercent', label: 'HD Episode %', example: '25' },
+    { field: 'episodeSdCount', label: 'SD Episode Count', example: '0' },
+    { field: 'episodeSdPercent', label: 'SD Episode %', example: '0' },
+    {
+      field: 'episodeUnknownResolutionCount',
+      label: 'Unknown Resolution Episode Count',
+      example: '0',
+    },
     { field: 'episodeHdrCount', label: 'HDR Episode Count', example: '16' },
     { field: 'episodeHdrPercent', label: 'HDR Episode %', example: '67' },
     { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
@@ -1139,6 +1153,15 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'episodeCount', label: 'Episode Count', example: '24' },
     { field: 'episode4kCount', label: '4K Episode Count', example: '18' },
     { field: 'episode4kPercent', label: '4K Episode %', example: '75' },
+    { field: 'episodeHdCount', label: 'HD Episode Count', example: '6' },
+    { field: 'episodeHdPercent', label: 'HD Episode %', example: '25' },
+    { field: 'episodeSdCount', label: 'SD Episode Count', example: '0' },
+    { field: 'episodeSdPercent', label: 'SD Episode %', example: '0' },
+    {
+      field: 'episodeUnknownResolutionCount',
+      label: 'Unknown Resolution Episode Count',
+      example: '0',
+    },
     { field: 'episodeHdrCount', label: 'HDR Episode Count', example: '16' },
     { field: 'episodeHdrPercent', label: 'HDR Episode %', example: '67' },
     { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
@@ -1433,6 +1456,11 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     episodeCount: 62,
     episode4kCount: 0,
     episode4kPercent: 0,
+    episodeHdCount: 0,
+    episodeHdPercent: 0,
+    episodeSdCount: 0,
+    episodeSdPercent: 0,
+    episodeUnknownResolutionCount: 0,
     episodeHdrCount: 0,
     episodeHdrPercent: 0,
     episodeDvCount: 0,

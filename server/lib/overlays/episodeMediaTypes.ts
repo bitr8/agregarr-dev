@@ -9,7 +9,7 @@ export interface EpisodeMediaInfo {
   seasonRatingKey: string;
   seasonNumber: number;
   episodeNumber: number;
-  resolution: string; // '4k', '1080', '720', 'sd'
+  resolution: string; // '4k', '1080', '720', 'sd', 'unknown'
   hdr: boolean;
   dolbyVision: boolean;
   dolbyVisionProfile?: number;
@@ -48,6 +48,11 @@ export interface AggregatedMediaInfo {
   episodeCount: number;
   episode4kCount: number;
   episode4kPercent: number;
+  episodeHdCount: number;
+  episodeHdPercent: number;
+  episodeSdCount: number;
+  episodeSdPercent: number;
+  episodeUnknownResolutionCount: number;
   episodeHdrCount: number;
   episodeHdrPercent: number;
   episodeDvCount: number;

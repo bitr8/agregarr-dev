@@ -4560,8 +4560,10 @@ class OverlayLibraryService {
     const {
       EpisodeMediaAggregator,
       mergedAddedAt,
+      mergedResolution,
       mergedVersionCount,
       needsAddedAtResave,
+      needsResolutionResave,
       needsVersionCountResave,
     } = await import('./EpisodeMediaAggregator');
     const { EpisodeMediaCacheService, keepCachedDetail } = await import(
@@ -4622,6 +4624,9 @@ class OverlayLibraryService {
     const freshVersionCountByKey = new Map(
       freshLightweight.map((ep) => [ep.ratingKey, ep.versionCount])
     );
+    const freshResolutionByKey = new Map(
+      freshLightweight.map((ep) => [ep.ratingKey, ep.resolution])
+    );
     const withFreshAddedAt = (eps: EpisodeMediaInfo[]): EpisodeMediaInfo[] =>
       eps.map((ep) => ({
         ...ep,
@@ -4634,6 +4639,11 @@ class OverlayLibraryService {
           ep.ratingKey,
           ep.versionCount,
           freshVersionCountByKey
+        ),
+        resolution: mergedResolution(
+          ep.ratingKey,
+          ep.resolution,
+          freshResolutionByKey
         ),
       }));
 
@@ -4664,8 +4674,16 @@ class OverlayLibraryService {
       const mergedVersionCountByKey = new Map(
         episodes.map((e) => [e.ratingKey, e.versionCount])
       );
+      const mergedResolutionByKey = new Map(
+        episodes.map((e) => [e.ratingKey, e.resolution])
+      );
       if (
         needsAddedAtResave(cachedEpisodes, mergedAddedAtByKey, currentKeys) ||
+        needsResolutionResave(
+          cachedEpisodes,
+          mergedResolutionByKey,
+          currentKeys
+        ) ||
         needsVersionCountResave(
           cachedEpisodes,
           mergedVersionCountByKey,
@@ -4673,11 +4691,14 @@ class OverlayLibraryService {
         )
       ) {
         await cacheService.saveEpisodes(serverId, libraryId, episodes);
-        logger.info('Resaved episode addedAt and version count into cache', {
-          label: 'EpisodeScanner',
-          libraryId,
-          count: episodes.length,
-        });
+        logger.info(
+          'Resaved episode addedAt, resolution and version count into cache',
+          {
+            label: 'EpisodeScanner',
+            libraryId,
+            count: episodes.length,
+          }
+        );
       }
     } else if (detailKeys.size > 0) {
       const keysToFetch = [...detailKeys];
