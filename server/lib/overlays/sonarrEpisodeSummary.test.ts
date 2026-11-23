@@ -341,7 +341,15 @@ describe('SONARR_EPISODE_SUMMARY_FIELDS', () => {
     vi.useFakeTimers();
     at('2026-11-28T09:00:00Z');
     const produced = Object.keys(
-      summariseSonarrEpisodes([...outlanderBomS2, ...yellowjackets])
+      summariseSonarrEpisodes([
+        ...outlanderBomS2,
+        ...yellowjackets,
+        {
+          seasonNumber: 5,
+          episodeNumber: 1,
+          airDateUtc: '2026-11-28T10:00:00Z',
+        },
+      ])
     );
     vi.useRealTimers();
     expect([...produced].sort()).toEqual(

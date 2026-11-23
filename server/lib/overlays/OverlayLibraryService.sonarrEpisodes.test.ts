@@ -28,10 +28,12 @@ vi.mock('@server/api/themoviedb', () => ({
 
 const mockGetSeries = vi.fn();
 const mockGetEpisodes = vi.fn();
+const mockGetEpisodeFile = vi.fn();
 vi.mock('@server/api/servarr/sonarr', () => ({
   default: class {
     getSeries = mockGetSeries;
     getEpisodesBySeries = mockGetEpisodes;
+    getEpisodeFile = mockGetEpisodeFile;
     getTags = () => Promise.resolve([]);
   },
 }));
@@ -44,6 +46,8 @@ vi.mock('@server/utils/metadataHashing', async (importOriginal) => ({
 
 import type { calculateOverlayInputHash } from '@server/utils/metadataHashing';
 import { overlayLibraryService } from './OverlayLibraryService';
+import { evaluateCondition } from './OverlayTemplateRenderer';
+import { PRESET_TEMPLATES } from './PresetTemplates';
 
 type Internals = {
   applyOverlaysToItem: (...args: unknown[]) => Promise<unknown>;
@@ -101,8 +105,10 @@ const show = {
   childCount: 4,
 };
 
-const run = async (field: string) => {
-  svc.requiredContextFieldsByLibrary.set('lib', new Set([field]));
+const run = async (fieldOrFields: string | string[]) => {
+  const fields = [fieldOrFields].flat();
+  const field = fields[0];
+  svc.requiredContextFieldsByLibrary.set('lib', new Set(fields));
   mockHash.mockImplementation((config: unknown) => {
     throw Object.assign(new Error('captured'), { config });
   });
@@ -178,5 +184,94 @@ describe('Sonarr episode fields on show posters', () => {
     expect(before.config?.context.episodesAiringToday).toBe(1);
     expect(after.config?.context.episodesAiringToday).toBe(0);
     expect(hash(after.config as never)).not.toBe(hash(before.config as never));
+  });
+});
+
+describe('scheduled air dates and call budget', () => {
+  const PREMIERE = '2026-11-23T02:00:00Z';
+  const E2 = '2026-11-30T02:00:00Z';
+  const early = [
+    {
+      seasonNumber: 4,
+      episodeNumber: 1,
+      airDateUtc: PREMIERE,
+      hasFile: true,
+      episodeFileId: 501,
+    },
+    { seasonNumber: 4, episodeNumber: 2, airDateUtc: E2, hasFile: false },
+  ];
+
+  beforeEach(() => {
+    vi.setSystemTime(new Date('2026-11-22T12:45:00Z')); // 23:45 AEDT 22/11
+    mockGetSeries.mockResolvedValue([
+      { id: 66, tvdbId: 399731, monitored: true, nextAiring: PREMIERE },
+    ]);
+    mockGetEpisodes.mockResolvedValue(early);
+    mockGetEpisodeFile.mockResolvedValue({
+      dateAdded: '2026-11-20T08:16:27Z',
+    });
+  });
+
+  it('makes no episode-list or file calls when no schedule field is read', async () => {
+    const { config } = await run('title');
+    expect(config).toBeDefined();
+    expect(mockGetEpisodes).not.toHaveBeenCalled();
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('counts down to a premiere that already has a file, without any file lookup', async () => {
+    const { config } = await run('daysUntilNextSeason');
+    expect(config?.context).toMatchObject({
+      daysUntilNextSeason: 1,
+      nextSeasonAirDate: PREMIERE,
+    });
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('one list and no file lookups for the Sonarr episode fields', async () => {
+    await run(['episodesAiringToday', 'nextSeasonDownloaded']);
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('flags the early premiere and Returning Tomorrow stays off the poster', async () => {
+    const fields = [
+      'daysUntilNextSeason',
+      'seasonNumber',
+      'mediaType',
+      'inSonarr',
+      'isMonitored',
+      'nextSeasonDownloaded',
+    ];
+    const tomorrow = PRESET_TEMPLATES.find(
+      (p) => p.name === 'Returning Tomorrow (Monitored)'
+    );
+    const downloaded = await run(fields);
+    expect(downloaded.config?.context).toMatchObject({
+      daysUntilNextSeason: 1,
+      nextSeasonDownloaded: true,
+      seasonNumber: 4,
+    });
+    expect(
+      evaluateCondition(
+        tomorrow?.applicationCondition,
+        downloaded.config?.context as never
+      )
+    ).toBe(false);
+
+    mockGetEpisodes.mockResolvedValue([
+      { ...early[0], hasFile: false },
+      early[1],
+    ]);
+    svc.sonarrSeriesCache = new Map();
+    const missing = await run(fields);
+    expect(missing.config?.context.nextSeasonDownloaded).toBe(false);
+    expect(
+      evaluateCondition(
+        tomorrow?.applicationCondition,
+        missing.config?.context as never
+      )
+    ).toBe(true);
   });
 });

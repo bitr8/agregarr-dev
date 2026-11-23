@@ -97,6 +97,7 @@ import {
   RELEASE_DATE_CONTEXT_FIELDS,
   shouldSkipOnReleaseDateFetchFailure,
   usesSonarrEpisodeSummary,
+  usesSonarrNextEpisode,
   usesSonarrPremiere,
 } from './releaseDateFetchPolicy';
 import {
@@ -3448,7 +3449,12 @@ class OverlayLibraryService {
           this.sonarrSeriesCache,
           this.preloadedTmdbReleaseDates,
           releaseDateFetch,
-          usesSonarrPremiere(this.requiredContextFieldsByLibrary.get(libraryId))
+          usesSonarrPremiere(
+            this.requiredContextFieldsByLibrary.get(libraryId)
+          ),
+          usesSonarrNextEpisode(
+            this.requiredContextFieldsByLibrary.get(libraryId)
+          )
         );
 
         // fork#35 (Mechanism 2): a transient TMDB/Sonarr failure returns

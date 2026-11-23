@@ -125,6 +125,8 @@ export interface OverlayRenderContext {
   lastFinaleType?: string;
   lastFinaleDate?: string;
   daysSinceLastFinale?: number;
+  nextEpisodeDownloaded?: boolean;
+  nextSeasonDownloaded?: boolean;
 
   totalSeasons?: number;
   seasonsAvailable?: number;

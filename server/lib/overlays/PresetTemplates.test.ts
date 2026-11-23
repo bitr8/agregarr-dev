@@ -462,3 +462,64 @@ describe('Returning Today presets', () => {
     expect(evaluateCondition(monitored?.applicationCondition, ctx)).toBe(false);
   });
 });
+
+describe('Returning Soon and Tomorrow presets', () => {
+  const names = [
+    'Returning Soon (Monitored)',
+    'Returning Soon (Unmonitored)',
+    'Returning Tomorrow (Monitored)',
+    'Returning Tomorrow (Unmonitored)',
+  ];
+  const gate = {
+    ruleOperator: 'and',
+    field: 'nextSeasonDownloaded',
+    operator: 'neq',
+    value: true,
+  };
+
+  it.each(names)(
+    '%s gates every section on the season not being downloaded',
+    (name) => {
+      const sections =
+        PRESET_TEMPLATES.find((p) => p.name === name)?.applicationCondition
+          ?.sections ?? [];
+      expect(sections.length).toBeGreaterThan(0);
+      for (const section of sections) {
+        expect(section.rules).toContainEqual(gate);
+      }
+    }
+  );
+
+  it('Returning Today stays ungated', () => {
+    const today = PRESET_TEMPLATES.filter((p) =>
+      p.name.startsWith('Returning Today')
+    );
+    expect(today.length).toBeGreaterThan(0);
+    for (const preset of today) {
+      expect(JSON.stringify(preset.applicationCondition)).not.toContain(
+        'nextSeasonDownloaded'
+      );
+    }
+  });
+
+  it('Returning Tomorrow shows for an unknown or missing premiere file, not a downloaded one', () => {
+    const tomorrow = PRESET_TEMPLATES.find(
+      (p) => p.name === 'Returning Tomorrow (Monitored)'
+    );
+    const ctx = {
+      mediaType: 'show' as const,
+      daysUntilNextSeason: 1,
+      seasonNumber: 4,
+      inSonarr: true,
+      isMonitored: true,
+    };
+    const matches = (nextSeasonDownloaded?: boolean) =>
+      evaluateCondition(tomorrow?.applicationCondition, {
+        ...ctx,
+        nextSeasonDownloaded,
+      } as never);
+    expect(matches(undefined)).toBe(true);
+    expect(matches(false)).toBe(true);
+    expect(matches(true)).toBe(false);
+  });
+});

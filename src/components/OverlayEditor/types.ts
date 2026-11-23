@@ -313,6 +313,8 @@ export interface OverlayRenderContext {
   lastFinaleType?: string;
   lastFinaleDate?: string;
   daysSinceLastFinale?: number;
+  nextEpisodeDownloaded?: boolean;
+  nextSeasonDownloaded?: boolean;
 
   totalSeasons?: number;
   seasonsAvailable?: number;
@@ -715,6 +717,16 @@ export const AVAILABLE_VARIABLES = {
       label: 'Days Since Last Finale (TV) - Show Poster',
       example: '220',
     },
+    {
+      field: 'nextEpisodeDownloaded',
+      label: 'Next Episode Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
+    {
+      field: 'nextSeasonDownloaded',
+      label: 'Next Season Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
@@ -1113,6 +1125,16 @@ export const CONDITION_FIELD_CATEGORIES = {
       label: 'Days Since Last Finale (TV) - Show Poster',
       example: '220',
     },
+    {
+      field: 'nextEpisodeDownloaded',
+      label: 'Next Episode Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
+    {
+      field: 'nextSeasonDownloaded',
+      label: 'Next Season Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
@@ -1406,6 +1428,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     lastFinaleType: 'season',
     lastFinaleDate: '2024-03-20T01:00:00Z',
     daysSinceLastFinale: 300,
+    nextEpisodeDownloaded: false,
+    nextSeasonDownloaded: false,
     daysAgo: 0,
     isMonitored: true,
     inSonarr: true,

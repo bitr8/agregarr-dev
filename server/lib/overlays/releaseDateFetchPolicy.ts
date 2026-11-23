@@ -78,3 +78,26 @@ export function usesSonarrEpisodeSummary(
     SONARR_EPISODE_SUMMARY_FIELDS.some((field) => requiredFields.has(field))
   );
 }
+
+const SONARR_NEXT_EPISODE_FIELDS = [
+  'nextEpisodeAirDate',
+  'daysUntilNextEpisode',
+  'nextSeasonAirDate',
+  'daysUntilNextSeason',
+  'daysAgoNextSeason',
+  'seasonNumber',
+  'episodeNumber',
+  'releaseDate',
+  'daysUntilRelease',
+  'daysAgo',
+];
+
+/** Whether a library reads a field resolved from Sonarr's next-episode lookup; undefined fields = could need it. */
+export function usesSonarrNextEpisode(
+  requiredFields: ReadonlySet<string> | undefined
+): boolean {
+  return (
+    !requiredFields ||
+    SONARR_NEXT_EPISODE_FIELDS.some((field) => requiredFields.has(field))
+  );
+}

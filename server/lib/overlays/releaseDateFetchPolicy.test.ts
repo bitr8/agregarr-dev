@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldSkipOnReleaseDateFetchFailure } from './releaseDateFetchPolicy';
+import {
+  shouldSkipOnReleaseDateFetchFailure,
+  usesSonarrEpisodeSummary,
+  usesSonarrNextEpisode,
+} from './releaseDateFetchPolicy';
 
 describe('shouldSkipOnReleaseDateFetchFailure', () => {
   it('skips conservatively when required fields are unknown', () => {
@@ -61,5 +65,44 @@ describe('shouldSkipOnReleaseDateFetchFailure', () => {
         new Set(['imdbRating', 'resolution', 'daysUntilNextEpisode'])
       )
     ).toBe(true);
+  });
+});
+
+describe('usesSonarrNextEpisode', () => {
+  it('is on when the fields are unknown', () => {
+    expect(usesSonarrNextEpisode(undefined)).toBe(true);
+  });
+
+  it('is off for a library that reads no schedule field', () => {
+    expect(usesSonarrNextEpisode(new Set(['imdbRating', 'resolution']))).toBe(
+      false
+    );
+    expect(usesSonarrNextEpisode(new Set(['episodesAiringToday']))).toBe(false);
+  });
+
+  it.each([
+    'daysUntilNextSeason',
+    'daysUntilNextEpisode',
+    'nextSeasonAirDate',
+    'seasonNumber',
+    'daysAgo',
+  ])('is on for %s', (field) => {
+    expect(usesSonarrNextEpisode(new Set([field]))).toBe(true);
+  });
+});
+
+describe('usesSonarrEpisodeSummary', () => {
+  it.each(['nextEpisodeDownloaded', 'nextSeasonDownloaded'])(
+    'is on for %s',
+    (field) => {
+      expect(usesSonarrEpisodeSummary(new Set([field]))).toBe(true);
+      expect(shouldSkipOnReleaseDateFetchFailure(new Set([field]))).toBe(true);
+    }
+  );
+
+  it('is off for a library that reads none of them', () => {
+    expect(usesSonarrEpisodeSummary(new Set(['daysUntilNextSeason']))).toBe(
+      false
+    );
   });
 });

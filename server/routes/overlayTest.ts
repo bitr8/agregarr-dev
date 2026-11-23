@@ -35,6 +35,7 @@ import {
 } from '@server/lib/overlays/releaseDateContext';
 import {
   usesSonarrEpisodeSummary,
+  usesSonarrNextEpisode,
   usesSonarrPremiere,
 } from '@server/lib/overlays/releaseDateFetchPolicy';
 import { usesTmdbRatingFields } from '@server/lib/overlays/tmdbRatingPolicy';
@@ -368,7 +369,8 @@ overlayTestRouter.post('/', async (req, res) => {
         undefined,
         undefined,
         undefined,
-        usesSonarrPremiere(requiredContextFields)
+        usesSonarrPremiere(requiredContextFields),
+        usesSonarrNextEpisode(requiredContextFields)
       );
 
       if (releaseDateInfo) {

@@ -77,6 +77,8 @@ export const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   'rtVerifiedHot',
   'hasSubtitles',
   'isEstimatedReleaseDate',
+  'nextEpisodeDownloaded',
+  'nextSeasonDownloaded',
   'showHdr',
   'showDolbyVision',
 ]);
