@@ -17,6 +17,7 @@ import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import {
   isAirDateUpcoming,
+  isSameAirDay,
   toServerCalendarDate,
 } from '@server/utils/dateHelpers';
 import { detectAudioProfile } from '@server/utils/mediaCapabilities';
@@ -1776,12 +1777,7 @@ function isUpcomingSeriesPremiere(
 }
 
 function isSamePremiere(tmdbDate: string | undefined, sonarrDate: string) {
-  if (!tmdbDate) return true;
-  const gapMs = Math.abs(
-    new Date(toServerCalendarDate(tmdbDate)).getTime() -
-      new Date(toServerCalendarDate(sonarrDate)).getTime()
-  );
-  return gapMs <= 2 * 24 * 60 * 60 * 1000;
+  return !tmdbDate || isSameAirDay(tmdbDate, sonarrDate);
 }
 
 function sameCalendarDay(a: string | undefined, b: string): boolean {

@@ -13,6 +13,7 @@ import type { ComingSoonSourceData } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isSameAirDay } from '@server/utils/dateHelpers';
 import {
   buildTraktRedirectUri,
   persistTraktTokens,
@@ -1618,8 +1619,14 @@ export async function markMonitoredStatus(
       if (sonarrData) {
         item.monitored = sonarrData.monitored;
         item.hasFile = sonarrData.hasFile;
-        // Only use Sonarr airDate if not already set
-        if (!item.airDate) item.airDate = sonarrData.airDate;
+        // Sonarr's S01E01 instant beats TMDB's US calendar day for the same premiere
+        if (
+          !item.airDate ||
+          (sonarrData.airDate &&
+            (item.seasonNumber ?? 1) === 1 &&
+            isSameAirDay(item.airDate, sonarrData.airDate))
+        )
+          item.airDate = sonarrData.airDate;
         item.downloadedDate = sonarrData.downloadedDate;
       } else {
         // Not in Sonarr

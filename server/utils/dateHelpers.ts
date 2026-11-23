@@ -111,6 +111,22 @@ export function isAirDateUpcoming(airDate: string): boolean {
   return calculateDaysSince(toServerCalendarDate(airDate)) <= 0;
 }
 
+/** A bare TMDB date is the US network's day, so it counts as aired once that day has ended in US Eastern. */
+export function hasBareAirDatePassed(date: string): boolean {
+  const day = date.split('T')[0];
+  const endOfDay = new Date(`${day}T00:00:00-05:00`).getTime() + 86400000;
+  return Date.now() >= endOfDay;
+}
+
+/** Whether two air dates (bare or datetime) fall within two server-timezone days of each other. */
+export function isSameAirDay(a: string, b: string): boolean {
+  const gapMs = Math.abs(
+    new Date(toServerCalendarDate(a)).getTime() -
+      new Date(toServerCalendarDate(b)).getTime()
+  );
+  return gapMs <= 2 * 86400000;
+}
+
 /**
  * Get today's date in server timezone (normalized to midnight)
  * @returns Date object representing today at midnight in server timezone
