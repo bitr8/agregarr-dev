@@ -475,3 +475,39 @@ describe('two Sonarr instances', () => {
     expect((await fetchNextEpisodeFromSonarr(399731)).kind).toBe('failed');
   });
 });
+
+describe('after the scheduled air time passes', () => {
+  const afterAirtime = () => {
+    vi.setSystemTime(new Date('2026-11-23T03:00:00Z'));
+    instances.hd.series = [{ ...SERIES(), nextAiring: E2 }];
+  };
+
+  it('keeps the early date, so the premiere is not airing today', async () => {
+    afterAirtime();
+    const ctx = await fetchSonarrEpisodeContext(1, 399731);
+    expect(ctx.episodesAiringToday).toBe(0);
+    expect(ctx.lastAiredSeasonNumber).toBe(4);
+    expect(ctx.lastAiredEpisodeNumber).toBe(1);
+    expect(ctx.lastAiredEpisodeDate).toBe(ADDED);
+  });
+
+  it('still looks up the file for an episode aired within 14 days', async () => {
+    afterAirtime();
+    await fetchSonarrEpisodeContext(1, 399731);
+    expect(mockGetEpisodeFile).toHaveBeenCalledWith('hd', 501);
+  });
+
+  it('skips the file lookup for episodes aired more than 14 days ago', async () => {
+    afterAirtime();
+    await fetchSonarrEpisodeContext(1, 399731);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalledWith('hd', 301);
+  });
+
+  it('an old episode imported long after airing keeps its air date', () => {
+    const row = {
+      ...s3(),
+      episodeFile: { dateAdded: '2026-11-22T00:00:00Z' },
+    };
+    expect(effectiveAirDateUtc(row)).toBe(s3().airDateUtc);
+  });
+});

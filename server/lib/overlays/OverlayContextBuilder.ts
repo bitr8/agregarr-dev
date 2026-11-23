@@ -228,6 +228,9 @@ const episodeCaches = new WeakMap<
   Map<string, Promise<SonarrEpisode[]>>
 >();
 
+// Only recently aired or upcoming episodes can have arrived early; older ones skip the file lookup.
+const EARLY_ARRIVAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
 async function getSonarrEpisodes(
   sonarrSettings: {
     hostname: string;
@@ -254,7 +257,7 @@ async function getSonarrEpisodes(
           !e.hasFile ||
           !e.episodeFileId ||
           !e.airDateUtc ||
-          new Date(e.airDateUtc).getTime() <= now
+          new Date(e.airDateUtc).getTime() <= now - EARLY_ARRIVAL_WINDOW_MS
         ) {
           return e;
         }
@@ -262,7 +265,7 @@ async function getSonarrEpisodes(
         return { ...e, episodeFile: { dateAdded: file.dateAdded } };
       })
     );
-    return withEffectiveAirDates(withFiles, now);
+    return withEffectiveAirDates(withFiles);
   };
   if (!cache) {
     return fetchList();

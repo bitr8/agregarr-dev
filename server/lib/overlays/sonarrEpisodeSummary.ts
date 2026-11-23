@@ -18,10 +18,9 @@ export interface SonarrEpisodeRow {
   scheduledAirDateUtc?: string;
 }
 
-/** Air instant for overlays: a future-dated episode already in the library counts from its file's dateAdded. */
+/** Air instant for overlays: an episode whose file arrived before its scheduled air time counts from the file's dateAdded. */
 export function effectiveAirDateUtc(
-  e: Pick<SonarrEpisodeRow, 'airDateUtc' | 'hasFile' | 'episodeFile'>,
-  now: number = Date.now()
+  e: Pick<SonarrEpisodeRow, 'airDateUtc' | 'hasFile' | 'episodeFile'>
 ): string | undefined {
   if (!e.airDateUtc || !e.hasFile) return e.airDateUtc;
   const scheduled = new Date(e.airDateUtc).getTime();
@@ -29,16 +28,15 @@ export function effectiveAirDateUtc(
     ? new Date(e.episodeFile.dateAdded).getTime()
     : NaN;
   if (Number.isNaN(scheduled) || Number.isNaN(added)) return e.airDateUtc;
-  if (scheduled <= now || added >= scheduled) return e.airDateUtc;
+  if (added >= scheduled) return e.airDateUtc;
   return e.episodeFile?.dateAdded;
 }
 
 export function withEffectiveAirDates<T extends SonarrEpisodeRow>(
-  episodes: readonly T[],
-  now: number = Date.now()
+  episodes: readonly T[]
 ): T[] {
   return episodes.map((e) => {
-    const effective = effectiveAirDateUtc(e, now);
+    const effective = effectiveAirDateUtc(e);
     return effective === e.airDateUtc
       ? e
       : { ...e, airDateUtc: effective, scheduledAirDateUtc: e.airDateUtc };
