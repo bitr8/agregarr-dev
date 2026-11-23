@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  needsSonarrEpisodeList,
   shouldSkipOnReleaseDateFetchFailure,
   usesSonarrEpisodeSummary,
   usesSonarrNextEpisode,
@@ -108,5 +109,31 @@ describe('usesSonarrEpisodeSummary', () => {
     expect(usesSonarrEpisodeSummary(new Set(['daysUntilNextSeason']))).toBe(
       false
     );
+  });
+});
+
+describe('needsSonarrEpisodeList', () => {
+  const flags = new Set(['nextSeasonDownloaded', 'daysUntilNextSeason']);
+
+  it('the downloaded flags alone need the list only when something is upcoming', () => {
+    expect(needsSonarrEpisodeList(flags, false)).toBe(false);
+    expect(needsSonarrEpisodeList(flags, true)).toBe(true);
+  });
+
+  it('any other summary field always needs it', () => {
+    expect(
+      needsSonarrEpisodeList(new Set(['episodesAiringToday']), false)
+    ).toBe(true);
+    expect(
+      needsSonarrEpisodeList(
+        new Set(['nextSeasonDownloaded', 'nextUndownloadedEpisodeNumber']),
+        false
+      )
+    ).toBe(true);
+  });
+
+  it('no summary field never needs it; unknown fields always do', () => {
+    expect(needsSonarrEpisodeList(new Set(['title']), true)).toBe(false);
+    expect(needsSonarrEpisodeList(undefined, false)).toBe(true);
   });
 });

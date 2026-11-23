@@ -78,7 +78,6 @@ interface DatedEpisode {
   aired: boolean;
   finaleType?: SonarrFinaleType;
   hasFile: boolean;
-  monitored: boolean;
 }
 
 const byAirOrder = (a: DatedEpisode, b: DatedEpisode) =>
@@ -102,7 +101,6 @@ export function summariseSonarrEpisodes(
     if (existing) {
       existing.finaleType ??= finaleType;
       existing.hasFile ||= !!e.hasFile;
-      existing.monitored ||= !!e.monitored;
       continue;
     }
     const day = toServerCalendarDate(e.airDateUtc);
@@ -116,7 +114,6 @@ export function summariseSonarrEpisodes(
       aired: instant <= now,
       finaleType,
       hasFile: !!e.hasFile,
-      monitored: !!e.monitored,
     });
   }
   const dated = [...byKey.values()].sort(byAirOrder);
@@ -147,18 +144,6 @@ export function summariseSonarrEpisodes(
     summary.nextEpisodeCount = dated.filter(
       (e) => !e.aired && e.day === next.day
     ).length;
-    summary.nextEpisodeDownloaded = next.hasFile;
-    if (next.episode === 1) summary.nextSeasonDownloaded = next.hasFile;
-  }
-
-  const undownloaded = dated.find(
-    (e) => e.daysSince <= 0 && e.monitored && !e.hasFile
-  );
-  if (undownloaded) {
-    summary.nextUndownloadedEpisodeDate = undownloaded.airDateUtc;
-    summary.daysUntilNextUndownloadedEpisode = Math.abs(undownloaded.daysSince);
-    summary.nextUndownloadedSeasonNumber = undownloaded.season;
-    summary.nextUndownloadedEpisodeNumber = undownloaded.episode;
   }
 
   const nextFinale = dated.find((e) => e.finaleType && e.daysSince <= 0);
@@ -196,8 +181,75 @@ export function mergeSonarrEpisodes<T extends SonarrEpisodeRow>(
       ...existing,
       finaleType: existing.finaleType ?? e.finaleType,
       hasFile: existing.hasFile || e.hasFile,
-      monitored: existing.monitored || e.monitored,
     });
   }
   return [...byKey.values()];
+}
+
+export interface NextEpisodeTargets {
+  nextEpisode?: { seasonNumber: number; episodeNumber: number };
+  nextSeason?: { seasonNumber: number; episodeNumber: number };
+}
+
+const episodeKey = (e: { seasonNumber: number; episodeNumber: number }) =>
+  `${e.seasonNumber}:${e.episodeNumber}`;
+
+/**
+ * Summary across Sonarr instances. hasFile is true if any instance has the file;
+ * the undownloaded candidate is picked per instance so a row's date and monitored
+ * flag always come from the same instance.
+ * The downloaded flags describe the episodes the next-episode / next-season countdowns resolved to.
+ */
+export function summariseSonarrEpisodeLists(
+  lists: readonly (readonly SonarrEpisodeRow[])[],
+  targets: NextEpisodeTargets = {}
+): SonarrEpisodeSummary {
+  const summary = summariseSonarrEpisodes(lists.flat());
+
+  const filed = new Set<string>();
+  const known = new Set<string>();
+  for (const e of lists.flat()) {
+    known.add(episodeKey(e));
+    if (e.hasFile) filed.add(episodeKey(e));
+  }
+  const downloaded = (t: { seasonNumber: number; episodeNumber: number }) =>
+    known.has(episodeKey(t)) ? filed.has(episodeKey(t)) : undefined;
+  if (targets.nextEpisode) {
+    summary.nextEpisodeDownloaded = downloaded(targets.nextEpisode);
+  }
+  if (targets.nextSeason) {
+    summary.nextSeasonDownloaded = downloaded(targets.nextSeason);
+  }
+
+  let best:
+    | { e: SonarrEpisodeRow; instant: number; daysSince: number }
+    | undefined;
+  for (const e of lists.flat()) {
+    if (
+      e.seasonNumber <= 0 ||
+      !e.airDateUtc ||
+      !e.monitored ||
+      filed.has(episodeKey(e))
+    ) {
+      continue;
+    }
+    const instant = new Date(e.airDateUtc).getTime();
+    if (Number.isNaN(instant)) continue;
+    const daysSince = calculateDaysSince(toServerCalendarDate(e.airDateUtc));
+    if (daysSince > 0) continue;
+    const order = best
+      ? instant - best.instant ||
+        e.seasonNumber - best.e.seasonNumber ||
+        e.episodeNumber - best.e.episodeNumber
+      : -1;
+    if (order < 0) best = { e, instant, daysSince };
+  }
+  if (best) {
+    summary.nextUndownloadedEpisodeDate = best.e.airDateUtc;
+    summary.daysUntilNextUndownloadedEpisode = Math.abs(best.daysSince);
+    summary.nextUndownloadedSeasonNumber = best.e.seasonNumber;
+    summary.nextUndownloadedEpisodeNumber = best.e.episodeNumber;
+  }
+
+  return summary;
 }

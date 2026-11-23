@@ -728,7 +728,7 @@ export const AVAILABLE_VARIABLES = {
     },
     {
       field: 'nextSeasonDownloaded',
-      label: 'Next Season Already Downloaded (TV) - Show Poster',
+      label: 'Next Season Premiere Already Downloaded (TV) - Show Poster',
       example: 'false',
     },
     {
@@ -1156,7 +1156,7 @@ export const CONDITION_FIELD_CATEGORIES = {
     },
     {
       field: 'nextSeasonDownloaded',
-      label: 'Next Season Already Downloaded (TV) - Show Poster',
+      label: 'Next Season Premiere Already Downloaded (TV) - Show Poster',
       example: 'false',
     },
     {

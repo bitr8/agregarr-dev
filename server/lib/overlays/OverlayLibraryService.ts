@@ -12,6 +12,7 @@ import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isAirDateUpcoming } from '@server/utils/dateHelpers';
 import { scrubSecrets } from '@server/utils/logRedaction';
 import { mapWithConcurrency } from '@server/utils/mapWithConcurrency';
 import fs from 'fs/promises';
@@ -51,6 +52,7 @@ import {
   checkMonitoringStatus,
   fetchReleaseDateInfo,
   fetchSonarrEpisodeContext,
+  nextEpisodeTargets,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
 import { getOverlayLibraryType } from './overlayLibraryType';
@@ -94,9 +96,9 @@ import {
   type RadarrReleaseDates,
 } from './releaseDateContext';
 import {
+  needsSonarrEpisodeList,
   RELEASE_DATE_CONTEXT_FIELDS,
   shouldSkipOnReleaseDateFetchFailure,
-  usesSonarrEpisodeSummary,
   usesSonarrNextEpisode,
   usesSonarrPremiere,
 } from './releaseDateFetchPolicy';
@@ -3303,6 +3305,25 @@ class OverlayLibraryService {
    *   this service previously overlaid. Used by the episode-rating eligibility
    *   policy so unrated episodes stay clean without re-uploading every fresh card.
    */
+  private templateFieldCache = new WeakMap<OverlayTemplate[], Set<string>>();
+
+  private async templateFields(
+    templates: OverlayTemplate[]
+  ): Promise<Set<string>> {
+    let fields = this.templateFieldCache.get(templates);
+    if (!fields) {
+      const { extractUsedContextFields } = await import(
+        '@server/utils/metadataHashing'
+      );
+      fields = extractUsedContextFields(
+        templates.map((t) => t.getTemplateData()),
+        templates.map((t) => t.getApplicationCondition())
+      );
+      this.templateFieldCache.set(templates, fields);
+    }
+    return fields;
+  }
+
   private async applyOverlaysToItem(
     plexApi: PlexAPI,
     item: PlexLibraryItem,
@@ -3437,6 +3458,14 @@ class OverlayLibraryService {
 
       const baseContext = contextResult.context;
 
+      // A show poster only pays for what the templates applied to it read; season and
+      // episode templates in the same library do not turn on the show's episode lists.
+      const libraryFields = this.requiredContextFieldsByLibrary.get(libraryId);
+      const gatingFields =
+        item.type === 'show' || item.type === 'movie'
+          ? await this.templateFields(templates)
+          : libraryFields;
+
       // Fetch release date information for ALL items with TMDB ID
       // Uses preloaded data from batch prefetch when available
       let releaseDateContext: Partial<OverlayRenderContext> = {};
@@ -3449,12 +3478,8 @@ class OverlayLibraryService {
           this.sonarrSeriesCache,
           this.preloadedTmdbReleaseDates,
           releaseDateFetch,
-          usesSonarrPremiere(
-            this.requiredContextFieldsByLibrary.get(libraryId)
-          ),
-          usesSonarrNextEpisode(
-            this.requiredContextFieldsByLibrary.get(libraryId)
-          )
+          usesSonarrPremiere(gatingFields),
+          usesSonarrNextEpisode(gatingFields)
         );
 
         // fork#35 (Mechanism 2): a transient TMDB/Sonarr failure returns
@@ -3466,9 +3491,7 @@ class OverlayLibraryService {
         // updates are not blocked by an unrelated date-API blip.
         if (
           releaseDateFetch.failed &&
-          shouldSkipOnReleaseDateFetchFailure(
-            this.requiredContextFieldsByLibrary.get(libraryId)
-          )
+          shouldSkipOnReleaseDateFetchFailure(gatingFields)
         ) {
           logger.info(
             'Skipping overlay application - release date fetch failed',
@@ -3506,8 +3529,10 @@ class OverlayLibraryService {
       if (
         tmdbId &&
         actualMediaType === 'show' &&
-        usesSonarrEpisodeSummary(
-          this.requiredContextFieldsByLibrary.get(libraryId)
+        needsSonarrEpisodeList(
+          gatingFields,
+          !!releaseDateInfo?.nextEpisodeAirDate &&
+            isAirDateUpcoming(releaseDateInfo.nextEpisodeAirDate)
         )
       ) {
         const episodeFetch = { failed: false };
@@ -3515,7 +3540,8 @@ class OverlayLibraryService {
           tmdbId,
           releaseDateInfo?.tvdbId,
           this.sonarrSeriesCache,
-          episodeFetch
+          episodeFetch,
+          nextEpisodeTargets(releaseDateInfo)
         );
         if (episodeFetch.failed) {
           logger.info(

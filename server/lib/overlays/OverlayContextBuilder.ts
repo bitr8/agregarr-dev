@@ -37,7 +37,8 @@ import {
 } from './releaseDateContext';
 import {
   mergeSonarrEpisodes,
-  summariseSonarrEpisodes,
+  summariseSonarrEpisodeLists,
+  type NextEpisodeTargets,
   type SonarrEpisodeRow,
   type SonarrEpisodeSummary,
 } from './sonarrEpisodeSummary';
@@ -1810,6 +1811,30 @@ async function applySonarrLastPremiere(
   };
 }
 
+/** The episodes the next-episode and next-season countdowns resolved to, by season and episode number. */
+export function nextEpisodeTargets(
+  info: ReleaseDateInfo | undefined
+): NextEpisodeTargets {
+  if (
+    !info ||
+    info.seasonNumber === undefined ||
+    info.episodeNumber === undefined
+  ) {
+    return {};
+  }
+  const { seasonNumber, episodeNumber } = info;
+  return {
+    nextEpisode:
+      info.nextEpisodeAirDate && isAirDateUpcoming(info.nextEpisodeAirDate)
+        ? { seasonNumber, episodeNumber }
+        : undefined,
+    nextSeason:
+      info.nextSeasonAirDate && isAirDateUpcoming(info.nextSeasonAirDate)
+        ? { seasonNumber, episodeNumber: 1 }
+        : undefined,
+  };
+}
+
 /**
  * Today's, last and next episode plus finale fields from Sonarr's episode list.
  * Untracked shows get nothing; a failed instance flags fetchStatus (fork#35).
@@ -1818,7 +1843,8 @@ export async function fetchSonarrEpisodeContext(
   tmdbId: number,
   tvdbId: number | undefined,
   sonarrCache?: Map<string, SonarrSeries[]>,
-  fetchStatus?: { failed: boolean }
+  fetchStatus?: { failed: boolean },
+  targets?: NextEpisodeTargets
 ): Promise<SonarrEpisodeSummary> {
   const instances = (getSettings().sonarr ?? []).filter((s) => s.hostname);
   if (instances.length === 0) return {};
@@ -1834,18 +1860,22 @@ export async function fetchSonarrEpisodeContext(
   }
   if (!resolvedTvdbId) return {};
   let tracked = false;
-  const episodes: SonarrEpisode[] = [];
+  const lists: SonarrEpisode[][] = [];
   for (const sonarrSettings of instances) {
     try {
       const allSeries = await getSonarrSeries(sonarrSettings, sonarrCache);
       const series = allSeries.find((s) => s.tvdbId === resolvedTvdbId);
       if (!series) continue;
-      episodes.push(
-        ...(await getSonarrEpisodes(
-          sonarrSettings,
-          series.id as number,
-          sonarrCache
-        ))
+      const rows = await getSonarrEpisodes(
+        sonarrSettings,
+        series.id as number,
+        sonarrCache
+      );
+      lists.push(
+        rows.map((e) => ({
+          ...e,
+          monitored: !!e.monitored && series.monitored,
+        }))
       );
       tracked = true;
     } catch (error) {
@@ -1859,7 +1889,7 @@ export async function fetchSonarrEpisodeContext(
       return {};
     }
   }
-  return tracked ? summariseSonarrEpisodes(episodes) : {};
+  return tracked ? summariseSonarrEpisodeLists(lists, targets) : {};
 }
 
 // Sonarr episodeCount = (monitored AND aired) OR hasFile, so this survives unmonitored deletes

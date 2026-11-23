@@ -80,6 +80,8 @@ export function usesSonarrEpisodeSummary(
 }
 
 const SONARR_NEXT_EPISODE_FIELDS = [
+  'nextEpisodeDownloaded',
+  'nextSeasonDownloaded',
   'nextEpisodeAirDate',
   'daysUntilNextEpisode',
   'nextSeasonAirDate',
@@ -100,4 +102,19 @@ export function usesSonarrNextEpisode(
     !requiredFields ||
     SONARR_NEXT_EPISODE_FIELDS.some((field) => requiredFields.has(field))
   );
+}
+
+const DOWNLOADED_FLAGS = ['nextEpisodeDownloaded', 'nextSeasonDownloaded'];
+
+/** Whether the per-show episode list is needed; the downloaded flags alone only need it for shows with an upcoming episode. */
+export function needsSonarrEpisodeList(
+  requiredFields: ReadonlySet<string> | undefined,
+  hasUpcomingEpisode: boolean
+): boolean {
+  if (!requiredFields) return true;
+  const used = SONARR_EPISODE_SUMMARY_FIELDS.filter((f) =>
+    requiredFields.has(f)
+  );
+  if (used.length === 0) return false;
+  return !used.every((f) => DOWNLOADED_FLAGS.includes(f)) || hasUpcomingEpisode;
 }

@@ -79,14 +79,18 @@ const EPISODES = [
   { seasonNumber: 4, episodeNumber: 2, airDateUtc: '2026-11-30T02:00:00Z' },
 ];
 
-const templateReading = (field: string) => ({
+const templateReading = (fieldOrFields: string | string[]) => ({
   id: 1,
   getTags: () => ['main'],
   getTemplateData: () => ({
     elements: [
       {
         type: 'variable',
-        properties: { segments: [{ type: 'variable', field }] },
+        properties: {
+          segments: [fieldOrFields]
+            .flat()
+            .map((field) => ({ type: 'variable', field })),
+        },
       },
     ],
   }),
@@ -105,10 +109,19 @@ const show = {
   childCount: 4,
 };
 
-const run = async (fieldOrFields: string | string[]) => {
+const run = async (
+  fieldOrFields: string | string[],
+  opts: {
+    templates?: unknown[];
+    libraryFields?: string[];
+    item?: Record<string, unknown>;
+  } = {}
+) => {
   const fields = [fieldOrFields].flat();
-  const field = fields[0];
-  svc.requiredContextFieldsByLibrary.set('lib', new Set(fields));
+  svc.requiredContextFieldsByLibrary.set(
+    'lib',
+    new Set(opts.libraryFields ?? fields)
+  );
   mockHash.mockImplementation((config: unknown) => {
     throw Object.assign(new Error('captured'), { config });
   });
@@ -116,8 +129,8 @@ const run = async (fieldOrFields: string | string[]) => {
   const result = await svc
     .applyOverlaysToItem(
       {},
-      { ...show },
-      [templateReading(field)],
+      { ...show, ...opts.item },
+      opts.templates ?? [templateReading(fields)],
       'show',
       'lib',
       'Lib',
@@ -196,9 +209,16 @@ describe('scheduled air dates and call budget', () => {
       episodeNumber: 1,
       airDateUtc: PREMIERE,
       hasFile: true,
+      monitored: true,
       episodeFileId: 501,
     },
-    { seasonNumber: 4, episodeNumber: 2, airDateUtc: E2, hasFile: false },
+    {
+      seasonNumber: 4,
+      episodeNumber: 2,
+      airDateUtc: E2,
+      hasFile: false,
+      monitored: true,
+    },
   ];
 
   beforeEach(() => {
@@ -321,5 +341,59 @@ describe('scheduled air dates and call budget', () => {
     });
     expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
     expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('three tracked shows, one with an upcoming episode: the Returning Tomorrow preset costs one list call', async () => {
+    const preset = PRESET_TEMPLATES.find(
+      (p) => p.name === 'Returning Tomorrow (Monitored)'
+    );
+    const template = {
+      id: 1,
+      getTags: () => ['main'],
+      getTemplateData: () => preset?.templateData,
+      getApplicationCondition: () => preset?.applicationCondition,
+    };
+    const { extractUsedContextFields } = await import(
+      '@server/utils/metadataHashing'
+    );
+    const fields = extractUsedContextFields(
+      [preset?.templateData as never],
+      [preset?.applicationCondition]
+    );
+    expect(fields.has('nextSeasonDownloaded')).toBe(true);
+
+    mockGetTvShow.mockImplementation(({ tvId }: { tvId: number }) =>
+      Promise.resolve({
+        name: `Show ${tvId}`,
+        first_air_date: '2020-01-01',
+        external_ids: { tvdb_id: tvId - 100 },
+        seasons: [],
+        ...(tvId === 101
+          ? { next_episode_to_air: TMDB_SHOW.next_episode_to_air }
+          : {}),
+      })
+    );
+    mockGetSeries.mockResolvedValue([
+      { id: 1, tvdbId: 1, monitored: true, nextAiring: PREMIERE },
+      { id: 2, tvdbId: 2, monitored: true },
+      { id: 3, tvdbId: 3, monitored: true },
+    ]);
+    for (const n of [101, 102, 103]) {
+      await run([...fields], {
+        templates: [template],
+        item: { Guid: [{ id: `tmdb://${n}` }] },
+      });
+    }
+    expect(mockGetEpisodes).toHaveBeenCalledTimes(1);
+    expect(mockGetEpisodes).toHaveBeenCalledWith(1);
+    expect(mockGetEpisodeFile).not.toHaveBeenCalled();
+  });
+
+  it('season and episode templates in the library do not turn on the show poster episode lists', async () => {
+    const { config } = await run('title', {
+      libraryFields: ['title', 'seasonNumber', 'episodeNumber'],
+    });
+    expect(config).toBeDefined();
+    expect(mockGetEpisodes).not.toHaveBeenCalled();
   });
 });
