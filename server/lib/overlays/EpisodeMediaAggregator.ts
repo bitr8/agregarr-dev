@@ -107,13 +107,18 @@ export function needsAddedAtResave(
   });
 }
 
-// Fresh value wins; an omitted fresh value keeps the previous one.
+// Fresh wins, except that unknown never replaces a known cached value.
 export function mergedResolution(
   ratingKey: string,
   previous: string,
   freshResolutionByKey: Map<string, string | undefined>
 ): string {
-  return freshResolutionByKey.get(ratingKey) ?? previous;
+  const fresh = freshResolutionByKey.get(ratingKey);
+  if (fresh === undefined) return previous;
+  if (fresh === UNKNOWN_RESOLUTION && previous !== UNKNOWN_RESOLUTION) {
+    return previous;
+  }
+  return fresh;
 }
 
 // Cached row disagrees with the merged value for a still-current episode.

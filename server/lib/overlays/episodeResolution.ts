@@ -15,15 +15,20 @@ export function resolutionBucket(resolution: string): ResolutionBucket {
 }
 
 const EXPLICIT_RANK: Record<string, number> = {
-  '4k': 5,
   '2k': 4,
   '1080': 3,
   '720': 2,
+  '576': 1.5,
 };
 
-// Higher is better; SD values tie, unknown ranks last.
+// Higher is better; unrecognised 4K-or-above values never lose to 4k.
 export function bestVersionRank(resolution: string | undefined): number {
   const r = (resolution ?? '').toLowerCase();
+  if (r === '4k') return 5;
+  const k = /^(\d+)k$/.exec(r);
+  if ((k && Number(k[1]) >= 4) || (/^\d+$/.test(r) && Number(r) >= 2160)) {
+    return 5;
+  }
   const explicit = EXPLICIT_RANK[r];
   if (explicit !== undefined) return explicit;
   return resolutionBucket(r) === 'sd' ? 1 : 0;

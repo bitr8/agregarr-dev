@@ -49,11 +49,16 @@ function extractEpisodeCapabilities(
 function isTrailerPlaceholder(ep: PlexLibraryItem): boolean {
   const file = ep.Media?.[0]?.Part?.[0]?.file;
   if (!file) return false;
-  const filename = file.split(/[\\/]/).pop() ?? '';
-  return filename.includes('S00E00') && filename.includes('Trailer');
+  const parts = file.split(/[\\/]/);
+  return (
+    parts[parts.length - 1] === 'S00E00.Trailer.mp4' &&
+    parts[parts.length - 2] === 'Season 00'
+  );
 }
 
 export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
+  trailerRatingKeys: string[] = [];
+
   constructor(private plexApi: PlexAPI) {}
 
   async scanLibraryEpisodes(
@@ -62,9 +67,11 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
   ): Promise<EpisodeMediaInfo[]> {
     const startTime = Date.now();
 
-    const episodes = (
-      await this.plexApi.getLibraryItemsByType(libraryId, 4)
-    ).filter((ep) => !isTrailerPlaceholder(ep));
+    const listed = await this.plexApi.getLibraryItemsByType(libraryId, 4);
+    this.trailerRatingKeys = listed
+      .filter(isTrailerPlaceholder)
+      .map((ep) => ep.ratingKey);
+    const episodes = listed.filter((ep) => !isTrailerPlaceholder(ep));
 
     logger.info('Episode list scan complete', {
       label: 'EpisodeScanner',

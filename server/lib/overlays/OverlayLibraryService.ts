@@ -4596,6 +4596,12 @@ class OverlayLibraryService {
       libraryId,
       false
     );
+    // Authoritative scan only; the cache-read path never prunes.
+    await cacheService.deleteEpisodes(
+      serverId,
+      libraryId,
+      scanner.trailerRatingKeys ?? []
+    );
 
     const { episodes: cachedEpisodes } = await cacheService.getCachedEpisodes(
       serverId,
@@ -4640,12 +4646,18 @@ class OverlayLibraryService {
           ep.versionCount,
           freshVersionCountByKey
         ),
-        resolution: mergedResolution(
-          ep.ratingKey,
-          ep.resolution,
-          freshResolutionByKey
-        ),
       }));
+    const refreshResolution = (
+      ep: EpisodeMediaInfo,
+      cached: EpisodeMediaInfo
+    ): EpisodeMediaInfo => ({
+      ...ep,
+      resolution: mergedResolution(
+        ep.ratingKey,
+        cached.resolution,
+        freshResolutionByKey
+      ),
+    });
 
     let episodes: EpisodeMediaInfo[];
 
@@ -4656,7 +4668,9 @@ class OverlayLibraryService {
     ) {
       // All episodes are cached and fresh — filter to current episodes only
       episodes = withFreshAddedAt(
-        cachedEpisodes.filter((c) => currentKeys.has(c.ratingKey))
+        cachedEpisodes
+          .filter((c) => currentKeys.has(c.ratingKey))
+          .map((c) => refreshResolution(c, c))
       );
       logger.info('Using cached episode media data', {
         label: 'EpisodeScanner',
@@ -4719,7 +4733,8 @@ class OverlayLibraryService {
       episodes = withFreshAddedAt(
         freshLightweight.map((ep) => {
           if (!detailKeys.has(ep.ratingKey) && cachedByKey.has(ep.ratingKey)) {
-            return cachedByKey.get(ep.ratingKey)!;
+            const cached = cachedByKey.get(ep.ratingKey)!;
+            return refreshResolution(cached, cached);
           }
           return resolveFetchedEpisodeDetail(
             ep,
@@ -4732,7 +4747,12 @@ class OverlayLibraryService {
     } else {
       // No stream detail needed — use lightweight data
       episodes = withFreshAddedAt(
-        keepCachedDetail(freshLightweight, cachedByKey, staleKeys)
+        keepCachedDetail(freshLightweight, cachedByKey, staleKeys).map((ep) => {
+          const cached = cachedByKey.get(ep.ratingKey);
+          return cached && !staleKeys.has(ep.ratingKey)
+            ? refreshResolution(ep, cached)
+            : ep;
+        })
       );
       if (staleKeys.size > 0) {
         await cacheService.saveEpisodes(serverId, libraryId, episodes);

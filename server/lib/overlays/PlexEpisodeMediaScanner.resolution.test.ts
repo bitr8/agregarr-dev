@@ -3,6 +3,7 @@ import type { PlexMetadata } from '@server/api/plexapi';
 import { createHash } from 'crypto';
 import { describe, expect, it } from 'vitest';
 import type { EpisodeMediaInfo } from './episodeMediaTypes';
+import { bestVersionRank, resolutionBucket } from './episodeResolution';
 import {
   PlexEpisodeMediaScanner,
   resolveFetchedEpisodeDetail,
@@ -119,28 +120,41 @@ describe('PlexEpisodeMediaScanner unknown resolution', () => {
 });
 
 describe('PlexEpisodeMediaScanner trailer placeholders', () => {
-  const trailer = listed('t', [
-    version('1080', '/tv/Show (2020)/Season 00/Show - S00E00 - Trailer.mkv'),
-  ]);
+  const placeholderPath = '/tv/Show (2026)/Season 00/S00E00.Trailer.mp4';
+  const trailer = listed('t', [version('1080', placeholderPath)]);
   const real = listed('r', [version('1080', '/tv/Show/Season 01/S01E01.mkv')]);
-  const specialNamedTrailer = listed('s', [
-    version('1080', '/tv/Show/Season 00/Show - S00E01 - Trailer.mkv'),
+  const realSpecial = listed('s', [
+    version('1080', '/tv/Show/Season 00/Show - S00E00 - Trailer.mkv'),
   ]);
 
-  it('drops trailer placeholders from the lightweight scan', async () => {
-    const result = await scannerFor([
-      trailer,
-      real,
-      specialNamedTrailer,
-    ]).scanLibraryEpisodes('lib', false);
+  it('drops the Agregarr placeholder and reports its rating key', async () => {
+    const scanner = scannerFor([trailer, real, realSpecial]);
+    const result = await scanner.scanLibraryEpisodes('lib', false);
     expect(result.map((e) => e.ratingKey)).toEqual(['r', 's']);
+    expect(scanner.trailerRatingKeys).toEqual(['t']);
   });
 
-  it('matches on the file name, not the folder', async () => {
-    const result = await scannerFor([
-      listed('x', [version('1080', '/tv/S00E00 Trailer/Show - S01E02.mkv')]),
-    ]).scanLibraryEpisodes('lib', false);
-    expect(result.map((e) => e.ratingKey)).toEqual(['x']);
+  it('handles Windows separators', async () => {
+    const scanner = scannerFor([
+      listed('w', [
+        version('1080', 'D:\\tv\\Show (2026)\\Season 00\\S00E00.Trailer.mp4'),
+      ]),
+    ]);
+    expect(await scanner.scanLibraryEpisodes('lib', false)).toEqual([]);
+    expect(scanner.trailerRatingKeys).toEqual(['w']);
+  });
+
+  it('requires the exact name, case and Season 00 folder', async () => {
+    const lookalikes = [
+      '/tv/Show/Season 01/S00E00.Trailer.mp4',
+      '/tv/Show/Season 00/s00e00.trailer.mp4',
+      '/tv/Show/Season 00/S00E00.Trailer.mkv',
+      '/tv/S00E00.Trailer.mp4',
+    ].map((f, i) => listed(`l${i}`, [version('1080', f)]));
+    const scanner = scannerFor(lookalikes);
+    const result = await scanner.scanLibraryEpisodes('lib', false);
+    expect(result).toHaveLength(4);
+    expect(scanner.trailerRatingKeys).toEqual([]);
   });
 
   it('never requests stream detail for them', async () => {
@@ -155,5 +169,17 @@ describe('PlexEpisodeMediaScanner trailer placeholders', () => {
     const result = await scanner.scanLibraryEpisodes('lib', true);
     expect(asked).toEqual([['r']]);
     expect(result.map((e) => e.ratingKey)).toEqual(['r']);
+  });
+});
+
+describe('best-version rank', () => {
+  it('ranks 576 above 480 and any 4K-or-higher value like 4k', () => {
+    expect(bestVersionRank('576')).toBeGreaterThan(bestVersionRank('480'));
+    expect(bestVersionRank('480')).toBe(bestVersionRank('sd'));
+    for (const r of ['8k', '4K', '2160', '4320']) {
+      expect(bestVersionRank(r)).toBeGreaterThanOrEqual(bestVersionRank('4k'));
+    }
+    expect(bestVersionRank('2k')).toBeLessThan(bestVersionRank('4k'));
+    expect(resolutionBucket('8k')).toBe('unknown');
   });
 });

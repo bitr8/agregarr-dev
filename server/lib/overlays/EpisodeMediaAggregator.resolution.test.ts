@@ -91,10 +91,15 @@ describe('resolution resave helpers', () => {
   const cached = [makeEpisode({ ratingKey: 'a' })];
 
   it('prefers the fresh resolution and falls back to the previous one', () => {
-    expect(mergedResolution('a', 'sd', new Map([['a', 'unknown']]))).toBe(
-      'unknown'
-    );
+    expect(mergedResolution('a', 'sd', new Map([['a', '720']]))).toBe('720');
     expect(mergedResolution('a', 'sd', new Map())).toBe('sd');
+  });
+
+  it('never lets unknown replace a known value', () => {
+    const unknown = new Map([['a', 'unknown']]);
+    expect(mergedResolution('a', '1080', unknown)).toBe('1080');
+    expect(mergedResolution('a', 'sd', unknown)).toBe('sd');
+    expect(mergedResolution('a', 'unknown', unknown)).toBe('unknown');
   });
 
   it('flags a still-current row whose resolution changed', () => {

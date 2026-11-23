@@ -161,6 +161,27 @@ export class EpisodeMediaCacheService {
     return keys;
   }
 
+  async deleteEpisodes(
+    serverId: string,
+    libraryId: string,
+    ratingKeys: string[]
+  ): Promise<void> {
+    if (ratingKeys.length === 0) return;
+    const repo = getRepository(EpisodeMediaCache);
+    for (let i = 0; i < ratingKeys.length; i += CHUNK_SIZE) {
+      await repo
+        .createQueryBuilder()
+        .delete()
+        .from(EpisodeMediaCache)
+        .where('serverId = :serverId', { serverId })
+        .andWhere('libraryId = :libraryId', { libraryId })
+        .andWhere('ratingKey IN (:...keys)', {
+          keys: ratingKeys.slice(i, i + CHUNK_SIZE),
+        })
+        .execute();
+    }
+  }
+
   async cleanExpired(serverId: string, libraryId: string): Promise<void> {
     const repo = getRepository(EpisodeMediaCache);
     await repo
