@@ -261,8 +261,13 @@ async function getSonarrEpisodes(
         ) {
           return e;
         }
-        const file = await api.getEpisodeFile(e.episodeFileId);
-        return { ...e, episodeFile: { dateAdded: file.dateAdded } };
+        try {
+          const file = await api.getEpisodeFile(e.episodeFileId);
+          return { ...e, episodeFile: { dateAdded: file.dateAdded } };
+        } catch {
+          // Unknown arrival time: fall back to the scheduled air date rather than failing the show.
+          return e;
+        }
       })
     );
     return withEffectiveAirDates(withFiles);

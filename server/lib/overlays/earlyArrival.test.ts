@@ -224,9 +224,16 @@ describe('early-arrived premiere', () => {
     expect(mockGetEpisodesCall).toHaveBeenCalledWith(66);
   });
 
-  it('a failed file lookup is failed, not none', async () => {
+  it('a failed file lookup falls back to the scheduled date', async () => {
     instances.hd.failFile = true;
-    expect((await fetchNextEpisodeFromSonarr(399731)).kind).toBe('failed');
+    expect(await fetchNextEpisodeFromSonarr(399731)).toMatchObject({
+      kind: 'found',
+      episode: {
+        nextEpisodeAirDate: PREMIERE,
+        seasonNumber: 4,
+        episodeNumber: 1,
+      },
+    });
   });
 
   it('only early episodes left: none carrying the arrivals', async () => {
@@ -472,6 +479,7 @@ describe('two Sonarr instances', () => {
   it('a failed instance with no found is still failed', async () => {
     instances.hd.failSeries = true;
     instances.uhd.episodes = [s3(), rawEarly()];
+    instances.uhd.files = { 501: { dateAdded: ADDED } };
     expect((await fetchNextEpisodeFromSonarr(399731)).kind).toBe('failed');
   });
 });
