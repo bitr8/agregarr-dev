@@ -71,6 +71,41 @@ describe('resolveSonarrFirstNextEpisode', () => {
     expect(info.releaseDate).toBe('2020-01-01'); // TMDB identity kept
   });
 
+  it('series premiere: releaseDate takes the server-TZ day of the Sonarr instant', () => {
+    const { info } = resolveSonarrFirstNextEpisode(
+      {
+        releaseDate: '2026-07-12',
+        nextEpisodeAirDate: '2026-07-12',
+        tvdbId: 1,
+      },
+      {
+        kind: 'found',
+        episode: {
+          nextEpisodeAirDate: '2026-07-13T01:00:00Z', // 21:00 ET 12/07 = 11:00 AEST 13/07
+          nextSeasonAirDate: '2026-07-13T01:00:00Z',
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+      }
+    );
+    expect(info.releaseDate).toBe('2026-07-13');
+  });
+
+  it('series premiere far from TMDB first_air_date: TMDB releaseDate kept', () => {
+    const { info } = resolveSonarrFirstNextEpisode(
+      { releaseDate: '2020-01-01', tvdbId: 1 },
+      {
+        kind: 'found',
+        episode: {
+          nextEpisodeAirDate: '2026-07-13T01:00:00Z',
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+      }
+    );
+    expect(info.releaseDate).toBe('2020-01-01');
+  });
+
   it('found but PAST: keeps the valid future TMDB value (HIGH fix)', () => {
     const { info, sonarrFailed } = resolveSonarrFirstNextEpisode(tmdbBase, {
       kind: 'found',

@@ -1764,6 +1764,21 @@ function matchesEarlyArrival(
   });
 }
 
+// TMDB first_air_date is the network's calendar day, a day early east of the US.
+function isUpcomingSeriesPremiere(
+  ep: SonarrNextEpisode,
+  releaseDate: string | undefined
+): boolean {
+  if (ep.numberingUnmatched || ep.seasonNumber !== 1 || ep.episodeNumber !== 1)
+    return false;
+  if (!releaseDate) return true;
+  const gapMs = Math.abs(
+    new Date(toServerCalendarDate(releaseDate)).getTime() -
+      new Date(toServerCalendarDate(ep.nextEpisodeAirDate)).getTime()
+  );
+  return gapMs <= 2 * 24 * 60 * 60 * 1000;
+}
+
 function sameCalendarDay(a: string | undefined, b: string): boolean {
   return !!a && toServerCalendarDate(a) === toServerCalendarDate(b);
 }
@@ -1800,7 +1815,9 @@ export function resolveSonarrFirstNextEpisode(
     return {
       info: {
         ...base,
-        releaseDate: base.releaseDate || ep.nextEpisodeAirDate,
+        releaseDate: isUpcomingSeriesPremiere(ep, base.releaseDate)
+          ? toServerCalendarDate(ep.nextEpisodeAirDate)
+          : base.releaseDate || ep.nextEpisodeAirDate,
         nextEpisodeAirDate: ep.nextEpisodeAirDate,
         ...(ep.numberingUnmatched
           ? sameCalendarDay(base.nextEpisodeAirDate, ep.nextEpisodeAirDate)
