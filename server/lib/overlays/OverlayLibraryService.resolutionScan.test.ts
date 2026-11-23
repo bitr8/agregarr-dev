@@ -252,4 +252,53 @@ describe('runEpisodeScan trailer placeholder rows', () => {
     );
     expect(fromCache?.get('show-1')?.episodeCount).toBe(2);
   });
+
+  it('leaves the trailer row alone when the scan throws part-way', async () => {
+    state.fresh = [row('a', { resolution: '1080', mediaHash: 'changed' })];
+    state.trailers = ['t'];
+    state.cached = [row('a'), row('t', { seasonNumber: 0 })];
+
+    await expect(
+      svc.runEpisodeScan(
+        { getMetadataBatch: () => Promise.reject(new Error('plex down')) },
+        'lib',
+        new Set(['hdr']),
+        new Set()
+      )
+    ).rejects.toThrow('plex down');
+
+    expect(state.deleted).toEqual([]);
+    expect(state.cached.map((c) => c.ratingKey)).toEqual(['a', 't']);
+  });
+});
+
+describe('runEpisodeScan detail without a resolution', () => {
+  const noResolutionBatch = new Map([
+    [
+      'b',
+      {
+        Media: [{ Part: [{ Stream: [{ streamType: 1, bitDepth: 10 }] }] }],
+      },
+    ],
+  ]);
+  const run = (listRes: string, cachedRes: string) => {
+    state.fresh = [row('b', { resolution: listRes, mediaHash: 'changed' })];
+    state.cached = [row('b', { resolution: cachedRes })];
+    return svc.runEpisodeScan(
+      { getMetadataBatch: () => Promise.resolve(noResolutionBatch) },
+      'lib',
+      new Set(['hdr']),
+      new Set()
+    );
+  };
+
+  it('takes the list value over the cached one', async () => {
+    await run('1080', '720');
+    expect(savedResolutions()).toEqual({ b: '1080' });
+  });
+
+  it('falls back to the cached value when the list is unknown too', async () => {
+    await run('unknown', '720');
+    expect(savedResolutions()).toEqual({ b: '720' });
+  });
 });

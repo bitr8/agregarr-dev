@@ -46,14 +46,25 @@ function extractEpisodeCapabilities(
     : { ...caps, resolution: UNKNOWN_RESOLUTION };
 }
 
-function isTrailerPlaceholder(ep: PlexLibraryItem): boolean {
-  const file = ep.Media?.[0]?.Part?.[0]?.file;
+function isPlaceholderFile(file: string | undefined): boolean {
   if (!file) return false;
   const parts = file.split(/[\\/]/);
   return (
     parts[parts.length - 1] === 'S00E00.Trailer.mp4' &&
     parts[parts.length - 2] === 'Season 00'
   );
+}
+
+function isPlaceholderMedia(media: Media): boolean {
+  return (
+    !!media.Part?.length && media.Part.every((p) => isPlaceholderFile(p.file))
+  );
+}
+
+function withoutPlaceholderMedia(media: Media[]): Media[] {
+  return media.some(isPlaceholderMedia)
+    ? media.filter((m) => !isPlaceholderMedia(m))
+    : media;
 }
 
 export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
@@ -68,10 +79,18 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
     const startTime = Date.now();
 
     const listed = await this.plexApi.getLibraryItemsByType(libraryId, 4);
-    this.trailerRatingKeys = listed
-      .filter(isTrailerPlaceholder)
-      .map((ep) => ep.ratingKey);
-    const episodes = listed.filter((ep) => !isTrailerPlaceholder(ep));
+    this.trailerRatingKeys = [];
+    const episodes: PlexLibraryItem[] = [];
+    for (const ep of listed) {
+      const kept = ep.Media?.length ? withoutPlaceholderMedia(ep.Media) : [];
+      if (ep.Media?.length && kept.length === 0) {
+        this.trailerRatingKeys.push(ep.ratingKey);
+      } else {
+        episodes.push(
+          kept.length === ep.Media?.length ? ep : { ...ep, Media: kept }
+        );
+      }
+    }
 
     logger.info('Episode list scan complete', {
       label: 'EpisodeScanner',
@@ -103,7 +122,7 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
       const metadata = batchMetadata.get(ep.ratingKey);
 
       const enrichedItem: PlexLibraryItem = metadata
-        ? { ...ep, Media: metadata.Media }
+        ? { ...ep, Media: withoutPlaceholderMedia(metadata.Media ?? []) }
         : ep;
 
       if (!enrichedItem.Media?.[0]) continue;
@@ -181,8 +200,9 @@ export function resolveFetchedEpisodeDetail(
     return lightweightEp;
   }
 
-  const media = metadata.Media?.length
-    ? metadata.Media[bestMediaIndex(metadata.Media)]
+  const versions = withoutPlaceholderMedia(metadata.Media ?? []);
+  const media = versions.length
+    ? versions[bestMediaIndex(versions)]
     : undefined;
   const streams = media?.Part?.[0]?.Stream;
 

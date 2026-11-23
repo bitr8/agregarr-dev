@@ -157,6 +157,62 @@ describe('PlexEpisodeMediaScanner trailer placeholders', () => {
     expect(scanner.trailerRatingKeys).toEqual([]);
   });
 
+  it('keeps a merged item with only the real versions, placeholder first', async () => {
+    const real = version(
+      '720',
+      '/tv/Show/Season 00/Show - S00E00 - Trailer.mkv'
+    );
+    const scanner = scannerFor([
+      listed('m', [version('4k', placeholderPath), real]),
+    ]);
+    const [ep] = await scanner.scanLibraryEpisodes('lib', false);
+    expect(ep.versionCount).toBe(1);
+    expect(ep.resolution).toBe('720');
+    expect(ep.mediaHash).toBe(hashOf([real]));
+    expect(scanner.trailerRatingKeys).toEqual([]);
+  });
+
+  it('keeps a merged item with only the real versions, placeholder last', async () => {
+    const real = version('1080', '/tv/Show/Season 00/Show - S00E00.mkv');
+    const scanner = scannerFor([
+      listed('m', [real, version('4k', placeholderPath)]),
+    ]);
+    const [ep] = await scanner.scanLibraryEpisodes('lib', false);
+    expect(ep.versionCount).toBe(1);
+    expect(ep.resolution).toBe('1080');
+    expect(ep.mediaHash).toBe(hashOf([real]));
+  });
+
+  it('excludes an item whose every version is the placeholder', async () => {
+    const scanner = scannerFor([
+      listed('m', [
+        version('1080', placeholderPath),
+        version('720', placeholderPath),
+      ]),
+    ]);
+    expect(await scanner.scanLibraryEpisodes('lib', false)).toEqual([]);
+    expect(scanner.trailerRatingKeys).toEqual(['m']);
+  });
+
+  it('ignores the placeholder entry in the stream-detail pass', () => {
+    const result = resolveFetchedEpisodeDetail(
+      { resolution: '720' } as EpisodeMediaInfo,
+      {
+        Media: [
+          {
+            videoResolution: '4k',
+            Part: [{ file: placeholderPath, Stream: [{ streamType: 1 }] }],
+          },
+          {
+            videoResolution: '720',
+            Part: [{ file: '/tv/a/S00E00.mkv', Stream: [{ streamType: 1 }] }],
+          },
+        ],
+      } as unknown as PlexMetadata
+    );
+    expect(result.resolution).toBe('720');
+  });
+
   it('never requests stream detail for them', async () => {
     const asked: string[][] = [];
     const scanner = new PlexEpisodeMediaScanner({

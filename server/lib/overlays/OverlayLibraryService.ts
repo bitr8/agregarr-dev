@@ -39,6 +39,7 @@ import {
   getEpisodeRatingEligibility,
   getUnratedEpisodeAction,
 } from './episodeRatingPolicy';
+import { UNKNOWN_RESOLUTION } from './episodeResolution';
 import { collectImdbPrefetchCandidates } from './imdbPrefetchCandidates';
 import {
   collectSeasonCandidateKeys,
@@ -4596,12 +4597,6 @@ class OverlayLibraryService {
       libraryId,
       false
     );
-    // Authoritative scan only; the cache-read path never prunes.
-    await cacheService.deleteEpisodes(
-      serverId,
-      libraryId,
-      scanner.trailerRatingKeys ?? []
-    );
 
     const { episodes: cachedEpisodes } = await cacheService.getCachedEpisodes(
       serverId,
@@ -4736,10 +4731,13 @@ class OverlayLibraryService {
             const cached = cachedByKey.get(ep.ratingKey)!;
             return refreshResolution(cached, cached);
           }
-          return resolveFetchedEpisodeDetail(
+          const resolved = resolveFetchedEpisodeDetail(
             ep,
             batchMetadata.get(ep.ratingKey)
           );
+          return resolved.resolution === UNKNOWN_RESOLUTION
+            ? refreshResolution(resolved, cachedByKey.get(ep.ratingKey) ?? ep)
+            : resolved;
         })
       );
 
@@ -4759,6 +4757,12 @@ class OverlayLibraryService {
       }
     }
 
+    // Authoritative scan only, and only once the save above has succeeded.
+    await cacheService.deleteEpisodes(
+      serverId,
+      libraryId,
+      scanner.trailerRatingKeys ?? []
+    );
     await cacheService.cleanExpired(serverId, libraryId);
 
     const aggregator = new EpisodeMediaAggregator();
