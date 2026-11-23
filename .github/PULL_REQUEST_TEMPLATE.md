@@ -17,6 +17,7 @@ Ref #XXXX (the issue where this was agreed; a one-line fix can skip this)
 #### Checklist
 
 - [ ] One concern, under ~400 lines net (or the series plan is in the description)
+- [ ] I've read every line and can explain why it's there, including anything AI-assisted
 - [ ] Review changes go up as fixup commits, no force-push until the squash is asked for
 - [ ] Tests cover the code that writes settings or calls Plex, and fail on the old code
 - [ ] Comments are one short line, only where the why isn't obvious
