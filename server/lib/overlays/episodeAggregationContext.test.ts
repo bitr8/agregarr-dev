@@ -14,6 +14,11 @@ const agg: AggregatedMediaInfo = {
   episodeCount: 20,
   episode4kCount: 10,
   episode4kPercent: 50,
+  episodeHdCount: 6,
+  episodeHdPercent: 30,
+  episodeSdCount: 3,
+  episodeSdPercent: 15,
+  episodeUnknownResolutionCount: 1,
   episodeHdrCount: 20,
   episodeHdrPercent: 100,
   episodeDvCount: 0,
@@ -30,6 +35,15 @@ describe('buildEpisodeAggregationContext', () => {
     expect(ctx.showResolution).toBe('1080');
     expect(ctx.episode4kPercent).toBe(50);
     expect(ctx.episodeMediaSource).toBe('aggregated');
+  });
+
+  it('passes the HD, SD and unknown resolution counts through', () => {
+    const ctx = buildEpisodeAggregationContext('season', '100', base, map);
+    expect(ctx.episodeHdCount).toBe(6);
+    expect(ctx.episodeHdPercent).toBe(30);
+    expect(ctx.episodeSdCount).toBe(3);
+    expect(ctx.episodeSdPercent).toBe(15);
+    expect(ctx.episodeUnknownResolutionCount).toBe(1);
   });
 
   it('skips the show-prefixed fields for a season', () => {

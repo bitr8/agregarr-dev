@@ -8,7 +8,16 @@ const offered = Object.values(CONDITION_FIELD_CATEGORIES)
 
 describe('condition field kinds', () => {
   it('classes the numeric and yes/no fields that were saved as text', () => {
-    for (const f of ['totalSeasons', 'episode4kPercent', 'showBitDepth']) {
+    for (const f of [
+      'totalSeasons',
+      'episode4kPercent',
+      'showBitDepth',
+      'episodeHdCount',
+      'episodeHdPercent',
+      'episodeSdCount',
+      'episodeSdPercent',
+      'episodeUnknownResolutionCount',
+    ]) {
       expect(NUMERIC_FIELDS.has(f)).toBe(true);
     }
     for (const f of ['showHdr', 'showDolbyVision']) {

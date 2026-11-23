@@ -76,6 +76,8 @@ describe('number format allowlist', () => {
       'imdbRating',
       'rtCriticsScore',
       'episode4kPercent',
+      'episodeHdPercent',
+      'episodeSdPercent',
       'fileSize',
       'width',
       'showResolution',

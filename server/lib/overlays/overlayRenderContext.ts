@@ -174,6 +174,11 @@ export interface OverlayRenderContext {
   episodeCount?: number;
   episode4kCount?: number;
   episode4kPercent?: number;
+  episodeHdCount?: number;
+  episodeHdPercent?: number;
+  episodeSdCount?: number;
+  episodeSdPercent?: number;
+  episodeUnknownResolutionCount?: number;
   episodeHdrCount?: number;
   episodeHdrPercent?: number;
   episodeDvCount?: number;

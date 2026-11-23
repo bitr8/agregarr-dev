@@ -1,12 +1,19 @@
 import type PlexAPI from '@server/api/plexapi';
-import type { PlexLibraryItem, PlexMetadata } from '@server/api/plexapi';
+import type {
+  Media,
+  PlexLibraryItem,
+  PlexMetadata,
+  PlexStream,
+} from '@server/api/plexapi';
 import logger from '@server/logger';
+import type { MediaCapabilities } from '@server/utils/mediaCapabilities';
 import { extractMediaCapabilities } from '@server/utils/mediaCapabilities';
 import { createHash } from 'crypto';
 import type {
   EpisodeMediaInfo,
   EpisodeMediaScanner,
 } from './episodeMediaTypes';
+import { bestVersionRank, UNKNOWN_RESOLUTION } from './episodeResolution';
 
 function computeMediaHash(mediaArray: unknown[]): string {
   return createHash('sha256')
@@ -15,7 +22,54 @@ function computeMediaHash(mediaArray: unknown[]): string {
     .slice(0, 16);
 }
 
+// First entry wins a tie.
+function bestMediaIndex(media: Media[]): number {
+  let best = 0;
+  for (let i = 1; i < media.length; i++) {
+    if (
+      bestVersionRank(media[i].videoResolution) >
+      bestVersionRank(media[best].videoResolution)
+    ) {
+      best = i;
+    }
+  }
+  return best;
+}
+
+function extractEpisodeCapabilities(
+  media: Media,
+  streams?: PlexStream[]
+): MediaCapabilities {
+  const caps = extractMediaCapabilities(media, streams);
+  return media.videoResolution
+    ? caps
+    : { ...caps, resolution: UNKNOWN_RESOLUTION };
+}
+
+function isPlaceholderFile(file: string | undefined): boolean {
+  if (!file) return false;
+  const parts = file.split(/[\\/]/);
+  return (
+    parts[parts.length - 1] === 'S00E00.Trailer.mp4' &&
+    parts[parts.length - 2] === 'Season 00'
+  );
+}
+
+function isPlaceholderMedia(media: Media): boolean {
+  return (
+    !!media.Part?.length && media.Part.every((p) => isPlaceholderFile(p.file))
+  );
+}
+
+function withoutPlaceholderMedia(media: Media[]): Media[] {
+  return media.some(isPlaceholderMedia)
+    ? media.filter((m) => !isPlaceholderMedia(m))
+    : media;
+}
+
 export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
+  trailerRatingKeys: string[] = [];
+
   constructor(private plexApi: PlexAPI) {}
 
   async scanLibraryEpisodes(
@@ -24,7 +78,19 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
   ): Promise<EpisodeMediaInfo[]> {
     const startTime = Date.now();
 
-    const episodes = await this.plexApi.getLibraryItemsByType(libraryId, 4);
+    const listed = await this.plexApi.getLibraryItemsByType(libraryId, 4);
+    this.trailerRatingKeys = [];
+    const episodes: PlexLibraryItem[] = [];
+    for (const ep of listed) {
+      const kept = ep.Media?.length ? withoutPlaceholderMedia(ep.Media) : [];
+      if (ep.Media?.length && kept.length === 0) {
+        this.trailerRatingKeys.push(ep.ratingKey);
+      } else {
+        episodes.push(
+          kept.length === ep.Media?.length ? ep : { ...ep, Media: kept }
+        );
+      }
+    }
 
     logger.info('Episode list scan complete', {
       label: 'EpisodeScanner',
@@ -56,7 +122,7 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
       const metadata = batchMetadata.get(ep.ratingKey);
 
       const enrichedItem: PlexLibraryItem = metadata
-        ? { ...ep, Media: metadata.Media }
+        ? { ...ep, Media: withoutPlaceholderMedia(metadata.Media ?? []) }
         : ep;
 
       if (!enrichedItem.Media?.[0]) continue;
@@ -81,10 +147,11 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
     ep: PlexLibraryItem,
     streamDetailFetched: boolean
   ): EpisodeMediaInfo {
-    const media = ep.Media[0];
+    const bestIndex = bestMediaIndex(ep.Media);
+    const media = ep.Media[bestIndex];
     const streams = media.Part?.[0]?.Stream;
 
-    const caps = extractMediaCapabilities(media, streams);
+    const caps = extractEpisodeCapabilities(media, streams);
 
     return {
       ratingKey: ep.ratingKey,
@@ -93,7 +160,11 @@ export class PlexEpisodeMediaScanner implements EpisodeMediaScanner {
       seasonNumber: ep.parentIndex ?? 0,
       episodeNumber: ep.index ?? 0,
       ...caps,
-      mediaHash: computeMediaHash(ep.Media),
+      mediaHash: computeMediaHash(
+        bestIndex === 0
+          ? ep.Media
+          : [{ bestMediaIndex: bestIndex }, ...ep.Media]
+      ),
       versionCount: ep.Media.length,
       addedAt: ep.addedAt,
       // Owned by the caller: a lightweight list scan has not fetched stream
@@ -129,13 +200,16 @@ export function resolveFetchedEpisodeDetail(
     return lightweightEp;
   }
 
-  const media = metadata.Media?.[0];
+  const versions = withoutPlaceholderMedia(metadata.Media ?? []);
+  const media = versions.length
+    ? versions[bestMediaIndex(versions)]
+    : undefined;
   const streams = media?.Part?.[0]?.Stream;
 
   if (media && streams && streams.length > 0) {
     return {
       ...lightweightEp,
-      ...extractMediaCapabilities(media, streams),
+      ...extractEpisodeCapabilities(media, streams),
       hasStreamDetail: true,
     };
   }
