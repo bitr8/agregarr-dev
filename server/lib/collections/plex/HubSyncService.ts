@@ -541,19 +541,16 @@ export class HubSyncService {
 
       try {
         if (!preExistingConfig.excludeFromOrdering) {
-          // Calculate current promotion status
+          // Evaluate first: promotion reads isActive, which may be stale
+          const effectiveVisibilityConfig =
+            this.evaluateAndUpdateTimeRestriction(
+              preExistingConfig,
+              'preExisting'
+            );
           const shouldBePromotedToHub =
             this.calculateIsPromotedToHub(preExistingConfig);
 
           if (shouldBePromotedToHub) {
-            // Collection should be in hub management - update visibility
-            // Evaluate time restrictions and get effective visibility config
-            const effectiveVisibilityConfig =
-              this.evaluateAndUpdateTimeRestriction(
-                preExistingConfig,
-                'preExisting'
-              );
-
             // Convert effective visibility config to Plex format
             const plexVisibility = {
               promotedToOwnHome:
@@ -2038,6 +2035,7 @@ export class HubSyncService {
         timeRestrictionResult.isActive,
         configType
       );
+      config.isActive = timeRestrictionResult.isActive;
     }
 
     // For hubs and pre-existing collections, removeFromPlexWhenInactive is always false (safety)
