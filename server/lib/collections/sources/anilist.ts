@@ -272,11 +272,13 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
 
       if (!matchedRatingKey) {
         // Check external links (TMDb/IMDb)
-        const tmdbId = this.extractTmdbId(m?.externalLinks ?? undefined);
+        const { tmdb: tmdbId, imdb: imdbId } = this.idsFromExternalLinks(
+          m.externalLinks,
+          mediaType
+        );
         if (tmdbId && libraryIndex.tmdb.has(tmdbId)) {
           matchedRatingKey = libraryIndex.tmdb.get(tmdbId)?.ratingKey;
         } else {
-          const imdbId = this.extractImdbId(m?.externalLinks ?? undefined);
           if (imdbId && libraryIndex.imdb.has(imdbId)) {
             matchedRatingKey = libraryIndex.imdb.get(imdbId)?.ratingKey;
           }
@@ -292,26 +294,44 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     return seenRatingKeys.size;
   }
 
-  private extractImdbId(links?: { site?: string; url?: string | null }[]) {
-    const imdb = links?.find(
-      (l) =>
-        (l.site || '').toUpperCase() === 'IMDB' ||
-        /imdb\.com/i.test(l.url || '')
+  private idsFromExternalLinks(
+    links: AniListMedia['externalLinks'],
+    mediaType: 'movie' | 'tv'
+  ) {
+    const tmdbLink = links?.find(
+      (link) =>
+        (link.site || '').toUpperCase().includes('TMDB') ||
+        /themoviedb\.org/i.test(link.url || '')
     );
-    if (!imdb?.url) return undefined;
-    const m = imdb.url.match(/(tt\d{6,})/i);
-    return m ? m[1].toLowerCase() : undefined;
+    const imdbLink = links?.find(
+      (link) =>
+        (link.site || '').toUpperCase() === 'IMDB' ||
+        /imdb\.com/i.test(link.url || '')
+    );
+    const tmdb = tmdbLink?.url?.match(/\/(tv|movie)\/(\d+)/i);
+    return {
+      tmdb: tmdb?.[1].toLowerCase() === mediaType ? tmdb[2] : undefined,
+      imdb: imdbLink?.url?.match(/(tt\d{6,})/i)?.[1].toLowerCase(),
+    };
   }
 
-  private extractTmdbId(links?: { site?: string; url?: string | null }[]) {
-    const tmdb = links?.find(
-      (l) =>
-        (l.site || '').toUpperCase().includes('TMDB') ||
-        /themoviedb\.org/i.test(l.url || '')
-    );
-    if (!tmdb?.url) return undefined;
-    const m = tmdb.url.match(/\/(?:tv|movie)\/(\d+)/i);
-    return m ? m[1] : undefined;
+  private async findPlexMatch(
+    plexClient: PlexAPI | undefined,
+    ids: Partial<Record<keyof ProviderIndex, string>>,
+    mediaType: 'movie' | 'tv'
+  ) {
+    if (!plexClient || !ids) return;
+    for (const provider of ['tvdb', 'tmdb', 'imdb'] as const) {
+      const id = ids[provider];
+      if (!id) continue;
+      const hit = await this.plexLookupByGuid(
+        plexClient,
+        provider,
+        id,
+        mediaType
+      );
+      if (hit) return hit;
+    }
   }
 
   // Try a direct Plex lookup by GUID if available on your PlexAPI
@@ -321,7 +341,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     id: string,
     mediaType: 'movie' | 'tv'
   ): Promise<{ ratingKey: string; title: string } | null> {
-    const guid = provider === 'imdb' ? `imdb://${id}` : `${provider}://${id}`;
+    const guid = `${provider}://${id}`;
     try {
       // PlexAPI may have optional methods for GUID lookups
       const plexClientWithMethods = plexClient as PlexAPI & {
@@ -999,79 +1019,43 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
 
       if (matched) continue;
 
-      // --- B) Fallback to AniList externalLinks (TMDb/IMDb) ---
-      const tmdbIdFromLink = this.extractTmdbId(
-        raw?.externalLinks ?? undefined
-      );
-      if (tmdbIdFromLink && tmdbIdx.has(tmdbIdFromLink)) {
-        const hit = tmdbIdx.get(tmdbIdFromLink);
-        if (hit) {
-          items.push({
-            ratingKey: hit.ratingKey,
-            title: hit.title,
-            type: mediaType,
-            tvdbId: hit.tvdbId,
-            posterUrl:
-              raw?.coverImage?.extraLarge ||
-              raw?.coverImage?.large ||
-              undefined,
-            metadata: { libraryKey: hit.libraryKey, originalPosition: i + 1 },
-          });
-          continue;
-        }
+      const linkIds = this.idsFromExternalLinks(raw?.externalLinks, mediaType);
+      const cachedLink =
+        (linkIds.tmdb ? tmdbIdx.get(linkIds.tmdb) : undefined) ??
+        (linkIds.imdb ? imdbIdx.get(linkIds.imdb) : undefined);
+      const posterUrl =
+        raw?.coverImage?.extraLarge || raw?.coverImage?.large || undefined;
+      if (cachedLink) {
+        items.push({
+          ratingKey: cachedLink.ratingKey,
+          title: cachedLink.title,
+          type: mediaType,
+          tvdbId: cachedLink.tvdbId,
+          posterUrl,
+          metadata: {
+            libraryKey: cachedLink.libraryKey,
+            originalPosition: i + 1,
+          },
+        });
+        continue;
       }
-      const imdbIdFromLink = this.extractImdbId(
-        raw?.externalLinks ?? undefined
+      const directLink = await this.findPlexMatch(
+        plexClient,
+        linkIds,
+        mediaType
       );
-      if (imdbIdFromLink && imdbIdx.has(imdbIdFromLink)) {
-        const hit = imdbIdx.get(imdbIdFromLink);
-        if (hit) {
-          items.push({
-            ratingKey: hit.ratingKey,
-            title: hit.title,
-            type: mediaType,
-            tvdbId: hit.tvdbId,
-            posterUrl:
-              raw?.coverImage?.extraLarge ||
-              raw?.coverImage?.large ||
-              undefined,
-            metadata: { libraryKey: hit.libraryKey, originalPosition: i + 1 },
-          });
-          continue;
-        }
-      }
-      if (plexClient && (tmdbIdFromLink || imdbIdFromLink)) {
-        const direct =
-          (tmdbIdFromLink &&
-            (await this.plexLookupByGuid(
-              plexClient,
-              'tmdb',
-              tmdbIdFromLink,
-              mediaType
-            ))) ||
-          (imdbIdFromLink &&
-            (await this.plexLookupByGuid(
-              plexClient,
-              'imdb',
-              imdbIdFromLink,
-              mediaType
-            )));
-        if (direct) {
-          items.push({
-            ratingKey: direct.ratingKey,
-            title: direct.title || displayTitle,
-            type: mediaType,
-            posterUrl:
-              raw?.coverImage?.extraLarge ||
-              raw?.coverImage?.large ||
-              undefined,
-            metadata: {
-              libraryKey: normalizedLibraryId,
-              originalPosition: i + 1,
-            },
-          });
-          continue;
-        }
+      if (directLink) {
+        items.push({
+          ratingKey: directLink.ratingKey,
+          title: directLink.title || displayTitle,
+          type: mediaType,
+          posterUrl,
+          metadata: {
+            libraryKey: normalizedLibraryId,
+            originalPosition: i + 1,
+          },
+        });
+        continue;
       }
 
       // --- C) No match found - try to get TMDB ID for auto-request ---
@@ -1129,7 +1113,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
 
       // Fallback to external links if no mapping found
       if (tmdbId === 0) {
-        const tmdbIdStr = this.extractTmdbId(raw?.externalLinks ?? undefined);
+        const tmdbIdStr = linkIds.tmdb;
         if (tmdbIdStr) {
           tmdbId = Number(tmdbIdStr) || 0;
         }

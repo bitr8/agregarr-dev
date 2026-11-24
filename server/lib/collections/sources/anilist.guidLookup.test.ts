@@ -40,6 +40,32 @@ vi.mock('@server/lib/settings', () => ({
 import { AnilistCollectionSync } from './anilist';
 import { MyAnimeListCollectionSync } from './myanimelist';
 
+it('ignores a TMDB movie link with the same numeric ID as a Plex show', async () => {
+  const result = await new AnilistCollectionSync().mapSourceDataToItems(
+    [
+      {
+        anilistId: 99,
+        title: 'Source title',
+        raw: {
+          format: 'TV',
+          externalLinks: [
+            { site: 'TMDB', url: 'https://www.themoviedb.org/movie/20' },
+          ],
+        },
+      },
+    ],
+    { libraryId: '1' } as CollectionConfig,
+    undefined,
+    {
+      '1': [
+        { ratingKey: 'show', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+      ],
+    }
+  );
+  expect(result.items).toEqual([]);
+  expect(result.missingItems).toEqual([]);
+});
+
 describe('AniList direct GUID lookup', () => {
   it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
     const findItemByGuid = vi.fn().mockResolvedValue(undefined);
