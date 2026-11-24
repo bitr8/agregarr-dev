@@ -149,6 +149,29 @@ describe('multi-source run with failing sources', () => {
     expect(handlePlaceholderCleanup).toHaveBeenCalledTimes(1);
   });
 
+  it('stops all sources before cleanup or Plex writes when the anime library is unavailable', async () => {
+    const o = internals();
+    const fetch = vi
+      .spyOn(o, 'fetchItemsFromSource')
+      .mockResolvedValue({ items: [item] });
+    const write = vi.spyOn(o, 'createOrUpdatePlexCollection');
+    handlePlaceholderCleanup.mockClear();
+    const result = await o.processMultiSourceCollection(
+      config({
+        sources: [sources[0], { id: 'anime', type: 'anilist' }],
+        combineMode: 'list_order',
+      } as never),
+      {},
+      [],
+      undefined,
+      { other: [] }
+    );
+    expect(result.error).toContain('Plex library 4 was unavailable');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(handlePlaceholderCleanup).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it('reports the failure when every source fails', async () => {
     const { result, write } = await run(['fail', 'fail']);
 
