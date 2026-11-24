@@ -3,6 +3,7 @@ import {
   ensureAnimeIdsLoaded,
   loadAnimeIds,
   lookupByAniList,
+  lookupByMal,
 } from './anibridgeV3';
 
 describe('AniBridge mapping cache', () => {
@@ -12,6 +13,7 @@ describe('AniBridge mapping cache', () => {
     const valid = {
       $meta: { schema_version: '3.0.3' },
       'anilist:1': { 'tmdb_movie:2': { '1': '1' } },
+      'mal:7': { 'tmdb_movie:2': { '1': '1' } },
     };
     const response = (data: unknown) => new Response(JSON.stringify(data));
     const fetch = vi
@@ -19,6 +21,7 @@ describe('AniBridge mapping cache', () => {
       .mockResolvedValueOnce(response(valid))
       .mockResolvedValueOnce(response({ '1': { tmdb_movie_id: 3 } }))
       .mockResolvedValueOnce(response({ $meta: valid.$meta }))
+      .mockResolvedValueOnce(response({ ...valid, 'mal:7': {} }))
       .mockResolvedValueOnce(response(valid));
     vi.stubGlobal('fetch', fetch);
     await Promise.all([ensureAnimeIdsLoaded(), ensureAnimeIdsLoaded()]);
@@ -29,8 +32,10 @@ describe('AniBridge mapping cache', () => {
     );
     await expect(ensureAnimeIdsLoaded(-1)).rejects.toThrow('schema');
     await expect(loadAnimeIds()).rejects.toThrow('no usable');
+    await expect(ensureAnimeIdsLoaded(-1)).rejects.toThrow('no usable MAL');
+    expect(lookupByMal(7, 'movie')).toEqual({ tmdb: '2' });
     expect(lookupByAniList(1, 'movie')).toEqual({ tmdb: '2' });
     await ensureAnimeIdsLoaded(-1);
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch).toHaveBeenCalledTimes(5);
   });
 });

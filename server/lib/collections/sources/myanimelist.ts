@@ -8,6 +8,7 @@ import type PlexAPI from '@server/api/plexapi';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
 import {
+  deduplicateMissingItems,
   getCollectionMediaType,
   processMissingItemsWithMode,
 } from '@server/lib/collections/core/CollectionUtilities';
@@ -71,9 +72,6 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
     libraryCache?: LibraryItemsCache
   ): Promise<SyncResult> {
     try {
-      // Ensure anime IDs are loaded for mapping
-      await ensureAnimeIdsLoaded();
-
       // Fetch source data from MAL (with libraryCache for early matching)
       const sourceData = await this.fetchSourceData(
         config,
@@ -191,6 +189,7 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
     options?: { apiTimeout?: number },
     libraryCache?: LibraryItemsCache
   ): Promise<CollectionSourceData[]> {
+    await ensureAnimeIdsLoaded();
     const rankingType = (config.subtype as MALRankingType) || 'all';
     const perPage = 500; // MAL API maximum per request
     const maxItems = config.maxItems || 9999;
@@ -288,6 +287,7 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
     plexClient?: PlexAPI,
     libraryCache?: LibraryItemsCache
   ): Promise<{ items: CollectionItem[]; missingItems?: MissingItem[] }> {
+    await ensureAnimeIdsLoaded();
     const items: CollectionItem[] = [];
     const missing: MissingItem[] = [];
 
@@ -308,6 +308,8 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
 
       const ids = lookupByMal(malId, mediaType);
       if (!ids) continue;
+      const tvdbId =
+        mediaType === 'tv' && ids.tvdb ? Number(ids.tvdb) : undefined;
       const hit = findMappedAnime(libraryIndex, ids);
       if (hit) {
         items.push({
@@ -315,7 +317,7 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
           title: hit.title,
           type: mediaType,
           tmdbId: ids.tmdb ? Number(ids.tmdb) : undefined,
-          tvdbId: mediaType === 'tv' ? hit.tvdbId : undefined,
+          tvdbId: mediaType === 'tv' ? hit.tvdbId ?? tvdbId : undefined,
           posterUrl:
             raw?.main_picture?.large || raw?.main_picture?.medium || undefined,
           metadata: { libraryKey: hit.libraryKey, originalPosition: i + 1 },
@@ -329,6 +331,7 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
       if (tmdbId) {
         missing.push({
           tmdbId,
+          tvdbId,
           mediaType: itemMediaType,
           title: displayTitle,
           originalPosition: i + 1,
@@ -337,7 +340,7 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
       }
     }
 
-    return { items, missingItems: missing };
+    return { items, missingItems: deduplicateMissingItems(missing) };
   }
 
   /**

@@ -20,6 +20,7 @@ import {
   buildSortTitleFromOverride,
   createCollectionLabel,
   createSyncError,
+  deduplicateMissingItems,
   getCollectionSyncCounter,
   getMediaTypeFromLibrary,
   getTargetUserLabel,
@@ -1198,18 +1199,7 @@ export class MultiSourceOrchestrator {
         // For all other modes, combine ALL missing items from ALL sources
         const allMissingItems = missingItemGroups.flat();
 
-        // Remove duplicates based on tmdbId and mediaType
-        const uniqueMissingItems = allMissingItems.reduce(
-          (acc, item) => {
-            const key = `${item.tmdbId}-${item.mediaType}`;
-            if (!acc.seen.has(key)) {
-              acc.seen.add(key);
-              acc.items.push(item);
-            }
-            return acc;
-          },
-          { seen: new Set<string>(), items: [] as MissingItem[] }
-        ).items;
+        const uniqueMissingItems = deduplicateMissingItems(allMissingItems);
 
         logger.debug(
           `Combined missing items from ${missingItemGroups.length} sources`,
