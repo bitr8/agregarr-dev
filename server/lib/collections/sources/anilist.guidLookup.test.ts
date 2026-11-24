@@ -110,6 +110,70 @@ describe('AniList external links', () => {
     raw: { format: 'TV', externalLinks: [{ site: 'TMDB', url }] },
   });
 
+  it('continues past a foreign library hit and stops after finding the selected show', async () => {
+    const mappings = await import('@server/api/animeIds');
+    const ready = vi
+      .spyOn(mappings, 'ensureAnimeIdsLoaded')
+      .mockResolvedValue();
+    const source = await import('@server/api/anilist');
+    const fetchPage = vi
+      .spyOn(source, 'getTrendingAnime')
+      .mockImplementation(async (page = 1) => ({
+        Page: {
+          pageInfo: {
+            total: 4,
+            perPage: 1,
+            currentPage: page,
+            lastPage: 4,
+            hasNextPage: page < 4,
+          },
+          media: [
+            {
+              id: [4, 212888, 6, 5][page - 1],
+              title: { english: 'Series' },
+              format: 'TV',
+              externalLinks: [
+                {
+                  id: page,
+                  site: 'TMDB',
+                  url:
+                    'https://www.themoviedb.org/tv/' +
+                    (page === 1 ? 20 : 324502),
+                },
+              ],
+            },
+          ],
+        },
+      }));
+    try {
+      const rows = await new AnilistCollectionSync().fetchSourceData(
+        { ...config, maxItems: 1 },
+        undefined,
+        {
+          '1': [
+            {
+              ratingKey: 'owned',
+              title: 'Overgeared',
+              Guid: [{ id: 'tmdb://324502' }],
+            },
+          ],
+          '2': [
+            {
+              ratingKey: 'foreign',
+              title: 'Series',
+              Guid: [{ id: 'tmdb://20' }],
+            },
+          ],
+        }
+      );
+      expect(rows.map((row) => row.anilistId)).toEqual([4, 212888, 6]);
+      expect(fetchPage).toHaveBeenCalledTimes(3);
+    } finally {
+      fetchPage.mockRestore();
+      ready.mockRestore();
+    }
+  });
+
   it('requires one distinct same-type link for a download and one owned match for membership', async () => {
     const fromLinks = (...paths: string[]) => ({
       ...linkedEntry(''),
