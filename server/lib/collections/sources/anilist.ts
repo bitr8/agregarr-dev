@@ -31,7 +31,10 @@ import type {
   PlexCollection,
   SyncResult,
 } from '@server/lib/collections/core/types';
-import { buildLibraryProviderIndex } from '@server/lib/collections/utils/AnimeProviderIndex';
+import {
+  buildLibraryProviderIndex,
+  type ProviderIndex,
+} from '@server/lib/collections/utils/AnimeProviderIndex';
 import type { CollectionConfig } from '@server/lib/settings';
 import logger from '@server/logger';
 
