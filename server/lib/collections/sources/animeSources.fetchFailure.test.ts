@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/api/animeIds', () => ({
   ensureAnimeIdsLoaded: vi.fn().mockResolvedValue(undefined),
-  getFirstValue: vi.fn(),
   lookupByAniList: vi.fn(),
   lookupByMal: vi.fn(),
 }));

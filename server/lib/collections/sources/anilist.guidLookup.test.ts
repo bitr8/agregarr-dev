@@ -1,5 +1,7 @@
+import { loadAnimeIds } from '@server/api/animeIds';
 import type PlexAPI from '@server/api/plexapi';
-import { describe, expect, it, vi } from 'vitest';
+import type { CollectionConfig } from '@server/lib/settings';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
@@ -23,10 +25,20 @@ vi.mock('@server/logger', () => ({
   default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('@server/lib/settings', () => ({
-  getSettings: () => ({ plex: { collectionConfigs: [], libraries: [] } }),
+  getSettings: () => ({
+    globalExclusions: { movies: [], shows: [] },
+    plex: {
+      collectionConfigs: [],
+      libraries: [
+        { key: '1', type: 'show' },
+        { key: '2', type: 'movie' },
+      ],
+    },
+  }),
 }));
 
 import { AnilistCollectionSync } from './anilist';
+import { MyAnimeListCollectionSync } from './myanimelist';
 
 describe('AniList direct GUID lookup', () => {
   it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
@@ -49,5 +61,163 @@ describe('AniList direct GUID lookup', () => {
 
     expect(findItemByGuid).not.toHaveBeenCalled();
     expect(hit).toBeNull();
+  });
+});
+
+describe('AniBridge collection matching', () => {
+  const episodes = { '1-12': '1-12' };
+  const overgeared = {
+    'tmdb_show:324502:s1': episodes,
+    'tvdb_show:478752:s1': episodes,
+    'mal:64340': episodes,
+    'anidb:20077:R': episodes,
+  };
+  const data = {
+    $meta: { schema_version: '3.0.3' },
+    'anilist:212888': overgeared,
+    'mal:64340': { ...overgeared, 'anilist:212888': episodes },
+    'anilist:2': {
+      'tmdb_movie:324502': episodes,
+      'imdb_movie:tt0123456': episodes,
+    },
+    'anilist:3': { 'tmdb_show:15:s1': episodes, 'tmdb_show:16:s2': episodes },
+    'anilist:4': { 'tmdb_show:20:s1': episodes, 'tmdb_show:20:s2': episodes },
+    'anilist:6': {
+      'tmdb_show:324502:s2': episodes,
+      'tvdb_show:478752:s2': episodes,
+    },
+    'anilist:5': { 'tmdb_show:21:s1': { '1-': null } },
+  };
+  const config = { libraryId: '1' } as CollectionConfig;
+  const entry = (anilistId: number, idMal?: number) => ({
+    anilistId,
+    title: 'Source title',
+    raw: { format: 'TV', idMal },
+  });
+  beforeEach(async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(JSON.stringify(data)))
+    );
+    await loadAnimeIds();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    'tmdb://324502',
+    'tvdb://478752',
+    'com.plexapp.agents.myanimelist://64340',
+  ])(
+    'matches Overgeared via %s and keeps its AniList position',
+    async (guid) => {
+      const sync = new AnilistCollectionSync();
+      const mapped = await sync.mapSourceDataToItems(
+        [entry(2), entry(212888), entry(4), entry(6)],
+        config,
+        undefined,
+        {
+          '1': [
+            {
+              ratingKey: 'second',
+              title: 'Another series',
+              Guid: [{ id: 'tmdb://20' }],
+            },
+            { ratingKey: 'first', title: 'Overgeared', Guid: [{ id: guid }] },
+          ],
+        }
+      );
+      const result = await sync.applyFilteringToMappedItems(mapped, config);
+      expect(
+        result.items.map((item) => [
+          item.ratingKey,
+          item.metadata?.originalPosition,
+        ])
+      ).toEqual([
+        ['first', 2],
+        ['second', 3],
+      ]);
+      expect(result.missingItems).toEqual([]);
+    }
+  );
+
+  it('uses the MAL source for both a missing AniList row and a MAL collection', async () => {
+    const cache = {
+      '1': [
+        {
+          ratingKey: 'hit',
+          title: 'Overgeared',
+          Guid: [{ id: 'tvdb://478752' }],
+        },
+      ],
+    };
+    const ani = await new AnilistCollectionSync().mapSourceDataToItems(
+      [entry(99, 64340)],
+      config,
+      undefined,
+      cache
+    );
+    const mal = await new MyAnimeListCollectionSync().mapSourceDataToItems(
+      [
+        {
+          malId: 64340,
+          rank: 1,
+          title: 'Overgeared',
+          raw: { media_type: 'tv' },
+        },
+      ],
+      config,
+      undefined,
+      cache
+    );
+    expect(ani.items[0]?.ratingKey).toBe('hit');
+    expect(mal.items[0]?.ratingKey).toBe('hit');
+  });
+
+  it('only creates missing items for unambiguous, correctly typed IDs', async () => {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [entry(3, 64340), entry(5), entry(2), entry(212888)],
+      config,
+      undefined,
+      {
+        '2': [
+          {
+            ratingKey: 'wrong-library',
+            title: 'Movie',
+            Guid: [{ id: 'tmdb://324502' }],
+          },
+        ],
+      }
+    );
+    expect(result.items).toEqual([]);
+    expect(result.missingItems).toEqual([
+      expect.objectContaining({
+        originalPosition: 4,
+        tmdbId: 324502,
+        tvdbId: 478752,
+        mediaType: 'tv',
+      }),
+    ]);
+  });
+
+  it('uses a movie IMDb target in a movie library', async () => {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [{ ...entry(2), raw: { format: 'MOVIE' } }],
+      { libraryId: '2' } as CollectionConfig,
+      undefined,
+      {
+        '2': [
+          {
+            ratingKey: 'movie',
+            title: 'Movie',
+            Guid: [{ id: 'imdb://tt0123456' }],
+          },
+        ],
+      }
+    );
+    expect(result.items[0]).toMatchObject({
+      ratingKey: 'movie',
+      type: 'movie',
+      tmdbId: 324502,
+    });
   });
 });
