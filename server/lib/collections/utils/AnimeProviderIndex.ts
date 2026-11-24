@@ -50,7 +50,8 @@ export interface ProviderIndex {
  */
 export function buildProviderIndex(
   libraryCache?: LibraryItemsCache,
-  mediaType?: 'movie' | 'tv'
+  mediaType?: 'movie' | 'tv',
+  mappingVersion: 'v2' | 'v3' = 'v2'
 ): ProviderIndex {
   const imdb = new Map<string, ProviderIndexEntry>();
   const tmdb = new Map<string, ProviderIndexEntry>();
@@ -129,7 +130,7 @@ export function buildProviderIndex(
         const mMalAgent = g.match(/myanimelist:\/\/(\d+)/i);
         if (mMalAgent) {
           const malId = parseInt(mMalAgent[1]);
-          if (mediaType) {
+          if (mappingVersion === 'v3' && mediaType) {
             const ids = lookupV3ByMal(malId, mediaType);
             if (ids) {
               const hit = {
@@ -150,7 +151,7 @@ export function buildProviderIndex(
           const map = lookupByMal(malId);
           if (map) {
             // Add all available IDs from PlexAniBridge mapping
-            if (map.tvdb_id) {
+            if (mediaType !== 'movie' && map.tvdb_id) {
               tvdb.set(String(map.tvdb_id), {
                 ratingKey: it.ratingKey,
                 title: it.title,
@@ -158,7 +159,7 @@ export function buildProviderIndex(
                 tvdbId: itemTvdbId ?? Number(map.tvdb_id),
               });
             }
-            if (map.tmdb_show_id) {
+            if (mediaType !== 'movie' && map.tmdb_show_id) {
               tmdb.set(String(map.tmdb_show_id), {
                 ratingKey: it.ratingKey,
                 title: it.title,
@@ -168,7 +169,8 @@ export function buildProviderIndex(
               });
             }
             // tmdb_movie_id can be array - add all values
-            const tmdbMovieIds = getAllValues(map.tmdb_movie_id);
+            const tmdbMovieIds =
+              mediaType === 'tv' ? [] : getAllValues(map.tmdb_movie_id);
             for (const mid of tmdbMovieIds) {
               tmdb.set(String(mid), {
                 ratingKey: it.ratingKey,
@@ -178,7 +180,8 @@ export function buildProviderIndex(
               });
             }
             // imdb_id can be array - add all values
-            const imdbIds = getAllValues(map.imdb_id);
+            const imdbIds =
+              mediaType === 'movie' ? [] : getAllValues(map.imdb_id);
             for (const iid of imdbIds) {
               imdb.set(iid.toLowerCase(), {
                 ratingKey: it.ratingKey,
@@ -214,9 +217,14 @@ export function requireAnimeLibraryItems(
 export function buildLibraryProviderIndex(
   libraryCache: LibraryItemsCache | undefined,
   libraryId: string | string[],
-  mediaType?: 'movie' | 'tv'
+  mediaType?: 'movie' | 'tv',
+  mappingVersion: 'v2' | 'v3' = 'v2'
 ): ProviderIndex {
-  return buildProviderIndex(requireAnimeLibraryItems(libraryCache, libraryId), mediaType);
+  return buildProviderIndex(
+    requireAnimeLibraryItems(libraryCache, libraryId),
+    mediaType,
+    mappingVersion
+  );
 }
 
 export function findMappedAnime(

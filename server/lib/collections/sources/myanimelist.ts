@@ -196,7 +196,12 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
     const mediaType = getCollectionMediaType(config);
 
     const libraryIndex = libraryCache
-      ? buildLibraryProviderIndex(libraryCache, config.libraryId, mediaType)
+      ? buildLibraryProviderIndex(
+          libraryCache,
+          config.libraryId,
+          mediaType,
+          'v3'
+        )
       : undefined;
 
     // Paginate through results with rate limiting and early matching checks
@@ -295,7 +300,8 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
     const libraryIndex = buildLibraryProviderIndex(
       libraryCache,
       config.libraryId,
-      mediaType
+      mediaType,
+      'v3'
     );
 
     for (let i = 0; i < sourceData.length; i++) {
