@@ -148,6 +148,16 @@ export function buildProviderIndex(
   return { imdb, tmdb, tvdb };
 }
 
+export function buildLibraryProviderIndex(
+  libraryCache: LibraryItemsCache | undefined,
+  libraryId: string | string[],
+  mediaType: 'movie' | 'tv'
+): ProviderIndex {
+  const key = Array.isArray(libraryId) ? libraryId[0] : libraryId;
+  const items = key && libraryCache?.[key];
+  return buildProviderIndex(items ? { [key]: items } : undefined, mediaType);
+}
+
 export function findMappedAnime(
   index: ProviderIndex,
   ids?: AnimeProviderIds | null

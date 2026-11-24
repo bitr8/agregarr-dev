@@ -40,6 +40,32 @@ vi.mock('@server/lib/settings', () => ({
 import { AnilistCollectionSync } from './anilist';
 import { MyAnimeListCollectionSync } from './myanimelist';
 
+it('ignores a TMDB movie link with the same numeric ID as a Plex show', async () => {
+  const result = await new AnilistCollectionSync().mapSourceDataToItems(
+    [
+      {
+        anilistId: 99,
+        title: 'Source title',
+        raw: {
+          format: 'TV',
+          externalLinks: [
+            { site: 'TMDB', url: 'https://www.themoviedb.org/movie/20' },
+          ],
+        },
+      },
+    ],
+    { libraryId: '1' } as CollectionConfig,
+    undefined,
+    {
+      '1': [
+        { ratingKey: 'show', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+      ],
+    }
+  );
+  expect(result.items).toEqual([]);
+  expect(result.missingItems).toEqual([]);
+});
+
 describe('AniList direct GUID lookup', () => {
   it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
     const findItemByGuid = vi.fn().mockResolvedValue(undefined);
@@ -61,6 +87,36 @@ describe('AniList direct GUID lookup', () => {
 
     expect(findItemByGuid).not.toHaveBeenCalled();
     expect(hit).toBeNull();
+  });
+});
+
+describe('AniList external links', () => {
+  const config = { libraryId: '1' } as CollectionConfig;
+  const linkedEntry = (url: string) => ({
+    anilistId: 99,
+    title: 'Source title',
+    raw: { format: 'TV', externalLinks: [{ site: 'TMDB', url }] },
+  });
+
+  it('ignores cached items from other libraries when the selected library is absent', async () => {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [linkedEntry('https://www.themoviedb.org/tv/20')],
+      config,
+      undefined,
+      {
+        '2': [
+          {
+            ratingKey: 'elsewhere',
+            title: 'Other library',
+            Guid: [{ id: 'tmdb://20' }],
+          },
+        ],
+      }
+    );
+    expect(result.items).toEqual([]);
+    expect(result.missingItems).toEqual([
+      expect.objectContaining({ tmdbId: 20, originalPosition: 1 }),
+    ]);
   });
 });
 
@@ -173,6 +229,39 @@ describe('AniBridge collection matching', () => {
     expect(mal.items[0]?.ratingKey).toBe('hit');
   });
 
+  it('resolves Overgeared through the MAL Plex agent in a MAL collection', async () => {
+    const result = await new MyAnimeListCollectionSync().mapSourceDataToItems(
+      [
+        {
+          malId: 64340,
+          rank: 1,
+          title: 'Overgeared',
+          raw: { media_type: 'tv' },
+        },
+      ],
+      config,
+      undefined,
+      {
+        '1': [
+          {
+            ratingKey: 'show',
+            title: 'Overgeared',
+            Guid: [{ id: 'com.plexapp.agents.myanimelist://64340' }],
+          },
+        ],
+      }
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        ratingKey: 'show',
+        type: 'tv',
+        tmdbId: 324502,
+        tvdbId: 478752,
+      }),
+    ]);
+    expect(result.missingItems).toEqual([]);
+  });
+
   it('only creates missing items for unambiguous, correctly typed IDs', async () => {
     const result = await new AnilistCollectionSync().mapSourceDataToItems(
       [entry(3, 64340), entry(5), entry(2), entry(212888)],
@@ -219,5 +308,36 @@ describe('AniBridge collection matching', () => {
       type: 'movie',
       tmdbId: 324502,
     });
+  });
+
+  it('matches ambiguous mappings via external links but skips them for downloads', async () => {
+    const linkedEntry = (anilistId: number, tmdbId: number) => ({
+      ...entry(anilistId),
+      raw: {
+        format: 'TV',
+        externalLinks: [
+          { site: 'TMDB', url: `https://www.themoviedb.org/tv/${tmdbId}` },
+        ],
+      },
+    });
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [linkedEntry(3, 20), linkedEntry(3, 21), linkedEntry(99, 21)],
+      config,
+      undefined,
+      {
+        '1': [
+          { ratingKey: 'linked', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+        ],
+      }
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        ratingKey: 'linked',
+        metadata: { libraryKey: '1', originalPosition: 1 },
+      }),
+    ]);
+    expect(result.missingItems).toEqual([
+      expect.objectContaining({ tmdbId: 21, originalPosition: 3 }),
+    ]);
   });
 });

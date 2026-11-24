@@ -8,7 +8,11 @@ import {
   type AniListCustomList,
   type AniListMedia,
 } from '@server/api/anilist';
-import { ensureAnimeIdsLoaded, lookupByAniList } from '@server/api/animeIds';
+import {
+  ensureAnimeIdsLoaded,
+  lookupByAniList,
+  type AnimeProviderIds,
+} from '@server/api/animeIds';
 import type PlexAPI from '@server/api/plexapi';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
@@ -26,7 +30,7 @@ import type {
   SyncResult,
 } from '@server/lib/collections/core/types';
 import {
-  buildProviderIndex,
+  buildLibraryProviderIndex,
   findMappedAnime,
   resolveAnimeTmdbId,
   type ProviderIndex,
@@ -202,58 +206,58 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
   ): number {
     const seenRatingKeys = new Set<string>();
 
-    for (const m of media) {
-      const ids = lookupByAniList(m.id, mediaType, m.idMal);
-      let matchedRatingKey = findMappedAnime(libraryIndex, ids)?.ratingKey;
-
-      if (!matchedRatingKey) {
-        // Check external links (TMDb/IMDb)
-        const tmdbId = this.extractTmdbId(
-          m?.externalLinks ?? undefined,
-          mediaType
-        );
-        if (tmdbId && libraryIndex.tmdb.has(tmdbId)) {
-          matchedRatingKey = libraryIndex.tmdb.get(tmdbId)?.ratingKey;
-        } else {
-          const imdbId = this.extractImdbId(m?.externalLinks ?? undefined);
-          if (imdbId && libraryIndex.imdb.has(imdbId)) {
-            matchedRatingKey = libraryIndex.imdb.get(imdbId)?.ratingKey;
-          }
-        }
-      }
-
-      // Only count if we haven't seen this ratingKey before (deduplication)
-      if (matchedRatingKey && !seenRatingKeys.has(matchedRatingKey)) {
-        seenRatingKeys.add(matchedRatingKey);
-      }
+    for (const entry of media) {
+      const ids = lookupByAniList(entry.id, mediaType, entry.idMal);
+      const ratingKey =
+        findMappedAnime(libraryIndex, ids)?.ratingKey ||
+        findMappedAnime(
+          libraryIndex,
+          this.idsFromExternalLinks(entry.externalLinks, mediaType)
+        )?.ratingKey;
+      if (ratingKey) seenRatingKeys.add(ratingKey);
     }
 
     return seenRatingKeys.size;
   }
 
-  private extractImdbId(links?: { site?: string; url?: string | null }[]) {
-    const imdb = links?.find(
-      (l) =>
-        (l.site || '').toUpperCase() === 'IMDB' ||
-        /imdb\.com/i.test(l.url || '')
+  private idsFromExternalLinks(
+    links: AniListMedia['externalLinks'],
+    mediaType: 'movie' | 'tv'
+  ): AnimeProviderIds {
+    const tmdbLink = links?.find(
+      (link) =>
+        (link.site || '').toUpperCase().includes('TMDB') ||
+        /themoviedb\.org/i.test(link.url || '')
     );
-    if (!imdb?.url) return undefined;
-    const m = imdb.url.match(/(tt\d{6,})/i);
-    return m ? m[1].toLowerCase() : undefined;
+    const imdbLink = links?.find(
+      (link) =>
+        (link.site || '').toUpperCase() === 'IMDB' ||
+        /imdb\.com/i.test(link.url || '')
+    );
+    const tmdb = tmdbLink?.url?.match(/\/(tv|movie)\/(\d+)/i);
+    return {
+      tmdb: tmdb?.[1].toLowerCase() === mediaType ? tmdb[2] : undefined,
+      imdb: imdbLink?.url?.match(/(tt\d{6,})/i)?.[1].toLowerCase(),
+    };
   }
 
-  private extractTmdbId(
-    links: { site?: string; url?: string | null }[] | undefined,
+  private async findPlexMatch(
+    plexClient: PlexAPI | undefined,
+    ids: AnimeProviderIds | null | undefined,
     mediaType: 'movie' | 'tv'
   ) {
-    const tmdb = links?.find(
-      (l) =>
-        (l.site || '').toUpperCase().includes('TMDB') ||
-        /themoviedb\.org/i.test(l.url || '')
-    );
-    if (!tmdb?.url) return undefined;
-    const m = tmdb.url.match(/\/(tv|movie)\/(\d+)/i);
-    return m?.[1].toLowerCase() === mediaType ? m[2] : undefined;
+    if (!plexClient || !ids) return;
+    for (const provider of ['tvdb', 'tmdb', 'imdb'] as const) {
+      const id = ids[provider];
+      if (!id) continue;
+      const hit = await this.plexLookupByGuid(
+        plexClient,
+        provider,
+        id,
+        mediaType
+      );
+      if (hit) return hit;
+    }
   }
 
   // Try a direct Plex lookup by GUID if available on your PlexAPI
@@ -263,7 +267,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     id: string,
     mediaType: 'movie' | 'tv'
   ): Promise<{ ratingKey: string; title: string } | null> {
-    const guid = provider === 'imdb' ? `imdb://${id}` : `${provider}://${id}`;
+    const guid = `${provider}://${id}`;
     try {
       // PlexAPI may have optional methods for GUID lookups
       const plexClientWithMethods = plexClient as PlexAPI & {
@@ -329,21 +333,9 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
         ? { format: 'MOVIE' }
         : { formatIn: ['TV', 'TV_SHORT', 'ONA', 'OVA', 'SPECIAL'] };
 
-    // Build library index for early matching checks (if library cache provided)
-    // Filter to target library FIRST, same as mapSourceDataToItems does!
-    let libraryIndex: ProviderIndex | null = null;
-    if (libraryCache) {
-      const targetLibraryId = Array.isArray(config.libraryId)
-        ? config.libraryId[0]
-        : config.libraryId;
-
-      const filteredCache: LibraryItemsCache = {};
-      if (targetLibraryId && libraryCache[targetLibraryId]) {
-        filteredCache[targetLibraryId] = libraryCache[targetLibraryId];
-      }
-
-      libraryIndex = buildProviderIndex(filteredCache, mediaType);
-    }
+    const libraryIndex = libraryCache
+      ? buildLibraryProviderIndex(libraryCache, config.libraryId, mediaType)
+      : undefined;
 
     // Paginate through results with rate limiting and early matching checks
     const paginateResults = async (
@@ -685,23 +677,15 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     const items: CollectionItem[] = [];
     const missing: MissingItem[] = [];
 
-    // Filter library cache to only include target library (like Trakt does)
     const targetLibraryId = Array.isArray(config.libraryId)
       ? config.libraryId[0]
       : config.libraryId;
-
-    // Normalize library ID to string for metadata (used by plexLookupByGuid fallbacks)
-    const normalizedLibraryId: string = targetLibraryId as string;
-
-    const filteredCache: LibraryItemsCache = {};
-    if (libraryCache && targetLibraryId) {
-      if (libraryCache[targetLibraryId]) {
-        filteredCache[targetLibraryId] = libraryCache[targetLibraryId];
-      }
-    }
-
     const mediaType = getCollectionMediaType(config);
-    const libraryIndex = buildProviderIndex(filteredCache, mediaType);
+    const libraryIndex = buildLibraryProviderIndex(
+      libraryCache,
+      targetLibraryId,
+      mediaType
+    );
 
     for (let i = 0; i < sourceData.length; i++) {
       const entry = sourceData[i];
@@ -722,20 +706,10 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
         ? lookupByAniList(anilistId, mediaType, raw?.idMal)
         : undefined;
       const cached = findMappedAnime(libraryIndex, ids);
-      let hit: { ratingKey: string; title: string } | null | undefined = cached;
-      if (!hit && ids && plexClient) {
-        for (const provider of ['tvdb', 'tmdb', 'imdb'] as const) {
-          const id = ids[provider];
-          if (id)
-            hit = await this.plexLookupByGuid(
-              plexClient,
-              provider,
-              id,
-              mediaType
-            );
-          if (hit) break;
-        }
-      }
+      const hit =
+        cached ?? (await this.findPlexMatch(plexClient, ids, mediaType));
+      const posterUrl =
+        raw?.coverImage?.extraLarge || raw?.coverImage?.large || undefined;
       if (hit) {
         items.push({
           ratingKey: hit.ratingKey,
@@ -743,97 +717,52 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
           type: mediaType,
           tmdbId: ids?.tmdb ? Number(ids.tmdb) : undefined,
           tvdbId: mediaType === 'tv' ? cached?.tvdbId : undefined,
-          posterUrl:
-            raw?.coverImage?.extraLarge || raw?.coverImage?.large || undefined,
+          posterUrl,
           metadata: {
-            libraryKey: cached?.libraryKey ?? normalizedLibraryId,
+            libraryKey: cached?.libraryKey ?? targetLibraryId,
             originalPosition: i + 1,
           },
         });
         continue;
       }
 
-      // --- B) Fallback to AniList externalLinks (TMDb/IMDb) ---
-      const tmdbIdFromLink = this.extractTmdbId(
-        raw?.externalLinks ?? undefined,
+      const linkIds = this.idsFromExternalLinks(raw?.externalLinks, mediaType);
+      const cachedLink = findMappedAnime(libraryIndex, linkIds);
+      if (cachedLink) {
+        items.push({
+          ratingKey: cachedLink.ratingKey,
+          title: cachedLink.title,
+          type: mediaType,
+          tvdbId: cachedLink.tvdbId,
+          posterUrl,
+          metadata: {
+            libraryKey: cachedLink.libraryKey,
+            originalPosition: i + 1,
+          },
+        });
+        continue;
+      }
+      const directLink = await this.findPlexMatch(
+        plexClient,
+        linkIds,
         mediaType
       );
-      if (tmdbIdFromLink && libraryIndex.tmdb.has(tmdbIdFromLink)) {
-        const hit = libraryIndex.tmdb.get(tmdbIdFromLink);
-        if (hit) {
-          items.push({
-            ratingKey: hit.ratingKey,
-            title: hit.title,
-            type: mediaType,
-            tvdbId: hit.tvdbId,
-            posterUrl:
-              raw?.coverImage?.extraLarge ||
-              raw?.coverImage?.large ||
-              undefined,
-            metadata: { libraryKey: hit.libraryKey, originalPosition: i + 1 },
-          });
-          continue;
-        }
-      }
-      const imdbIdFromLink = this.extractImdbId(
-        raw?.externalLinks ?? undefined
-      );
-      if (imdbIdFromLink && libraryIndex.imdb.has(imdbIdFromLink)) {
-        const hit = libraryIndex.imdb.get(imdbIdFromLink);
-        if (hit) {
-          items.push({
-            ratingKey: hit.ratingKey,
-            title: hit.title,
-            type: mediaType,
-            tvdbId: hit.tvdbId,
-            posterUrl:
-              raw?.coverImage?.extraLarge ||
-              raw?.coverImage?.large ||
-              undefined,
-            metadata: { libraryKey: hit.libraryKey, originalPosition: i + 1 },
-          });
-          continue;
-        }
-      }
-      if (plexClient && (tmdbIdFromLink || imdbIdFromLink)) {
-        const direct =
-          (tmdbIdFromLink &&
-            (await this.plexLookupByGuid(
-              plexClient,
-              'tmdb',
-              tmdbIdFromLink,
-              mediaType
-            ))) ||
-          (imdbIdFromLink &&
-            (await this.plexLookupByGuid(
-              plexClient,
-              'imdb',
-              imdbIdFromLink,
-              mediaType
-            )));
-        if (direct) {
-          items.push({
-            ratingKey: direct.ratingKey,
-            title: direct.title || displayTitle,
-            type: mediaType,
-            posterUrl:
-              raw?.coverImage?.extraLarge ||
-              raw?.coverImage?.large ||
-              undefined,
-            metadata: {
-              libraryKey: normalizedLibraryId,
-              originalPosition: i + 1,
-            },
-          });
-          continue;
-        }
+      if (directLink) {
+        items.push({
+          ratingKey: directLink.ratingKey,
+          title: directLink.title || displayTitle,
+          type: mediaType,
+          posterUrl,
+          metadata: { libraryKey: targetLibraryId, originalPosition: i + 1 },
+        });
+        continue;
       }
 
       const itemMediaType = raw?.format === 'MOVIE' ? 'movie' : 'tv';
       if (ids === null || itemMediaType !== mediaType) continue;
       const tmdbId =
         (ids && (await resolveAnimeTmdbId(ids, mediaType))) ||
-        Number(tmdbIdFromLink);
+        Number(linkIds.tmdb ?? 0);
       const tvdbId =
         mediaType === 'tv' && ids?.tvdb ? Number(ids.tvdb) : undefined;
       if (tmdbId > 0 || tvdbId) {

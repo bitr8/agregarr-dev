@@ -20,7 +20,7 @@ import type {
   SyncResult,
 } from '@server/lib/collections/core/types';
 import {
-  buildProviderIndex,
+  buildLibraryProviderIndex,
   findMappedAnime,
   resolveAnimeTmdbId,
   type ProviderIndex,
@@ -196,21 +196,9 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
     const maxItems = config.maxItems || 9999;
     const mediaType = getCollectionMediaType(config);
 
-    // Build library index for early matching checks (if library cache provided)
-    // Filter to target library FIRST, same as mapSourceDataToItems does!
-    let libraryIndex: ProviderIndex | null = null;
-    if (libraryCache) {
-      const targetLibraryId = Array.isArray(config.libraryId)
-        ? config.libraryId[0]
-        : config.libraryId;
-
-      const filteredCache: LibraryItemsCache = {};
-      if (targetLibraryId && libraryCache[targetLibraryId]) {
-        filteredCache[targetLibraryId] = libraryCache[targetLibraryId];
-      }
-
-      libraryIndex = buildProviderIndex(filteredCache, mediaType);
-    }
+    const libraryIndex = libraryCache
+      ? buildLibraryProviderIndex(libraryCache, config.libraryId, mediaType)
+      : undefined;
 
     // Paginate through results with rate limiting and early matching checks
     const allData: CollectionSourceData[] = [];
@@ -303,20 +291,12 @@ export class MyAnimeListCollectionSync extends BaseCollectionSync<'myanimelist'>
     const items: CollectionItem[] = [];
     const missing: MissingItem[] = [];
 
-    // Filter library cache to only include target library (like Trakt does)
-    const targetLibraryId = Array.isArray(config.libraryId)
-      ? config.libraryId[0]
-      : config.libraryId;
-
-    const filteredCache: LibraryItemsCache = {};
-    if (libraryCache && targetLibraryId) {
-      if (libraryCache[targetLibraryId]) {
-        filteredCache[targetLibraryId] = libraryCache[targetLibraryId];
-      }
-    }
-
     const mediaType = getCollectionMediaType(config);
-    const libraryIndex = buildProviderIndex(filteredCache, mediaType);
+    const libraryIndex = buildLibraryProviderIndex(
+      libraryCache,
+      config.libraryId,
+      mediaType
+    );
 
     for (let i = 0; i < sourceData.length; i++) {
       const entry = sourceData[i];
