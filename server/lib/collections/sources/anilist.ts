@@ -663,7 +663,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
         ? lookupByAniList(anilistId, mediaType, raw?.idMal)
         : undefined;
       const hit = findMappedAnime(libraryIndex, ids);
-      const mappedTvdbId =
+      const tvdbId =
         mediaType === 'tv' && ids?.tvdb ? Number(ids.tvdb) : undefined;
       const posterUrl =
         raw?.coverImage?.extraLarge || raw?.coverImage?.large || undefined;
@@ -673,7 +673,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
           title: hit.title || displayTitle,
           type: mediaType,
           tmdbId: ids?.tmdb ? Number(ids.tmdb) : undefined,
-          tvdbId: mediaType === 'tv' ? hit.tvdbId ?? mappedTvdbId : undefined,
+          tvdbId: mediaType === 'tv' ? hit.tvdbId ?? tvdbId : undefined,
           posterUrl,
           metadata: {
             libraryKey: hit.libraryKey,
@@ -693,8 +693,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
           ratingKey: cachedLink.ratingKey,
           title: cachedLink.title,
           type: mediaType,
-          tvdbId:
-            mediaType === 'tv' ? cachedLink.tvdbId ?? mappedTvdbId : undefined,
+          tvdbId: mediaType === 'tv' ? cachedLink.tvdbId ?? tvdbId : undefined,
           posterUrl,
           metadata: {
             libraryKey: cachedLink.libraryKey,
@@ -709,7 +708,6 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
         (ids && (await resolveAnimeTmdbId(ids, mediaType))) ||
         linkedTmdbId ||
         0;
-      const tvdbId = mappedTvdbId;
       if (tmdbId > 0 || tvdbId) {
         missing.push({
           tmdbId: tmdbId > 0 ? tmdbId : 0, // Use 0 if no TMDB ID (Sonarr will use TVDB)

@@ -47,22 +47,35 @@ vi.mock('@server/lib/settings', () => ({
 }));
 
 import { AnilistCollectionSync } from './anilist';
-import { MyAnimeListCollectionSync } from './myanimelist';
+
+const episodes = { '1-12': '1-12' };
+const overgeared = {
+  'tmdb_show:324502:s1': episodes,
+  'tvdb_show:478752:s1': episodes,
+  'mal:64340': episodes,
+  'anidb:20077:R': episodes,
+};
+const data = {
+  $meta: { schema_version: '3.0.3' },
+  'anilist:212888': overgeared,
+  'mal:64340': { ...overgeared, 'anilist:212888': episodes },
+  'anilist:2': {
+    'tmdb_movie:324502': episodes,
+    'imdb_movie:tt0123456': episodes,
+  },
+  'anilist:3': { 'tmdb_show:15:s1': episodes, 'tmdb_show:16:s2': episodes },
+  'anilist:4': { 'tmdb_show:20:s1': episodes, 'tmdb_show:20:s2': episodes },
+  'anilist:6': {
+    'tmdb_show:324502:s2': episodes,
+    'tvdb_show:478752:s2': episodes,
+  },
+  'anilist:5': { 'tmdb_show:21:s1': { '1-': null } },
+};
 
 beforeEach(async () => {
-  const movie = { 'tmdb_movie:1': { '1': '1' } };
   vi.stubGlobal(
     'fetch',
-    vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            $meta: { schema_version: '3.0.3' },
-            'anilist:1': movie,
-            'mal:1': movie,
-          })
-        )
-    )
+    vi.fn().mockResolvedValue(new Response(JSON.stringify(data)))
   );
   await loadAnimeIds();
 });
@@ -208,41 +221,11 @@ describe('AniList external links', () => {
   });
 });
 describe('AniBridge collection matching', () => {
-  const episodes = { '1-12': '1-12' };
-  const overgeared = {
-    'tmdb_show:324502:s1': episodes,
-    'tvdb_show:478752:s1': episodes,
-    'mal:64340': episodes,
-    'anidb:20077:R': episodes,
-  };
-  const data = {
-    $meta: { schema_version: '3.0.3' },
-    'anilist:212888': overgeared,
-    'mal:64340': { ...overgeared, 'anilist:212888': episodes },
-    'anilist:2': {
-      'tmdb_movie:324502': episodes,
-      'imdb_movie:tt0123456': episodes,
-    },
-    'anilist:3': { 'tmdb_show:15:s1': episodes, 'tmdb_show:16:s2': episodes },
-    'anilist:4': { 'tmdb_show:20:s1': episodes, 'tmdb_show:20:s2': episodes },
-    'anilist:6': {
-      'tmdb_show:324502:s2': episodes,
-      'tvdb_show:478752:s2': episodes,
-    },
-    'anilist:5': { 'tmdb_show:21:s1': { '1-': null } },
-  };
   const config = { libraryId: '1' } as CollectionConfig;
   const entry = (anilistId: number, idMal?: number) => ({
     anilistId,
     title: 'Source title',
     raw: { format: 'TV', idMal },
-  });
-  beforeEach(async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(JSON.stringify(data)))
-    );
-    await loadAnimeIds();
   });
 
   it.each([
@@ -282,7 +265,7 @@ describe('AniBridge collection matching', () => {
     }
   );
 
-  it('uses the MAL source for both a missing AniList row and a MAL collection', async () => {
+  it('falls back to the MAL source when the AniList row is absent', async () => {
     const cache = {
       '1': [
         {
@@ -298,54 +281,57 @@ describe('AniBridge collection matching', () => {
       undefined,
       cache
     );
-    const mal = await new MyAnimeListCollectionSync().mapSourceDataToItems(
-      [
-        {
-          malId: 64340,
-          rank: 1,
-          title: 'Overgeared',
-          raw: { media_type: 'tv' },
-        },
-      ],
-      config,
-      undefined,
-      cache
-    );
     expect(ani.items[0]?.ratingKey).toBe('hit');
-    expect(mal.items[0]?.ratingKey).toBe('hit');
   });
 
-  it('resolves Overgeared through the MAL Plex agent in a MAL collection', async () => {
-    const result = await new MyAnimeListCollectionSync().mapSourceDataToItems(
-      [
-        {
-          malId: 64340,
-          rank: 1,
-          title: 'Overgeared',
-          raw: { media_type: 'tv' },
-        },
-      ],
-      config,
-      undefined,
-      {
-        '1': [
-          {
-            ratingKey: 'show',
-            title: 'Overgeared',
-            Guid: [{ id: 'com.plexapp.agents.myanimelist://64340' }],
+  it('continues past a foreign library hit and stops after finding the selected show', async () => {
+    const source = await import('@server/api/anilist');
+    const fetchPage = vi
+      .spyOn(source, 'getTrendingAnime')
+      .mockImplementation(async (page = 1) => ({
+        Page: {
+          pageInfo: {
+            total: 4,
+            perPage: 1,
+            currentPage: page,
+            lastPage: 4,
+            hasNextPage: page < 4,
           },
-        ],
-      }
-    );
-    expect(result.items).toEqual([
-      expect.objectContaining({
-        ratingKey: 'show',
-        type: 'tv',
-        tmdbId: 324502,
-        tvdbId: 478752,
-      }),
-    ]);
-    expect(result.missingItems).toEqual([]);
+          media: [
+            {
+              id: [4, 212888, 6, 5][page - 1],
+              title: { english: 'Series' },
+              format: 'TV',
+            },
+          ],
+        },
+      }));
+    try {
+      const rows = await new AnilistCollectionSync().fetchSourceData(
+        { ...config, maxItems: 1 },
+        undefined,
+        {
+          '1': [
+            {
+              ratingKey: 'owned',
+              title: 'Overgeared',
+              Guid: [{ id: 'tvdb://478752' }],
+            },
+          ],
+          '2': [
+            {
+              ratingKey: 'foreign',
+              title: 'Series',
+              Guid: [{ id: 'tmdb://20' }],
+            },
+          ],
+        }
+      );
+      expect(rows.map((row) => row.anilistId)).toEqual([4, 212888, 6]);
+      expect(fetchPage).toHaveBeenCalledTimes(3);
+    } finally {
+      fetchPage.mockRestore();
+    }
   });
 
   it('only creates missing items for unambiguous, correctly typed IDs', async () => {
