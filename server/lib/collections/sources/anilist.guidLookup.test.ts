@@ -1,8 +1,17 @@
 import { loadAnimeIds } from '@server/api/animeIds';
 import type PlexAPI from '@server/api/plexapi';
+import { prefetchAllLibraryItems } from '@server/lib/collections/core/CollectionUtilities';
+import { autoRequestService } from '@server/lib/collections/services/AutoRequestService';
+import { handlePlaceholderCleanup } from '@server/lib/placeholders/services/PlaceholderCleanup';
 import type { CollectionConfig } from '@server/lib/settings';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@server/lib/collections/services/AutoRequestService', () => ({
+  autoRequestService: { processAutoRequests: vi.fn() },
+}));
+vi.mock('@server/lib/placeholders/services/PlaceholderCleanup', () => ({
+  handlePlaceholderCleanup: vi.fn(),
+}));
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
   CollectionMetadata: class {},
@@ -40,6 +49,25 @@ vi.mock('@server/lib/settings', () => ({
 import { AnilistCollectionSync } from './anilist';
 import { MyAnimeListCollectionSync } from './myanimelist';
 
+beforeEach(async () => {
+  const movie = { 'tmdb_movie:1': { '1': '1' } };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            $meta: { schema_version: '3.0.3' },
+            'anilist:1': movie,
+            'mal:1': movie,
+          })
+        )
+    )
+  );
+  await loadAnimeIds();
+});
+afterEach(() => vi.unstubAllGlobals());
+
 it('ignores a TMDB movie link with the same numeric ID as a Plex show', async () => {
   const result = await new AnilistCollectionSync().mapSourceDataToItems(
     [
@@ -66,30 +94,6 @@ it('ignores a TMDB movie link with the same numeric ID as a Plex show', async ()
   expect(result.missingItems).toEqual([]);
 });
 
-describe('AniList direct GUID lookup', () => {
-  it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
-    const findItemByGuid = vi.fn().mockResolvedValue(undefined);
-    const sync = new AnilistCollectionSync() as unknown as {
-      plexLookupByGuid: (
-        c: PlexAPI,
-        p: 'tmdb' | 'imdb' | 'tvdb',
-        id: string,
-        m: 'movie' | 'tv'
-      ) => Promise<unknown>;
-    };
-
-    const hit = await sync.plexLookupByGuid(
-      { findItemByGuid } as unknown as PlexAPI,
-      'tmdb',
-      '1001',
-      'movie'
-    );
-
-    expect(findItemByGuid).not.toHaveBeenCalled();
-    expect(hit).toBeNull();
-  });
-});
-
 describe('AniList external links', () => {
   const config = { libraryId: '1' } as CollectionConfig;
   const linkedEntry = (url: string) => ({
@@ -98,28 +102,111 @@ describe('AniList external links', () => {
     raw: { format: 'TV', externalLinks: [{ site: 'TMDB', url }] },
   });
 
-  it('ignores cached items from other libraries when the selected library is absent', async () => {
-    const result = await new AnilistCollectionSync().mapSourceDataToItems(
-      [linkedEntry('https://www.themoviedb.org/tv/20')],
+  it('requires one distinct same-type link for a download and one owned match for membership', async () => {
+    const fromLinks = (...paths: string[]) => ({
+      ...linkedEntry(''),
+      raw: {
+        format: 'TV',
+        externalLinks: paths.map((path) => ({
+          site: 'TMDB',
+          url: 'https://www.themoviedb.org/' + path,
+        })),
+      },
+    });
+    const sync = new AnilistCollectionSync();
+    const entries = [
+      fromLinks('tv/20', 'tv/21'),
+      fromLinks('movie/20', 'tv/21', 'tv/21'),
+    ];
+    const missing = await sync.mapSourceDataToItems(
+      entries,
+      config,
+      undefined,
+      { '1': [] }
+    );
+    expect(missing.missingItems).toEqual([
+      expect.objectContaining({ tmdbId: 21, originalPosition: 2 }),
+    ]);
+    const owned = await sync.mapSourceDataToItems(
+      entries.slice(0, 1),
       config,
       undefined,
       {
-        '2': [
-          {
-            ratingKey: 'elsewhere',
-            title: 'Other library',
-            Guid: [{ id: 'tmdb://20' }],
-          },
+        '1': [
+          { ratingKey: 'owned', title: 'Show', Guid: [{ id: 'tmdb://21' }] },
         ],
       }
     );
-    expect(result.items).toEqual([]);
-    expect(result.missingItems).toEqual([
-      expect.objectContaining({ tmdbId: 20, originalPosition: 1 }),
-    ]);
+    expect(owned.items.map((item) => item.ratingKey)).toEqual(['owned']);
+    expect(owned.missingItems).toEqual([]);
+  });
+
+  it('stops before missing-item processing when prefetch fails, and processes a successful empty read', async () => {
+    const getLibraryContents = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ items: [] });
+    const plex = {
+      getLibraries: async () => [{ key: '1', type: 'show' }],
+      getLibraryContents,
+    } as unknown as PlexAPI;
+    const sync = new AnilistCollectionSync();
+    const entry = linkedEntry('https://www.themoviedb.org/tv/20');
+    vi.spyOn(sync, 'fetchSourceData').mockResolvedValue([entry]);
+    const mappings = await import('@server/api/animeIds');
+    const ready = vi
+      .spyOn(mappings, 'ensureAnimeIdsLoaded')
+      .mockResolvedValue();
+    const requestConfig = { ...config, searchMissingTV: true };
+    vi.clearAllMocks();
+    try {
+      await expect(
+        sync['processConfiguration'](
+          requestConfig,
+          plex,
+          [],
+          undefined,
+          await prefetchAllLibraryItems(plex)
+        )
+      ).rejects.toThrow('Plex library 1 was unavailable');
+      expect(autoRequestService.processAutoRequests).not.toHaveBeenCalled();
+      expect(handlePlaceholderCleanup).not.toHaveBeenCalled();
+      await sync['processConfiguration'](
+        requestConfig,
+        plex,
+        [],
+        undefined,
+        await prefetchAllLibraryItems(plex)
+      );
+      expect(autoRequestService.processAutoRequests).toHaveBeenCalledWith(
+        [expect.objectContaining({ tmdbId: 20, originalPosition: 1 })],
+        requestConfig,
+        'anilist'
+      );
+    } finally {
+      ready.mockRestore();
+    }
+  });
+
+  it('ignores cached items from other libraries when the selected library is absent', async () => {
+    await expect(
+      new AnilistCollectionSync().mapSourceDataToItems(
+        [linkedEntry('https://www.themoviedb.org/tv/20')],
+        config,
+        undefined,
+        {
+          '2': [
+            {
+              ratingKey: 'elsewhere',
+              title: 'Other library',
+              Guid: [{ id: 'tmdb://20' }],
+            },
+          ],
+        }
+      )
+    ).rejects.toThrow('Plex library 1 was unavailable');
   });
 });
-
 describe('AniBridge collection matching', () => {
   const episodes = { '1-12': '1-12' };
   const overgeared = {
@@ -157,7 +244,6 @@ describe('AniBridge collection matching', () => {
     );
     await loadAnimeIds();
   });
-  afterEach(() => vi.unstubAllGlobals());
 
   it.each([
     'tmdb://324502',
@@ -268,6 +354,7 @@ describe('AniBridge collection matching', () => {
       config,
       undefined,
       {
+        '1': [],
         '2': [
           {
             ratingKey: 'wrong-library',
@@ -286,6 +373,28 @@ describe('AniBridge collection matching', () => {
         mediaType: 'tv',
       }),
     ]);
+  });
+
+  it('requests two missing seasons once at their first source position', async () => {
+    vi.clearAllMocks();
+    const sync = new AnilistCollectionSync();
+    vi.spyOn(sync, 'fetchSourceData').mockResolvedValue([
+      entry(212888),
+      entry(6),
+    ]);
+    const requestConfig = { ...config, searchMissingTV: true };
+    await sync['processConfiguration'](
+      requestConfig,
+      {} as PlexAPI,
+      [],
+      undefined,
+      { '1': [] }
+    );
+    expect(autoRequestService.processAutoRequests).toHaveBeenCalledWith(
+      [expect.objectContaining({ tmdbId: 324502, originalPosition: 1 })],
+      requestConfig,
+      'anilist'
+    );
   });
 
   it('uses a movie IMDb target in a movie library', async () => {
