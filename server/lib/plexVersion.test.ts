@@ -1,4 +1,4 @@
-import { plexVersionAtLeast } from '@server/lib/plexVersion';
+import { exploitedCvesFor, plexVersionAtLeast } from '@server/lib/plexVersion';
 import { describe, expect, it } from 'vitest';
 
 describe('plexVersionAtLeast', () => {
@@ -25,5 +25,13 @@ describe('plexVersionAtLeast', () => {
     expect(plexVersionAtLeast('1.44.', '1.43.3')).toBe(false);
     expect(plexVersionAtLeast('1.44.0x10', '1.43.3')).toBe(false);
     expect(plexVersionAtLeast('1.44.1e2', '1.43.3')).toBe(false);
+    expect(plexVersionAtLeast('1.43.3.bad', '1.43.3')).toBe(false);
+    expect(plexVersionAtLeast('1.44.0.x-abc', '0.0.0')).toBe(false);
+  });
+
+  it('reports KEV CVEs only for versions it can parse', () => {
+    expect(exploitedCvesFor('1.43.3.bad')).toEqual([]);
+    expect(exploitedCvesFor('1.43.5.11029-6bf8af3f0')).toEqual([]);
+    expect(exploitedCvesFor('1.43.3.10860-abc')).toHaveLength(4);
   });
 });
