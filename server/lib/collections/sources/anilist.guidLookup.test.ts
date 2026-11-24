@@ -12,6 +12,12 @@ vi.mock('@server/lib/collections/services/AutoRequestService', () => ({
 vi.mock('@server/lib/placeholders/services/PlaceholderCleanup', () => ({
   handlePlaceholderCleanup: vi.fn(),
 }));
+const { getExternalId } = vi.hoisted(() => ({ getExternalId: vi.fn() }));
+vi.mock('@server/api/themoviedb', () => ({
+  default: class {
+    getByExternalId = getExternalId;
+  },
+}));
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
   CollectionMetadata: class {},
@@ -49,28 +55,53 @@ vi.mock('@server/lib/settings', () => ({
 import { AnilistCollectionSync } from './anilist';
 import { MyAnimeListCollectionSync } from './myanimelist';
 
-describe('AniList direct GUID lookup', () => {
-  it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
-    const findItemByGuid = vi.fn().mockResolvedValue(undefined);
-    const sync = new AnilistCollectionSync() as unknown as {
-      plexLookupByGuid: (
-        c: PlexAPI,
-        p: 'tmdb' | 'imdb' | 'tvdb',
-        id: string,
-        m: 'movie' | 'tv'
-      ) => Promise<unknown>;
-    };
+it('ignores a TMDB movie link with the same numeric ID as a Plex show', async () => {
+  const result = await new AnilistCollectionSync().mapSourceDataToItems(
+    [
+      {
+        anilistId: 99,
+        title: 'Source title',
+        raw: {
+          format: 'TV',
+          externalLinks: [
+            { site: 'TMDB', url: 'https://www.themoviedb.org/movie/20' },
+          ],
+        },
+      },
+    ],
+    { libraryId: '1' } as CollectionConfig,
+    undefined,
+    {
+      '1': [
+        { ratingKey: 'show', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+      ],
+    }
+  );
+  expect(result.items).toEqual([]);
+  expect(result.missingItems).toEqual([]);
+});
 
-    const hit = await sync.plexLookupByGuid(
-      { findItemByGuid } as unknown as PlexAPI,
-      'tmdb',
-      '1001',
-      'movie'
+it('ignores a mapped movie ID with the same number as a Plex show', async () => {
+  const animeIds = await import('@server/api/animeIds');
+  const lookup = vi
+    .spyOn(animeIds, 'lookupByAniList')
+    .mockReturnValue({ tmdb_movie_id: 20 });
+  try {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [{ anilistId: 99, title: 'Source title', raw: { format: 'TV' } }],
+      { libraryId: '1' } as CollectionConfig,
+      undefined,
+      {
+        '1': [
+          { ratingKey: 'show', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+        ],
+      }
     );
-
-    expect(findItemByGuid).not.toHaveBeenCalled();
-    expect(hit).toBeNull();
-  });
+    expect(result.items).toEqual([]);
+    expect(result.missingItems).toEqual([]);
+  } finally {
+    lookup.mockRestore();
+  }
 });
 
 describe('AniList external links', () => {
@@ -79,6 +110,102 @@ describe('AniList external links', () => {
     anilistId: 99,
     title: 'Source title',
     raw: { format: 'TV', externalLinks: [{ site: 'TMDB', url }] },
+  });
+
+  it('requires one distinct same-type link for a download and one owned match for membership', async () => {
+    const fromLinks = (...paths: string[]) => ({
+      ...linkedEntry(''),
+      raw: {
+        format: 'TV',
+        externalLinks: paths.map((path) => ({
+          site: 'TMDB',
+          url: 'https://www.themoviedb.org/' + path,
+        })),
+      },
+    });
+    const sync = new AnilistCollectionSync();
+    const entries = [
+      fromLinks('tv/20', 'tv/21'),
+      fromLinks('movie/20', 'tv/21', 'tv/21'),
+    ];
+    const missing = await sync.mapSourceDataToItems(
+      entries,
+      config,
+      undefined,
+      { '1': [] }
+    );
+    expect(missing.missingItems).toEqual([
+      expect.objectContaining({ tmdbId: 21, originalPosition: 2 }),
+    ]);
+    const owned = await sync.mapSourceDataToItems(
+      entries.slice(0, 1),
+      config,
+      undefined,
+      {
+        '1': [
+          { ratingKey: 'owned', title: 'Show', Guid: [{ id: 'tmdb://21' }] },
+        ],
+      }
+    );
+    expect(owned.items.map((item) => item.ratingKey)).toEqual(['owned']);
+    expect(owned.missingItems).toEqual([]);
+  });
+
+  it('keeps the movie ID of a MAL-agent row out of the show index', async () => {
+    const mappings = await import('@server/api/animeIds');
+    const lookup = vi
+      .spyOn(mappings, 'lookupByMal')
+      .mockReturnValue({ tmdb_movie_id: 20, tmdb_show_id: 30 });
+    try {
+      const { items } = await new AnilistCollectionSync().mapSourceDataToItems(
+        [
+          linkedEntry('https://www.themoviedb.org/tv/20'),
+          linkedEntry('https://www.themoviedb.org/tv/30'),
+        ],
+        config,
+        undefined,
+        {
+          '1': [
+            {
+              ratingKey: 'series',
+              title: 'Series',
+              Guid: [{ id: 'com.plexapp.agents.myanimelist://7' }],
+            },
+          ],
+        }
+      );
+      expect(items.map((item) => item.metadata?.originalPosition)).toEqual([2]);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  it('keeps TVDB-only series out of opposite-type and ambiguous TMDB requests', async () => {
+    const mappings = await import('@server/api/animeIds');
+    const lookup = vi
+      .spyOn(mappings, 'lookupByAniList')
+      .mockReturnValue({ tvdb_id: 99 });
+    const entry = { anilistId: 1, title: 'Show', raw: { format: 'TV' } };
+    try {
+      for (const tv_results of [[], [{ id: 11 }, { id: 12 }]]) {
+        getExternalId.mockResolvedValueOnce({
+          tv_results,
+          movie_results: [{ id: 777 }],
+        });
+        const { missingItems } =
+          await new AnilistCollectionSync().mapSourceDataToItems(
+            [entry],
+            config,
+            undefined,
+            { '1': [] }
+          );
+        expect(missingItems).toEqual([
+          expect.objectContaining({ mediaType: 'tv', tvdbId: 99, tmdbId: 0 }),
+        ]);
+      }
+    } finally {
+      lookup.mockRestore();
+    }
   });
 
   it('stops before missing-item processing when prefetch fails, and processes a successful empty read', async () => {
