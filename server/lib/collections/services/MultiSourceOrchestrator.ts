@@ -47,6 +47,7 @@ import { TmdbCollectionSync } from '@server/lib/collections/sources/tmdb';
 import { TracearrStatsCollectionSync } from '@server/lib/collections/sources/tracearrStats';
 import { TraktCollectionSync } from '@server/lib/collections/sources/trakt';
 import { TvdbCollectionSync } from '@server/lib/collections/sources/tvdb';
+import { requireAnimeLibraryItems } from '@server/lib/collections/utils/AnimeProviderIndex';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import { generatePoster } from '@server/lib/posterStorage';
@@ -305,6 +306,14 @@ export class MultiSourceOrchestrator {
             }
           );
         }
+      }
+
+      if (
+        sourcesToFetch.some(
+          (source) => source.type === 'anilist' || source.type === 'myanimelist'
+        )
+      ) {
+        requireAnimeLibraryItems(libraryCache, config.libraryId);
       }
 
       // Fetch items from sources

@@ -2376,7 +2376,7 @@ export async function prefetchAllLibraryItems(
             libraryKey: library.key,
           }
         );
-        return { libraryKey: library.key, items: [] };
+        throw error;
       }
     });
 
