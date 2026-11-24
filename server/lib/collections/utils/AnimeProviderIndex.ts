@@ -45,7 +45,8 @@ export interface ProviderIndex {
  * and also resolves MyAnimeList agent GUIDs via the PlexAniBridge mapping.
  */
 export function buildProviderIndex(
-  libraryCache?: LibraryItemsCache
+  libraryCache?: LibraryItemsCache,
+  mediaType?: 'movie' | 'tv'
 ): ProviderIndex {
   const imdb = new Map<string, ProviderIndexEntry>();
   const tmdb = new Map<string, ProviderIndexEntry>();
@@ -127,7 +128,7 @@ export function buildProviderIndex(
           const map = lookupByMal(malId);
           if (map) {
             // Add all available IDs from PlexAniBridge mapping
-            if (map.tvdb_id) {
+            if (mediaType !== 'movie' && map.tvdb_id) {
               tvdb.set(String(map.tvdb_id), {
                 ratingKey: it.ratingKey,
                 title: it.title,
@@ -135,7 +136,7 @@ export function buildProviderIndex(
                 tvdbId: itemTvdbId ?? Number(map.tvdb_id),
               });
             }
-            if (map.tmdb_show_id) {
+            if (mediaType !== 'movie' && map.tmdb_show_id) {
               tmdb.set(String(map.tmdb_show_id), {
                 ratingKey: it.ratingKey,
                 title: it.title,
@@ -145,7 +146,8 @@ export function buildProviderIndex(
               });
             }
             // tmdb_movie_id can be array - add all values
-            const tmdbMovieIds = getAllValues(map.tmdb_movie_id);
+            const tmdbMovieIds =
+              mediaType === 'tv' ? [] : getAllValues(map.tmdb_movie_id);
             for (const mid of tmdbMovieIds) {
               tmdb.set(String(mid), {
                 ratingKey: it.ratingKey,
@@ -155,7 +157,8 @@ export function buildProviderIndex(
               });
             }
             // imdb_id can be array - add all values
-            const imdbIds = getAllValues(map.imdb_id);
+            const imdbIds =
+              mediaType === 'movie' ? [] : getAllValues(map.imdb_id);
             for (const iid of imdbIds) {
               imdb.set(iid.toLowerCase(), {
                 ratingKey: it.ratingKey,
@@ -190,7 +193,11 @@ export function requireAnimeLibraryItems(
 
 export function buildLibraryProviderIndex(
   libraryCache: LibraryItemsCache | undefined,
-  libraryId: string | string[]
+  libraryId: string | string[],
+  mediaType?: 'movie' | 'tv'
 ): ProviderIndex {
-  return buildProviderIndex(requireAnimeLibraryItems(libraryCache, libraryId));
+  return buildProviderIndex(
+    requireAnimeLibraryItems(libraryCache, libraryId),
+    mediaType
+  );
 }
