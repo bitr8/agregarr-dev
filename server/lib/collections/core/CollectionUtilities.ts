@@ -1590,14 +1590,9 @@ export function filterItemsByPosition<T extends { originalPosition: number }>(
 export function combinePreviewMissingItems<
   T extends { tmdbId?: number; mediaType: string; originalPosition: number }
 >(groups: T[][], maxItems?: number): T[] {
-  // Position-filter per source before dedupe, as the sync does
-  const seen = new Set<string>();
-  return filterItemsByPosition(groups.flat(), maxItems).filter((item) => {
-    const key = `${item.tmdbId}-${item.mediaType}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return deduplicateMissingItems(
+    filterItemsByPosition(groups.flat(), maxItems)
+  );
 }
 
 /**
@@ -2029,11 +2024,15 @@ export async function applyCollectionExclusions(
   }
 }
 
-export function deduplicateMissingItems(items: MissingItem[]): MissingItem[] {
+export function deduplicateMissingItems<
+  T extends { mediaType: string; tmdbId?: number; tvdbId?: number }
+>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     const tmdb =
-      item.tmdbId > 0 ? `${item.mediaType}:tmdb:${item.tmdbId}` : undefined;
+      item.tmdbId && item.tmdbId > 0
+        ? `${item.mediaType}:tmdb:${item.tmdbId}`
+        : undefined;
     const tvdb =
       item.mediaType === 'tv' && item.tvdbId
         ? `tv:tvdb:${item.tvdbId}`
