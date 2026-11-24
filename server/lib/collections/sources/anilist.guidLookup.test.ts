@@ -38,6 +38,55 @@ vi.mock('@server/lib/settings', () => ({
 
 import { AnilistCollectionSync } from './anilist';
 
+it('ignores a TMDB movie link with the same numeric ID as a Plex show', async () => {
+  const result = await new AnilistCollectionSync().mapSourceDataToItems(
+    [
+      {
+        anilistId: 99,
+        title: 'Source title',
+        raw: {
+          format: 'TV',
+          externalLinks: [
+            { site: 'TMDB', url: 'https://www.themoviedb.org/movie/20' },
+          ],
+        },
+      },
+    ],
+    { libraryId: '1' } as CollectionConfig,
+    undefined,
+    {
+      '1': [
+        { ratingKey: 'show', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+      ],
+    }
+  );
+  expect(result.items).toEqual([]);
+  expect(result.missingItems).toEqual([]);
+});
+
+it('ignores a mapped movie ID with the same number as a Plex show', async () => {
+  const animeIds = await import('@server/api/animeIds');
+  const lookup = vi
+    .spyOn(animeIds, 'lookupByAniList')
+    .mockReturnValue({ tmdb_movie_id: 20 });
+  try {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [{ anilistId: 99, title: 'Source title', raw: { format: 'TV' } }],
+      { libraryId: '1' } as CollectionConfig,
+      undefined,
+      {
+        '1': [
+          { ratingKey: 'show', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+        ],
+      }
+    );
+    expect(result.items).toEqual([]);
+    expect(result.missingItems).toEqual([]);
+  } finally {
+    lookup.mockRestore();
+  }
+});
+
 describe('AniList direct GUID lookup', () => {
   it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
     const findItemByGuid = vi.fn().mockResolvedValue(undefined);
