@@ -65,7 +65,9 @@ describe.each([
     const result = await sync.processCollections(
       [cfg],
       { recordCollectionProcessingTime: vi.fn() } as unknown as PlexAPI,
-      []
+      [],
+      undefined,
+      { '1': [] }
     );
 
     expect(result.error).toContain('upstream list unavailable');
@@ -88,7 +90,9 @@ describe('anilist custom URL', () => {
     return sync.processCollections(
       [cfg],
       { recordCollectionProcessingTime: vi.fn() } as unknown as PlexAPI,
-      []
+      [],
+      undefined,
+      { '1': [] }
     );
   };
 

@@ -66,6 +66,7 @@ export function parseMappings(data: unknown): Map<string, AnimeMapping> {
 
   const result = new Map<string, AnimeMapping>();
   let hasUsableAniListMapping = false;
+  let hasUsableMalMapping = false;
   for (const [source, targets] of Object.entries(data)) {
     if (
       !/^(?:(?:anilist|mal):[1-9]\d*|anidb:[1-9]\d*:R)$/.test(source) ||
@@ -77,12 +78,15 @@ export function parseMappings(data: unknown): Map<string, AnimeMapping> {
     const mapping = parseEpisodeMappings(targets);
     if (!Object.keys(mapping).length) continue;
     result.set(source, mapping);
-    if (source.startsWith('anilist:') && (mapping.tv || mapping.movie)) {
-      hasUsableAniListMapping = true;
+    if (mapping.tv || mapping.movie) {
+      if (source.startsWith('anilist:')) hasUsableAniListMapping = true;
+      if (source.startsWith('mal:')) hasUsableMalMapping = true;
     }
   }
   if (!hasUsableAniListMapping) {
     throw new Error('AniBridge mappings contain no usable AniList entries');
   }
+  if (!hasUsableMalMapping)
+    throw new Error('AniBridge mappings contain no usable MAL entries');
   return result;
 }

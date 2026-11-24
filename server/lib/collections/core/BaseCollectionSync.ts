@@ -1073,7 +1073,8 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       // Check TV shows (TMDB or TVDB)
       if (item.type === 'tv') {
         const tmdbId = item.tmdbId || (item.metadata?.tmdbId as number);
-        const tvdbId = item.metadata?.tvdbId as number | undefined;
+        const tvdbId =
+          item.tvdbId ?? (item.metadata?.tvdbId as number | undefined);
 
         // Check TMDB exclusions
         if (
@@ -3720,7 +3721,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           }
 
           // Check TVDB exclusions (if item has tvdbId)
-          const tvdbId = (item as { tvdbId?: number }).tvdbId;
+          const tvdbId = item.tvdbId;
           if (
             tvdbId &&
             exclusions.shows.some(

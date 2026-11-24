@@ -20,6 +20,7 @@ import {
   buildSortTitleFromOverride,
   createCollectionLabel,
   createSyncError,
+  deduplicateMissingItems,
   getCollectionSyncCounter,
   getMediaTypeFromLibrary,
   getTargetUserLabel,
@@ -47,6 +48,7 @@ import { TmdbCollectionSync } from '@server/lib/collections/sources/tmdb';
 import { TracearrStatsCollectionSync } from '@server/lib/collections/sources/tracearrStats';
 import { TraktCollectionSync } from '@server/lib/collections/sources/trakt';
 import { TvdbCollectionSync } from '@server/lib/collections/sources/tvdb';
+import { requireAnimeLibraryItems } from '@server/lib/collections/utils/AnimeProviderIndex';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import { generatePoster } from '@server/lib/posterStorage';
@@ -305,6 +307,14 @@ export class MultiSourceOrchestrator {
             }
           );
         }
+      }
+
+      if (
+        sourcesToFetch.some(
+          (source) => source.type === 'anilist' || source.type === 'myanimelist'
+        )
+      ) {
+        requireAnimeLibraryItems(libraryCache, config.libraryId);
       }
 
       // Fetch items from sources
@@ -1189,18 +1199,7 @@ export class MultiSourceOrchestrator {
         // For all other modes, combine ALL missing items from ALL sources
         const allMissingItems = missingItemGroups.flat();
 
-        // Remove duplicates based on tmdbId and mediaType
-        const uniqueMissingItems = allMissingItems.reduce(
-          (acc, item) => {
-            const key = `${item.tmdbId}-${item.mediaType}`;
-            if (!acc.seen.has(key)) {
-              acc.seen.add(key);
-              acc.items.push(item);
-            }
-            return acc;
-          },
-          { seen: new Set<string>(), items: [] as MissingItem[] }
-        ).items;
+        const uniqueMissingItems = deduplicateMissingItems(allMissingItems);
 
         logger.debug(
           `Combined missing items from ${missingItemGroups.length} sources`,
