@@ -30,10 +30,7 @@ import type {
   PlexCollection,
   SyncResult,
 } from '@server/lib/collections/core/types';
-import {
-  buildProviderIndex,
-  type ProviderIndex,
-} from '@server/lib/collections/utils/AnimeProviderIndex';
+import { buildLibraryProviderIndex } from '@server/lib/collections/utils/AnimeProviderIndex';
 import type { CollectionConfig } from '@server/lib/settings';
 import logger from '@server/logger';
 
@@ -390,24 +387,9 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
         ? { format: 'MOVIE' }
         : { formatIn: ['TV', 'TV_SHORT', 'ONA', 'OVA', 'SPECIAL'] };
 
-    // Build library index for early matching checks (if library cache provided)
-    // Filter to target library FIRST, same as mapSourceDataToItems does!
-    let libraryIndex: ProviderIndex | null = null;
-    if (libraryCache) {
-      const targetLibraryId = Array.isArray(config.libraryId)
-        ? config.libraryId[0]
-        : config.libraryId;
-
-      const filteredCache: LibraryItemsCache = {};
-      if (targetLibraryId && libraryCache[targetLibraryId]) {
-        filteredCache[targetLibraryId] = libraryCache[targetLibraryId];
-      }
-
-      const cacheToUse =
-        Object.keys(filteredCache).length > 0 ? filteredCache : libraryCache;
-
-      libraryIndex = buildProviderIndex(cacheToUse);
-    }
+    const libraryIndex = libraryCache
+      ? buildLibraryProviderIndex(libraryCache, config.libraryId)
+      : undefined;
 
     // Paginate through results with rate limiting and early matching checks
     const paginateResults = async (
@@ -749,7 +731,6 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     const items: CollectionItem[] = [];
     const missing: MissingItem[] = [];
 
-    // Filter library cache to only include target library (like Trakt does)
     const targetLibraryId = Array.isArray(config.libraryId)
       ? config.libraryId[0]
       : config.libraryId;
@@ -757,23 +738,11 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     // Normalize library ID to string for metadata (used by plexLookupByGuid fallbacks)
     const normalizedLibraryId: string = targetLibraryId as string;
 
-    const filteredCache: LibraryItemsCache = {};
-    if (libraryCache && targetLibraryId) {
-      if (libraryCache[targetLibraryId]) {
-        filteredCache[targetLibraryId] = libraryCache[targetLibraryId];
-      }
-    }
-
-    // Use filtered cache (target library only) if available, otherwise use full cache
-    const cacheToUse =
-      Object.keys(filteredCache).length > 0 ? filteredCache : libraryCache;
-
     const {
       imdb: imdbIdx,
       tmdb: tmdbIdx,
       tvdb: tvdbIdx,
-    } = buildProviderIndex(cacheToUse);
-    // Get media type from config (this already returns 'movie' | 'tv')
+    } = buildLibraryProviderIndex(libraryCache, config.libraryId);
     const mediaType = getCollectionMediaType(config);
 
     for (let i = 0; i < sourceData.length; i++) {

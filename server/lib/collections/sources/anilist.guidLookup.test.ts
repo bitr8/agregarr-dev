@@ -1,4 +1,5 @@
 import type PlexAPI from '@server/api/plexapi';
+import type { CollectionConfig } from '@server/lib/settings';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
@@ -23,7 +24,16 @@ vi.mock('@server/logger', () => ({
   default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('@server/lib/settings', () => ({
-  getSettings: () => ({ plex: { collectionConfigs: [], libraries: [] } }),
+  getSettings: () => ({
+    globalExclusions: { movies: [], shows: [] },
+    plex: {
+      collectionConfigs: [],
+      libraries: [
+        { key: '1', type: 'show' },
+        { key: '2', type: 'movie' },
+      ],
+    },
+  }),
 }));
 
 import { AnilistCollectionSync } from './anilist';
@@ -49,5 +59,35 @@ describe('AniList direct GUID lookup', () => {
 
     expect(findItemByGuid).not.toHaveBeenCalled();
     expect(hit).toBeNull();
+  });
+});
+
+describe('AniList external links', () => {
+  const config = { libraryId: '1' } as CollectionConfig;
+  const linkedEntry = (url: string) => ({
+    anilistId: 99,
+    title: 'Source title',
+    raw: { format: 'TV', externalLinks: [{ site: 'TMDB', url }] },
+  });
+
+  it('ignores cached items from other libraries when the selected library is absent', async () => {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [linkedEntry('https://www.themoviedb.org/tv/20')],
+      config,
+      undefined,
+      {
+        '2': [
+          {
+            ratingKey: 'elsewhere',
+            title: 'Other library',
+            Guid: [{ id: 'tmdb://20' }],
+          },
+        ],
+      }
+    );
+    expect(result.items).toEqual([]);
+    expect(result.missingItems).toEqual([
+      expect.objectContaining({ tmdbId: 20, originalPosition: 1 }),
+    ]);
   });
 });
