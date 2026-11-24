@@ -1,3 +1,7 @@
+import {
+  lookupByMal as lookupV3ByMal,
+  type AnimeProviderIds,
+} from '@server/api/anibridgeV3';
 import { getAllValues, lookupByMal } from '@server/api/animeIds';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
 
@@ -45,7 +49,8 @@ export interface ProviderIndex {
  * and also resolves MyAnimeList agent GUIDs via the PlexAniBridge mapping.
  */
 export function buildProviderIndex(
-  libraryCache?: LibraryItemsCache
+  libraryCache?: LibraryItemsCache,
+  mediaType?: 'movie' | 'tv'
 ): ProviderIndex {
   const imdb = new Map<string, ProviderIndexEntry>();
   const tmdb = new Map<string, ProviderIndexEntry>();
@@ -124,6 +129,24 @@ export function buildProviderIndex(
         const mMalAgent = g.match(/myanimelist:\/\/(\d+)/i);
         if (mMalAgent) {
           const malId = parseInt(mMalAgent[1]);
+          if (mediaType) {
+            const ids = lookupV3ByMal(malId, mediaType);
+            if (ids) {
+              const hit = {
+                ratingKey: it.ratingKey,
+                title: it.title,
+                libraryKey: libKey,
+                tvdbId:
+                  mediaType === 'tv'
+                    ? itemTvdbId ?? (ids.tvdb ? Number(ids.tvdb) : undefined)
+                    : undefined,
+              };
+              if (ids.tmdb) tmdb.set(ids.tmdb, hit);
+              if (ids.tvdb) tvdb.set(ids.tvdb, hit);
+              if (ids.imdb) imdb.set(ids.imdb, hit);
+            }
+            continue;
+          }
           const map = lookupByMal(malId);
           if (map) {
             // Add all available IDs from PlexAniBridge mapping
@@ -176,9 +199,41 @@ export function buildProviderIndex(
 
 export function buildLibraryProviderIndex(
   libraryCache: LibraryItemsCache | undefined,
-  libraryId: string | string[]
+  libraryId: string | string[],
+  mediaType?: 'movie' | 'tv'
 ): ProviderIndex {
   const key = Array.isArray(libraryId) ? libraryId[0] : libraryId;
   const items = key && libraryCache?.[key];
-  return buildProviderIndex(items ? { [key]: items } : undefined);
+  return buildProviderIndex(items ? { [key]: items } : undefined, mediaType);
+}
+
+export function findMappedAnime(
+  index: ProviderIndex,
+  ids?: AnimeProviderIds | null
+) {
+  if (!ids) return undefined;
+  return (
+    (ids.tvdb ? index.tvdb.get(ids.tvdb) : undefined) ??
+    (ids.tmdb ? index.tmdb.get(ids.tmdb) : undefined) ??
+    (ids.imdb ? index.imdb.get(ids.imdb) : undefined)
+  );
+}
+
+export async function resolveAnimeTmdbId(
+  ids: AnimeProviderIds,
+  type: 'movie' | 'tv'
+) {
+  if (ids.tmdb) return Number(ids.tmdb);
+  if (!ids.tvdb) return undefined;
+  try {
+    const TheMovieDb = (await import('@server/api/themoviedb')).default;
+    const result = await new TheMovieDb().getByExternalId({
+      externalId: Number(ids.tvdb),
+      type: 'tvdb',
+    });
+    const candidates = type === 'tv' ? result.tv_results : result.movie_results;
+    return candidates?.length === 1 ? candidates[0].id : undefined;
+  } catch {
+    return undefined;
+  }
 }

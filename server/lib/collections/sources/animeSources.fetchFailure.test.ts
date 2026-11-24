@@ -4,6 +4,10 @@ import type { CollectionConfig } from '@server/lib/settings';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
+vi.mock('@server/api/anibridgeV3', () => ({
+  ensureAnimeIdsLoaded: vi.fn().mockResolvedValue(undefined),
+  lookupByMal: vi.fn(),
+}));
 vi.mock('@server/api/animeIds', () => ({
   ensureAnimeIdsLoaded: vi.fn().mockResolvedValue(undefined),
   getFirstValue: vi.fn(),

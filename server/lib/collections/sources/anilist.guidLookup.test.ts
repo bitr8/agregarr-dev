@@ -1,6 +1,7 @@
+import { loadAnimeIds } from '@server/api/anibridgeV3';
 import type PlexAPI from '@server/api/plexapi';
 import type { CollectionConfig } from '@server/lib/settings';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
@@ -37,6 +38,7 @@ vi.mock('@server/lib/settings', () => ({
 }));
 
 import { AnilistCollectionSync } from './anilist';
+import { MyAnimeListCollectionSync } from './myanimelist';
 
 describe('AniList direct GUID lookup', () => {
   it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
@@ -89,5 +91,60 @@ describe('AniList external links', () => {
     expect(result.missingItems).toEqual([
       expect.objectContaining({ tmdbId: 20, originalPosition: 1 }),
     ]);
+  });
+});
+
+describe('MyAnimeList v3 matching', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('resolves Overgeared through the MAL Plex agent in a show library', async () => {
+    const episodes = { '1-12': '1-12' };
+    const series = {
+      'tmdb_show:324502:s1': episodes,
+      'tvdb_show:478752:s1': episodes,
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            $meta: { schema_version: '3.0.3' },
+            'anilist:212888': series,
+            'mal:64340': series,
+          })
+        )
+      )
+    );
+    await loadAnimeIds();
+    const result = await new MyAnimeListCollectionSync().mapSourceDataToItems(
+      [
+        {
+          malId: 64340,
+          rank: 1,
+          title: 'Overgeared',
+          raw: { media_type: 'tv' },
+        },
+      ],
+      { libraryId: '1' } as CollectionConfig,
+      undefined,
+      {
+        '1': [
+          {
+            ratingKey: 'show',
+            title: 'Overgeared',
+            Guid: [{ id: 'com.plexapp.agents.myanimelist://64340' }],
+          },
+        ],
+      }
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        ratingKey: 'show',
+        type: 'tv',
+        tmdbId: 324502,
+        tvdbId: 478752,
+      }),
+    ]);
+    expect(result.missingItems).toEqual([]);
   });
 });
