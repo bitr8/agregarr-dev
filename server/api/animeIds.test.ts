@@ -3,7 +3,7 @@ import {
   ensureAnimeIdsLoaded,
   loadAnimeIds,
   lookupByAniList,
-} from './anibridgeV3';
+} from './animeIds';
 
 describe('AniBridge mapping cache', () => {
   afterEach(() => vi.unstubAllGlobals());

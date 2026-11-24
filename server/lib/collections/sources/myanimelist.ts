@@ -1,4 +1,4 @@
-import { ensureAnimeIdsLoaded, lookupByMal } from '@server/api/anibridgeV3';
+import { ensureAnimeIdsLoaded, lookupByMal } from '@server/api/animeIds';
 import {
   getRankedAnime,
   type MALAnime,

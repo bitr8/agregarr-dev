@@ -1,7 +1,7 @@
-import { loadAnimeIds } from '@server/api/anibridgeV3';
+import { loadAnimeIds } from '@server/api/animeIds';
 import type PlexAPI from '@server/api/plexapi';
 import type { CollectionConfig } from '@server/lib/settings';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/datasource', () => ({ getRepository: vi.fn() }));
 vi.mock('@server/entity/CollectionMetadata', () => ({
@@ -66,29 +66,6 @@ it('ignores a TMDB movie link with the same numeric ID as a Plex show', async ()
   expect(result.missingItems).toEqual([]);
 });
 
-it('ignores a mapped movie ID with the same number as a Plex show', async () => {
-  const animeIds = await import('@server/api/animeIds');
-  const lookup = vi
-    .spyOn(animeIds, 'lookupByAniList')
-    .mockReturnValue({ tmdb_movie_id: 20 });
-  try {
-    const result = await new AnilistCollectionSync().mapSourceDataToItems(
-      [{ anilistId: 99, title: 'Source title', raw: { format: 'TV' } }],
-      { libraryId: '1' } as CollectionConfig,
-      undefined,
-      {
-        '1': [
-          { ratingKey: 'show', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
-        ],
-      }
-    );
-    expect(result.items).toEqual([]);
-    expect(result.missingItems).toEqual([]);
-  } finally {
-    lookup.mockRestore();
-  }
-});
-
 describe('AniList direct GUID lookup', () => {
   it("doesn't call PlexAPI.findItemByGuid, whose arguments are (libraryId, guid)", async () => {
     const findItemByGuid = vi.fn().mockResolvedValue(undefined);
@@ -143,28 +120,116 @@ describe('AniList external links', () => {
   });
 });
 
-describe('MyAnimeList v3 matching', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it('resolves Overgeared through the MAL Plex agent in a show library', async () => {
-    const episodes = { '1-12': '1-12' };
-    const series = {
-      'tmdb_show:324502:s1': episodes,
-      'tvdb_show:478752:s1': episodes,
-    };
+describe('AniBridge collection matching', () => {
+  const episodes = { '1-12': '1-12' };
+  const overgeared = {
+    'tmdb_show:324502:s1': episodes,
+    'tvdb_show:478752:s1': episodes,
+    'mal:64340': episodes,
+    'anidb:20077:R': episodes,
+  };
+  const data = {
+    $meta: { schema_version: '3.0.3' },
+    'anilist:212888': overgeared,
+    'mal:64340': { ...overgeared, 'anilist:212888': episodes },
+    'anilist:2': {
+      'tmdb_movie:324502': episodes,
+      'imdb_movie:tt0123456': episodes,
+    },
+    'anilist:3': { 'tmdb_show:15:s1': episodes, 'tmdb_show:16:s2': episodes },
+    'anilist:4': { 'tmdb_show:20:s1': episodes, 'tmdb_show:20:s2': episodes },
+    'anilist:6': {
+      'tmdb_show:324502:s2': episodes,
+      'tvdb_show:478752:s2': episodes,
+    },
+    'anilist:5': { 'tmdb_show:21:s1': { '1-': null } },
+  };
+  const config = { libraryId: '1' } as CollectionConfig;
+  const entry = (anilistId: number, idMal?: number) => ({
+    anilistId,
+    title: 'Source title',
+    raw: { format: 'TV', idMal },
+  });
+  beforeEach(async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            $meta: { schema_version: '3.0.3' },
-            'anilist:212888': series,
-            'mal:64340': series,
-          })
-        )
-      )
+      vi.fn().mockResolvedValue(new Response(JSON.stringify(data)))
     );
     await loadAnimeIds();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    'tmdb://324502',
+    'tvdb://478752',
+    'com.plexapp.agents.myanimelist://64340',
+  ])(
+    'matches Overgeared via %s and keeps its AniList position',
+    async (guid) => {
+      const sync = new AnilistCollectionSync();
+      const mapped = await sync.mapSourceDataToItems(
+        [entry(2), entry(212888), entry(4), entry(6)],
+        config,
+        undefined,
+        {
+          '1': [
+            {
+              ratingKey: 'second',
+              title: 'Another series',
+              Guid: [{ id: 'tmdb://20' }],
+            },
+            { ratingKey: 'first', title: 'Overgeared', Guid: [{ id: guid }] },
+          ],
+        }
+      );
+      const result = await sync.applyFilteringToMappedItems(mapped, config);
+      expect(
+        result.items.map((item) => [
+          item.ratingKey,
+          item.metadata?.originalPosition,
+        ])
+      ).toEqual([
+        ['first', 2],
+        ['second', 3],
+      ]);
+      expect(result.missingItems).toEqual([]);
+    }
+  );
+
+  it('uses the MAL source for both a missing AniList row and a MAL collection', async () => {
+    const cache = {
+      '1': [
+        {
+          ratingKey: 'hit',
+          title: 'Overgeared',
+          Guid: [{ id: 'tvdb://478752' }],
+        },
+      ],
+    };
+    const ani = await new AnilistCollectionSync().mapSourceDataToItems(
+      [entry(99, 64340)],
+      config,
+      undefined,
+      cache
+    );
+    const mal = await new MyAnimeListCollectionSync().mapSourceDataToItems(
+      [
+        {
+          malId: 64340,
+          rank: 1,
+          title: 'Overgeared',
+          raw: { media_type: 'tv' },
+        },
+      ],
+      config,
+      undefined,
+      cache
+    );
+    expect(ani.items[0]?.ratingKey).toBe('hit');
+    expect(mal.items[0]?.ratingKey).toBe('hit');
+  });
+
+  it('resolves Overgeared through the MAL Plex agent in a MAL collection', async () => {
     const result = await new MyAnimeListCollectionSync().mapSourceDataToItems(
       [
         {
@@ -174,7 +239,7 @@ describe('MyAnimeList v3 matching', () => {
           raw: { media_type: 'tv' },
         },
       ],
-      { libraryId: '1' } as CollectionConfig,
+      config,
       undefined,
       {
         '1': [
@@ -195,5 +260,84 @@ describe('MyAnimeList v3 matching', () => {
       }),
     ]);
     expect(result.missingItems).toEqual([]);
+  });
+
+  it('only creates missing items for unambiguous, correctly typed IDs', async () => {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [entry(3, 64340), entry(5), entry(2), entry(212888)],
+      config,
+      undefined,
+      {
+        '2': [
+          {
+            ratingKey: 'wrong-library',
+            title: 'Movie',
+            Guid: [{ id: 'tmdb://324502' }],
+          },
+        ],
+      }
+    );
+    expect(result.items).toEqual([]);
+    expect(result.missingItems).toEqual([
+      expect.objectContaining({
+        originalPosition: 4,
+        tmdbId: 324502,
+        tvdbId: 478752,
+        mediaType: 'tv',
+      }),
+    ]);
+  });
+
+  it('uses a movie IMDb target in a movie library', async () => {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [{ ...entry(2), raw: { format: 'MOVIE' } }],
+      { libraryId: '2' } as CollectionConfig,
+      undefined,
+      {
+        '2': [
+          {
+            ratingKey: 'movie',
+            title: 'Movie',
+            Guid: [{ id: 'imdb://tt0123456' }],
+          },
+        ],
+      }
+    );
+    expect(result.items[0]).toMatchObject({
+      ratingKey: 'movie',
+      type: 'movie',
+      tmdbId: 324502,
+    });
+  });
+
+  it('matches ambiguous mappings via external links but skips them for downloads', async () => {
+    const linkedEntry = (anilistId: number, tmdbId: number) => ({
+      ...entry(anilistId),
+      raw: {
+        format: 'TV',
+        externalLinks: [
+          { site: 'TMDB', url: `https://www.themoviedb.org/tv/${tmdbId}` },
+        ],
+      },
+    });
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [linkedEntry(3, 20), linkedEntry(3, 21), linkedEntry(99, 21)],
+      config,
+      undefined,
+      {
+        '1': [
+          { ratingKey: 'linked', title: 'Series', Guid: [{ id: 'tmdb://20' }] },
+        ],
+      }
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        ratingKey: 'linked',
+        metadata: { libraryKey: '1', originalPosition: 1 },
+      }),
+    ]);
+    expect(result.missingItems).toEqual([
+      expect.objectContaining({ tmdbId: 21, originalPosition: 3 }),
+    ]);
   });
 });
