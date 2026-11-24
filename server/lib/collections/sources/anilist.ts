@@ -13,6 +13,7 @@ import {
   getFirstValue,
   lookupByAniList,
   lookupByMal,
+  type AnimeIdsRow,
 } from '@server/api/animeIds';
 import type PlexAPI from '@server/api/plexapi';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
@@ -197,20 +198,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
    */
   private countMatchedItems(
     media: AniListMedia[],
-    libraryIndex: {
-      imdb: Map<
-        string,
-        { ratingKey: string; title: string; libraryKey: string }
-      >;
-      tmdb: Map<
-        string,
-        { ratingKey: string; title: string; libraryKey: string }
-      >;
-      tvdb: Map<
-        string,
-        { ratingKey: string; title: string; libraryKey: string }
-      >;
-    },
+    libraryIndex: ProviderIndex,
     mediaType: 'movie' | 'tv'
   ): number {
     const seenRatingKeys = new Set<string>();
@@ -234,64 +222,49 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
         }
 
         if (map) {
-          const tmdbShow =
-            map.tmdb_show_id != null ? String(map.tmdb_show_id) : undefined;
-          // tmdb_movie_id can be array - take first value
-          const tmdbMovieFirst = getFirstValue(map.tmdb_movie_id);
-          const tmdbMovie =
-            tmdbMovieFirst != null ? String(tmdbMovieFirst) : undefined;
-          const tvdb = map.tvdb_id != null ? String(map.tvdb_id) : undefined;
-          // imdb_id can be array - take first value and lowercase
-          const imdbFirst = getFirstValue(map.imdb_id);
-          const imdb = imdbFirst?.toLowerCase();
-
-          // Check if any of these IDs exist in library and get ratingKey
-          if (mediaType === 'tv') {
-            if (tvdb && libraryIndex.tvdb.has(tvdb)) {
-              matchedRatingKey = libraryIndex.tvdb.get(tvdb)?.ratingKey;
-            } else if (tmdbShow && libraryIndex.tmdb.has(tmdbShow)) {
-              matchedRatingKey = libraryIndex.tmdb.get(tmdbShow)?.ratingKey;
-            } else if (imdb && libraryIndex.imdb.has(imdb)) {
-              matchedRatingKey = libraryIndex.imdb.get(imdb)?.ratingKey;
-            }
-          }
-
-          if (!matchedRatingKey) {
-            const tryTmdbIds = [tmdbMovie, tmdbShow].filter(
-              Boolean
-            ) as string[];
-            for (const tid of tryTmdbIds) {
-              if (libraryIndex.tmdb.has(tid)) {
-                matchedRatingKey = libraryIndex.tmdb.get(tid)?.ratingKey;
-                break;
-              }
-            }
-          }
+          const ids = this.idsForLibrary(map, mediaType);
+          matchedRatingKey = this.findCachedMatch(libraryIndex, ids)?.ratingKey;
         }
       }
 
       if (!matchedRatingKey) {
         // Check external links (TMDb/IMDb)
-        const { tmdb: tmdbId, imdb: imdbId } = this.idsFromExternalLinks(
-          m.externalLinks,
-          mediaType
-        );
-        if (tmdbId && libraryIndex.tmdb.has(tmdbId)) {
-          matchedRatingKey = libraryIndex.tmdb.get(tmdbId)?.ratingKey;
-        } else {
-          if (imdbId && libraryIndex.imdb.has(imdbId)) {
-            matchedRatingKey = libraryIndex.imdb.get(imdbId)?.ratingKey;
-          }
-        }
+        matchedRatingKey = this.findCachedMatch(
+          libraryIndex,
+          this.idsFromExternalLinks(m.externalLinks, mediaType)
+        )?.ratingKey;
       }
-
-      // Only count if we haven't seen this ratingKey before (deduplication)
-      if (matchedRatingKey && !seenRatingKeys.has(matchedRatingKey)) {
-        seenRatingKeys.add(matchedRatingKey);
-      }
+      if (matchedRatingKey) seenRatingKeys.add(matchedRatingKey);
     }
 
     return seenRatingKeys.size;
+  }
+
+  private idsForLibrary(row: AnimeIdsRow, mediaType: 'movie' | 'tv') {
+    const tmdb =
+      mediaType === 'tv' ? row.tmdb_show_id : getFirstValue(row.tmdb_movie_id);
+    return {
+      tmdb: tmdb != null ? String(tmdb) : undefined,
+      tvdb:
+        mediaType === 'tv' && row.tvdb_id != null
+          ? String(row.tvdb_id)
+          : undefined,
+      imdb:
+        mediaType === 'tv'
+          ? getFirstValue(row.imdb_id)?.toLowerCase()
+          : undefined,
+    };
+  }
+
+  private findCachedMatch(
+    index: ProviderIndex,
+    ids: Partial<Record<keyof ProviderIndex, string>>
+  ) {
+    for (const provider of ['tvdb', 'tmdb', 'imdb'] as const) {
+      const id = ids[provider];
+      const hit = id ? index[provider].get(id) : undefined;
+      if (hit) return hit;
+    }
   }
 
   private idsFromExternalLinks(
@@ -780,7 +753,8 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
         entry.title ||
         'Unknown';
 
-      let matched = false;
+      const posterUrl =
+        raw?.coverImage?.extraLarge || raw?.coverImage?.large || undefined;
 
       // --- A) PlexAniBridge mapping first ---
       if (anilistId) {
@@ -814,217 +788,39 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
             }
           }
 
-          // Narrow to a non-optional local so TypeScript won't lose the narrowed type across awaits
-          const row = map;
-
-          const tmdbShow =
-            row.tmdb_show_id != null ? String(row.tmdb_show_id) : undefined;
-          // tmdb_movie_id can be number or number[] - take first value
-          const tmdbMovieFirst = getFirstValue(row.tmdb_movie_id);
-          const tmdbMovie =
-            tmdbMovieFirst != null ? String(tmdbMovieFirst) : undefined;
-          const tvdb = row.tvdb_id != null ? String(row.tvdb_id) : undefined;
-          // imdb_id can be string or string[] - take first value and lowercase
-          const imdbFirst = getFirstValue(row.imdb_id);
-          const imdb = imdbFirst?.toLowerCase();
-
-          // Preferred path depending on configured mediaType: prefer TVDB for shows
-          if (mediaType === 'tv') {
-            if (tvdb && tvdbIdx.has(tvdb)) {
-              const hit = tvdbIdx.get(tvdb);
-              if (hit) {
-                items.push({
-                  ratingKey: hit.ratingKey,
-                  title: hit.title,
-                  type: 'tv',
-                  tmdbId: tmdbShow ? Number(tmdbShow) : undefined,
-                  tvdbId: hit.tvdbId,
-                  posterUrl:
-                    raw?.coverImage?.extraLarge ||
-                    raw?.coverImage?.large ||
-                    undefined,
-                  metadata: {
-                    libraryKey: hit.libraryKey,
-                    originalPosition: i + 1,
-                  },
-                });
-                matched = true;
-              }
-            } else if (tmdbShow && tmdbIdx.has(tmdbShow)) {
-              const hit = tmdbIdx.get(tmdbShow);
-              if (hit) {
-                items.push({
-                  ratingKey: hit.ratingKey,
-                  title: hit.title,
-                  type: 'tv',
-                  tmdbId: Number(tmdbShow),
-                  tvdbId: hit.tvdbId,
-                  posterUrl:
-                    raw?.coverImage?.extraLarge ||
-                    raw?.coverImage?.large ||
-                    undefined,
-                  metadata: {
-                    libraryKey: hit.libraryKey,
-                    originalPosition: i + 1,
-                  },
-                });
-                matched = true;
-              }
-            } else if (imdb && imdbIdx.has(imdb)) {
-              const hit = imdbIdx.get(imdb);
-              if (hit) {
-                items.push({
-                  ratingKey: hit.ratingKey,
-                  title: hit.title,
-                  type: 'tv',
-                  tmdbId: tmdbShow ? Number(tmdbShow) : undefined,
-                  tvdbId: hit.tvdbId,
-                  posterUrl:
-                    raw?.coverImage?.extraLarge ||
-                    raw?.coverImage?.large ||
-                    undefined,
-                  metadata: {
-                    libraryKey: hit.libraryKey,
-                    originalPosition: i + 1,
-                  },
-                });
-                matched = true;
-              }
-            } else if (plexClient && (tvdb || tmdbShow || imdb)) {
-              const direct =
-                (tvdb &&
-                  (await this.plexLookupByGuid(
-                    plexClient,
-                    'tvdb',
-                    tvdb,
-                    'tv'
-                  ))) ||
-                (tmdbShow &&
-                  (await this.plexLookupByGuid(
-                    plexClient,
-                    'tmdb',
-                    tmdbShow,
-                    'tv'
-                  ))) ||
-                (imdb &&
-                  (await this.plexLookupByGuid(
-                    plexClient,
-                    'imdb',
-                    imdb,
-                    'tv'
-                  )));
-              if (direct) {
-                items.push({
-                  ratingKey: direct.ratingKey,
-                  title: direct.title || displayTitle,
-                  type: 'tv',
-                  posterUrl:
-                    raw?.coverImage?.extraLarge ||
-                    raw?.coverImage?.large ||
-                    undefined,
-                  metadata: {
-                    libraryKey: normalizedLibraryId,
-                    originalPosition: i + 1,
-                  },
-                });
-                matched = true;
-              }
-            }
-          }
-
-          // If still not matched, try either TMDb id (movie or show) as a cross-check
-          if (!matched) {
-            const tryTmdbIds = [tmdbMovie, tmdbShow].filter(
-              Boolean
-            ) as string[];
-            for (const tid of tryTmdbIds) {
-              if (tmdbIdx.has(tid)) {
-                const hit = tmdbIdx.get(tid);
-                if (hit) {
-                  const chosenType: 'movie' | 'tv' =
-                    mediaType === 'tv' ? 'tv' : 'movie';
-                  items.push({
-                    ratingKey: hit.ratingKey,
-                    title: hit.title,
-                    type: chosenType,
-                    tmdbId: Number(tid),
-                    tvdbId: hit.tvdbId,
-                    posterUrl:
-                      raw?.coverImage?.extraLarge ||
-                      raw?.coverImage?.large ||
-                      undefined,
-                    metadata: {
-                      libraryKey: hit.libraryKey,
-                      originalPosition: i + 1,
-                    },
-                  });
-                  matched = true;
-                  break;
-                }
-              }
-              if (plexClient) {
-                const directTv = await this.plexLookupByGuid(
-                  plexClient,
-                  'tmdb',
-                  tid,
-                  'tv'
-                );
-                if (directTv) {
-                  items.push({
-                    ratingKey: directTv.ratingKey,
-                    title: directTv.title || displayTitle,
-                    type: 'tv',
-                    tmdbId: Number(tid),
-                    posterUrl:
-                      raw?.coverImage?.extraLarge ||
-                      raw?.coverImage?.large ||
-                      undefined,
-                    metadata: {
-                      libraryKey: normalizedLibraryId,
-                      originalPosition: i + 1,
-                    },
-                  });
-                  matched = true;
-                  break;
-                }
-                const directMovie = await this.plexLookupByGuid(
-                  plexClient,
-                  'tmdb',
-                  tid,
-                  'movie'
-                );
-                if (directMovie) {
-                  items.push({
-                    ratingKey: directMovie.ratingKey,
-                    title: directMovie.title || displayTitle,
-                    type: 'movie',
-                    tmdbId: Number(tid),
-                    posterUrl:
-                      raw?.coverImage?.extraLarge ||
-                      raw?.coverImage?.large ||
-                      undefined,
-                    metadata: {
-                      libraryKey: normalizedLibraryId,
-                      originalPosition: i + 1,
-                    },
-                  });
-                  matched = true;
-                  break;
-                }
-              }
-            }
+          const ids = this.idsForLibrary(map, mediaType);
+          const cached = this.findCachedMatch(
+            { tmdb: tmdbIdx, tvdb: tvdbIdx, imdb: imdbIdx },
+            ids
+          );
+          const hit =
+            cached ?? (await this.findPlexMatch(plexClient, ids, mediaType));
+          if (hit) {
+            items.push({
+              ratingKey: hit.ratingKey,
+              title: hit.title || displayTitle,
+              type: mediaType,
+              tmdbId:
+                ids.tmdb && (cached || mediaType === 'movie')
+                  ? Number(ids.tmdb)
+                  : undefined,
+              tvdbId: cached?.tvdbId,
+              posterUrl,
+              metadata: {
+                libraryKey: cached?.libraryKey ?? normalizedLibraryId,
+                originalPosition: i + 1,
+              },
+            });
+            continue;
           }
         }
       }
 
-      if (matched) continue;
-
       const linkIds = this.idsFromExternalLinks(raw?.externalLinks, mediaType);
-      const cachedLink =
-        (linkIds.tmdb ? tmdbIdx.get(linkIds.tmdb) : undefined) ??
-        (linkIds.imdb ? imdbIdx.get(linkIds.imdb) : undefined);
-      const posterUrl =
-        raw?.coverImage?.extraLarge || raw?.coverImage?.large || undefined;
+      const cachedLink = this.findCachedMatch(
+        { tmdb: tmdbIdx, tvdb: tvdbIdx, imdb: imdbIdx },
+        linkIds
+      );
       if (cachedLink) {
         items.push({
           ratingKey: cachedLink.ratingKey,
