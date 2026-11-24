@@ -171,7 +171,9 @@ describe('AniList external links', () => {
           ],
         }
       );
-      expect(rows.map((row) => row.anilistId)).toEqual([4, 212888, 6]);
+      expect(rows).toMatchObject(
+        [4, 212888, 6].map((anilistId) => ({ anilistId }))
+      );
       expect(fetchPage).toHaveBeenCalledTimes(3);
     } finally {
       fetchPage.mockRestore();
