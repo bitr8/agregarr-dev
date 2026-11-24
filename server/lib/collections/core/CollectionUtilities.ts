@@ -1590,14 +1590,9 @@ export function filterItemsByPosition<T extends { originalPosition: number }>(
 export function combinePreviewMissingItems<
   T extends { tmdbId?: number; mediaType: string; originalPosition: number }
 >(groups: T[][], maxItems?: number): T[] {
-  // Position-filter per source before dedupe, as the sync does
-  const seen = new Set<string>();
-  return filterItemsByPosition(groups.flat(), maxItems).filter((item) => {
-    const key = `${item.tmdbId}-${item.mediaType}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return deduplicateMissingItems(
+    filterItemsByPosition(groups.flat(), maxItems)
+  );
 }
 
 /**
@@ -2029,6 +2024,26 @@ export async function applyCollectionExclusions(
   }
 }
 
+export function deduplicateMissingItems<
+  T extends { mediaType: string; tmdbId?: number; tvdbId?: number }
+>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const tmdb =
+      item.tmdbId && item.tmdbId > 0
+        ? `${item.mediaType}:tmdb:${item.tmdbId}`
+        : undefined;
+    const tvdb =
+      item.mediaType === 'tv' && item.tvdbId
+        ? `tv:tvdb:${item.tvdbId}`
+        : undefined;
+    const duplicate = (tmdb && seen.has(tmdb)) || (tvdb && seen.has(tvdb));
+    if (tmdb) seen.add(tmdb);
+    if (tvdb) seen.add(tvdb);
+    return !duplicate;
+  });
+}
+
 /**
  * Process missing items using the appropriate download service based on collection config
  * Routes to either Overseerr request workflow or direct *arr download workflow
@@ -2267,24 +2282,8 @@ export function extractTmdbIdFromGuids(
 async function getAllLibraryItems(
   plexClient: PlexAPI,
   libraryKey: string
-): Promise<
-  {
-    ratingKey: string;
-    title: string;
-    addedAt?: number;
-    releaseDate?: number;
-    editionTitle?: string;
-    Guid?: { id: string }[];
-  }[]
-> {
-  const allItems: {
-    ratingKey: string;
-    title: string;
-    addedAt?: number;
-    releaseDate?: number;
-    editionTitle?: string;
-    Guid?: { id: string }[];
-  }[] = [];
+): Promise<LibraryItemsCache[string]> {
+  const allItems: LibraryItemsCache[string] = [];
   let offset = 0;
   const pageSize = 200; // Larger page size for efficiency
 
@@ -2310,6 +2309,7 @@ async function getAllLibraryItems(
         addedAt: item.addedAt,
         releaseDate,
         editionTitle: item.editionTitle,
+        guid: item.guid,
         Guid: item.Guid,
       };
     });
@@ -2335,6 +2335,7 @@ export interface LibraryItemsCache {
     addedAt?: number;
     releaseDate?: number; // Converted from originallyAvailableAt string to Unix timestamp
     editionTitle?: string;
+    guid?: string;
     Guid?: { id: string }[];
   }[];
 }

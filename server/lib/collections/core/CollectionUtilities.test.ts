@@ -797,6 +797,23 @@ describe('capPreviewItemsToMaxItems', () => {
 });
 
 describe('combinePreviewMissingItems', () => {
+  it('preserves distinct TVDB-only shows, typed TMDB IDs and the earliest season', () => {
+    const first = {
+      mediaType: 'tv',
+      tmdbId: 0,
+      tvdbId: 20,
+      originalPosition: 1,
+    };
+    const second = { ...first, tvdbId: 21, originalPosition: 2 };
+    const movie = { mediaType: 'movie', tmdbId: 20, originalPosition: 3 };
+    const show = { mediaType: 'tv', tmdbId: 20, originalPosition: 4 };
+    expect(
+      combinePreviewMissingItems([
+        [first, second, movie, show, { ...first, originalPosition: 5 }],
+      ])
+    ).toEqual([first, second, movie, show]);
+  });
+
   it('position-filters each source before dedupe so an in-cap duplicate survives', () => {
     const a = [{ tmdbId: 1, mediaType: 'movie', originalPosition: 40 }];
     const b = [
