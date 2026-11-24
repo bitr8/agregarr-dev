@@ -57,7 +57,7 @@ describe('MAL collection sync', () => {
     protected async updateCollectionMetadata() {
       return { ratingKeyIsStale: false };
     }
-    protected persistCollectionRatingKey() {}
+    protected persistCollectionRatingKey = vi.fn();
   }
   const plex = {
     getLibraries: async () => [{ key: '1', type: 'show' }],
