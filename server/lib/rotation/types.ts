@@ -66,6 +66,7 @@ export interface RotationGroup {
   interval: RotationInterval;
   weekday?: number;
   everyWeeks?: number;
+  weeksAnchor?: string;
   order: RotationOrder;
   surfaces: Visibility;
   members: RotationMember[];

@@ -99,8 +99,18 @@ const pk = (
   iso: string,
   weekday?: number,
   run?: string,
-  everyWeeks?: number
-) => periodKey(interval, weekday, parts(iso), run, emptyState(), everyWeeks);
+  everyWeeks?: number,
+  anchor?: string
+) =>
+  periodKey(
+    interval,
+    weekday,
+    parts(iso),
+    run,
+    emptyState(),
+    everyWeeks,
+    anchor
+  );
 
 describe('periodKey', () => {
   it.each([
@@ -946,5 +956,111 @@ describe('partial swap', () => {
     const after = occupants(g.state);
     expect(after.filter((k, i) => k !== before[i])).toHaveLength(1);
     expect(new Set([...after, ...g.state.queue]).size).toBe(6);
+  });
+});
+
+describe('every N weeks anchored to when it was set', () => {
+  const changeDays = (
+    from: string,
+    days: number,
+    wd: number,
+    n: number,
+    anchor?: string
+  ) => {
+    const start = Date.parse(`${from}T12:00:00Z`);
+    const out: string[] = [];
+    let prev = pk(
+      'weekly',
+      new Date(start).toISOString(),
+      wd,
+      undefined,
+      n,
+      anchor
+    );
+    for (let i = 1; i <= days; i++) {
+      const iso = new Date(start + i * 86400000).toISOString();
+      const k = pk('weekly', iso, wd, undefined, n, anchor);
+      if (k !== prev) {
+        expect(parts(iso).dow).toBe(wd);
+        out.push(iso.slice(0, 10));
+        prev = k;
+      }
+    }
+    return out;
+  };
+
+  it('first change is N weeks after the anchor week, then every N weeks', () => {
+    // set on Wednesday 2026-03-18, weekday Monday: anchor week starts 2026-03-16
+    expect(changeDays('2026-03-18', 70, 1, 3, '2026-03-16')).toEqual([
+      '2026-04-06',
+      '2026-04-27',
+      '2026-05-18',
+    ]);
+  });
+
+  it('two groups set a week apart change in different weeks', () => {
+    const a = changeDays('2026-03-11', 60, 1, 2, '2026-03-09');
+    const b = changeDays('2026-03-18', 60, 1, 2, '2026-03-16');
+    expect(a[0]).toBe('2026-03-23');
+    expect(b[0]).toBe('2026-03-30');
+    expect(a.some((d) => b.includes(d))).toBe(false);
+  });
+
+  it('a missing or malformed anchor falls back to the epoch blocks', () => {
+    const base = changeDays('2026-03-11', 90, 1, 3);
+    expect(changeDays('2026-03-11', 90, 1, 3, undefined)).toEqual(base);
+    expect(changeDays('2026-03-11', 90, 1, 3, 'nope')).toEqual(base);
+    expect(base).not.toEqual(changeDays('2026-03-11', 90, 1, 3, '2026-03-16'));
+  });
+
+  it('crosses a year end and a DST month on the chosen weekday', () => {
+    expect(changeDays('2026-12-02', 90, 5, 4, '2026-11-27')).toEqual([
+      '2026-12-25',
+      '2027-01-22',
+      '2027-02-19',
+    ]);
+    expect(changeDays('2026-03-20', 100, 0, 2, '2026-03-15')).toEqual([
+      '2026-03-29',
+      '2026-04-12',
+      '2026-04-26',
+      '2026-05-10',
+      '2026-05-24',
+      '2026-06-07',
+      '2026-06-21',
+    ]);
+  });
+
+  it('N of 1 ignores the anchor', () => {
+    expect(
+      pk('weekly', '2026-03-18T12:00:00Z', 1, undefined, 1, '2026-03-02')
+    ).toBe(pk('weekly', '2026-03-18T12:00:00Z', 1));
+  });
+
+  it('nextBoundary reports the anchored change', () => {
+    const state = { ...emptyState(), periodKey: '2026-03-16' };
+    const b = nextBoundary(
+      'weekly',
+      1,
+      at('2026-03-18T12:00:00Z'),
+      toLocal,
+      state,
+      3,
+      '2026-03-16'
+    );
+    expect(b.notBefore?.toISOString().slice(0, 10)).toBe('2026-04-06');
+  });
+
+  it('planRotation holds until the anchored week, then rotates', () => {
+    const g = mkGroup(8, 5, {
+      interval: 'weekly',
+      weekday: 1,
+      everyWeeks: 3,
+      weeksAnchor: '2026-03-16',
+    });
+    const first = planRotation(input(g, '2026-03-18T10:00:00Z'));
+    expect(first.state.periodKey).toBe('2026-03-16');
+    const g2 = withState(g, first.state);
+    expect(planRotation(input(g2, '2026-03-30T10:00:00Z')).rotated).toBe(false);
+    expect(planRotation(input(g2, '2026-04-06T10:00:00Z')).rotated).toBe(true);
   });
 });

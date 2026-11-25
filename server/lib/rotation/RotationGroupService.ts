@@ -18,7 +18,13 @@ import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import parser from 'cron-parser';
 import { randomUUID } from 'crypto';
-import { emptyState, nextBoundary, planRotation, simulate } from './engine';
+import {
+  emptyState,
+  nextBoundary,
+  periodKey,
+  planRotation,
+  simulate,
+} from './engine';
 import type { ManagedFields, MemberConfig } from './materialise';
 import {
   applyManagedFields,
@@ -745,13 +751,17 @@ class RotationGroupService {
     };
 
     const state = group.state;
-    if (
-      prior &&
-      (prior.interval !== group.interval ||
-        prior.weekday !== group.weekday ||
-        (prior.everyWeeks ?? 1) !== (group.everyWeeks ?? 1))
-    ) {
-      state.periodKey = null;
+    const rescheduled =
+      !prior ||
+      prior.interval !== group.interval ||
+      prior.weekday !== group.weekday ||
+      (prior.everyWeeks ?? 1) !== (group.everyWeeks ?? 1);
+    if (prior && rescheduled) state.periodKey = null;
+    if (group.everyWeeks !== undefined) {
+      const anchor = rescheduled
+        ? periodKey('weekly', group.weekday, toLocal(now), undefined, state)
+        : prior?.weeksAnchor;
+      if (anchor) group.weeksAnchor = anchor;
     }
     if (!prior) {
       const start = this.libraryNextPosition(group.libraryId);
@@ -1173,7 +1183,8 @@ class RotationGroupService {
         now,
         toLocal,
         group.state,
-        group.everyWeeks
+        group.everyWeeks,
+        group.weeksAnchor
       );
       nextChange = { kind: b.kind };
       if (b.notBefore) nextChange.notBefore = b.notBefore.toISOString();

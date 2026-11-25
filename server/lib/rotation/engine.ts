@@ -50,13 +50,19 @@ const DAY_MS = 24 * HOUR_MS;
 const isEveryWeeks = (n: number | undefined): n is number =>
   typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 6;
 
+const parseAnchor = (a: string | undefined): number | undefined => {
+  const m = a ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(a) : null;
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : undefined;
+};
+
 export function periodKey(
   interval: RotationInterval,
   weekday: number | undefined,
   parts: LocalParts,
   syncRunId: string | undefined,
   _state: RotationState,
-  everyWeeks?: number
+  everyWeeks?: number,
+  weeksAnchor?: string
 ): string | null {
   switch (interval) {
     case 'every_sync':
@@ -69,7 +75,11 @@ export function periodKey(
       const back = (parts.dow - (isWeekday(weekday) ? weekday : 1) + 7) % 7;
       const t = new Date(Date.UTC(parts.y, parts.m - 1, parts.d - back));
       if (isEveryWeeks(everyWeeks) && everyWeeks > 1) {
-        const weekIndex = Math.floor(t.getTime() / (7 * DAY_MS));
+        const anchorMs = parseAnchor(weeksAnchor);
+        const weekIndex =
+          anchorMs === undefined
+            ? Math.floor(t.getTime() / (7 * DAY_MS))
+            : Math.round((t.getTime() - anchorMs) / (7 * DAY_MS));
         const offset = ((weekIndex % everyWeeks) + everyWeeks) % everyWeeks;
         t.setUTCDate(t.getUTCDate() - offset * 7);
       }
@@ -111,7 +121,8 @@ export function nextBoundary(
   now: Date,
   toLocal: (d: Date) => LocalParts,
   state: RotationState,
-  everyWeeks?: number
+  everyWeeks?: number,
+  weeksAnchor?: string
 ): { kind: NextChangeKind; notBefore?: Date } {
   if (interval === 'every_sync') return { kind: 'every_sync' };
   const parts = toLocal(now);
@@ -134,7 +145,7 @@ export function nextBoundary(
   }
 
   const key = (p: LocalParts) =>
-    periodKey(interval, weekday, p, undefined, state, everyWeeks);
+    periodKey(interval, weekday, p, undefined, state, everyWeeks, weeksAnchor);
   const k0 = key(parts);
   if (
     typeof state.periodKey === 'string' &&
@@ -243,7 +254,8 @@ export function planRotation(input: PlanInput): PlanResult {
     parts,
     syncRunId,
     state,
-    group.everyWeeks
+    group.everyWeeks,
+    group.weeksAnchor
   );
   const stored = before.periodKey;
   const storedUsable =

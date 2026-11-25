@@ -1119,3 +1119,47 @@ describe('save failure rolls back', () => {
     expect(snapshot()).toBe(before);
   });
 });
+
+describe('everyWeeks anchor', () => {
+  const weekly = (over: Partial<GroupInput> = {}) =>
+    input({ interval: 'weekly', weekday: 3, everyWeeks: 3, ...over });
+
+  it('is set to the chosen weekday of the week it was saved in', async () => {
+    await service.createGroup(weekly());
+    expect(group().weeksAnchor).toBe('2026-11-11');
+  });
+
+  it('is not set for every week or other intervals', async () => {
+    await service.createGroup(weekly({ everyWeeks: 1 }));
+    expect(group().weeksAnchor).toBeUndefined();
+    await service.updateGroup(group().id, input({ interval: 'daily' }));
+    expect(group().weeksAnchor).toBeUndefined();
+  });
+
+  it('survives an edit that leaves the schedule alone', async () => {
+    await service.createGroup(weekly());
+    vi.setSystemTime(new Date(2026, 11, 2, 10, 0, 0));
+    await service.updateGroup(group().id, weekly({ name: 'Renamed' }));
+    expect(group().weeksAnchor).toBe('2026-11-11');
+  });
+
+  it.each([
+    ['everyWeeks', { everyWeeks: 2 }, '2026-12-02'],
+    ['weekday', { weekday: 1 }, '2026-11-30'],
+  ] as const)('is reset when %s changes', async (_label, change, expected) => {
+    await service.createGroup(weekly());
+    vi.setSystemTime(new Date(2026, 11, 2, 10, 0, 0));
+    await service.updateGroup(group().id, weekly(change));
+    expect(group().weeksAnchor).toBe(expected);
+  });
+
+  it('reports the first change N weeks after the anchor week', async () => {
+    await service.createGroup(weekly());
+    const status = await service.getStatus(group().id);
+    expect(status?.nextChange.kind).toBe('boundary');
+    expect(new Date(status?.nextChange.notBefore as string).getDate()).toBe(2);
+    expect(new Date(status?.nextChange.notBefore as string).getMonth()).toBe(
+      11
+    );
+  });
+});
