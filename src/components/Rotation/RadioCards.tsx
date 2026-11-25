@@ -65,7 +65,7 @@ const RadioCards = <T extends string>({
               tabIndex={selected ? 0 : -1}
               onClick={() => onChange(option.value)}
               onKeyDown={(e) => onKeyDown(e, i)}
-              className="block min-h-[44px] w-full rounded-md p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+              className="block min-h-[44px] w-full whitespace-normal rounded-md p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
             >
               <span className="block text-sm font-medium text-white">
                 {option.label}
