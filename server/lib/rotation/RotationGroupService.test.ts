@@ -741,6 +741,39 @@ describe('rebind', () => {
     expect(rebound.sortOrderHome).toBe(3);
   });
 
+  it('saving or turning off while a member is unbound keeps it so it can rejoin', async () => {
+    await service.createGroup(input());
+    const old = settings().plex.preExistingCollectionConfigs.splice(2, 1)[0];
+    service.runPass({ now: NOW });
+    expect(
+      group().members.find((m) => m.name === old.name)?.unboundSince
+    ).toBeDefined();
+    await service.updateGroup(group().id, input({ slotCount: 3 }));
+    expect(group().members.some((m) => m.name === old.name)).toBe(true);
+    await service.updateGroup(group().id, input({ enabled: false }));
+    await service.updateGroup(group().id, input({ enabled: true }));
+    settings().plex.preExistingCollectionConfigs.push(
+      pre(30, { name: old.name, collectionRatingKey: 'rk-new' })
+    );
+    service.runPass({ now: NOW });
+    const m = group().members.find((x) => x.name === old.name);
+    expect(m?.configId).toBe('pre-30');
+    expect(m?.unboundSince).toBeUndefined();
+  });
+
+  it('leaving an unbound member out of a save removes it', async () => {
+    await service.createGroup(input());
+    const old = settings().plex.preExistingCollectionConfigs.splice(2, 1)[0];
+    service.runPass({ now: NOW });
+    await service.updateGroup(
+      group().id,
+      input({
+        members: input().members.filter((m) => m.configId !== 'pre-3'),
+      })
+    );
+    expect(group().members.some((m) => m.name === old.name)).toBe(false);
+  });
+
   it('two same-title candidates do not bind', async () => {
     await service.createGroup(input());
     const old = settings().plex.preExistingCollectionConfigs.splice(2, 1)[0];

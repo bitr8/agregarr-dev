@@ -1,5 +1,6 @@
 import messages from '@app/components/Rotation/messages';
 import type {
+  Candidate,
   GroupInput,
   MemberSummary,
   RotationGroupStatus,
@@ -139,4 +140,23 @@ export const nextChangeSentence = (
     date: formatDay(intl, notBefore),
     time: formatWhen(intl, expectedSyncAt),
   });
+};
+
+export const draftMembers = (
+  candidates: (Candidate & { missing?: boolean })[],
+  selected: Set<string>
+): GroupInput['members'] =>
+  candidates
+    .filter((c) => selected.has(c.key) && (c.selectable || c.missing))
+    .map((c) => ({ kind: c.kind, configId: c.configId }));
+
+export const membersToKeep = <M extends { key: string }>(
+  members: M[],
+  candidates: Candidate[]
+): M[] => {
+  const known = new Set(candidates.map((c) => c.key));
+  const accepted = new Set(
+    candidates.filter((c) => c.selectable).map((c) => c.key)
+  );
+  return members.filter((m) => accepted.has(m.key) || !known.has(m.key));
 };

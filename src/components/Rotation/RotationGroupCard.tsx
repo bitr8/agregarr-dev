@@ -14,6 +14,7 @@ import {
   formatWhen,
   intervalLabels,
   isSyncRunningError,
+  membersToKeep,
   nextChangeSentence,
   surfacePlaces,
   weekdayName,
@@ -103,10 +104,7 @@ const RotationGroupCard = ({
           params: { libraryId: group.libraryId, groupId: group.id },
         }),
       ]);
-      const accepted = new Set(
-        cands.items.filter((c) => c.selectable).map((c) => c.key)
-      );
-      const kept = (full.members ?? []).filter((m) => accepted.has(m.key));
+      const kept = membersToKeep(full.members ?? [], cands.items);
       const dropped = (full.members ?? []).length - kept.length;
       const input: GroupInput = {
         name: full.name,

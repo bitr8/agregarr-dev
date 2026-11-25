@@ -648,6 +648,7 @@ class RotationGroupService {
       }
       const config = this.findConfig(m.kind, m.configId);
       if (!config) {
+        if (existing?.members.some((p) => p.key === key)) continue;
         throw new RotationValidationError(
           'One of the collections no longer exists.'
         );
@@ -695,8 +696,13 @@ class RotationGroupService {
     const wasEnabled = !!prior?.enabled;
     const members: RotationMember[] = input.members.map((m) => {
       const key = memberKey(m.kind, m.configId);
-      const config = configs.get(key) as MemberConfig;
+      const config = configs.get(key);
       const kept = prior?.members.find((p) => p.key === key);
+      if (!config && kept) {
+        kept.unboundSince ??= iso;
+        return kept;
+      }
+      if (!config) throw new RotationValidationError('Member not found.');
       const member: RotationMember = kept ?? {
         key,
         kind: m.kind,

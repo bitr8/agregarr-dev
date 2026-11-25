@@ -1,5 +1,12 @@
-import { draftProblem } from '@app/components/Rotation/utils';
-import type { GroupInput } from '@server/interfaces/api/rotationInterfaces';
+import {
+  draftMembers,
+  draftProblem,
+  membersToKeep,
+} from '@app/components/Rotation/utils';
+import type {
+  Candidate,
+  GroupInput,
+} from '@server/interfaces/api/rotationInterfaces';
 import { describe, expect, it } from 'vitest';
 
 const draft = (over: Partial<GroupInput> = {}): GroupInput => ({
@@ -47,5 +54,30 @@ describe('draftProblem', () => {
 
   it('flags no members', () => {
     expect(draftProblem(draft({ members: [] }))).toBe('members');
+  });
+});
+
+const cand = (key: string, selectable: boolean, missing = false) =>
+  ({
+    key,
+    kind: 'preExisting',
+    configId: key,
+    selectable,
+    missing,
+  } as Candidate & { missing?: boolean });
+
+describe('draftMembers', () => {
+  it('keeps selected members that are no longer in Plex', () => {
+    const rows = [cand('a', true), cand('gone', false, true), cand('c', false)];
+    const out = draftMembers(rows, new Set(['a', 'gone', 'c']));
+    expect(out.map((m) => m.configId)).toEqual(['a', 'gone']);
+  });
+});
+
+describe('membersToKeep', () => {
+  it('keeps members the server no longer lists, drops ones that cannot rotate', () => {
+    const members = [{ key: 'a' }, { key: 'gone' }, { key: 'c' }];
+    const out = membersToKeep(members, [cand('a', true), cand('c', false)]);
+    expect(out.map((m) => m.key)).toEqual(['a', 'gone']);
   });
 });

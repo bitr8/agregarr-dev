@@ -12,6 +12,7 @@ import RadioCards from '@app/components/Rotation/RadioCards';
 import SlotCountField from '@app/components/Rotation/SlotCountField';
 import useSyncRunning from '@app/components/Rotation/useSyncRunning';
 import {
+  draftMembers,
   draftProblem,
   intervalLabels,
   isSyncRunningError,
@@ -170,16 +171,14 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
     () =>
       new Set(
         (candidates ?? [])
-          .filter((c) => selected.has(c.key) && !c.selectable)
+          .filter((c) => selected.has(c.key) && !c.selectable && !c.missing)
           .map((c) => c.key)
       ),
     [candidates, selected]
   );
 
   const draft = useMemo<GroupInput>(() => {
-    const ordered = (candidates ?? [])
-      .filter((c) => selected.has(c.key) && c.selectable)
-      .map((c) => ({ kind: c.kind, configId: c.configId }));
+    const ordered = draftMembers(candidates ?? [], selected);
     return {
       name: name.trim(),
       libraryId,
