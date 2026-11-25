@@ -226,6 +226,29 @@ export class MultiSourceOrchestrator {
         return { created: 0, updated: 0 };
       }
 
+      const itemGroups: CollectionItem[][] = [];
+      const missingItemGroups: MissingItem[][] = [];
+
+      // For cycle_lists mode, only fetch from the active source
+      // For other modes, fetch from all sources
+      const sourcesToFetch =
+        config.combineMode === 'cycle_lists'
+          ? [
+              config.sources[
+                (getCollectionSyncCounter(config.id, -1) + 1) %
+                  config.sources.length
+              ],
+            ]
+          : config.sources;
+
+      if (
+        sourcesToFetch.some(
+          (source) => source.type === 'anilist' || source.type === 'myanimelist'
+        )
+      ) {
+        requireAnimeLibraryItems(libraryCache, config.libraryId);
+      }
+
       // Increment sync counter for cycle_lists mode
       if (config.combineMode === 'cycle_lists') {
         const newCounter = incrementCollectionSyncCounter(config.id);
@@ -239,20 +262,6 @@ export class MultiSourceOrchestrator {
           }
         );
       }
-
-      const itemGroups: CollectionItem[][] = [];
-      const missingItemGroups: MissingItem[][] = [];
-
-      // For cycle_lists mode, only fetch from the active source
-      // For other modes, fetch from all sources
-      const sourcesToFetch =
-        config.combineMode === 'cycle_lists'
-          ? [
-              config.sources[
-                getCollectionSyncCounter(config.id) % config.sources.length
-              ],
-            ]
-          : config.sources;
 
       logger.debug(
         `Fetching from ${sourcesToFetch.length} source(s) for ${config.combineMode} mode`,
@@ -307,14 +316,6 @@ export class MultiSourceOrchestrator {
             }
           );
         }
-      }
-
-      if (
-        sourcesToFetch.some(
-          (source) => source.type === 'anilist' || source.type === 'myanimelist'
-        )
-      ) {
-        requireAnimeLibraryItems(libraryCache, config.libraryId);
       }
 
       // Fetch items from sources

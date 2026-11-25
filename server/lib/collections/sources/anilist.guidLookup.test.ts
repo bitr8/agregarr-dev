@@ -247,7 +247,7 @@ describe('AniList external links', () => {
           undefined,
           await prefetchAllLibraryItems(plex)
         )
-      ).rejects.toThrow('Plex library 1 was unavailable');
+      ).rejects.toThrow('Plex library 1 is missing from the library cache');
       expect(autoRequestService.processAutoRequests).not.toHaveBeenCalled();
       expect(handlePlaceholderCleanup).not.toHaveBeenCalled();
       await sync['processConfiguration'](
@@ -283,7 +283,7 @@ describe('AniList external links', () => {
           ],
         }
       )
-    ).rejects.toThrow('Plex library 1 was unavailable');
+    ).rejects.toThrow('Plex library 1 is missing from the library cache');
   });
 });
 describe('AniBridge collection matching', () => {

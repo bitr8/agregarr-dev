@@ -797,7 +797,7 @@ describe('capPreviewItemsToMaxItems', () => {
 });
 
 describe('combinePreviewMissingItems', () => {
-  it('preserves distinct TVDB-only shows, typed TMDB IDs and the earliest season', () => {
+  it('keeps distinct TVDB-only shows and typed TMDB IDs at their first source position', () => {
     const first = {
       mediaType: 'tv',
       tmdbId: 0,
@@ -813,6 +813,18 @@ describe('combinePreviewMissingItems', () => {
       ])
     ).toEqual([first, second, movie, show]);
   });
+
+  it.each(['tv', 'movie'])(
+    'keeps separate %s entries when neither provider identifies them',
+    (mediaType) => {
+      const first = { mediaType, tmdbId: 0, originalPosition: 1 };
+      const second = { mediaType, originalPosition: 2 };
+      expect(combinePreviewMissingItems([[first, second]])).toEqual([
+        first,
+        second,
+      ]);
+    }
+  );
 
   it('position-filters each source before dedupe so an in-cap duplicate survives', () => {
     const a = [{ tmdbId: 1, mediaType: 'movie', originalPosition: 40 }];

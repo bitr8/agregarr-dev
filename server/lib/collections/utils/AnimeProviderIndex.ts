@@ -155,9 +155,7 @@ export function requireAnimeLibraryItems(
   const key = Array.isArray(libraryId) ? libraryId[0] : libraryId;
   const items = libraryCache?.[key];
   if (!items) {
-    throw new Error(
-      `Plex library ${key} was unavailable during anime matching`
-    );
+    throw new Error(`Plex library ${key} is missing from the library cache`);
   }
   return { [key]: items };
 }
