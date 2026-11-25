@@ -1477,8 +1477,10 @@ class RotationGroupService {
     );
     return (
       known ||
-      this.validGroups().some((g) =>
-        g.members.some((m) => m.ratingKey === ratingKey)
+      this.validGroups().some(
+        (g) =>
+          libraries.has(g.libraryId) &&
+          g.members.some((m) => m.ratingKey === ratingKey)
       )
     );
   }

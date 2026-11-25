@@ -1118,6 +1118,14 @@ describe('hardening', () => {
     expect(service.isKnownRatingKey('rk-other')).toBe(false);
   });
 
+  it('the poster proxy rejects a rotation member whose library is no longer configured', async () => {
+    await service.createGroup(input());
+    expect(service.isKnownRatingKey('rk-1')).toBe(true);
+    settings().plex.libraries = [];
+    settings().plex.preExistingCollectionConfigs = [];
+    expect(service.isKnownRatingKey('rk-1')).toBe(false);
+  });
+
   it('deleting a group settles the library its members were restored in', async () => {
     await service.createGroup(input());
     kick.mockClear();
