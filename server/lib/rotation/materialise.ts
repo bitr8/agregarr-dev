@@ -144,6 +144,46 @@ export function restoreFields(
   else c.randomizeHomeOrder = own.randomizeHomeOrder;
 }
 
+export interface OrderRow {
+  visibilityConfig?: Visibility;
+  sortOrderHome?: number;
+}
+
+const onHome = (r: OrderRow): boolean =>
+  !!r.visibilityConfig &&
+  (r.visibilityConfig.usersHome ||
+    r.visibilityConfig.serverOwnerHome ||
+    r.visibilityConfig.libraryRecommended);
+
+/** Puts restored rows back at their own place among the others, renumbering only when the saved values no longer sort that way. */
+export function reinsertRestored<T extends OrderRow>(
+  items: T[],
+  restored: Set<T>
+): void {
+  const others = items
+    .filter((r) => onHome(r) && !restored.has(r))
+    .sort((a, b) => (a.sortOrderHome ?? 0) - (b.sortOrderHome ?? 0));
+  const back = items
+    .filter((r) => restored.has(r) && onHome(r) && (r.sortOrderHome ?? 0) > 0)
+    .sort((a, b) => (a.sortOrderHome ?? 0) - (b.sortOrderHome ?? 0));
+  const order = [...others];
+  for (const r of back) {
+    order.splice(Math.min((r.sortOrderHome as number) - 1, order.length), 0, r);
+  }
+  const value = (r: OrderRow) => r.sortOrderHome ?? 0;
+  const fits = back.every((r) => {
+    const i = order.indexOf(r);
+    return (
+      (i === 0 || value(order[i - 1]) < value(r)) &&
+      (i === order.length - 1 || value(order[i + 1]) > value(r))
+    );
+  });
+  if (fits) return;
+  order.forEach((r, i) => {
+    r.sortOrderHome = i + 1;
+  });
+}
+
 /** Why this config cannot join `groupId` in `libraryId`, or undefined when it can. */
 export function classifyCandidate(
   config: MemberConfig,
