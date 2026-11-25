@@ -160,3 +160,14 @@ export const membersToKeep = <M extends { key: string }>(
   );
   return members.filter((m) => accepted.has(m.key) || !known.has(m.key));
 };
+
+export const homeRowAction = (
+  configType: 'collection' | 'preExisting' | 'hub',
+  isSlotRow: boolean,
+  hasMembership: boolean,
+  activeTab: string
+): 'delete' | 'manage' | 'hide' | null => {
+  if (configType === 'collection' && !isSlotRow) return 'delete';
+  if (activeTab === 'inactive' && !isSlotRow) return null;
+  return hasMembership ? 'manage' : 'hide';
+};

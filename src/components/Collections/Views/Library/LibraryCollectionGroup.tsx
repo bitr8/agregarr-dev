@@ -18,6 +18,7 @@ import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
 import RotationBadge from '@app/components/Rotation/RotationBadge';
+import { homeRowAction } from '@app/components/Rotation/utils';
 import useRotationMembership from '@app/hooks/rotation/useRotationMembership';
 import type {
   CollectionFormConfig,
@@ -273,6 +274,12 @@ const SortableItem = ({
     ? undefined
     : rotationMap[`${configType}:${config.id}`];
   const isSlotRow = Boolean(membership?.showing);
+  const rowAction = homeRowAction(
+    configType,
+    isSlotRow,
+    Boolean(membership),
+    activeTab
+  );
 
   // Check actual linking status for all config types
   const isLinked = Boolean(config.isLinked);
@@ -700,8 +707,7 @@ const SortableItem = ({
             </>
           )}
 
-        {isCollection ? (
-          // Full delete for Agregarr collections
+        {rowAction === 'delete' && (
           <ConfirmButton
             confirmText="Delete"
             buttonSize="sm"
@@ -710,30 +716,26 @@ const SortableItem = ({
           >
             <TrashIcon className="h-4 w-4" />
           </ConfirmButton>
-        ) : (
-          // Hide button for hubs and pre-existing collections
-          activeTab !== 'inactive' &&
-          (membership ? (
-            <Link
-              href={`/rotation/edit?id=${encodeURIComponent(
-                membership.groupId
-              )}`}
-              legacyBehavior
-            >
-              <a className="whitespace-nowrap text-sm text-orange-400 hover:text-orange-300">
-                {intl.formatMessage(messages.manageRotation)}
-              </a>
-            </Link>
-          ) : (
-            <ConfirmButton
-              confirmText="Hide"
-              buttonSize="sm"
-              buttonType="primary"
-              onClick={() => onHide(config)}
-            >
-              <TrashIcon className="h-4 w-4" />
-            </ConfirmButton>
-          ))
+        )}
+        {rowAction === 'manage' && membership && (
+          <Link
+            href={`/rotation/edit?id=${encodeURIComponent(membership.groupId)}`}
+            legacyBehavior
+          >
+            <a className="whitespace-nowrap text-sm text-orange-400 hover:text-orange-300">
+              {intl.formatMessage(messages.manageRotation)}
+            </a>
+          </Link>
+        )}
+        {rowAction === 'hide' && (
+          <ConfirmButton
+            confirmText="Hide"
+            buttonSize="sm"
+            buttonType="primary"
+            onClick={() => onHide(config)}
+          >
+            <TrashIcon className="h-4 w-4" />
+          </ConfirmButton>
         )}
       </div>
     </div>

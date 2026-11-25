@@ -1,6 +1,7 @@
 import {
   draftMembers,
   draftProblem,
+  homeRowAction,
   membersToKeep,
 } from '@app/components/Rotation/utils';
 import type {
@@ -79,5 +80,19 @@ describe('membersToKeep', () => {
     const members = [{ key: 'a' }, { key: 'gone' }, { key: 'c' }];
     const out = membersToKeep(members, [cand('a', true), cand('c', false)]);
     expect(out.map((m) => m.key)).toEqual(['a', 'gone']);
+  });
+});
+
+describe('homeRowAction', () => {
+  it('a slot row always manages the rotation, never deletes', () => {
+    expect(homeRowAction('collection', true, true, 'active')).toBe('manage');
+    expect(homeRowAction('preExisting', true, true, 'active')).toBe('manage');
+  });
+
+  it('keeps the existing buttons off slot rows', () => {
+    expect(homeRowAction('collection', false, false, 'active')).toBe('delete');
+    expect(homeRowAction('preExisting', false, true, 'active')).toBe('manage');
+    expect(homeRowAction('preExisting', false, false, 'active')).toBe('hide');
+    expect(homeRowAction('hub', false, false, 'inactive')).toBeNull();
   });
 });
