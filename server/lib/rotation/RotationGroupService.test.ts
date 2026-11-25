@@ -777,6 +777,13 @@ describe('status and previews', () => {
     ).toBe(1);
   });
 
+  it('a sync that lands exactly on the boundary is the one that swaps', async () => {
+    await service.createGroup(input());
+    const s = await service.getStatus(group().id);
+    expect(s.nextChange.notBefore).toBeDefined();
+    expect(s.nextChange.expectedSyncAt).toBe(s.nextChange.notBefore);
+  });
+
   it('previewDraft saves nothing and describes who leaves and joins', async () => {
     await service.createGroup(input());
     const before = snapshot();

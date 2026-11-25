@@ -1188,7 +1188,7 @@ class RotationGroupService {
       );
       nextChange = { kind: b.kind };
       if (b.notBefore) nextChange.notBefore = b.notBefore.toISOString();
-      const from = b.notBefore ?? now;
+      const from = b.notBefore ? new Date(b.notBefore.getTime() - 1) : now;
       const sync = this.cronNext(from)[0];
       if (sync && b.kind !== 'monthly_done' && b.kind !== 'disabled') {
         nextChange.expectedSyncAt = sync.toISOString();
