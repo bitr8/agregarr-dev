@@ -818,7 +818,7 @@ describe('combinePreviewMissingItems', () => {
     'keeps separate %s entries when neither provider identifies them',
     (mediaType) => {
       const first = { mediaType, tmdbId: 0, originalPosition: 1 };
-      const second = { mediaType, originalPosition: 2 };
+      const second = { ...first, originalPosition: 2 };
       expect(combinePreviewMissingItems([[first, second]])).toEqual([
         first,
         second,
