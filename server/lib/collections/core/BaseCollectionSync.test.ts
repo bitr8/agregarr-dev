@@ -32,6 +32,7 @@ vi.mock('@server/logger', () => ({
 const save = vi.fn();
 const settings = {
   clientId: 'test-client',
+  globalExclusions: { movies: [], shows: [{ type: 'tvdb', id: 42 }] },
   main: {},
   plex: {
     collectionConfigs: [] as CollectionConfig[],
@@ -80,6 +81,30 @@ const config = (overrides: Partial<CollectionConfig> = {}): CollectionConfig =>
     isActive: true,
     ...overrides,
   } as CollectionConfig);
+
+it('applies a TVDB exclusion to a top-level series ID and falls back to legacy metadata', () => {
+  const show: CollectionItem = {
+    type: 'tv',
+    ratingKey: 'top-level',
+    title: 'Show',
+    tvdbId: 42,
+  };
+  const keep = {
+    ...show,
+    ratingKey: 'allowed',
+    tvdbId: 43,
+    metadata: { tvdbId: 42 },
+  };
+  const { filteredItems } = new TestSync()['applyCommonFiltering'](
+    [
+      show,
+      { ...show, ratingKey: 'legacy', tvdbId: 0, metadata: { tvdbId: 42 } },
+      keep,
+    ],
+    config()
+  );
+  expect(filteredItems).toEqual([keep]);
+});
 
 // A client that gets as far as creating the collection and then fails, which is
 // the window the fix exists to cover. The first call each path makes after
