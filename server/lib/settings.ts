@@ -827,8 +827,43 @@ const SETTINGS_PATH = process.env.CONFIG_DIRECTORY
   : path.join(__dirname, '../../config/settings.json');
 const SETTINGS_BACKUP_PATH = `${SETTINGS_PATH}.last-good`;
 
+const parseSettings = (raw: string): AllSettings | undefined => {
+  if (!raw.trim()) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+};
+
+const writeAndSync = (file: string, contents: string): void => {
+  const fd = fs.openSync(file, 'w');
+  try {
+    fs.writeFileSync(fd, contents);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+};
+
+// A plain write truncates first, so an interrupted save used to leave an empty file
+const writeFileDurably = (file: string, contents: string): void => {
+  const tmpPath = `${file}.tmp`;
+  try {
+    writeAndSync(tmpPath, contents);
+    fs.renameSync(tmpPath, file);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== 'EBUSY' && code !== 'EXDEV' && code !== 'EACCES') throw e;
+    // A bind-mounted file or read-only directory: the file can be rewritten, not replaced
+    fs.rmSync(tmpPath, { force: true });
+    writeAndSync(file, contents);
+  }
+};
+
 class Settings {
   private data: AllSettings;
+  private loaded = false;
 
   constructor(initialSettings?: AllSettings) {
     this.data = {
@@ -1314,6 +1349,7 @@ class Settings {
   public load(overrideSettings?: AllSettings): Settings {
     if (overrideSettings) {
       this.data = overrideSettings;
+      this.loaded = true;
       registerLogSecrets(collectSecretValues(this.data));
       return this;
     }
@@ -1321,22 +1357,35 @@ class Settings {
     if (!fs.existsSync(SETTINGS_PATH)) {
       this.save();
     }
-    let data = fs.readFileSync(SETTINGS_PATH, 'utf-8');
-    let parsed: AllSettings | undefined;
+    const data = fs.readFileSync(SETTINGS_PATH, 'utf-8');
+    let parsed = parseSettings(data);
 
-    // An empty or cut-short file must not turn into a fresh install
-    try {
-      parsed = data.trim() ? JSON.parse(data) : undefined;
-    } catch {
-      // handled below
+    if (!parsed && this.loaded) {
+      // Memory is current after the first load; never merge an older copy into it
+      logger.warn(
+        'settings.json is empty or unreadable - rewriting it from memory',
+        { label: 'Settings' }
+      );
+      this.save();
+      return this;
     }
     if (!parsed && fs.existsSync(SETTINGS_BACKUP_PATH)) {
+      parsed = parseSettings(fs.readFileSync(SETTINGS_BACKUP_PATH, 'utf-8'));
+      if (!parsed) {
+        throw new Error(
+          `settings.json and ${SETTINGS_BACKUP_PATH} are both unreadable - refusing to overwrite them`
+        );
+      }
+      if (data.trim()) {
+        fs.copyFileSync(
+          SETTINGS_PATH,
+          `${SETTINGS_PATH}.corrupt-${Date.now()}`
+        );
+      }
       logger.error(
         'settings.json is empty or unreadable - restoring the last good copy',
         { label: 'Settings', backup: SETTINGS_BACKUP_PATH }
       );
-      data = fs.readFileSync(SETTINGS_BACKUP_PATH, 'utf-8');
-      parsed = JSON.parse(data);
     } else if (!parsed && data.trim()) {
       throw new Error(
         `settings.json is not valid JSON and no ${SETTINGS_BACKUP_PATH} exists - refusing to overwrite it`
@@ -1346,29 +1395,22 @@ class Settings {
     if (parsed) {
       this.data = merge(this.data, parsed);
       this.save();
-      try {
-        fs.writeFileSync(SETTINGS_BACKUP_PATH, data);
-      } catch (e) {
-        logger.warn('Could not write the settings backup copy', {
-          label: 'Settings',
-          error: e instanceof Error ? e.message : String(e),
-        });
-      }
+      this.loaded = true;
     }
     return this;
   }
 
-  // writeFileSync truncates first, so an interrupted save left an empty file
   public save(): void {
-    const tmpPath = `${SETTINGS_PATH}.tmp`;
-    const fd = fs.openSync(tmpPath, 'w');
+    const contents = JSON.stringify(this.data, undefined, ' ');
+    writeFileDurably(SETTINGS_PATH, contents);
     try {
-      fs.writeSync(fd, JSON.stringify(this.data, undefined, ' '));
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
+      writeFileDurably(SETTINGS_BACKUP_PATH, contents);
+    } catch (e) {
+      logger.warn('Could not write the settings backup copy', {
+        label: 'Settings',
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
-    fs.renameSync(tmpPath, SETTINGS_PATH);
     registerLogSecrets(collectSecretValues(this.data));
   }
 
