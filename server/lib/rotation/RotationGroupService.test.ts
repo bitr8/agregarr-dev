@@ -705,7 +705,7 @@ describe('rebind', () => {
       pre(30, {
         name: old.name,
         collectionRatingKey: 'rk-new',
-        visibilityConfig: vis(true, true, false),
+        visibilityConfig: vis(false, false, false),
         sortOrderHome: 30,
       })
     );
@@ -715,15 +715,30 @@ describe('rebind', () => {
     expect(m?.key).toBe('preExisting:pre-30');
     expect(m?.rebound?.previousRatingKey).toBe('rk-3');
     expect(m?.unboundSince).toBeUndefined();
-    expect(m?.own).toEqual({
-      visibilityConfig: vis(true, true, false),
-      inactiveVisibilityConfig: null,
-      sortOrderHome: 30,
-      randomizeHomeOrder: null,
-      capturedAt: NOW.toISOString(),
-    });
+    expect(m?.own?.visibilityConfig).toEqual(vis(true, true, false));
+    expect(m?.own?.sortOrderHome).toBe(3);
     expect(group().state.queue).toContain('preExisting:pre-30');
     expect(group().state.queue).not.toContain('preExisting:pre-3');
+  });
+
+  it('deleting the group after a re-bind restores the original Home settings', async () => {
+    await service.createGroup(input());
+    const old = settings().plex.preExistingCollectionConfigs.splice(2, 1)[0];
+    settings().plex.preExistingCollectionConfigs.push(
+      pre(30, {
+        name: old.name,
+        collectionRatingKey: 'rk-new',
+        visibilityConfig: vis(false, false, false),
+        sortOrderHome: 0,
+      })
+    );
+    service.runPass({ now: NOW });
+    service.deleteGroup(group().id);
+    const rebound = settings().plex.preExistingCollectionConfigs.find(
+      (c) => c.id === 'pre-30'
+    ) as Cfg;
+    expect(rebound.visibilityConfig).toEqual(vis(true, true, false));
+    expect(rebound.sortOrderHome).toBe(3);
   });
 
   it('two same-title candidates do not bind', async () => {

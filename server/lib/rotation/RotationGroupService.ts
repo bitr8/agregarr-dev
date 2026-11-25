@@ -262,7 +262,7 @@ class RotationGroupService {
           member.ratingKey = found.collectionRatingKey;
           member.rebound = { at: iso, previousRatingKey };
           delete member.unboundSince;
-          member.own = captureOwn(found, now);
+          member.own ??= captureOwn(found, now);
           const s = group.state;
           s.queue = s.queue.map((k) => (k === oldKey ? newKey : k));
           s.shownThisCycle = s.shownThisCycle.map((k) =>
