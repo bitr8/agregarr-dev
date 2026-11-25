@@ -238,4 +238,38 @@ describe('leaving a rotation through the real reorder', () => {
     const positions = rows.map((c) => c.sortOrderHome as number);
     expect(new Set(positions).size).toBe(positions.length);
   });
+
+  it('raising Slots while removing the showing member keeps the removed one below the new slots', async () => {
+    const base = {
+      name: 'Group One',
+      libraryId: 'lib-1',
+      enabled: true,
+      interval: 'daily' as const,
+      order: 'sequential' as const,
+      surfaces: SHOWN,
+    };
+    await service.createGroup({ ...base, slotCount: 1, members });
+    await service.settlePositions(['lib-1']);
+    const showing = homeRows().find((c) =>
+      ['m2', 'm4', 'm5'].includes(c.id as string)
+    ) as Cfg;
+
+    await service.updateGroup(groupId(), {
+      ...base,
+      slotCount: 2,
+      members: members.filter((m) => m.configId !== showing.id),
+    });
+
+    const slotPositions = (
+      state.settings as {
+        plex: {
+          rotationGroups: { state: { slots: { sortOrderHome: number }[] } }[];
+        };
+      }
+    ).plex.rotationGroups[0].state.slots.map((x) => x.sortOrderHome);
+    const removed = showing.sortOrderHome as number;
+    expect(removed).toBeGreaterThan(Math.max(...slotPositions));
+    const positions = homeRows().map((c) => c.sortOrderHome as number);
+    expect(new Set(positions).size).toBe(positions.length);
+  });
 });

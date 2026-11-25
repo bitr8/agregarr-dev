@@ -509,7 +509,8 @@ class RotationGroupService {
   private restoreMembers(
     group: RotationGroup,
     members: RotationMember[],
-    slotRefilled = false
+    slotRefilled = false,
+    addedSlots = 0
   ): void {
     const before = new Map<string, number>();
     const restored: { member: RotationMember; config: MemberConfig }[] = [];
@@ -550,9 +551,9 @@ class RotationGroupService {
       .filter((c) => !skip.has(c) && inLibrary(c, group.libraryId))
       .reduce((max, c) => Math.max(max, c.sortOrderHome ?? 0), 0);
     if (slotRefilled) {
-      for (const slot of group.state?.slots ?? []) {
-        last = Math.max(last, slot.sortOrderHome);
-      }
+      const slots = group.state?.slots ?? [];
+      const top = slots.reduce((a, x) => Math.max(a, x.sortOrderHome), 0);
+      last = Math.max(last, top + addedSlots);
     }
     for (const config of appended) config.sortOrderHome = ++last;
   }
@@ -895,7 +896,12 @@ class RotationGroupService {
     const { group, restore } = this.buildDraft(input, existing, configs, now);
     const settings = getSettings();
     this.transact(() => {
-      this.restoreMembers(existing, restore, group.enabled);
+      this.restoreMembers(
+        existing,
+        restore,
+        group.enabled,
+        Math.max(0, group.slotCount - existing.slotCount)
+      );
       const writes = group.enabled ? this.planConfigWrites(group, false) : [];
       this.replaceGroup(group);
       this.commitWrites(writes);
