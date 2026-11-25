@@ -48,6 +48,11 @@ import type {
 } from './types';
 import { ALL_HIDDEN, memberKey } from './types';
 
+const inLibrary = (c: { libraryId: string | string[] }, libraryId: string) =>
+  Array.isArray(c.libraryId)
+    ? c.libraryId.includes(libraryId)
+    : c.libraryId === libraryId;
+
 export class RotationValidationError extends Error {}
 export class RotationNotFoundError extends Error {}
 
@@ -503,7 +508,8 @@ class RotationGroupService {
   /** Restores each member's own settings; newly visible ones that are not in a slot go after the last row. */
   private restoreMembers(
     group: RotationGroup,
-    members: RotationMember[]
+    members: RotationMember[],
+    slotRefilled = false
   ): void {
     const before = new Map<string, number>();
     const restored: { member: RotationMember; config: MemberConfig }[] = [];
@@ -513,7 +519,9 @@ class RotationGroupService {
       const slot = group.state?.slots?.find((x) => x.occupant === member.key);
       before.set(
         member.key,
-        slot ? config.sortOrderHome || slot.sortOrderHome || 0 : 0
+        slot && !slotRefilled
+          ? config.sortOrderHome || slot.sortOrderHome || 0
+          : 0
       );
       this.restoreMember(group, member);
       restored.push({ member, config });
@@ -539,8 +547,13 @@ class RotationGroupService {
       ...(plex.hubConfigs ?? []),
       ...(plex.preExistingCollectionConfigs ?? []),
     ]
-      .filter((c) => !skip.has(c) && String(c.libraryId) === group.libraryId)
+      .filter((c) => !skip.has(c) && inLibrary(c, group.libraryId))
       .reduce((max, c) => Math.max(max, c.sortOrderHome ?? 0), 0);
+    if (slotRefilled) {
+      for (const slot of group.state?.slots ?? []) {
+        last = Math.max(last, slot.sortOrderHome);
+      }
+    }
     for (const config of appended) config.sortOrderHome = ++last;
   }
 
@@ -725,7 +738,7 @@ class RotationGroupService {
       ...(plex.collectionConfigs ?? []),
       ...(plex.hubConfigs ?? []),
       ...(plex.preExistingCollectionConfigs ?? []),
-    ].filter((c) => String(c.libraryId) === libraryId);
+    ].filter((c) => inLibrary(c, libraryId));
     return all.reduce((max, c) => Math.max(max, c.sortOrderHome ?? 0), 0) + 1;
   }
 
@@ -882,7 +895,7 @@ class RotationGroupService {
     const { group, restore } = this.buildDraft(input, existing, configs, now);
     const settings = getSettings();
     this.transact(() => {
-      this.restoreMembers(existing, restore);
+      this.restoreMembers(existing, restore, group.enabled);
       const writes = group.enabled ? this.planConfigWrites(group, false) : [];
       this.replaceGroup(group);
       this.commitWrites(writes);

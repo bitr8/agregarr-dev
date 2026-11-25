@@ -608,7 +608,7 @@ describe('restore reads only the stash', () => {
       group().id,
       input({ members: input().members.slice(1) })
     );
-    expect(current()[0]).toEqual(LITERAL[0]);
+    expect(current()[0]).toEqual({ ...LITERAL[0], s: 43 });
     expect(inactive()).toEqual(INACTIVE);
     expect(group().members.length).toBe(5);
   });
@@ -1383,6 +1383,61 @@ describe('restored members and Home order', () => {
       before.filter((n) => n !== removed)
     );
     expect(after.indexOf(slotN)).toBe(before.indexOf(slotN));
+  });
+
+  it('removing the showing member while running: replacement holds the slot, removed goes last, no shared position', async () => {
+    await setup();
+    const slotN = occupant();
+    const slotPos = cfg(slotN).sortOrderHome as number;
+    await service.updateGroup(
+      group().id,
+      input({
+        slotCount: 1,
+        members: memberIds([2, 4, 5].filter((n) => n !== slotN)),
+      })
+    );
+    const replacement = occupant();
+    expect(replacement).not.toBe(slotN);
+    expect(cfg(replacement).sortOrderHome).toBe(slotPos);
+    const after = homeOrder();
+    expect(after[after.length - 1]).toBe(slotN);
+    const others = settings()
+      .plex.preExistingCollectionConfigs.filter((c) => c.id !== `pre-${slotN}`)
+      .map((c) => c.sortOrderHome as number);
+    expect(cfg(slotN).sortOrderHome).toBeGreaterThan(Math.max(...others));
+  });
+
+  it('a multi-library collection holding the highest position counts as in the library', async () => {
+    await setup();
+    settings().plex.collectionConfigs.push({
+      id: 'multi-1',
+      name: 'Multi',
+      libraryId: ['lib-1', 'lib-2'],
+      sortOrderHome: 50,
+      visibilityConfig: vis(true, true, false),
+    });
+    const slotN = occupant();
+    const removed = [2, 4, 5].find((n) => n !== slotN) as number;
+    await service.updateGroup(
+      group().id,
+      input({
+        slotCount: 1,
+        members: memberIds([2, 4, 5].filter((n) => n !== removed)),
+      })
+    );
+    expect(cfg(removed).sortOrderHome).toBe(51);
+  });
+
+  it('a new rotation allocates its slots after a multi-library collection', async () => {
+    settings().plex.collectionConfigs.push({
+      id: 'multi-1',
+      name: 'Multi',
+      libraryId: ['lib-1', 'lib-2'],
+      sortOrderHome: 50,
+      visibilityConfig: vis(true, true, false),
+    });
+    await service.createGroup(input({ slotCount: 2 }));
+    expect(group().state.slots.map((s) => s.sortOrderHome)).toEqual([51, 52]);
   });
 
   it('a member that was hidden gets its saved position back and is not placed', async () => {
