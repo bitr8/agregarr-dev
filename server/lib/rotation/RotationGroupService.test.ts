@@ -772,6 +772,9 @@ describe('status and previews', () => {
     });
     expect(p.restored.map((m) => m.key)).toEqual(['preExisting:pre-6']);
     expect(p.now.length).toBe(3);
+    for (const m of [...p.now, ...p.upNext, ...p.restored]) {
+      expect(m.posterUrl).toMatch(/^\/api\/v1\/rotation-groups\/poster\//);
+    }
     expect(snapshot()).toBe(before);
     expect(settings().save).not.toHaveBeenCalled();
   });
@@ -781,6 +784,9 @@ describe('status and previews', () => {
     const before = snapshot();
     const p = await service.previewSaved(group().id, 3);
     expect(p.steps.length).toBe(3);
+    for (const m of p.steps.flatMap((x) => x.slots)) {
+      expect(m.posterUrl).toMatch(/^\/api\/v1\/rotation-groups\/poster\//);
+    }
     expect(p.steps[0].slots.map((m) => m.key)).toEqual([
       'preExisting:pre-3',
       'preExisting:pre-4',

@@ -910,6 +910,7 @@ class RotationGroupService {
     const now = new Date();
     const { group, restore } = this.buildDraft(input, existing, configs, now);
     const ctx = await this.statusContext(group.state.seq);
+    await this.withPosters(group, ctx);
     const eligibility = this.eligibilityMap(group, now);
     const showing = new Set(
       group.state.slots.map((s) => s.occupant).filter(Boolean) as MemberKey[]
@@ -962,6 +963,7 @@ class RotationGroupService {
     const count = Math.min(5, Math.max(1, Math.floor(steps) || 1));
     const eligibility = this.eligibilityMap(group, now);
     const ctx = await this.statusContext(group.state.seq);
+    await this.withPosters(group, ctx);
     const states = simulate(
       { group, eligibility, now, toLocal, rng: () => 0.5 },
       count
