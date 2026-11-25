@@ -138,6 +138,7 @@ class RotationGroupService {
         plex.preExistingCollectionConfigs ?? null
       ),
       rotationGroups: JSON.stringify(plex.rotationGroups ?? null),
+      hubConfigs: JSON.stringify(plex.hubConfigs ?? null),
     };
     try {
       return fn();

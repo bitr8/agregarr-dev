@@ -1277,6 +1277,30 @@ describe('save failure rolls back', () => {
     expect(() => service.reassertManagedFields()).toThrow('disk full');
     expect(snapshot()).toBe(before);
   });
+  it('a failed delete also leaves hub rows as they were', async () => {
+    settings().plex.hubConfigs = [
+      {
+        id: 'hub-1',
+        libraryId: 'lib-1',
+        sortOrderHome: 20,
+        visibilityConfig: vis(true, true, false),
+      },
+    ];
+    await service.createGroup(
+      input({
+        slotCount: 1,
+        members: [1, 3, 5].map((n) => ({
+          kind: 'preExisting' as const,
+          configId: `pre-${n}`,
+        })),
+      })
+    );
+    const before = snapshot();
+    failOnce();
+    expect(() => service.deleteGroup(group().id)).toThrow('disk full');
+    expect(snapshot()).toBe(before);
+    expect(settings().plex.hubConfigs[0].sortOrderHome).toBe(20);
+  });
 });
 
 describe('everyWeeks anchor', () => {
