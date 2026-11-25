@@ -157,6 +157,11 @@ const PreviewCollectionModal = ({
           totalItems: number;
           matchedCount: number;
           missingCount: number;
+          sourceErrors?: {
+            sourceId: string;
+            sourceName: string;
+            message: string;
+          }[];
         };
       }
     >
@@ -748,6 +753,13 @@ const PreviewCollectionModal = ({
             </div>
           )}
 
+          {activeStatus?.result?.sourceErrors?.map(
+            ({ sourceId, sourceName, message }) => (
+              <p key={sourceId} role="alert" className="text-sm text-amber-300">
+                <strong>{sourceName}</strong>: {message}
+              </p>
+            )
+          )}
           {error && (
             <div className="flex h-96 items-center justify-center">
               <div className="text-red-500">

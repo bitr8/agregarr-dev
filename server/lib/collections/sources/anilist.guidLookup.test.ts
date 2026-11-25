@@ -79,6 +79,72 @@ describe('AniList external links', () => {
     raw: { format: 'TV', externalLinks: [{ site: 'TMDB', url }] },
   });
 
+  it('continues past a foreign library hit and stops after finding the selected show', async () => {
+    const mappings = await import('@server/api/animeIds');
+    const ready = vi
+      .spyOn(mappings, 'ensureAnimeIdsLoaded')
+      .mockResolvedValue();
+    const source = await import('@server/api/anilist');
+    const fetchPage = vi
+      .spyOn(source, 'getTrendingAnime')
+      .mockImplementation(async (page = 1) => ({
+        Page: {
+          pageInfo: {
+            total: 4,
+            perPage: 1,
+            currentPage: page,
+            lastPage: 4,
+            hasNextPage: page < 4,
+          },
+          media: [
+            {
+              id: [4, 212888, 6, 5][page - 1],
+              title: { english: 'Series' },
+              format: 'TV',
+              externalLinks: [
+                {
+                  id: page,
+                  site: 'TMDB',
+                  url:
+                    'https://www.themoviedb.org/tv/' +
+                    (page === 1 ? 20 : 324502),
+                },
+              ],
+            },
+          ],
+        },
+      }));
+    try {
+      const rows = await new AnilistCollectionSync().fetchSourceData(
+        { ...config, maxItems: 1 },
+        undefined,
+        {
+          '1': [
+            {
+              ratingKey: 'owned',
+              title: 'Overgeared',
+              Guid: [{ id: 'tmdb://324502' }],
+            },
+          ],
+          '2': [
+            {
+              ratingKey: 'foreign',
+              title: 'Series',
+              Guid: [{ id: 'tmdb://20' }],
+            },
+          ],
+        }
+      );
+      expect(rows).toMatchObject(
+        [4, 212888, 6].map((anilistId) => ({ anilistId }))
+      );
+      expect(fetchPage).toHaveBeenCalledTimes(3);
+    } finally {
+      fetchPage.mockRestore();
+      ready.mockRestore();
+    }
+  });
+
   it('stops before missing-item processing when prefetch fails, and processes a successful empty read', async () => {
     const getLibraryContents = vi
       .fn()
@@ -106,7 +172,7 @@ describe('AniList external links', () => {
           undefined,
           await prefetchAllLibraryItems(plex)
         )
-      ).rejects.toThrow('Plex library 1 was unavailable');
+      ).rejects.toThrow('Plex library 1 is missing from the library cache');
       expect(autoRequestService.processAutoRequests).not.toHaveBeenCalled();
       expect(handlePlaceholderCleanup).not.toHaveBeenCalled();
       await sync['processConfiguration'](
@@ -142,6 +208,6 @@ describe('AniList external links', () => {
           ],
         }
       )
-    ).rejects.toThrow('Plex library 1 was unavailable');
+    ).rejects.toThrow('Plex library 1 is missing from the library cache');
   });
 });
