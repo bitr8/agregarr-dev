@@ -1074,7 +1074,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       if (item.type === 'tv') {
         const tmdbId = item.tmdbId || (item.metadata?.tmdbId as number);
         const tvdbId =
-          item.tvdbId ?? (item.metadata?.tvdbId as number | undefined);
+          item.tvdbId || (item.metadata?.tvdbId as number | undefined);
 
         // Check TMDB exclusions
         if (
