@@ -20,6 +20,9 @@ const RotationEmptyState = () => {
       <p className="mx-auto mt-2 max-w-md text-sm text-gray-400">
         {intl.formatMessage(messages.emptyBody)}
       </p>
+      <p className="mx-auto mt-2 max-w-md text-xs text-gray-500">
+        {intl.formatMessage(messages.emptyCycleListsHint)}
+      </p>
       <div className="mt-6">
         <Button
           buttonType="primary"

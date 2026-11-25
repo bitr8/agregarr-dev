@@ -7,6 +7,8 @@ const messages = defineMessages({
   newRotation: 'New rotation',
   createRotation: 'Create a rotation',
   emptyTitle: 'Keep Home fresh without the clutter',
+  emptyCycleListsHint:
+    'Rotation takes turns between collections you already have. To take turns between lists in one row instead, use Cycle Lists.',
   emptyBody:
     'A rotation gives a few Home rows to a bigger set of collections and swaps them on a schedule, so everything gets a turn.',
   loadError: "Couldn't load your rotations.",
