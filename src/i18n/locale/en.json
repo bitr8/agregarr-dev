@@ -1472,6 +1472,7 @@
   "components.Rotation.intervalEverySync": "Every sync",
   "components.Rotation.intervalEverySyncHelp": "Swaps every time Agregarr runs a full sync.",
   "components.Rotation.intervalEveryWeeks": "Every {count} weeks on {day}",
+  "components.Rotation.intervalEveryWeeksHelp": "Swaps at the first sync on or after the day you pick, in fixed {count}-week blocks, so the first change can come sooner than {count} weeks. Next change shows the date.",
   "components.Rotation.intervalMonthly": "Once a month, on a random day",
   "components.Rotation.intervalMonthlyHelp": "Agregarr picks a different day each month and swaps at the first sync on or after it.",
   "components.Rotation.intervalWeekly": "Every week",

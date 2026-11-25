@@ -225,6 +225,10 @@ describe('rotation groups routes', () => {
         (b) =>
           Object.assign(b, { interval: 'weekly', weekday: 1, everyWeeks: 2.5 }),
       ],
+      [
+        'everyWeeks 0 on a daily interval',
+        (b) => Object.assign(b, { interval: 'daily', everyWeeks: 0 }),
+      ],
       ['bad order', (b) => (b.order = 'random')],
       [
         'no surface on',

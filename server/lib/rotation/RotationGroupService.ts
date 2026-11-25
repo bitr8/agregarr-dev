@@ -609,16 +609,16 @@ class RotationGroupService {
           'Pick a weekday (0 for Sunday to 6 for Saturday).'
         );
       }
-      if (
-        input.everyWeeks !== undefined &&
-        (!Number.isInteger(input.everyWeeks) ||
-          input.everyWeeks < 1 ||
-          input.everyWeeks > 6)
-      ) {
-        throw new RotationValidationError(
-          'Pick how many weeks between changes (1 to 6).'
-        );
-      }
+    }
+    if (
+      input.everyWeeks !== undefined &&
+      (!Number.isInteger(input.everyWeeks) ||
+        input.everyWeeks < 1 ||
+        input.everyWeeks > 6)
+    ) {
+      throw new RotationValidationError(
+        'Pick how many weeks between changes (1 to 6).'
+      );
     }
     if (input.order !== 'sequential' && input.order !== 'shuffled') {
       throw new RotationValidationError('Pick an order.');

@@ -39,7 +39,12 @@ const IntervalField = ({
       options={OPTIONS.map((option) => ({
         value: option,
         label: intl.formatMessage(messages[intervalLabels[option].label]),
-        help: intl.formatMessage(messages[intervalLabels[option].help]),
+        help:
+          option === 'weekly' && everyWeeks > 1
+            ? intl.formatMessage(messages.intervalEveryWeeksHelp, {
+                count: everyWeeks,
+              })
+            : intl.formatMessage(messages[intervalLabels[option].help]),
         extra:
           option === 'weekly' ? (
             <>

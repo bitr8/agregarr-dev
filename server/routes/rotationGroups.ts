@@ -105,7 +105,6 @@ function validateGroupInput(body: unknown): string | null {
     return 'weekday must be an integer from 0 to 6';
   }
   if (
-    interval === 'weekly' &&
     everyWeeks !== undefined &&
     (!Number.isInteger(everyWeeks) ||
       (everyWeeks as number) < 1 ||

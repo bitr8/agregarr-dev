@@ -364,6 +364,11 @@ class CollectionsSync {
       await IndividualCollectionScheduler.waitForIndividualSyncsToComplete();
     }
 
+    if (this.cancelled) {
+      this.pending = false;
+      return;
+    }
+
     // All cross-job waits have cleared: claim the running state now. Setting it
     // here (rather than at the top of run()) is what prevents the deadlock with
     // Overlay Application while still gating individual syncs during real work.

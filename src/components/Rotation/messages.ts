@@ -125,6 +125,8 @@ const messages = defineMessages({
   fieldEveryWeeks: 'Repeat every',
   everyWeeksOption: '{count, plural, one {every week} other {every # weeks}}',
   intervalEveryWeeks: 'Every {count} weeks on {day}',
+  intervalEveryWeeksHelp:
+    'Swaps at the first sync on or after the day you pick, in fixed {count}-week blocks, so the first change can come sooner than {count} weeks. Next change shows the date.',
   namePlaceholder: 'Movie night',
   libraryLockedTip: 'A rotation works inside one library.',
   slotsTip: 'How many Home rows this rotation fills at once.',

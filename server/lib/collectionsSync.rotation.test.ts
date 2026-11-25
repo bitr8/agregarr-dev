@@ -4,6 +4,8 @@ const h = vi.hoisted(() => ({
   settings: undefined as unknown,
   order: [] as string[],
   save: vi.fn(),
+  individualRunning: false,
+  onIndividualWait: undefined as undefined | (() => void),
 }));
 
 vi.mock('@server/lib/settings', async (importOriginal) => {
@@ -42,6 +44,7 @@ vi.mock('@server/lib/collections/CollectionSyncProgress', () => ({
 
 vi.mock('@server/lib/collections/services/CollectionSyncService', () => ({
   collectionSyncService: {
+    cancel: vi.fn(),
     syncAllConfigurations: vi.fn(async () => {
       h.order.push('configs');
       throw new Error('stop after configs');
@@ -61,7 +64,13 @@ vi.mock(
   '@server/lib/collections/services/IndividualCollectionScheduler',
   () => ({
     IndividualCollectionScheduler: {
-      getLibraryQueuesStatus: () => [],
+      getLibraryQueuesStatus: () =>
+        h.individualRunning
+          ? [{ libraryId: '1', queueSize: 1, running: true }]
+          : [],
+      waitForIndividualSyncsToComplete: vi.fn(async () => {
+        h.onIndividualWait?.();
+      }),
       setFullSyncRunning: vi.fn(),
       processPendingQueues: vi.fn(async () => undefined),
     },
@@ -111,6 +120,8 @@ beforeEach(() => {
   h.settings = makeSettings();
   h.order.length = 0;
   h.save.mockClear();
+  h.individualRunning = false;
+  h.onIndividualWait = undefined;
   vi.restoreAllMocks();
 });
 
@@ -140,5 +151,15 @@ describe('collectionsSync.run rotation hook', () => {
     expect(h.order).toEqual(['plex', 'configs']);
     expect(pass).not.toHaveBeenCalled();
     expect(h.save).not.toHaveBeenCalled();
+  });
+
+  it('a cancel while waiting on individual syncs stops the full sync before it touches Plex', async () => {
+    h.individualRunning = true;
+    h.onIndividualWait = () => collectionsSync.cancel();
+
+    await collectionsSync.run();
+
+    expect(h.order).toEqual([]);
+    expect(collectionsSync.status.running).toBe(false);
   });
 });

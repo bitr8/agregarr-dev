@@ -244,6 +244,9 @@ describe('create', () => {
       ).rejects.toThrow(/weeks/);
     }
     await expect(
+      service.createGroup(input({ interval: 'daily', everyWeeks: 0 }))
+    ).rejects.toThrow(/weeks/);
+    await expect(
       service.createGroup(input({ libraryId: 'nope' }))
     ).rejects.toThrow(/library/);
     expect(settings().save).not.toHaveBeenCalled();
