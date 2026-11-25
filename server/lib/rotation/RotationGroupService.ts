@@ -609,6 +609,16 @@ class RotationGroupService {
           'Pick a weekday (0 for Sunday to 6 for Saturday).'
         );
       }
+      if (
+        input.everyWeeks !== undefined &&
+        (!Number.isInteger(input.everyWeeks) ||
+          input.everyWeeks < 1 ||
+          input.everyWeeks > 6)
+      ) {
+        throw new RotationValidationError(
+          'Pick how many weeks between changes (1 to 6).'
+        );
+      }
     }
     if (input.order !== 'sequential' && input.order !== 'shuffled') {
       throw new RotationValidationError('Pick an order.');
@@ -723,6 +733,9 @@ class RotationGroupService {
       slotCount: input.slotCount,
       interval: input.interval,
       ...(input.interval === 'weekly' ? { weekday: input.weekday } : {}),
+      ...(input.interval === 'weekly' && (input.everyWeeks ?? 1) > 1
+        ? { everyWeeks: input.everyWeeks }
+        : {}),
       order: input.order,
       surfaces: { ...input.surfaces },
       members,
@@ -734,7 +747,9 @@ class RotationGroupService {
     const state = group.state;
     if (
       prior &&
-      (prior.interval !== group.interval || prior.weekday !== group.weekday)
+      (prior.interval !== group.interval ||
+        prior.weekday !== group.weekday ||
+        (prior.everyWeeks ?? 1) !== (group.everyWeeks ?? 1))
     ) {
       state.periodKey = null;
     }
@@ -1155,7 +1170,8 @@ class RotationGroupService {
         group.weekday,
         now,
         toLocal,
-        group.state
+        group.state,
+        group.everyWeeks
       );
       nextChange = { kind: b.kind };
       if (b.notBefore) nextChange.notBefore = b.notBefore.toISOString();
@@ -1177,6 +1193,9 @@ class RotationGroupService {
       slotCount: group.slotCount,
       interval: group.interval,
       ...(group.weekday !== undefined ? { weekday: group.weekday } : {}),
+      ...(group.everyWeeks !== undefined
+        ? { everyWeeks: group.everyWeeks }
+        : {}),
       order: group.order,
       surfaces: group.surfaces,
       slots: group.state.slots.map((s, index) => {

@@ -56,6 +56,7 @@ export interface RotationGroupStatus {
   slotCount: number;
   interval: RotationInterval;
   weekday?: number;
+  everyWeeks?: number;
   order: RotationOrder;
   surfaces: Visibility;
   slots: {
@@ -91,6 +92,7 @@ export interface GroupInput {
   slotCount: number;
   interval: RotationInterval;
   weekday?: number;
+  everyWeeks?: number;
   order: RotationOrder;
   surfaces: Visibility;
   members: { kind: MemberKind; configId: string }[];

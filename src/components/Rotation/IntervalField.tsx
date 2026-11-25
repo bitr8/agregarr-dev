@@ -7,8 +7,10 @@ import { useIntl } from 'react-intl';
 interface IntervalFieldProps {
   interval: RotationInterval;
   weekday: number;
+  everyWeeks: number;
   onChange: (interval: RotationInterval) => void;
   onWeekdayChange: (weekday: number) => void;
+  onEveryWeeksChange: (everyWeeks: number) => void;
 }
 
 const OPTIONS: RotationInterval[] = [
@@ -22,8 +24,10 @@ const OPTIONS: RotationInterval[] = [
 const IntervalField = ({
   interval,
   weekday,
+  everyWeeks,
   onChange,
   onWeekdayChange,
+  onEveryWeeksChange,
 }: IntervalFieldProps) => {
   const intl = useIntl();
 
@@ -38,17 +42,32 @@ const IntervalField = ({
         help: intl.formatMessage(messages[intervalLabels[option].help]),
         extra:
           option === 'weekly' ? (
-            <select
-              aria-label={intl.formatMessage(messages.fieldWeekday)}
-              value={weekday}
-              onChange={(e) => onWeekdayChange(Number(e.target.value))}
-            >
-              {[1, 2, 3, 4, 5, 6, 0].map((d) => (
-                <option key={d} value={d}>
-                  {weekdayName(intl, d)}
-                </option>
-              ))}
-            </select>
+            <>
+              <select
+                aria-label={intl.formatMessage(messages.fieldEveryWeeks)}
+                value={everyWeeks}
+                onChange={(e) => onEveryWeeksChange(Number(e.target.value))}
+              >
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <option key={n} value={n}>
+                    {intl.formatMessage(messages.everyWeeksOption, {
+                      count: n,
+                    })}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label={intl.formatMessage(messages.fieldWeekday)}
+                value={weekday}
+                onChange={(e) => onWeekdayChange(Number(e.target.value))}
+              >
+                {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                  <option key={d} value={d}>
+                    {weekdayName(intl, d)}
+                  </option>
+                ))}
+              </select>
+            </>
           ) : undefined,
       }))}
     />

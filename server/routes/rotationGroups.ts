@@ -69,8 +69,16 @@ function fail(res: Response, error: unknown, what: string): void {
 
 function validateGroupInput(body: unknown): string | null {
   if (!isObject(body)) return 'Body must be an object';
-  const { name, libraryId, enabled, slotCount, interval, weekday, order } =
-    body;
+  const {
+    name,
+    libraryId,
+    enabled,
+    slotCount,
+    interval,
+    weekday,
+    everyWeeks,
+    order,
+  } = body;
   if (typeof name !== 'string' || !name.trim() || name.length > 60) {
     return 'name must be 1 to 60 characters';
   }
@@ -95,6 +103,15 @@ function validateGroupInput(body: unknown): string | null {
       (weekday as number) > 6)
   ) {
     return 'weekday must be an integer from 0 to 6';
+  }
+  if (
+    interval === 'weekly' &&
+    everyWeeks !== undefined &&
+    (!Number.isInteger(everyWeeks) ||
+      (everyWeeks as number) < 1 ||
+      (everyWeeks as number) > 6)
+  ) {
+    return 'everyWeeks must be an integer from 1 to 6';
   }
   if (typeof order !== 'string' || !ORDERS.includes(order)) {
     return `order must be one of ${ORDERS.join(', ')}`;
@@ -150,6 +167,7 @@ function toGroupInput(body: Record<string, unknown>): GroupInput {
     })),
   };
   if (input.weekday !== undefined) dto.weekday = input.weekday;
+  if (input.everyWeeks !== undefined) dto.everyWeeks = input.everyWeeks;
   return dto;
 }
 

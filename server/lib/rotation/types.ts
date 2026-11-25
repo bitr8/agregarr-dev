@@ -65,6 +65,7 @@ export interface RotationGroup {
   slotCount: number;
   interval: RotationInterval;
   weekday?: number;
+  everyWeeks?: number;
   order: RotationOrder;
   surfaces: Visibility;
   members: RotationMember[];

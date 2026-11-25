@@ -16,6 +16,7 @@ import {
   intervalLabels,
   isSyncRunningError,
   nextChangeSentence,
+  weekdayName,
 } from '@app/components/Rotation/utils';
 import { ROTATION_GROUPS_URL } from '@app/hooks/rotation/useRotationGroups';
 import { apiErrorMessage } from '@app/utils/apiErrorMessage';
@@ -78,6 +79,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
   const [slotCount, setSlotCount] = useState(5);
   const [interval, setIntervalValue] = useState<RotationInterval>('daily');
   const [weekday, setWeekday] = useState(1);
+  const [everyWeeks, setEveryWeeks] = useState(1);
   const [order, setOrder] = useState<'sequential' | 'shuffled'>('sequential');
   const [surfaces, setSurfaces] = useState<Visibility>({
     usersHome: true,
@@ -107,6 +109,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
       setSlotCount(group.slotCount);
       setIntervalValue(group.interval);
       setWeekday(group.weekday ?? 1);
+      setEveryWeeks(group.everyWeeks ?? 1);
       setOrder(group.order);
       setSurfaces(group.surfaces);
       setEnabled(group.enabled);
@@ -184,6 +187,8 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
       slotCount,
       interval,
       weekday: interval === 'weekly' ? weekday : undefined,
+      everyWeeks:
+        interval === 'weekly' && everyWeeks > 1 ? everyWeeks : undefined,
       order,
       surfaces,
       members: ordered,
@@ -197,6 +202,7 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
     slotCount,
     interval,
     weekday,
+    everyWeeks,
     order,
     surfaces,
   ]);
@@ -221,9 +227,11 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
         every_sync: messages.summaryEverySync,
         '12h': messages.summary12h,
         daily: messages.summaryDaily,
-        weekly: messages.summaryWeekly,
+        weekly:
+          everyWeeks > 1 ? messages.summaryEveryWeeks : messages.summaryWeekly,
         monthly_random: messages.summaryMonthly,
-      }[interval]
+      }[interval],
+      { count: everyWeeks, day: weekdayName(intl, weekday) }
     );
     const turn =
       interval === 'every_sync'
@@ -235,7 +243,9 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
         : interval === 'daily'
         ? intl.formatMessage(messages.turnDays, { count: rotations })
         : interval === 'weekly'
-        ? intl.formatMessage(messages.turnWeeks, { count: rotations })
+        ? intl.formatMessage(messages.turnWeeks, {
+            count: rotations * everyWeeks,
+          })
         : intl.formatMessage(messages.turnMonths, { count: rotations });
     if (count === 0 || count <= slotCount) {
       return intl.formatMessage(messages.summaryShort, {
@@ -549,8 +559,10 @@ const RotationEditor = ({ groupId }: RotationEditorProps) => {
             <IntervalField
               interval={interval}
               weekday={weekday}
+              everyWeeks={everyWeeks}
               onChange={setIntervalValue}
               onWeekdayChange={setWeekday}
+              onEveryWeeksChange={setEveryWeeks}
             />
           </div>
 

@@ -98,8 +98,9 @@ const pk = (
   interval: RotationInterval,
   iso: string,
   weekday?: number,
-  run?: string
-) => periodKey(interval, weekday, parts(iso), run, emptyState());
+  run?: string,
+  everyWeeks?: number
+) => periodKey(interval, weekday, parts(iso), run, emptyState(), everyWeeks);
 
 describe('periodKey', () => {
   it.each([
@@ -150,6 +151,54 @@ describe('periodKey', () => {
     expect(pk('weekly', '2026-03-18T12:00:00Z', 9)).toBe('2026-03-16');
   });
 
+  it('everyWeeks 1 or unset gives the exact key weekly always gave', () => {
+    const start = Date.UTC(2025, 0, 1, 12);
+    for (const wd of [0, 1, 2, 3, 4, 5, 6]) {
+      for (let i = 0; i < 400; i++) {
+        const iso = new Date(start + i * 86400000).toISOString();
+        const p = parts(iso);
+        const back = (p.dow - wd + 7) % 7;
+        const t = new Date(Date.UTC(p.y, p.m - 1, p.d - back));
+        const old = t.toISOString().slice(0, 10);
+        expect(pk('weekly', iso, wd)).toBe(old);
+        expect(pk('weekly', iso, wd, undefined, 1)).toBe(old);
+      }
+    }
+  });
+
+  it.each([2, 3, 4, 5, 6])(
+    'weekly every %i weeks changes on the weekday at that spacing',
+    (n) => {
+      const start = Date.UTC(2026, 0, 1, 12);
+      const changes: string[] = [];
+      let prev = pk('weekly', new Date(start).toISOString(), 3, undefined, n);
+      for (let i = 1; i < 7 * n * 8; i++) {
+        const iso = new Date(start + i * 86400000).toISOString();
+        const k = pk('weekly', iso, 3, undefined, n);
+        if (k !== prev) {
+          expect(parts(iso).dow).toBe(3);
+          changes.push(iso.slice(0, 10));
+          prev = k;
+        }
+        expect(pk('weekly', iso, 3, undefined, n)).toBe(k);
+      }
+      expect(changes.length).toBeGreaterThanOrEqual(7);
+      for (let i = 1; i < changes.length; i++) {
+        const gap =
+          (Date.parse(changes[i]) - Date.parse(changes[i - 1])) / 86400000;
+        expect(gap).toBe(7 * n);
+      }
+    }
+  );
+
+  it('weekly every 2 weeks holds the key for the second week', () => {
+    const a = pk('weekly', '2026-03-16T12:00:00Z', 1, undefined, 2);
+    const b = pk('weekly', '2026-03-23T12:00:00Z', 1, undefined, 2);
+    const c = pk('weekly', '2026-03-30T12:00:00Z', 1, undefined, 2);
+    expect(a).toBe(b);
+    expect(c).not.toBe(b);
+  });
+
   it('every_sync uses the run id and is null outside a sync', () => {
     expect(pk('every_sync', '2026-03-10T12:00:00Z', undefined, 'r1')).toBe(
       'sync:r1'
@@ -163,8 +212,9 @@ describe('nextBoundary', () => {
     interval: RotationInterval,
     iso: string,
     weekday?: number,
-    state = emptyState()
-  ) => nextBoundary(interval, weekday, at(iso), toLocal, state);
+    state = emptyState(),
+    everyWeeks?: number
+  ) => nextBoundary(interval, weekday, at(iso), toLocal, state, everyWeeks);
 
   it('every_sync has no date', () => {
     expect(nb('every_sync', '2026-03-10T12:00:00Z')).toEqual({
@@ -186,6 +236,23 @@ describe('nextBoundary', () => {
     const r = nb(interval, iso, wd);
     expect(r.kind).toBe('boundary');
     expect(r.notBefore?.toISOString()).toBe(expected);
+  });
+
+  it('weekly every 3 weeks lands three weeks after the bucket start', () => {
+    const state = emptyState();
+    const now = '2026-03-18T10:00:00Z';
+    const k0 = pk('weekly', now, 1, undefined, 3);
+    const r = nb('weekly', now, 1, state, 3);
+    expect(r.kind).toBe('boundary');
+    const boundary = r.notBefore as Date;
+    expect(boundary.getUTCDay()).toBe(1);
+    expect(boundary.getTime()).toBeGreaterThan(at(now).getTime());
+    expect(pk('weekly', boundary.toISOString(), 1, undefined, 3)).not.toBe(k0);
+    const before = new Date(boundary.getTime() - 1).toISOString();
+    expect(pk('weekly', before, 1, undefined, 3)).toBe(k0);
+    const gapDays =
+      (boundary.getTime() - Date.parse(`${k0}T00:00:00Z`)) / 86400000;
+    expect(gapDays).toBe(21);
   });
 
   it('is now when the group is already behind', () => {

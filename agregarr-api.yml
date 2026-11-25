@@ -130,6 +130,10 @@ components:
           type: integer
           minimum: 0
           maximum: 6
+        everyWeeks:
+          type: integer
+          minimum: 1
+          maximum: 6
         order:
           type: string
           enum: [sequential, shuffled]

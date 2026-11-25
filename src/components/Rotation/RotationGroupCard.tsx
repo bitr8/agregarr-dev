@@ -16,6 +16,7 @@ import {
   isSyncRunningError,
   nextChangeSentence,
   surfacePlaces,
+  weekdayName,
 } from '@app/components/Rotation/utils';
 import { ROTATION_GROUPS_URL } from '@app/hooks/rotation/useRotationGroups';
 import { apiErrorMessage } from '@app/utils/apiErrorMessage';
@@ -114,6 +115,7 @@ const RotationGroupCard = ({
         slotCount: full.slotCount,
         interval: full.interval,
         weekday: full.weekday,
+        everyWeeks: full.everyWeeks,
         order: full.order,
         surfaces: full.surfaces,
         members: kept.map((m) => ({ kind: m.kind, configId: m.configId })),
@@ -175,9 +177,13 @@ const RotationGroupCard = ({
     0,
     group.cycle.total - occupied - group.upNext.length
   );
-  const intervalText = intl.formatMessage(
-    messages[intervalLabels[group.interval].label]
-  );
+  const intervalText =
+    group.interval === 'weekly' && (group.everyWeeks ?? 1) > 1
+      ? intl.formatMessage(messages.intervalEveryWeeks, {
+          count: group.everyWeeks,
+          day: weekdayName(intl, group.weekday ?? 1),
+        })
+      : intl.formatMessage(messages[intervalLabels[group.interval].label]);
   const menuItem = (active: boolean) =>
     `block w-full px-4 py-2.5 text-left text-sm focus:outline-none disabled:opacity-50 ${
       active ? 'bg-gray-700 text-white' : 'text-gray-200'

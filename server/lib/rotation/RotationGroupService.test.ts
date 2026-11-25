@@ -236,6 +236,13 @@ describe('create', () => {
     await expect(
       service.createGroup(input({ interval: 'weekly' }))
     ).rejects.toThrow(/weekday/);
+    for (const everyWeeks of [0, 7, 2.5]) {
+      await expect(
+        service.createGroup(
+          input({ interval: 'weekly', weekday: 1, everyWeeks })
+        )
+      ).rejects.toThrow(/weeks/);
+    }
     await expect(
       service.createGroup(input({ libraryId: 'nope' }))
     ).rejects.toThrow(/library/);
@@ -387,12 +394,48 @@ describe('schedule edits', () => {
     expect(group().state.periodKey).toBe('2026-11-11');
   });
 
+  it('changing only everyWeeks keeps the slots and restamps', async () => {
+    const { before } = await editSchedule(
+      { interval: 'weekly', weekday: 1, everyWeeks: 2 },
+      '2026-11-02',
+      { everyWeeks: 3 }
+    );
+    expect(occupants()).toEqual(before);
+    expect(group().state.periodKey).not.toBe('2026-11-02');
+    expect(group().everyWeeks).toBe(3);
+  });
+
   it('daily to monthly keeps the slots and treats this month as done', async () => {
     const { before } = await editSchedule({}, '2026-11-13', {
       interval: 'monthly_random',
     });
     expect(occupants()).toEqual(before);
     expect(group().state.periodKey).toBe('2026-11');
+  });
+});
+
+describe('everyWeeks', () => {
+  it('is stored and reported for weekly groups', async () => {
+    await service.createGroup(
+      input({ interval: 'weekly', weekday: 2, everyWeeks: 3 })
+    );
+    expect(group().everyWeeks).toBe(3);
+    const status = await service.getStatus(group().id);
+    expect(status?.everyWeeks).toBe(3);
+  });
+
+  it('is dropped for 1 and for other intervals', async () => {
+    await service.createGroup(
+      input({ interval: 'weekly', weekday: 2, everyWeeks: 1 })
+    );
+    expect(group().everyWeeks).toBeUndefined();
+    await service.updateGroup(
+      group().id,
+      input({ interval: 'daily', everyWeeks: 4 })
+    );
+    expect(group().everyWeeks).toBeUndefined();
+    const status = await service.getStatus(group().id);
+    expect(status && 'everyWeeks' in status).toBe(false);
   });
 });
 

@@ -45,13 +45,18 @@ const cloneState = (s: RotationState): RotationState =>
 const isWeekday = (n: number | undefined): n is number =>
   typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 6;
 
+const DAY_MS = 24 * HOUR_MS;
+// 6 weeks (42 days) must stay inside SEARCH_HOURS.
+const isEveryWeeks = (n: number | undefined): n is number =>
+  typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 6;
+
 export function periodKey(
   interval: RotationInterval,
   weekday: number | undefined,
   parts: LocalParts,
   syncRunId: string | undefined,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _state: RotationState
+  _state: RotationState,
+  everyWeeks?: number
 ): string | null {
   switch (interval) {
     case 'every_sync':
@@ -63,6 +68,11 @@ export function periodKey(
     case 'weekly': {
       const back = (parts.dow - (isWeekday(weekday) ? weekday : 1) + 7) % 7;
       const t = new Date(Date.UTC(parts.y, parts.m - 1, parts.d - back));
+      if (isEveryWeeks(everyWeeks) && everyWeeks > 1) {
+        const weekIndex = Math.floor(t.getTime() / (7 * DAY_MS));
+        const offset = ((weekIndex % everyWeeks) + everyWeeks) % everyWeeks;
+        t.setUTCDate(t.getUTCDate() - offset * 7);
+      }
       return ymd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
     }
     case 'monthly_random':
@@ -100,7 +110,8 @@ export function nextBoundary(
   weekday: number | undefined,
   now: Date,
   toLocal: (d: Date) => LocalParts,
-  state: RotationState
+  state: RotationState,
+  everyWeeks?: number
 ): { kind: NextChangeKind; notBefore?: Date } {
   if (interval === 'every_sync') return { kind: 'every_sync' };
   const parts = toLocal(now);
@@ -123,7 +134,7 @@ export function nextBoundary(
   }
 
   const key = (p: LocalParts) =>
-    periodKey(interval, weekday, p, undefined, state);
+    periodKey(interval, weekday, p, undefined, state, everyWeeks);
   const k0 = key(parts);
   if (
     typeof state.periodKey === 'string' &&
@@ -226,7 +237,14 @@ export function planRotation(input: PlanInput): PlanResult {
   }
 
   // 3. due?
-  const key = periodKey(group.interval, group.weekday, parts, syncRunId, state);
+  const key = periodKey(
+    group.interval,
+    group.weekday,
+    parts,
+    syncRunId,
+    state,
+    group.everyWeeks
+  );
   const stored = before.periodKey;
   const storedUsable =
     typeof stored === 'string' &&

@@ -215,6 +215,16 @@ describe('rotation groups routes', () => {
       ['bad interval', (b) => (b.interval = 'hourly')],
       ['weekly without weekday', (b) => (b.interval = 'weekly')],
       ['weekday 7', (b) => (b.weekday = 7)],
+      [
+        'everyWeeks 7',
+        (b) =>
+          Object.assign(b, { interval: 'weekly', weekday: 1, everyWeeks: 7 }),
+      ],
+      [
+        'everyWeeks 2.5',
+        (b) =>
+          Object.assign(b, { interval: 'weekly', weekday: 1, everyWeeks: 2.5 }),
+      ],
       ['bad order', (b) => (b.order = 'random')],
       [
         'no surface on',
@@ -283,6 +293,18 @@ describe('rotation groups routes', () => {
         weekday: 0,
       });
       expect(res.status).toBe(201);
+    });
+
+    it('passes everyWeeks through to the service', async () => {
+      const body = {
+        ...validInput(),
+        interval: 'weekly',
+        weekday: 1,
+        everyWeeks: 3,
+      };
+      const res = await call('POST', '/', body);
+      expect(res.status).toBe(201);
+      expect(svc.createGroup).toHaveBeenCalledWith(body);
     });
 
     it('400 on steps out of range', async () => {
