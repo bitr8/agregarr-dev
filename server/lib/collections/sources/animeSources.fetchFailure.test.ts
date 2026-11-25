@@ -50,6 +50,17 @@ describe.each([
   ['anilist', AnilistCollectionSync],
   ['myanimelist', MyAnimeListCollectionSync],
 ] as const)('%s source fetch failure', (type, SyncClass) => {
+  it('rejects a cache containing only a foreign library before fetching a page', async () => {
+    const sync = new SyncClass();
+    await expect(
+      sync.fetchSourceData(
+        { type, libraryId: '1' } as CollectionConfig,
+        undefined,
+        { other: [] }
+      )
+    ).rejects.toThrow('Plex library 1 is missing from the library cache');
+  });
+
   it('reaches the sync result with the real cause', async () => {
     const sync = new SyncClass();
     vi.spyOn(sync, 'fetchSourceData').mockRejectedValue(
