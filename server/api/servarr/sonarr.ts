@@ -39,6 +39,7 @@ interface EpisodeResult {
   overview: string;
   hasFile: boolean;
   monitored: boolean;
+  finaleType?: string | null;
   absoluteEpisodeNumber: number;
   unverifiedSceneNumbering: boolean;
   id: number;

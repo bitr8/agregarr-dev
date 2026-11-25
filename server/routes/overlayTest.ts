@@ -1,14 +1,18 @@
 import type { MaintainerrCollection } from '@server/api/maintainerr';
 import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
+import type { SonarrSeries } from '@server/api/servarr/sonarr';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import { rankContextFromOrderedKeys } from '@server/lib/overlays/collectionRank';
+import { buildEpisodeAggregationContext } from '@server/lib/overlays/episodeAggregationContext';
 import { seasonFallbackFor } from '@server/lib/overlays/maintainerrCountdown';
 import {
   buildRenderContext,
   checkMonitoringStatus,
   fetchReleaseDateInfo,
+  fetchSonarrEpisodeContext,
+  nextEpisodeTargets,
   type ReleaseDateInfo,
 } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayLibraryService } from '@server/lib/overlays/OverlayLibraryService';
@@ -31,9 +35,15 @@ import {
   preferRadarrReleaseDate,
   type RadarrReleaseDates,
 } from '@server/lib/overlays/releaseDateContext';
+import {
+  needsSonarrEpisodeList,
+  usesSonarrNextEpisode,
+  usesSonarrPremiere,
+} from '@server/lib/overlays/releaseDateFetchPolicy';
 import { usesTmdbRatingFields } from '@server/lib/overlays/tmdbRatingPolicy';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isAirDateUpcoming } from '@server/utils/dateHelpers';
 import { extractUsedContextFields } from '@server/utils/metadataHashing';
 import { Router } from 'express';
 import type { OverlayOptions } from 'sharp';
@@ -355,8 +365,17 @@ overlayTestRouter.post('/', async (req, res) => {
     // Fetch release date information if TMDB ID available
     let releaseDateContext: Partial<OverlayRenderContext> = {};
     let releaseDateInfo: ReleaseDateInfo | undefined;
+    const sonarrCache = new Map<string, SonarrSeries[]>();
     if (tmdbId) {
-      releaseDateInfo = await fetchReleaseDateInfo(tmdbId, actualMediaType);
+      releaseDateInfo = await fetchReleaseDateInfo(
+        tmdbId,
+        actualMediaType,
+        sonarrCache,
+        undefined,
+        undefined,
+        usesSonarrPremiere(requiredContextFields),
+        usesSonarrNextEpisode(requiredContextFields)
+      );
 
       if (releaseDateInfo) {
         // Same shared read-time derivation as the overlay sync path, so the
@@ -364,6 +383,35 @@ overlayTestRouter.post('/', async (req, res) => {
         // next-episode date (fork#35).
         releaseDateContext = deriveReleaseDateContext(releaseDateInfo);
       }
+    }
+
+    const episodeFetch = { failed: false };
+    const sonarrEpisodeContext: Partial<OverlayRenderContext> =
+      tmdbId &&
+      actualMediaType === 'show' &&
+      needsSonarrEpisodeList(
+        requiredContextFields,
+        !!releaseDateInfo?.nextEpisodeAirDate &&
+          isAirDateUpcoming(releaseDateInfo.nextEpisodeAirDate)
+      )
+        ? await fetchSonarrEpisodeContext(
+            tmdbId,
+            releaseDateInfo?.tvdbId,
+            sonarrCache,
+            episodeFetch,
+            nextEpisodeTargets(releaseDateInfo)
+          )
+        : {};
+    if (episodeFetch.failed) {
+      // A real sync would skip this item and keep its poster.
+      logger.warn(
+        'Sonarr episode list fetch failed during overlay test - proceeding anyway',
+        {
+          label: 'OverlayTest',
+          itemTitle: item.title,
+          ratingKey: item.ratingKey,
+        }
+      );
     }
 
     // Check monitoring status if TMDB ID available
@@ -451,11 +499,25 @@ overlayTestRouter.post('/', async (req, res) => {
         .length,
     });
 
+    const aggregatedMap =
+      config.enableEpisodeScanning &&
+      (item.type === 'show' || item.type === 'season')
+        ? await overlayLibraryService.getAggregatedMediaFromCache(libraryId)
+        : undefined;
+    const episodeAggregation = buildEpisodeAggregationContext(
+      item.type,
+      ratingKey,
+      baseContext,
+      aggregatedMap
+    );
+
     const context: OverlayRenderContext = {
       ...baseContext,
       isPlaceholder: actualIsPlaceholder,
       downloaded,
+      ...episodeAggregation,
       ...releaseDateContext,
+      ...sonarrEpisodeContext,
       ...monitoringContext,
       collection: collectionIds,
       ...rankContext,

@@ -21,6 +21,7 @@ import type {
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { withSupportedTargetUser } from '@server/utils/targetUserSupport';
 import { Router } from 'express';
 
 // Plex label can be either a string or an object with a tag property
@@ -474,7 +475,7 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
         const newConfigId = IdGenerator.generateId();
 
         // Create new config based on existing config settings
-        const newConfig: CollectionConfig = {
+        const newConfig: CollectionConfig = withSupportedTargetUser({
           ...existingConfig, // Copy all settings from the base config
           ...req.body, // Apply user changes
           id: newConfigId,
@@ -490,7 +491,7 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
           collectionRatingKey: undefined, // New collection doesn't exist in Plex yet
           sortOrderHome: existingConfig.sortOrderHome,
           sortOrderLibrary: existingConfig.sortOrderLibrary,
-        };
+        });
 
         // Add to configs array
         configs.push(newConfig);
@@ -745,7 +746,7 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       }
 
       // Merge settings while preserving computed fields and library-specific fields
-      let updatedConfig: CollectionConfig = {
+      let updatedConfig: CollectionConfig = withSupportedTargetUser({
         ...configToUpdate, // Preserve all existing fields including computed ones
         ...req.body, // Apply user changes
         name: processedName, // Use processed template name
@@ -784,7 +785,7 @@ collectionsRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
         lastSyncWarning: configToUpdate.lastSyncWarning, // Sync warnings are per-library
         lastSyncWarningAt: configToUpdate.lastSyncWarningAt, // Sync warning timestamp is per-library
         missing: configToUpdate.missing, // Missing status is per-library (can exist in one library but not another)
-      };
+      });
 
       if (
         pendingRepositionRank !== undefined &&
@@ -1775,7 +1776,7 @@ collectionsRoutes.post('/create', isAuthenticated(), async (req, res) => {
       );
 
       // Create individual config for this library
-      const newConfig = {
+      const newConfig = withSupportedTargetUser({
         ...req.body,
         id: IdGenerator.generateId(),
         libraryId,
@@ -1797,7 +1798,7 @@ collectionsRoutes.post('/create', isAuthenticated(), async (req, res) => {
         // Remove multi-library fields that don't belong in individual configs
         libraryIds: undefined,
         libraryNames: undefined,
-      };
+      });
 
       // Set firstSyncAt for custom sync schedules that use startNow
       if (

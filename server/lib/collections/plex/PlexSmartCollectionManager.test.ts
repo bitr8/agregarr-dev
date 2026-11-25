@@ -478,3 +478,47 @@ describe('PlexSmartCollectionManager.updateFilteredHubUri', () => {
     expect(decodedUri).toContain('type=2');
   });
 });
+
+describe('recently_released upper bound', () => {
+  it('bounds TV at today in the create URI', async () => {
+    const { manager, mockPlexApi } = createManager();
+    await manager.createFilteredHub('Released', '3', 'tv', 'recently_released');
+    const url = decodeURIComponent(
+      mockPlexApi.safePostQuery.mock.calls[0][0] as string
+    );
+    expect(url).toContain('episode.originallyAvailableAt<<=-0d');
+  });
+
+  it('bounds TV at today in the update URI', async () => {
+    const { manager, mockPlexApi } = createManager();
+    await manager.updateFilteredHubUri('99999', '3', 'tv', 'recently_released');
+    const url = decodeURIComponent(
+      mockPlexApi.safePutQuery.mock.calls[0][0] as string
+    );
+    expect(url).toContain('episode.originallyAvailableAt<<=-0d');
+  });
+
+  it('leaves movies unbounded', async () => {
+    const { manager, mockPlexApi } = createManager();
+    await manager.createFilteredHub(
+      'Released',
+      '1',
+      'movie',
+      'recently_released'
+    );
+    await manager.updateFilteredHubUri(
+      '99999',
+      '1',
+      'movie',
+      'recently_released'
+    );
+    const create = decodeURIComponent(
+      mockPlexApi.safePostQuery.mock.calls[0][0] as string
+    );
+    const update = decodeURIComponent(
+      mockPlexApi.safePutQuery.mock.calls[0][0] as string
+    );
+    expect(create).not.toContain('<<=-0d');
+    expect(update).not.toContain('<<=-0d');
+  });
+});

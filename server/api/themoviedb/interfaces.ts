@@ -534,6 +534,7 @@ export interface TmdbList {
   id: string;
   items: TmdbListItem[];
   item_count: number;
+  total_pages?: number;
   iso_639_1: string;
   name: string;
   poster_path?: string;

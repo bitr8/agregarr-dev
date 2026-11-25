@@ -1,6 +1,10 @@
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import Modal from '@app/components/Common/Modal';
+import {
+  getFieldLabel,
+  OPERATOR_LABELS,
+} from '@app/components/OverlayEditor/conditionLabels';
 import { formatActualValue } from '@app/components/Posters/formatActualValue';
 import type {
   OverlayTestResult,
@@ -504,12 +508,11 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                                           key={sIdx}
                                           className="ml-2 space-y-1"
                                         >
-                                          {sIdx > 0 &&
-                                            section.sectionOperator && (
-                                              <p className="text-xs font-bold uppercase text-orange-400">
-                                                {section.sectionOperator}
-                                              </p>
-                                            )}
+                                          {sIdx > 0 && (
+                                            <p className="text-xs font-bold uppercase text-orange-400">
+                                              {section.sectionOperator ?? 'or'}
+                                            </p>
+                                          )}
                                           <div className="space-y-1">
                                             {section.ruleResults.map(
                                               (rule, rIdx) => (
@@ -517,12 +520,12 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                                                   key={rIdx}
                                                   className="flex items-start space-x-2 text-xs"
                                                 >
-                                                  {rIdx > 0 &&
-                                                    rule.ruleOperator && (
-                                                      <span className="min-w-[30px] font-bold uppercase text-orange-400">
-                                                        {rule.ruleOperator}
-                                                      </span>
-                                                    )}
+                                                  {rIdx > 0 && (
+                                                    <span className="min-w-[30px] font-bold uppercase text-orange-400">
+                                                      {rule.ruleOperator ??
+                                                        'and'}
+                                                    </span>
+                                                  )}
                                                   <div
                                                     className={`flex-1 ${
                                                       rule.matched
@@ -531,8 +534,12 @@ const TestItemModal: React.FC<TestItemModalProps> = ({ isOpen, onClose }) => {
                                                     }`}
                                                   >
                                                     <span className="font-mono">
-                                                      {rule.field}{' '}
-                                                      {rule.operator}{' '}
+                                                      {getFieldLabel(
+                                                        rule.field
+                                                      )}{' '}
+                                                      {OPERATOR_LABELS[
+                                                        rule.operator
+                                                      ] ?? rule.operator}{' '}
                                                       {JSON.stringify(
                                                         rule.value
                                                       )}

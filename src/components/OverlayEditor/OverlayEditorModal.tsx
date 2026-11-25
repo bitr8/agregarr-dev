@@ -28,6 +28,7 @@ import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
 import { ConditionDisplay } from './ConditionDisplay';
 import { ConditionEditorModal } from './ConditionEditorModal';
+import { buildEditorPreviewContext } from './editorPreviewContext';
 import { computeLayoutWarnings, type LayoutWarning } from './layoutWarnings';
 import type { OverlayCanvasRef } from './OverlayCanvas';
 import { OverlayCanvas } from './OverlayCanvas';
@@ -38,10 +39,7 @@ import type {
   OverlayTemplateData,
   PreviewPosterInfo,
 } from './types';
-import {
-  getTemplateTypeFromConditionField,
-  SAMPLE_PREVIEW_CONTEXTS,
-} from './types';
+import { getTemplateTypeFromConditionField } from './types';
 
 const messages = defineMessages({
   createOverlayTitle: 'Create Overlay Template',
@@ -249,6 +247,11 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
     isOpen && currentPoster
       ? `/api/v1/overlay-templates/preview-metadata/${currentPoster.id}`
       : null
+  );
+
+  const previewContext = useMemo(
+    () => buildEditorPreviewContext(currentPoster?.type, metadataResponse),
+    [currentPoster?.type, metadataResponse]
   );
 
   // Fetch available overlay templates for preview selection
@@ -467,15 +470,6 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
       setCurrentPosterIndex((prev) => (prev + 1) % postersData.count);
     }
   };
-
-  // Get preview context - use real metadata if available, otherwise fallback to sample data
-  const previewContext: OverlayRenderContext | undefined = metadataResponse
-    ? metadataResponse
-    : currentPoster?.type === 'movie'
-    ? (SAMPLE_PREVIEW_CONTEXTS.movie as OverlayRenderContext)
-    : currentPoster?.type === 'tv'
-    ? (SAMPLE_PREVIEW_CONTEXTS.tv as OverlayRenderContext)
-    : (SAMPLE_PREVIEW_CONTEXTS.movie as OverlayRenderContext);
 
   // Get poster URL
   const posterUrl = currentPoster?.url;
@@ -807,6 +801,7 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                         onElementSelect={setSelectedElementId}
                         backgroundImageUrl={posterUrl}
                         renderContext={previewContext}
+                        conditionContext={previewContext}
                         snapToGuides={snapToGuides}
                         previewOverlays={selectedPreviewOverlays}
                       />
@@ -872,6 +867,7 @@ export const OverlayEditorModal: React.FC<OverlayEditorModalProps> = ({
                         onChange={addToHistory}
                         selectedElementId={selectedElementId}
                         onElementSelect={setSelectedElementId}
+                        renderContext={previewContext}
                       />
                     </div>
                   </div>

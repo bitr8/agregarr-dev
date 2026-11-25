@@ -117,7 +117,7 @@ class RandomizeHomeOrder {
   /**
    * Randomize home order for all collections/hubs that have randomizeHomeOrder enabled
    */
-  public async run(): Promise<void> {
+  public async run(options?: { fromCollectionsSync?: boolean }): Promise<void> {
     if (this.status.running) {
       logger.warn('Randomize Home Order already in progress', {
         label: 'Randomize Home Order',
@@ -128,7 +128,7 @@ class RandomizeHomeOrder {
     // Check if collections sync is running to prevent conflicts
     const collectionsSync = (await import('@server/lib/collectionsSync'))
       .default;
-    if (collectionsSync.running) {
+    if (!options?.fromCollectionsSync && collectionsSync.running) {
       logger.warn(
         'Collections sync is currently running. Skipping randomization to avoid conflicts.',
         {

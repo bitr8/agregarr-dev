@@ -3,6 +3,7 @@ import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
 } from './episodeMediaTypes';
+import { resolutionBucket, UNKNOWN_RESOLUTION } from './episodeResolution';
 
 const RESOLUTION_RANK: Record<string, number> = {
   '4k': 4,
@@ -106,6 +107,66 @@ export function needsAddedAtResave(
   });
 }
 
+// Fresh wins, except that unknown never replaces a known cached value.
+export function mergedResolution(
+  ratingKey: string,
+  previous: string,
+  freshResolutionByKey: Map<string, string | undefined>
+): string {
+  const fresh = freshResolutionByKey.get(ratingKey);
+  if (fresh === undefined) return previous;
+  if (fresh === UNKNOWN_RESOLUTION && previous !== UNKNOWN_RESOLUTION) {
+    return previous;
+  }
+  return fresh;
+}
+
+// Cached row disagrees with the merged value for a still-current episode.
+export function needsResolutionResave(
+  cachedEpisodes: EpisodeMediaInfo[],
+  mergedResolutionByKey: Map<string, string | undefined>,
+  currentKeys: Set<string>
+): boolean {
+  return cachedEpisodes.some((c) => {
+    if (!currentKeys.has(c.ratingKey)) return false;
+    return c.resolution !== mergedResolutionByKey.get(c.ratingKey);
+  });
+}
+
+function normalizeVersionCount(v: number | null | undefined): number | null {
+  return v ?? null;
+}
+
+// Fresh value wins; an omitted fresh value keeps the previous one.
+export function mergedVersionCount(
+  ratingKey: string,
+  previous: number | null | undefined,
+  freshVersionCountByKey: Map<string, number | null | undefined>
+): number | null {
+  return freshVersionCountByKey.get(ratingKey) ?? previous ?? null;
+}
+
+// Cached row disagrees with the merged value for a still-current episode.
+export function needsVersionCountResave(
+  cachedEpisodes: EpisodeMediaInfo[],
+  mergedVersionCountByKey: Map<string, number | null | undefined>,
+  currentKeys: Set<string>
+): boolean {
+  return cachedEpisodes.some((c) => {
+    if (!currentKeys.has(c.ratingKey)) return false;
+    return (
+      normalizeVersionCount(c.versionCount) !==
+      normalizeVersionCount(mergedVersionCountByKey.get(c.ratingKey))
+    );
+  });
+}
+
+function multiVersionCount(episodes: EpisodeMediaInfo[]): number | undefined {
+  const known = episodes.filter((ep) => ep.versionCount != null);
+  if (known.length === 0) return undefined;
+  return known.filter((ep) => (ep.versionCount as number) > 1).length;
+}
+
 export class EpisodeMediaAggregator {
   aggregateByShow(
     episodes: EpisodeMediaInfo[]
@@ -127,7 +188,10 @@ export class EpisodeMediaAggregator {
       const epsToAggregate =
         nonSpecials.length > 0 ? nonSpecials : showEpisodes;
 
-      result.set(showKey, this.aggregate(epsToAggregate));
+      const agg = this.aggregate(epsToAggregate);
+      agg.episodeMultiVersionCount =
+        nonSpecials.length > 0 ? multiVersionCount(nonSpecials) : undefined;
+      result.set(showKey, agg);
     }
 
     // Full `episodes`, specials included on purpose: a new special is still
@@ -168,7 +232,13 @@ export class EpisodeMediaAggregator {
 
     const result = new Map<string, AggregatedMediaInfo>();
     for (const [seasonKey, seasonEpisodes] of bySeason) {
-      result.set(seasonKey, this.aggregate(seasonEpisodes));
+      const agg = this.aggregate(seasonEpisodes);
+      agg.episodeMultiVersionCount = seasonEpisodes.some(
+        (ep) => ep.seasonNumber === 0
+      )
+        ? undefined
+        : multiVersionCount(seasonEpisodes);
+      result.set(seasonKey, agg);
     }
     return result;
   }
@@ -187,6 +257,11 @@ export class EpisodeMediaAggregator {
         episodeCount: 0,
         episode4kCount: 0,
         episode4kPercent: 0,
+        episodeHdCount: 0,
+        episodeHdPercent: 0,
+        episodeSdCount: 0,
+        episodeSdPercent: 0,
+        episodeUnknownResolutionCount: 0,
         episodeHdrCount: 0,
         episodeHdrPercent: 0,
         episodeDvCount: 0,
@@ -199,6 +274,12 @@ export class EpisodeMediaAggregator {
     const fourKCount = episodes.filter(
       (ep) => ep.resolution.toLowerCase() === '4k'
     ).length;
+    const bucketCount = (bucket: string) =>
+      episodes.filter((ep) => resolutionBucket(ep.resolution) === bucket)
+        .length;
+    const hdCount = bucketCount('hd');
+    const sdCount = bucketCount('sd');
+    const unknownCount = bucketCount('unknown');
     const hdrCount = episodes.filter((ep) => ep.hdr).length;
     const dvCount = episodes.filter((ep) => ep.dolbyVision).length;
 
@@ -210,7 +291,9 @@ export class EpisodeMediaAggregator {
     return {
       resolution:
         majorityVote(
-          episodes.map((ep) => ep.resolution),
+          episodes.map((ep) =>
+            ep.resolution === UNKNOWN_RESOLUTION ? 'sd' : ep.resolution
+          ),
           resolutionRank
         ) || 'sd',
       hdr: booleanMajority(episodes.map((ep) => ep.hdr)),
@@ -230,6 +313,11 @@ export class EpisodeMediaAggregator {
       episodeCount: count,
       episode4kCount: fourKCount,
       episode4kPercent: percent(fourKCount, count),
+      episodeHdCount: hdCount,
+      episodeHdPercent: percent(hdCount, count),
+      episodeSdCount: sdCount,
+      episodeSdPercent: percent(sdCount, count),
+      episodeUnknownResolutionCount: unknownCount,
       episodeHdrCount: hdrCount,
       episodeHdrPercent: percent(hdrCount, count),
       episodeDvCount: dvCount,

@@ -164,12 +164,21 @@ describe('Plex webhook placeholder unwatch', () => {
     await flush();
   };
 
+  const postUnconfirmed = async (payload: unknown) => {
+    const form = new FormData();
+    form.append('payload', JSON.stringify(payload));
+    await axios.post(`${baseURL}/plex-webhook?token=secret`, form);
+    await vi.waitFor(() => expect(mocks.metadata).toHaveBeenCalled());
+    await flush();
+    await flush();
+  };
+
   it('does not touch a real special titled Trailer under a real show', async () => {
     mocks.metadata.mockImplementation(async (key: string) => ({
       Label: key === '700' ? [] : [{ tag: 'trailer-placeholder' }],
     }));
     mocks.sharedToken.mockResolvedValue('user-token');
-    await post({
+    await postUnconfirmed({
       event: 'media.scrobble',
       Account: { id: 200 },
       Metadata: {
@@ -180,9 +189,36 @@ describe('Plex webhook placeholder unwatch', () => {
       },
     });
 
-    expect(mocks.unscrobble).toHaveBeenCalledTimes(1);
-    expect(mocks.unscrobble).toHaveBeenCalledWith('admin-token', '77');
+    expect(mocks.unscrobble).not.toHaveBeenCalled();
     expect(mocks.sharedToken).not.toHaveBeenCalled();
+    expect(mocks.progress).not.toHaveBeenCalled();
+  });
+
+  it('confirms through the label Plex returns capitalised', async () => {
+    mocks.metadata.mockResolvedValue({
+      Label: [{ tag: 'Trailer-placeholder' }],
+    });
+    mocks.sharedToken.mockResolvedValue('user-token');
+    await send({
+      event: 'media.stop',
+      Account: { id: 200 },
+      Metadata: trailer,
+    });
+
+    expect(mocks.unscrobble).toHaveBeenCalledWith('admin-token', '555');
+    expect(mocks.unscrobble).toHaveBeenCalledWith('user-token', '555');
+    expect(mocks.progress).toHaveBeenCalledWith('admin-token', '555');
+  });
+
+  it('does not touch an unconfirmed trailer edition', async () => {
+    mocks.metadata.mockResolvedValue({ Label: [] });
+    await postUnconfirmed({
+      event: 'media.play',
+      Account: { id: 100 },
+      Metadata: trailer,
+    });
+
+    expect(mocks.unscrobble).not.toHaveBeenCalled();
     expect(mocks.progress).not.toHaveBeenCalled();
   });
 

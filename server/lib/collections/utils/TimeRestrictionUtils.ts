@@ -45,6 +45,14 @@ export class TimeRestrictionUtils {
       ? this.isDayInWeeklySchedule(now, weeklySchedule)
       : null;
 
+    // No dates and no days set: the form showed every day ticked, so treat as active
+    if (dateRangeMatch === null && weeklyScheduleMatch === null) {
+      return {
+        isActive: true,
+        reason: 'always_active',
+      };
+    }
+
     // Determine if collection should be active
     let isActive = false;
     let reason: TimeRestrictionResult['reason'] = 'no_match';

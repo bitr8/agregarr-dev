@@ -31,6 +31,7 @@ import {
   linkCollectionConfig,
   unlinkCollectionConfig,
 } from '@app/utils/collections/linkingHandlers';
+import { pendingCollectionName } from '@app/utils/collections/sortTitle';
 import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
@@ -39,6 +40,7 @@ import {
   PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import type {
   PlexHubConfig,
   PreExistingCollectionConfig,
@@ -235,7 +237,11 @@ const AllCollectionsView: React.FC = () => {
 
         collections.push({
           id: `preExisting-${preExistingConfig.id}`,
-          name: preExistingConfig.name,
+          name: pendingCollectionName(
+            preExistingConfig.name,
+            preExistingConfig.collectionSuffixMode,
+            preExistingConfig.collectionSuffixRenameFailed
+          ),
           type: 'preExisting',
           configType: 'preExisting',
           libraryName:
@@ -504,6 +510,9 @@ const AllCollectionsView: React.FC = () => {
         }),
         ...(preExistingConfig.sortTitleOverride !== undefined && {
           sortTitleOverride: preExistingConfig.sortTitleOverride,
+        }),
+        ...(preExistingConfig.collectionSuffixMode && {
+          collectionSuffixMode: preExistingConfig.collectionSuffixMode,
         }),
         ...(preExistingConfig.customTheme && {
           customTheme: preExistingConfig.customTheme,
@@ -810,10 +819,9 @@ const AllCollectionsView: React.FC = () => {
                       {/* Placeholders Badge - Shows when create placeholders is enabled for collections */}
                       {isCollection && collection.originalConfig && (
                         <PlaceholdersBadge
-                          createPlaceholdersForMissing={
-                            (collection.originalConfig as CollectionFormConfig)
-                              .createPlaceholdersForMissing
-                          }
+                          createPlaceholdersForMissing={placeholdersEnabled(
+                            collection.originalConfig as CollectionFormConfig
+                          )}
                         />
                       )}
 

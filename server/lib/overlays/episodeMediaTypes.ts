@@ -9,7 +9,7 @@ export interface EpisodeMediaInfo {
   seasonRatingKey: string;
   seasonNumber: number;
   episodeNumber: number;
-  resolution: string; // '4k', '1080', '720', 'sd'
+  resolution: string; // '4k', '1080', '720', 'sd', 'unknown'
   hdr: boolean;
   dolbyVision: boolean;
   dolbyVisionProfile?: number;
@@ -20,6 +20,9 @@ export interface EpisodeMediaInfo {
   audioChannels: number;
   bitDepth: number;
   mediaHash: string; // hash of Plex Media[] for change detection
+  // Plex Media[] length. null/undefined mean unknown (a cached row from
+  // before the column existed).
+  versionCount?: number | null;
   // Whether HDR/DV/codec detail was actually extracted from a Part stream for
   // this episode (a lightweight list scan, or a full scan that hit a partial
   // getMetadataBatch failure, sets this false). Tracked per episode so a stale
@@ -45,11 +48,18 @@ export interface AggregatedMediaInfo {
   episodeCount: number;
   episode4kCount: number;
   episode4kPercent: number;
+  episodeHdCount: number;
+  episodeHdPercent: number;
+  episodeSdCount: number;
+  episodeSdPercent: number;
+  episodeUnknownResolutionCount: number;
   episodeHdrCount: number;
   episodeHdrPercent: number;
   episodeDvCount: number;
   episodeDvPercent: number;
   episodeMediaSource: 'aggregated' | 'show';
+  // Unset when no episode has a known version count.
+  episodeMultiVersionCount?: number;
 
   lastEpisodeAddedAt?: number; // unix seconds, from the latest lightweight scan
 }

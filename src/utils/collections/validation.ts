@@ -497,44 +497,6 @@ export const ValidationHelpers = {
   },
 
   /**
-   * Validate time restrictions
-   */
-  validateTimeRestrictions: (values: CollectionFormConfig): string | null => {
-    const timeRestriction = values.timeRestriction;
-    if (!timeRestriction || timeRestriction.alwaysActive) {
-      return null; // No restrictions to validate
-    }
-
-    // Validate date ranges
-    if (timeRestriction.dateRanges && timeRestriction.dateRanges.length > 0) {
-      for (const range of timeRestriction.dateRanges) {
-        if (!range.startDate || !range.endDate) {
-          return 'All date ranges must have both start and end dates';
-        }
-
-        if (new Date(range.startDate) >= new Date(range.endDate)) {
-          return 'End date must be after start date in all date ranges';
-        }
-      }
-    }
-
-    // Validate weekly schedule
-    if (timeRestriction.weeklySchedule) {
-      const hasAnyDay = Object.values(timeRestriction.weeklySchedule).some(
-        Boolean
-      );
-      if (
-        !hasAnyDay &&
-        (!timeRestriction.dateRanges || timeRestriction.dateRanges.length === 0)
-      ) {
-        return 'At least one day or date range must be selected for time restrictions';
-      }
-    }
-
-    return null;
-  },
-
-  /**
    * Perform comprehensive validation of the entire form
    */
   validateForm: (
@@ -586,13 +548,6 @@ export const ValidationHelpers = {
     const autoRequestError = ValidationHelpers.validateAutoRequest(values);
     if (autoRequestError) {
       errors.autoRequest = autoRequestError;
-    }
-
-    // Time restrictions validation
-    const timeRestrictionsError =
-      ValidationHelpers.validateTimeRestrictions(values);
-    if (timeRestrictionsError) {
-      errors.timeRestriction = timeRestrictionsError;
     }
 
     return errors;

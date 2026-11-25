@@ -115,6 +115,10 @@ router.get('/status/appdata', (_req, res) => {
   });
 });
 
+router.get('/status/timezone', isAuthenticated(), (_req, res) => {
+  return res.status(200).json({ tz: process.env.TZ || 'UTC' });
+});
+
 router.get('/status/health', isAuthenticated(), (_req, res) => {
   return res.status(200).json(getHealthStatus());
 });

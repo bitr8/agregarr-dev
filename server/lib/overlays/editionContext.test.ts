@@ -159,3 +159,43 @@ describe('buildRenderContext edition on placeholders', () => {
     expect(context.edition).toBeUndefined();
   });
 });
+
+describe('buildRenderContext season/episode numbers', () => {
+  const tvItem = (over: Record<string, unknown>) =>
+    ({
+      ratingKey: '9',
+      title: 'Test Show',
+      guid: 'plex://show/abc',
+      Guid: [],
+      addedAt: 0,
+      updatedAt: 0,
+      ...over,
+    } as unknown as PlexLibraryItem);
+  const fields = new Set(['seasonNumber', 'episodeNumber']);
+
+  it('a show with Plex index 1 and no release info has no numbers', async () => {
+    const { context } = await buildRenderContext(
+      tvItem({ type: 'show', index: 1 }),
+      'show',
+      false,
+      undefined,
+      undefined,
+      fields
+    );
+    expect(context.episodeNumber).toBeUndefined();
+    expect(context.seasonNumber).toBeUndefined();
+  });
+
+  it('an episode takes its numbers from Plex index and parentIndex', async () => {
+    const { context } = await buildRenderContext(
+      tvItem({ type: 'episode', index: 7, parentIndex: 3 }),
+      'show',
+      false,
+      undefined,
+      undefined,
+      fields
+    );
+    expect(context.episodeNumber).toBe(7);
+    expect(context.seasonNumber).toBe(3);
+  });
+});

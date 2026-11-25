@@ -278,3 +278,45 @@ describe('arrangeCollectionItemsInOrder items missing from the collection', () =
     expect(findArrangeWarn(logger)).toBeUndefined();
   });
 });
+
+describe('addLabelToItem existing-label check', () => {
+  beforeAll(async () => {
+    await import('./plexapi');
+  }, 60_000);
+
+  async function setup(tags: string[]) {
+    const { default: PlexAPI } = await import('./plexapi');
+    const api = new PlexAPI({
+      plexToken: 'test-token',
+      plexSettings: {
+        name: 'test',
+        ip: '127.0.0.1',
+        port: 32400,
+        libraries: [],
+      },
+    });
+    vi.spyOn(api, 'getMetadata').mockResolvedValue({
+      Label: tags.map((tag) => ({ tag })),
+    } as never);
+    const put = (
+      vi.spyOn(
+        api as unknown as { safePutQuery: unknown },
+        'safePutQuery' as never
+      ) as unknown as MockInstance
+    ).mockResolvedValue(undefined as never);
+    return { api, put };
+  }
+
+  it('skips the write when Plex returns the label capitalised', async () => {
+    const { api, put } = await setup(['Trailer-placeholder']);
+    await api.addLabelToItem('1001', 'trailer-placeholder');
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it('writes the label when it is missing', async () => {
+    const { api, put } = await setup(['Other']);
+    await api.addLabelToItem('1001', 'trailer-placeholder');
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(put.mock.calls[0][0]).toContain('trailer-placeholder');
+  });
+});

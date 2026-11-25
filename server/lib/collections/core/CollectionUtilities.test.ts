@@ -38,9 +38,11 @@ import {
   hasAgregarrLabel,
   isMultiCollectionPattern,
   isSortTitleOverrideEdit,
+  limitByPosition,
   MAX_PROMOTED_RANK,
   parseConfigIdFromLabel,
   parseTypedRepositionRank,
+  previewPlaceholderMode,
   PROMOTED_SORT_TITLE_RANK_WIDTH,
   resolveMultiCollectionBase,
   resolveMultiCollectionSortTitle,
@@ -1192,5 +1194,101 @@ describe('isSortTitleResetRequest', () => {
     const { isSortTitleResetRequest } = await import('./CollectionUtilities');
     expect(isSortTitleResetRequest(undefined, 'ZZZ_Crow')).toBe(false);
     expect(isSortTitleResetRequest(null, 'ZZZ_Crow')).toBe(false);
+  });
+});
+
+describe('limitByPosition', () => {
+  const pos = (n: number) => ({ n });
+  it('keeps the best positions in their current order', () => {
+    const items = [pos(5), pos(1), pos(9), pos(3)];
+    expect(limitByPosition(items, (i) => i.n, 2)).toEqual([pos(1), pos(3)]);
+  });
+
+  it('changes nothing under the limit, without a limit, or without positions', () => {
+    const items = [pos(5), pos(1), pos(9)];
+    expect(limitByPosition(items, (i) => i.n, 3)).toBe(items);
+    expect(limitByPosition(items, (i) => i.n, undefined)).toBe(items);
+    expect(
+      limitByPosition(items, (i) => (i.n === 9 ? undefined : i.n), 2)
+    ).toBe(items);
+  });
+});
+
+describe('capPreviewItemsToMaxItems with placeholders', () => {
+  const matched = [1, 3, 5, 7].map((p) => ({
+    ratingKey: `rk-${p}`,
+    metadata: { originalPosition: p },
+  }));
+  const missing = [{ originalPosition: 2 }, { originalPosition: 4 }];
+
+  it('shares the limit between matched and missing items by position', () => {
+    const result = capPreviewItemsToMaxItems(matched, missing, 4, 'position');
+    expect(result.items.map((i) => i.ratingKey)).toEqual(['rk-1', 'rk-3']);
+    expect(result.missingItems).toEqual(missing);
+  });
+
+  it('fills free slots when matched items have no position', () => {
+    const bare = [{ ratingKey: 'a' }, { ratingKey: 'b' }, { ratingKey: 'c' }];
+    expect(capPreviewItemsToMaxItems(bare, missing, 2, 'position')).toEqual({
+      items: [{ ratingKey: 'a' }, { ratingKey: 'b' }],
+      missingItems: [],
+    });
+    const two = bare.slice(0, 1);
+    expect(
+      capPreviewItemsToMaxItems(two, missing, 2, 'position').missingItems
+    ).toEqual([{ originalPosition: 2 }]);
+  });
+
+  it('under another sort, counts free slots before exclusions like the sync', () => {
+    const result = capPreviewItemsToMaxItems(
+      [matched[0], matched[1]],
+      missing,
+      3,
+      'fill',
+      3
+    );
+    expect(result.missingItems).toEqual([]);
+  });
+
+  it('under another sort, missing items only take free slots', () => {
+    const sorted = [matched[2], matched[0]];
+    const result = capPreviewItemsToMaxItems(sorted, missing, 3, 'fill');
+    expect(result.items).toEqual(sorted);
+    expect(result.missingItems).toEqual([{ originalPosition: 2 }]);
+  });
+
+  it('never counts a row without a TMDB id as a placeholder', () => {
+    const rows = [
+      { originalPosition: 2, tmdbId: 0 },
+      { originalPosition: 4, tmdbId: 9 },
+    ];
+    const result = capPreviewItemsToMaxItems(matched, rows, 4, 'position');
+    expect(result.missingItems).toEqual([{ originalPosition: 4, tmdbId: 9 }]);
+    expect(result.items.map((i) => i.ratingKey)).toEqual([
+      'rk-1',
+      'rk-3',
+      'rk-5',
+    ]);
+  });
+
+  it('leaves missing items uncounted when placeholders are off', () => {
+    const result = capPreviewItemsToMaxItems(matched, missing, 4);
+    expect(result.items).toHaveLength(4);
+    expect(result.missingItems).toEqual(missing);
+  });
+});
+
+describe('previewPlaceholderMode', () => {
+  it('matches the sync rule per sort, off without placeholders', () => {
+    expect(previewPlaceholderMode('imdb', true, undefined)).toBe('position');
+    expect(previewPlaceholderMode('imdb', true, 'default')).toBe('position');
+    expect(previewPlaceholderMode('imdb', true, 'random')).toBe('fill');
+    expect(previewPlaceholderMode('imdb', false, 'default')).toBeUndefined();
+  });
+
+  it('leaves Coming Soon on the old preview caps', () => {
+    expect(
+      previewPlaceholderMode('comingsoon', true, undefined)
+    ).toBeUndefined();
   });
 });

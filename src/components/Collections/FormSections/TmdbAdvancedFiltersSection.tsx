@@ -5,6 +5,11 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
+import {
+  CERTIFICATIONS_BY_COUNTRY,
+  CERTIFICATION_FIELDS,
+  keepCountryCertifications,
+} from './tmdbCertifications';
 import TmdbSearchSelect from './TmdbSearchSelect';
 
 interface TmdbGenre {
@@ -80,6 +85,15 @@ const MULTIVALUE_SEPARATOR_FIELDS = new Set([
   'with_release_type',
   'with_watch_providers',
   'with_watch_monetization_types',
+  'with_networks',
+  'with_origin_country',
+]);
+
+// An item has only one status, type or certification, so these always match any
+const MATCH_ANY_ONLY_FIELDS = new Set([
+  'with_status',
+  'with_type',
+  'certification',
 ]);
 
 // Fields that use TMDB search-as-you-type instead of free-text ID entry
@@ -1036,7 +1050,14 @@ const TmdbAdvancedFiltersSection = ({
 
   const removeFilterGroup = useCallback(
     (groupId: string) => {
-      updateFilterGroups(filterGroups.filter((g) => g.id !== groupId));
+      const remaining = filterGroups.filter((g) => g.id !== groupId);
+      updateFilterGroups(
+        remaining.map((g, i) =>
+          i === 0
+            ? { ...g, operator: 'and' as const, groupOperator: 'and' as const }
+            : g
+        )
+      );
     },
     [filterGroups, updateFilterGroups]
   );
@@ -1084,11 +1105,19 @@ const TmdbAdvancedFiltersSection = ({
   const removeFilter = useCallback(
     (groupId: string, filterId: string) => {
       updateFilterGroups(
-        filterGroups.map((g) =>
-          g.id === groupId
-            ? { ...g, filters: g.filters.filter((f) => f.id !== filterId) }
-            : g
-        )
+        filterGroups.map((g) => {
+          if (g.id !== groupId) return g;
+          const filters = g.filters.filter((f) => f.id !== filterId);
+          const countryRemoved =
+            g.filters.find((f) => f.id === filterId)?.field ===
+            'certification_country';
+          return {
+            ...g,
+            filters: countryRemoved
+              ? keepCountryCertifications(filters)
+              : filters,
+          };
+        })
       );
     },
     [filterGroups, updateFilterGroups]
@@ -1097,16 +1126,22 @@ const TmdbAdvancedFiltersSection = ({
   const updateFilter = useCallback(
     (groupId: string, filterId: string, updates: Partial<Filter>) => {
       updateFilterGroups(
-        filterGroups.map((g) =>
-          g.id === groupId
-            ? {
-                ...g,
-                filters: g.filters.map((f) =>
-                  f.id === filterId ? { ...f, ...updates } : f
-                ),
-              }
-            : g
-        )
+        filterGroups.map((g) => {
+          if (g.id !== groupId) return g;
+          const filters = g.filters.map((f) =>
+            f.id === filterId ? { ...f, ...updates } : f
+          );
+          const countryChanged =
+            'value' in updates &&
+            g.filters.find((f) => f.id === filterId)?.field ===
+              'certification_country';
+          return {
+            ...g,
+            filters: countryChanged
+              ? keepCountryCertifications(filters)
+              : filters,
+          };
+        })
       );
     },
     [filterGroups, updateFilterGroups]
@@ -1116,6 +1151,19 @@ const TmdbAdvancedFiltersSection = ({
     const fieldConfig =
       FILTER_FIELDS[filter.field as keyof typeof FILTER_FIELDS];
     if (!fieldConfig) return null;
+
+    const certificationCountry = String(
+      filterGroups
+        .find((g) => g.id === groupId)
+        ?.filters.find((f) => f.field === 'certification_country')?.value ||
+        'US'
+    );
+    const fieldOptions = CERTIFICATION_FIELDS.has(filter.field)
+      ? (
+          CERTIFICATIONS_BY_COUNTRY[certificationCountry] ??
+          CERTIFICATIONS_BY_COUNTRY.US
+        ).map((c) => ({ value: c, label: c }))
+      : fieldConfig.options;
 
     switch (fieldConfig.type) {
       case 'number':
@@ -1300,7 +1348,7 @@ const TmdbAdvancedFiltersSection = ({
         }
 
         // Option-based multi-select (release type, monetization types)
-        if (fieldConfig.options && fieldConfig.multiple === false) {
+        if (fieldOptions && fieldConfig.multiple === false) {
           return (
             <select
               value={(filter.value as string) || ''}
@@ -1310,7 +1358,7 @@ const TmdbAdvancedFiltersSection = ({
               className="w-full rounded-md border border-stone-500 bg-stone-700 px-3 py-2 text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="">Select...</option>
-              {fieldConfig.options.map((opt) => (
+              {fieldOptions.map((opt) => (
                 <option key={String(opt.value)} value={opt.value}>
                   {opt.label}
                 </option>
@@ -1319,13 +1367,17 @@ const TmdbAdvancedFiltersSection = ({
           );
         }
 
-        if (fieldConfig.options) {
+        if (fieldOptions) {
           return (
             <OptionMultiSelect
-              options={fieldConfig.options}
+              options={fieldOptions}
               value={filter.value ? filter.value.toString().split(/[,|]/) : []}
               onChange={(selected: string[]) => {
-                const separator = filter.operator === 'or' ? '|' : ',';
+                const separator =
+                  filter.operator === 'or' ||
+                  MATCH_ANY_ONLY_FIELDS.has(filter.field)
+                    ? '|'
+                    : ',';
                 updateFilter(groupId, filter.id, {
                   value: selected.join(separator),
                 });

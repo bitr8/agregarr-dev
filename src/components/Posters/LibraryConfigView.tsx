@@ -23,6 +23,7 @@ import PosterResetModal from './PosterResetModal';
 
 const messages = defineMessages({
   loading: 'Loading libraries...',
+  stopRequested: 'Stop requested for this library',
   noLibraries: 'No libraries found',
   configure: 'Configure',
   overlaysEnabled: '{count} overlays enabled',
@@ -257,16 +258,19 @@ const LibraryConfigView: React.FC = () => {
     setResetModalOpen(false);
   };
 
-  const handleStopSync = async () => {
+  const handleStopSync = async (libraryId: string) => {
     try {
-      // Cancel via the scheduled jobs system (same as Jobs settings page)
-      await axios.post('/api/v1/settings/jobs/overlay-application/cancel');
-      addToast('Overlay job cancelled', {
+      await axios.post(`/api/v1/overlay-library-configs/${libraryId}/stop`);
+      addToast(intl.formatMessage(messages.stopRequested), {
         appearance: 'success',
         autoDismiss: true,
       });
       mutateRunningLibraries();
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        mutateRunningLibraries();
+        return;
+      }
       addToast('Failed to stop overlay sync', {
         appearance: 'error',
         autoDismiss: true,
@@ -472,7 +476,7 @@ const LibraryConfigView: React.FC = () => {
               <LibraryProgressCard
                 key={lib.libraryId}
                 status={lib}
-                onStop={() => handleStopSync()}
+                onStop={() => handleStopSync(lib.libraryId)}
               />
             ))}
           </div>

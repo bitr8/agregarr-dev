@@ -2,6 +2,7 @@ import type { PlexMetadata } from '@server/api/plexapi';
 import {
   classifyCollectionKey,
   classifyPlexMetadataResponse,
+  isPlexConflictError,
   isPlexNotFoundError,
 } from '@server/api/plexMetadataClassify';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +22,22 @@ const meta = (type: string, ratingKey = '398348'): PlexMetadata =>
  * genuine, unambiguous absence yields 'not_found'; every ambiguous case is
  * 'error'.
  */
+describe('isPlexConflictError', () => {
+  it('matches only the exact 409 status', () => {
+    expect(
+      isPlexConflictError(
+        'Plex Server didnt respond with a valid 2xx status code, response code: 409'
+      )
+    ).toBe(true);
+    expect(
+      isPlexConflictError(
+        'GET /library/collections/40912 failed, response code: 500'
+      )
+    ).toBe(false);
+    expect(isPlexConflictError('response code: 4090')).toBe(false);
+  });
+});
+
 describe('isPlexNotFoundError', () => {
   it('classifies a real plex-api 404 message as not-found', () => {
     // Exact shape verified live against nostromo's Plex.

@@ -38,6 +38,11 @@ export function isPlexNotFoundError(errorMessage: string): boolean {
   return statusMatch?.[1] === '404';
 }
 
+/** True only when a plex-api error message reports an HTTP 409. */
+export function isPlexConflictError(errorMessage: string): boolean {
+  return errorMessage.match(/response code:\s*(\d+)/i)?.[1] === '409';
+}
+
 /**
  * Classify a successful (non-throwing) plex-api metadata response. Only a
  * well-formed Plex MediaContainer is trustworthy: a non-Plex 2xx (reverse

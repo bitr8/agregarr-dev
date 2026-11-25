@@ -25,6 +25,13 @@ const mockGetSeries = vi.fn();
 vi.mock('@server/api/servarr/sonarr', () => ({
   default: class {
     getSeries = mockGetSeries;
+    getEpisodesBySeries = vi.fn().mockResolvedValue([
+      {
+        seasonNumber: 2,
+        episodeNumber: 4,
+        airDateUtc: '2026-07-20T09:00:00Z',
+      },
+    ]);
   },
 }));
 
@@ -74,6 +81,7 @@ describe('fetchReleaseDateInfo preload branch: Sonarr-first throw is contained (
   // Sonarr has an upcoming episode (a datetime), so Sonarr-first engages and the
   // disagreement-logging block that calls toServerCalendarDate is reached.
   const seriesUpcoming = {
+    id: 7,
     tvdbId: 123,
     nextAiring: '2026-07-20T09:00:00Z',
     seasons: [

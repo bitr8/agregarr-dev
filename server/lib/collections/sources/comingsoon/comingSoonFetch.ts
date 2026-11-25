@@ -1,11 +1,19 @@
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
-import { TMDB_MAX_PAGE } from '@server/api/themoviedb/constants';
+import {
+  isLastTmdbPage,
+  TMDB_MAX_PAGE,
+} from '@server/api/themoviedb/constants';
 import TraktAPI from '@server/api/trakt';
+import {
+  DEFAULT_PLACEHOLDER_DAYS_AHEAD,
+  resolvePlaceholderDaysAhead,
+} from '@server/constants/placeholders';
 import type { ComingSoonSourceData } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isSameAirDay } from '@server/utils/dateHelpers';
 import {
   buildTraktRedirectUri,
   persistTraktTokens,
@@ -70,8 +78,7 @@ export async function fetchMonitoredMovies(
   }
 
   const { getFutureDateFromToday } = await import('@server/utils/dateHelpers');
-  const maxDaysAway =
-    config.placeholderDaysAhead || config.comingSoonDays || 360;
+  const maxDaysAway = resolvePlaceholderDaysAhead(config);
   const maxDate = getFutureDateFromToday(maxDaysAway);
 
   // Filter to specific server if configured
@@ -281,8 +288,7 @@ export async function fetchMonitoredShows(
     return items;
   }
 
-  const maxDaysAway =
-    config.placeholderDaysAhead || config.comingSoonDays || 360;
+  const maxDaysAway = resolvePlaceholderDaysAhead(config);
 
   // Filter to specific server if configured
   const sonarrInstances = config.comingSoonSonarrServerId
@@ -734,9 +740,7 @@ export async function fetchTmdbComingSoonMovies(
     const TmdbAPI = (await import('@server/api/themoviedb')).default;
     const tmdbClient = new TmdbAPI();
 
-    const perPage = 20; // TMDB returns 20 per page
-    const maxDaysAway =
-      config.placeholderDaysAhead || config.comingSoonDays || 360;
+    const maxDaysAway = resolvePlaceholderDaysAhead(config);
 
     // Calculate date range for upcoming releases
     const { getToday, getFutureDateFromToday, extractReleaseDates } =
@@ -872,8 +876,11 @@ export async function fetchTmdbComingSoonMovies(
 
       // Check if we should stop pagination
       if (
-        discoverResult.results.length < perPage ||
-        currentPage > discoverResult.total_pages
+        isLastTmdbPage(
+          currentPage - 1,
+          discoverResult,
+          discoverResult.results.length
+        )
       ) {
         hasMorePages = false;
       }
@@ -917,9 +924,7 @@ export async function fetchTmdbComingSoonShows(
     const TmdbAPI = (await import('@server/api/themoviedb')).default;
     const tmdbClient = new TmdbAPI();
 
-    const perPage = 20; // TMDB returns 20 per page
-    const maxDaysAway =
-      config.placeholderDaysAhead || config.comingSoonDays || 360;
+    const maxDaysAway = resolvePlaceholderDaysAhead(config);
 
     // Calculate date range for upcoming air dates
     const { getToday, getFutureDateFromToday } = await import(
@@ -1056,8 +1061,11 @@ export async function fetchTmdbComingSoonShows(
       currentPage++;
 
       if (
-        discoverResult.results.length < perPage ||
-        currentPage > discoverResult.total_pages
+        isLastTmdbPage(
+          currentPage - 1,
+          discoverResult,
+          discoverResult.results.length
+        )
       ) {
         hasMorePages = false;
       }
@@ -1115,8 +1123,11 @@ export async function fetchTmdbComingSoonShows(
         currentPage++;
 
         if (
-          discoverResult.results.length < perPage ||
-          currentPage > discoverResult.total_pages
+          isLastTmdbPage(
+            currentPage - 1,
+            discoverResult,
+            discoverResult.results.length
+          )
         ) {
           hasMorePages = false;
         }
@@ -1152,13 +1163,13 @@ export async function fetchTmdbComingSoonShows(
  * Modifies the array in place
  *
  * @param items - Array of items to enrich
- * @param maxDaysAway - Maximum days in future to include (default 360)
+ * @param maxDaysAway - Maximum days in future to include (default 90)
  * @param releasedDays - Days in past to include (default 0)
  * @param skipDateFilter - When true, only enrich metadata without filtering (for non-Coming-Soon with includeAllReleasedItems)
  */
 export async function enrichWithTMDBReleaseDates(
   items: ComingSoonSourceData[],
-  maxDaysAway = 360,
+  maxDaysAway = DEFAULT_PLACEHOLDER_DAYS_AHEAD,
   releasedDays = 0,
   skipDateFilter = false
 ): Promise<void> {
@@ -1462,7 +1473,7 @@ export async function enrichWithTMDBReleaseDates(
  */
 export async function markMonitoredStatus(
   items: ComingSoonSourceData[],
-  maxDaysAway = 360,
+  maxDaysAway = DEFAULT_PLACEHOLDER_DAYS_AHEAD,
   releasedDays = 0
 ): Promise<void> {
   const settings = getSettings();
@@ -1608,8 +1619,14 @@ export async function markMonitoredStatus(
       if (sonarrData) {
         item.monitored = sonarrData.monitored;
         item.hasFile = sonarrData.hasFile;
-        // Only use Sonarr airDate if not already set
-        if (!item.airDate) item.airDate = sonarrData.airDate;
+        // Sonarr's S01E01 instant beats TMDB's US calendar day for the same premiere
+        if (
+          !item.airDate ||
+          (sonarrData.airDate &&
+            (item.seasonNumber ?? 1) === 1 &&
+            isSameAirDay(item.airDate, sonarrData.airDate))
+        )
+          item.airDate = sonarrData.airDate;
         item.downloadedDate = sonarrData.downloadedDate;
       } else {
         // Not in Sonarr

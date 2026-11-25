@@ -3519,6 +3519,14 @@ components:
           type: string
           description: 'Unique collection identifier (libraryId-collectionRatingKey)'
           example: '1-35954'
+        collectionSuffixMode:
+          type: string
+          enum: [leave, strip, add]
+          description: '" Collection" suffix on the Plex title. leave (default) never renames; strip removes it; add appends it.'
+          example: 'leave'
+        collectionSuffixRenameFailed:
+          type: boolean
+          description: 'Set by the sync when the last suffix rename was skipped or refused. Read-only.'
         collectionRatingKey:
           type: string
           description: 'Plex collection rating key'
@@ -3777,6 +3785,11 @@ components:
           type: string
           description: 'Unique collection identifier (libraryId-collectionRatingKey)'
           example: '1-35954'
+        collectionSuffixMode:
+          type: string
+          enum: [leave, strip, add]
+          description: '" Collection" suffix on the Plex title. leave (default) never renames; strip removes it; add appends it.'
+          example: 'leave'
         collectionRatingKey:
           type: string
           description: 'Plex collection rating key'
@@ -6901,6 +6914,23 @@ paths:
                     type: number
                   restartRequired:
                     type: boolean
+  /status/timezone:
+    get:
+      summary: Get the server timezone
+      description: Returns the server timezone for any authenticated user.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Server timezone
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tz:
+                    type: string
+                    example: Australia/Sydney
   /status/appdata:
     get:
       summary: Get application data volume status
@@ -8573,6 +8603,10 @@ paths:
                     type: string
                   description: Plex item labels; matching items are left out of the preview
                   example: ['trailer-placeholder']
+                createPlaceholdersForMissing:
+                  type: boolean
+                  description: Whether the collection creates placeholders, so missing items share the Max Items limit with matched items
+                  example: true
                 timePeriod:
                   type: string
                   description: Time period for Tautulli collections
@@ -9657,6 +9691,39 @@ paths:
           description: Pre-existing collection not found
         '500':
           description: Failed to update pre-existing collection settings
+  /preexisting/{id}/sync:
+    post:
+      summary: Sync individual pre-existing collection
+      description: Applies one pre-existing collection's visibility, artwork, title and sort title to Plex now instead of waiting for the next full sync. Refuses with 409 while a full sync is running or pending.
+      tags:
+        - pre-existing-collections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Pre-existing collection ID
+          schema:
+            type: string
+            example: '1-35954'
+      responses:
+        '200':
+          description: Collection synced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preExistingCollectionConfig:
+                    $ref: '#/components/schemas/PreExistingCollectionConfig'
+                  renameFailed:
+                    type: boolean
+                    description: 'True when the suffix rename was skipped or refused'
+        '404':
+          description: Pre-existing collection not found
+        '409':
+          description: A full sync is running or pending
+        '500':
+          description: Failed to sync collection
   /preexisting/{id}/promote:
     patch:
       summary: Promote pre-existing collection to top section
@@ -14309,7 +14376,8 @@ paths:
                                     example: 20
                                   type:
                                     type: string
-                                    enum: [text, raster, svg, content-grid]
+                                    enum:
+                                      [text, raster, svg, content-grid, tile]
                                     example: 'text'
                                   x:
                                     type: number
@@ -14379,6 +14447,21 @@ paths:
                                             type: number
                                           cornerRadius:
                                             type: number
+                                      - type: object
+                                        title: 'Tile Element Properties'
+                                        properties:
+                                          fillColor:
+                                            type: string
+                                          fillOpacity:
+                                            type: number
+                                          borderColor:
+                                            type: string
+                                          borderWidth:
+                                            type: number
+                                          borderRadiusTopLeft:
+                                            type: number
+                                          lockCorners:
+                                            type: boolean
                             migrated:
                               type: boolean
                               description: 'Flag indicating if template has been migrated to unified layering system'
@@ -17591,7 +17674,7 @@ paths:
   /plex/library/{libraryId}/attributes/{attributeType}:
     get:
       summary: Discover library attribute values
-      description: Returns the distinct values for a given attribute type in a Plex library, plus any existing collections that would conflict with the rendered template.
+      description: Returns the distinct values for a given attribute type in a Plex library, plus the titles of existing collections in that library (excluding those owned by configId) and the library's media type.
       tags:
         - plex
       parameters:
@@ -17606,11 +17689,6 @@ paths:
           schema:
             type: string
             enum: [genre, decade, resolution, contentRating]
-        - name: template
-          in: query
-          required: false
-          schema:
-            type: string
         - name: configId
           in: query
           required: false
@@ -17635,15 +17713,13 @@ paths:
                           type: string
                         fastKey:
                           type: string
-                  conflicts:
+                  existingTitles:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        title:
-                          type: string
-                        ratingKey:
-                          type: string
+                      type: string
+                  mediaType:
+                    type: string
+                    enum: [movie, tv]
         '400':
           description: Invalid attribute type or library
         '401':

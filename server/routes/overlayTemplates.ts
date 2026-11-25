@@ -7,8 +7,12 @@ import type {
   OverlayTileElementProps,
   OverlayVariableElementProps,
 } from '@server/entity/OverlayTemplate';
-import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import {
+  OverlayTemplate,
+  type ApplicationCondition,
+} from '@server/entity/OverlayTemplate';
 import { sampleCollectionRankContext } from '@server/lib/overlays/collectionRank';
+import { hasEffectiveCondition } from '@server/lib/overlays/conditionEvaluator';
 import { extractStreamingProvider } from '@server/lib/overlays/OverlayContextBuilder';
 import { overlayOutputFormat } from '@server/lib/overlays/overlayOutputQuality';
 import { createOverlayPreviewArtwork } from '@server/lib/overlays/overlayPreviewArtwork';
@@ -201,10 +205,10 @@ interface PreviewPosterMetadata {
   director?: string;
   studio?: string;
   network?: string;
-  resolution: string;
-  audioFormat: string;
+  resolution?: string;
+  audioFormat?: string;
   audioProfile?: string;
-  videoCodec: string;
+  videoCodec?: string;
   edition?: string;
   status: string;
   daysUntilRelease?: number;
@@ -389,16 +393,11 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         rtAudienceScore,
         director,
         studio,
-        resolution: '4K', // Simulated technical info
-        audioFormat: 'Dolby Atmos',
-        audioProfile: 'truehd_atmos',
-        videoCodec: 'HEVC',
         edition: 'Extended Cut',
         status: 'Available',
         releaseDate: movieDetails.release_date,
         ...previewMovieReleaseStates(movieDetails.release_dates?.results),
         runtime: movieDetails.runtime,
-        daysUntilAction: 5, // Simulated Maintainerr data for preview
       };
     } else {
       // TV show
@@ -453,16 +452,11 @@ router.get('/preview-metadata/:posterId', async (req, res, next) => {
         rtCriticsScore,
         rtAudienceScore,
         network,
-        resolution: '1080p', // Simulated technical info
-        audioFormat: '5.1',
-        audioProfile: 'plus',
-        videoCodec: 'H.264',
         status:
           tvDetails.status === 'Ended' || tvDetails.status === 'Canceled'
             ? 'Ended'
             : 'Continuing',
         releaseDate: tvDetails.first_air_date,
-        daysUntilAction: 3, // Simulated Maintainerr data for preview
       };
     }
 
@@ -571,8 +565,8 @@ router.post('/', async (req, res, next) => {
     // Conditional variable elements are mutually exclusive at render time
     const unconditionalVariables =
       templateData.elements?.filter(
-        (el: { type: string; condition?: unknown }) =>
-          el.type === 'variable' && !el.condition
+        (el: { type: string; condition?: ApplicationCondition }) =>
+          el.type === 'variable' && !hasEffectiveCondition(el.condition)
       ) || [];
 
     if (unconditionalVariables.length > 1) {
@@ -669,8 +663,8 @@ router.put('/:id', async (req, res, next) => {
     if (templateData) {
       const unconditionalVariables =
         templateData.elements?.filter(
-          (el: { type: string; condition?: unknown }) =>
-            el.type === 'variable' && !el.condition
+          (el: { type: string; condition?: ApplicationCondition }) =>
+            el.type === 'variable' && !hasEffectiveCondition(el.condition)
         ) || [];
 
       if (unconditionalVariables.length > 1) {

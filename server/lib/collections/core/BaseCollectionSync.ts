@@ -9,6 +9,7 @@ import { getRepository } from '@server/datasource';
 import { CollectionMetadata } from '@server/entity/CollectionMetadata';
 import { PosterTemplate } from '@server/entity/PosterTemplate';
 import cacheManager from '@server/lib/cache';
+import { clearRemovedCustomArtwork } from '@server/lib/collections/plex/customArtworkCleanup';
 import type { ServiceUserManager } from '@server/lib/collections/services/ServiceUserManager';
 import { serviceUserManager } from '@server/lib/collections/services/ServiceUserManager';
 import type { TemplateEngine } from '@server/lib/collections/utils/TemplateEngine';
@@ -82,6 +83,7 @@ interface MediaProcessingResult {
 }
 // CollectionUpdateStrategy removed - logic moved inline below
 import type { PlexCollectionItem } from '@server/api/plexapi';
+import { placeholdersEnabled } from '@server/constants/placeholders';
 
 // Types moved from CollectionUpdateStrategy.ts
 interface CollectionUpdateOptions {
@@ -363,7 +365,11 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             ),
           });
 
-          if (effectiveConfig.applyOverlaysDuringSync && collectionRatingKey) {
+          if (
+            effectiveConfig.applyOverlaysDuringSync &&
+            collectionRatingKey &&
+            !options?.reorderOnly
+          ) {
             try {
               const { overlayLibraryService } = await import(
                 '@server/lib/overlays/OverlayLibraryService'
@@ -780,13 +786,109 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       return [];
     }
 
-    return this.processMissingItems(
-      missingItems,
-      config,
-      plexClient,
-      autoRequestHandler,
-      sourceTmdbIds
+    // Under any sort but the source's own, placeholders only fill free slots, so
+    // don't make ones that can't fit. Auto-requests keep the caller's full list.
+    const maxItems =
+      config.maxItems && config.maxItems > 0 ? config.maxItems : undefined;
+    if (
+      !maxItems ||
+      !placeholdersEnabled(config) ||
+      this.inSourceOrder(config)
+    ) {
+      return this.processMissingItems(
+        missingItems,
+        config,
+        plexClient,
+        autoRequestHandler,
+        sourceTmdbIds
+      );
+    }
+
+    // One that can't be made frees its slot for the next, round by round
+    const queue = [...missingItems].sort(
+      (a, b) => a.originalPosition - b.originalPosition
     );
+    const made: CollectionItem[] = [];
+    let room = Math.max(0, maxItems - items.length);
+    while (room > 0 && queue.length > 0) {
+      made.push(
+        ...(await this.processMissingItems(
+          queue.splice(0, room),
+          config,
+          plexClient,
+          undefined,
+          sourceTmdbIds
+        ))
+      );
+      room = Math.max(0, maxItems - items.length - made.length);
+    }
+    await autoRequestHandler?.();
+    return made;
+  }
+
+  /**
+   * Adds new placeholders to the matched items, each tagged with its list position. In
+   * source order they sit at that position; under any other sort they follow the sorted
+   * items. capToMaxItems applies the limit once exclusions have run.
+   */
+  protected mergePlaceholders(
+    items: CollectionItem[],
+    placeholderItems: CollectionItem[],
+    missingItems: MissingItem[] | undefined,
+    config: CollectionConfig
+  ): CollectionItem[] {
+    if (placeholderItems.length === 0) {
+      return items;
+    }
+    const missingPositions = new Map<string, number>();
+    for (const m of missingItems ?? []) {
+      const key = `${m.mediaType}:${m.tmdbId}`;
+      if (!missingPositions.has(key))
+        missingPositions.set(key, m.originalPosition);
+    }
+    const placed = placeholderItems.map((item) => {
+      const position =
+        (item.metadata?.originalPosition as number | undefined) ??
+        missingPositions.get(`${item.type}:${item.tmdbId}`);
+      return position === undefined
+        ? item
+        : {
+            ...item,
+            metadata: { ...item.metadata, originalPosition: position },
+          };
+    });
+    const merged = [...items, ...placed];
+    if (!this.inSourceOrder(config)) {
+      return merged;
+    }
+    const positionOf = (item: CollectionItem) =>
+      item.metadata?.originalPosition;
+    if (merged.some((item) => positionOf(item) === undefined)) {
+      logger.debug('Placeholders appended: some items have no list position', {
+        label: `${this.source} Collections`,
+        configName: config.name,
+      });
+      return merged;
+    }
+    return [...merged].sort(
+      (a, b) => (positionOf(a) as number) - (positionOf(b) as number)
+    );
+  }
+
+  /** Max Items over matched items and placeholders together, after exclusions */
+  protected capToMaxItems(
+    items: CollectionItem[],
+    config: CollectionConfig
+  ): CollectionItem[] {
+    return config.maxItems &&
+      config.maxItems > 0 &&
+      items.length > config.maxItems
+      ? items.slice(0, config.maxItems)
+      : items;
+  }
+
+  private inSourceOrder(config: CollectionConfig): boolean {
+    return !config.sortOrder || config.sortOrder === 'default';
   }
 
   /**
@@ -822,7 +924,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     let placeholderItems: CollectionItem[] = [];
 
     // Create placeholders if enabled
-    if (config.createPlaceholdersForMissing) {
+    if (placeholdersEnabled(config)) {
       // Apply missing item filters (rating, year, genre, etc.) before creating placeholders
       const { missingItemFilterService, buildPlaceholderFilterConfig } =
         await import('../services/MissingItemFilterService');
@@ -2858,6 +2960,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       }
     }
 
+    await clearRemovedCustomArtwork(
+      plexClient,
+      collectionRatingKey,
+      options.config,
+      options.libraryKey
+    );
+
     return { ratingKeyIsStale: false };
   }
 
@@ -3874,6 +3983,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       plexClient,
       this.source
     );
+    filteredItems = this.capToMaxItems(filteredItems, config);
 
     // Check again if we have items after exclusions
     if (filteredItems.length === 0) {
@@ -3941,10 +4051,12 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       collectionTypeOverride?: string; // For networks/originals to pass platform name
       dynamicLogo?: string; // For networks to pass extracted sprite logo
       personImageUrl?: string; // For person collections to pass TMDB profile image
+      itemCount?: number; // Full collection size when `items` is a slice
     }
   ): Promise<void> {
     try {
       const mediaType = getCollectionMediaType(config);
+      const fullItemCount = options?.itemCount ?? items?.length ?? 0;
 
       logger.info(`Auto-generating poster for collection: ${collectionName}`, {
         label: `${this.source} Collections`,
@@ -3952,19 +4064,32 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         mediaType,
       });
 
+      const defaultTemplate = config.autoPosterTemplate
+        ? null
+        : await (
+            await import('@server/lib/posterGeneration')
+          ).getDefaultPosterTemplate();
+      const effectiveTemplateId =
+        config.autoPosterTemplate ?? defaultTemplate?.id ?? null;
+
       // Convert items to poster format if available
       let posterItems: CollectionItemWithPoster[] | undefined;
       if (items && items.length > 0) {
         // Determine how many items we need based on the template's content grid
         let maxItems = 4; // Default fallback for old templates
 
-        if (config.autoPosterTemplate) {
+        if (config.autoPosterTemplate || defaultTemplate) {
           try {
             const templateRepository = getRepository(PosterTemplate);
+            const explicitId = config.autoPosterTemplate;
 
-            const template = await templateRepository.findOne({
-              where: { id: config.autoPosterTemplate, isActive: true },
-            });
+            const template =
+              defaultTemplate ??
+              (explicitId
+                ? await templateRepository.findOne({
+                    where: { id: explicitId, isActive: true },
+                  })
+                : null);
 
             if (template) {
               const templateData = template.getTemplateData();
@@ -4029,7 +4154,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
 
       // Fetch template data for accurate change detection
       let templateData: unknown = null;
-      if (config.autoPosterTemplate) {
+      if (defaultTemplate) {
+        templateData = defaultTemplate.templateData;
+      } else if (config.autoPosterTemplate) {
         const templateRepo = getRepository(PosterTemplate);
         const template = await templateRepo.findOne({
           where: { id: config.autoPosterTemplate },
@@ -4038,11 +4165,14 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
       }
 
       // Calculate input hash for poster to check if regeneration needed
-      const { calculatePosterInputHash } = await import(
-        '@server/utils/metadataHashing'
-      );
+      const {
+        calculatePosterInputHash,
+        posterTemplateReadsField,
+        posterTemplateReadsCollectionType,
+      } = await import('@server/utils/metadataHashing');
+      const ruleTemplateData = templateData;
       const posterInputHash = calculatePosterInputHash({
-        templateId: config.autoPosterTemplate || null,
+        templateId: effectiveTemplateId,
         templateData, // Include template content for change detection
         itemIds: (posterItems || [])
           .map((item) => item.tmdbId?.toString() || item.title)
@@ -4051,6 +4181,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
         mediaType,
         collectionType: options?.collectionTypeOverride || config.type,
         collectionSubtype: config.subtype,
+        ...(posterTemplateReadsField(ruleTemplateData, 'itemCount') && {
+          itemCount: fullItemCount,
+        }),
+        ...(posterTemplateReadsCollectionType(ruleTemplateData) && {
+          conditionCollectionType: config.type,
+          conditionCollectionSubtype: config.subtype,
+        }),
       });
 
       // Check if regeneration needed using metadata tracking
@@ -4116,6 +4253,9 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
           items: posterItems,
           autoPosterTemplate: config.autoPosterTemplate,
           libraryId: config.libraryId,
+          itemCount: fullItemCount,
+          conditionCollectionType: config.type,
+          conditionCollectionSubtype: config.subtype,
           ...(options?.dynamicLogo && { dynamicLogo: options.dynamicLogo }),
           ...(options?.personImageUrl && {
             personImageUrl: options.personImageUrl,

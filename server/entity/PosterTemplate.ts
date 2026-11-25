@@ -5,13 +5,16 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { ApplicationCondition } from './OverlayTemplate';
+import type {
+  ApplicationCondition,
+  OverlayTileElementProps,
+} from './OverlayTemplate';
 
 // New unified layering system types
 export interface LayeredElement {
   id: string;
   layerOrder: number; // 0 = bottom, higher = top
-  type: 'text' | 'raster' | 'svg' | 'content-grid' | 'person';
+  type: 'text' | 'raster' | 'svg' | 'content-grid' | 'person' | 'tile';
 
   // Common properties
   x: number;
@@ -27,7 +30,8 @@ export interface LayeredElement {
     | RasterElementProps
     | SVGElementProps
     | ContentGridProps
-    | PersonElementProps;
+    | PersonElementProps
+    | TileElementProps;
 }
 
 export interface TextElementProps {
@@ -58,6 +62,8 @@ export interface SVGElementProps {
   iconPath?: string; // For custom icons, service logo is dynamic
   grayscale: boolean;
 }
+
+export type TileElementProps = Omit<OverlayTileElementProps, 'colorScale'>;
 
 export interface ContentGridProps {
   columns: number;

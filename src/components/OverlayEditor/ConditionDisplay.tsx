@@ -1,33 +1,11 @@
 import type { ApplicationCondition } from '@server/entity/OverlayTemplate';
 import { defineMessages, useIntl } from 'react-intl';
 import useSWR from 'swr';
-import { CONDITION_FIELD_CATEGORIES } from './types';
+import { getFieldLabel, OPERATOR_LABELS } from './conditionLabels';
 
 const messages = defineMessages({
   alwaysApply: 'Always apply (no condition)',
 });
-
-// Operator display labels
-const OPERATOR_LABELS: Record<string, string> = {
-  eq: '=',
-  neq: '≠',
-  gt: '>',
-  gte: '≥',
-  lt: '<',
-  lte: '≤',
-  in: 'in',
-  contains: 'contains',
-  notContains: '!contains',
-  regex: 'regex',
-  begins: 'begins',
-  ends: 'ends',
-};
-
-// Get field label from CONDITION_FIELD_CATEGORIES
-const getFieldLabel = (field: string): string => {
-  const allFields = Object.values(CONDITION_FIELD_CATEGORIES).flat();
-  return allFields.find((v) => v.field === field)?.label || field;
-};
 
 // Resolve collection ID to display name
 const useCollectionName = (

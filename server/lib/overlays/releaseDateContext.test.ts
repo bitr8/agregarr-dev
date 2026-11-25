@@ -52,6 +52,30 @@ describe('deriveReleaseDateContext', () => {
     process.env.TZ = originalTz;
   });
 
+  it('counts Days Since Home Release from Radarr alone when Radarr supplied a home date', () => {
+    vi.setSystemTime(new Date('2026-12-01T12:00:00Z'));
+    const info = preferRadarrReleaseDate(
+      {
+        releaseDate: '2026-11-20',
+        physicalRelease: '2026-11-20',
+        releaseSource: 'physical',
+      },
+      { radarrDigitalRelease: '2026-11-28T00:00:00Z' }
+    );
+    const ctx = deriveReleaseDateContext(info ?? {});
+    expect(ctx.releaseDate).toBe('2026-11-28');
+    expect(ctx.daysSinceHomeRelease).toBe(3);
+  });
+
+  it('counts Days Since Home Release from the earliest TMDB home date without Radarr', () => {
+    vi.setSystemTime(new Date('2026-12-01T12:00:00Z'));
+    const ctx = deriveReleaseDateContext({
+      digitalRelease: '2026-11-28',
+      physicalRelease: '2026-11-20',
+    });
+    expect(ctx.daysSinceHomeRelease).toBe(11);
+  });
+
   it('computes daysUntilRelease for a future release date', () => {
     const ctx = deriveReleaseDateContext({ releaseDate: '2026-07-14' });
     expect(ctx.daysUntilRelease).toBe(3);

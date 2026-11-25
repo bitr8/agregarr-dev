@@ -5,6 +5,7 @@ import type { TmdbTvEpisodeResult } from '@server/api/themoviedb/interfaces';
 import type { MissingItem } from '@server/lib/collections/core/types';
 import type { CollectionConfig } from '@server/lib/settings';
 import logger from '@server/logger';
+import { hasBareAirDatePassed } from '@server/utils/dateHelpers';
 
 /**
  * Results from filtering missing items
@@ -947,7 +948,6 @@ export class MissingItemFilterService {
         return [];
       }
 
-      const now = new Date();
       const seasonsWithStatus: { seasonNumber: number; hasAired: boolean }[] =
         [];
 
@@ -959,10 +959,9 @@ export class MissingItemFilterService {
 
         // If season has an air_date, check if it's in the past
         if (season.air_date) {
-          const seasonAirDate = new Date(season.air_date);
           seasonsWithStatus.push({
             seasonNumber: season.season_number,
-            hasAired: seasonAirDate <= now,
+            hasAired: hasBareAirDatePassed(season.air_date),
           });
         } else {
           // If no air_date on season, we need to check individual episodes
@@ -975,9 +974,7 @@ export class MissingItemFilterService {
             // Check if ANY episode has aired
             const hasAnyEpisodeAired = seasonDetails.episodes.some(
               (ep: TmdbTvEpisodeResult) => {
-                if (!ep.air_date) return false;
-                const epAirDate = new Date(ep.air_date);
-                return epAirDate <= now;
+                return !!ep.air_date && hasBareAirDatePassed(ep.air_date);
               }
             );
 

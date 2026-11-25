@@ -89,6 +89,7 @@ interface PreviewCollectionModalProps {
     customUrl?: string;
     maxItems?: number;
     excludeLabels?: string[];
+    createPlaceholdersForMissing?: boolean;
     // TMDB advanced discover filters
     tmdbAdvancedFilters?: Record<string, unknown>;
     tmdbMovieSortBy?: string;
@@ -222,6 +223,7 @@ const PreviewCollectionModal = ({
       ? Number(previewConfig.maxItems)
       : undefined,
     excludeLabels: previewConfig.excludeLabels,
+    createPlaceholdersForMissing: previewConfig.createPlaceholdersForMissing,
     timePeriod: previewConfig.timePeriod,
     minimumPlays: previewConfig.minimumPlays
       ? Number(previewConfig.minimumPlays)
@@ -311,6 +313,8 @@ const PreviewCollectionModal = ({
             ? Number(previewConfig.maxItems)
             : undefined,
           excludeLabels: previewConfig.excludeLabels,
+          createPlaceholdersForMissing:
+            previewConfig.createPlaceholdersForMissing,
           timePeriod: previewConfig.timePeriod,
           minimumPlays: previewConfig.minimumPlays
             ? Number(previewConfig.minimumPlays)

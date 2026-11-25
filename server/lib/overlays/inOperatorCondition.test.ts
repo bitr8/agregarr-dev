@@ -87,10 +87,16 @@ describe("'in' operator", () => {
     ).toBe(false);
   });
 
-  it('does not coerce list-valued fields into a match', () => {
+  it('matches a list-valued field when any item is in the list', () => {
     expect(
       evaluateCondition(
         inRule('audioLanguages', 'english'),
+        ctx({ audioLanguages: ['English'] } as Partial<OverlayRenderContext>)
+      )
+    ).toBe(true);
+    expect(
+      evaluateCondition(
+        inRule('audioLanguages', 'german'),
         ctx({ audioLanguages: ['English'] } as Partial<OverlayRenderContext>)
       )
     ).toBe(false);

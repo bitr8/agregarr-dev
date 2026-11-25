@@ -9,7 +9,9 @@ import type {
   SyncResult,
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
+import { clearRemovedCustomArtwork } from '@server/lib/collections/plex/customArtworkCleanup';
 // getCollectionMediaType removed - using items[0]?.type instead
+import { placeholdersEnabled } from '@server/constants/placeholders';
 import type { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyCollectionExclusions,
@@ -152,6 +154,7 @@ export class MultiSourceOrchestrator {
   ): Promise<SyncResult> {
     let configForSync: MultiSourceCollectionConfig = config;
     let collectionNameForSync = config.name;
+    let pendingTitleName: string | undefined;
 
     try {
       // 1. Time Restrictions - check if collection should be active
@@ -283,10 +286,7 @@ export class MultiSourceOrchestrator {
             name: prefixedName,
           } as MultiSourceCollectionConfig;
 
-          // Persist updated name and source title for subsequent syncs
-          this.updateCollectionConfigField(config.id, {
-            name: prefixedName,
-          });
+          pendingTitleName = prefixedName;
           this.updateSourceResolvedTitle(
             config.id,
             activeSource.id,
@@ -466,6 +466,10 @@ export class MultiSourceOrchestrator {
           updated: 0,
           ...(failedError && { error: failedError }),
         };
+      }
+
+      if (pendingTitleName) {
+        this.updateCollectionConfigField(config.id, { name: pendingTitleName });
       }
 
       logger.info(
@@ -782,7 +786,7 @@ export class MultiSourceOrchestrator {
       // Handle placeholder creation for missing items using unified flow
       // This respects the createPlaceholdersForMissing checkbox on the parent config
       if (
-        parentConfig.createPlaceholdersForMissing &&
+        placeholdersEnabled(parentConfig) &&
         missingItems &&
         missingItems.length > 0
       ) {
@@ -2590,6 +2594,13 @@ export class MultiSourceOrchestrator {
       }
     }
 
+    await clearRemovedCustomArtwork(
+      plexClient,
+      collectionRatingKey,
+      options.config,
+      options.config.libraryId
+    );
+
     logger.debug(`Applied standardized metadata to multi-source collection`, {
       label: 'Multi-Source Orchestrator',
       configId: options.config.id,
@@ -2857,6 +2868,8 @@ export class MultiSourceOrchestrator {
           mediaType,
           items: posterItems,
           autoPosterTemplate: config.autoPosterTemplate, // Use configured template or default
+          itemCount: items.length,
+          conditionCollectionType: 'multi-source',
           ...(dynamicPlatformLogo && { dynamicLogo: dynamicPlatformLogo }), // Pass dynamic logo if available
         },
         `${

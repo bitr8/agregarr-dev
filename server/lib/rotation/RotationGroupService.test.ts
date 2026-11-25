@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -134,7 +134,14 @@ const cfg = (n: number) =>
   settings().plex.preExistingCollectionConfigs[n - 1] as Cfg;
 const group = () => settings().plex.rotationGroups?.[0] as RotationGroup;
 
+// Fixtures are dated NOW; methods without a `now` argument read the clock.
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
   state.settings = makeSettings();
   state.planFails = false;
   kick.mockClear();

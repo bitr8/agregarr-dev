@@ -1,6 +1,9 @@
 import type PlexAPI from '@server/api/plexapi';
 import TmdbAPI from '@server/api/themoviedb';
-import { TMDB_MAX_PAGE } from '@server/api/themoviedb/constants';
+import {
+  isLastTmdbPage,
+  TMDB_MAX_PAGE,
+} from '@server/api/themoviedb/constants';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
   applyLabelExclusions,
@@ -101,10 +104,26 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           // Fetch a batch of pages
           for (let i = 0; i < BATCH_SIZE && hasMorePages; i++) {
             if (mediaType === 'movie') {
-              const data = await this.tmdbClient.getMovieTrending({
-                page: currentPage,
-                timeWindow,
-              });
+              let data: Awaited<ReturnType<TmdbAPI['getMovieTrending']>>;
+              try {
+                data = await this.tmdbClient.getMovieTrending({
+                  page: currentPage,
+                  timeWindow,
+                });
+              } catch (error) {
+                if (tmdbData.length === 0) throw error;
+                logger.warn(
+                  'TMDB trending request failed, keeping the pages already fetched',
+                  {
+                    label: 'Collection Sync',
+                    page: currentPage,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  }
+                );
+                hasMorePages = false;
+                break;
+              }
 
               if (!data.results || data.results.length === 0) {
                 hasMorePages = false;
@@ -118,15 +137,31 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
             if (mediaType === 'tv') {
-              const data = await this.tmdbClient.getTvTrending({
-                page: currentPage,
-                timeWindow,
-              });
+              let data: Awaited<ReturnType<TmdbAPI['getTvTrending']>>;
+              try {
+                data = await this.tmdbClient.getTvTrending({
+                  page: currentPage,
+                  timeWindow,
+                });
+              } catch (error) {
+                if (tmdbData.length === 0) throw error;
+                logger.warn(
+                  'TMDB trending request failed, keeping the pages already fetched',
+                  {
+                    label: 'Collection Sync',
+                    page: currentPage,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  }
+                );
+                hasMorePages = false;
+                break;
+              }
 
               if (!data.results || data.results.length === 0) {
                 hasMorePages = false;
@@ -140,7 +175,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -187,7 +222,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -209,7 +244,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -256,7 +291,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -279,7 +314,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
             }
@@ -371,8 +406,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
 
             allItems.push(...normalizedItems);
 
-            // Stop if this page had fewer items than expected (last page)
-            if (listData.items.length < 20) {
+            if (isLastTmdbPage(currentPage, listData, listData.items.length)) {
               hasMorePages = false;
             }
 
@@ -410,7 +444,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
 
@@ -457,7 +491,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                   }))
                 );
 
-                if (data.results.length < 20) {
+                if (isLastTmdbPage(currentPage, data, data.results.length)) {
                   hasMorePages = false;
                 }
               } else {
@@ -480,7 +514,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                   }))
                 );
 
-                if (data.results.length < 20) {
+                if (isLastTmdbPage(currentPage, data, data.results.length)) {
                   hasMorePages = false;
                 }
               }
@@ -629,6 +663,16 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           'with_watch_providers',
           'with_status', // TV-only: comma (AND) or pipe (OR) separated
           'with_type', // TV-only: comma (AND) or pipe (OR) separated
+          'with_networks',
+          'with_origin_country',
+          'certification',
+        ]);
+
+        // An item has only one status, type or certification, so AND never matches
+        const MATCH_ANY_ONLY_FIELDS = new Set([
+          'with_status',
+          'with_type',
+          'certification',
         ]);
 
         type AdvancedDiscoverFilters = NonNullable<
@@ -746,12 +790,12 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
             if (!filter.field) continue;
             if (!hasNonEmptyValue(filter.value)) continue;
 
-            const filterLogicalOperator = normalizeLogicalOperator(
-              filter.operator
-            );
-
             const field = normalizeDiscoverField(filter.field);
             if (!field) continue;
+
+            const filterLogicalOperator = MATCH_ANY_ONLY_FIELDS.has(field)
+              ? 'or'
+              : normalizeLogicalOperator(filter.operator);
             if (!isSupportedForMediaType(field)) continue;
             let rawValue: unknown = coerceDiscoverValue(field, filter.value);
 
@@ -808,6 +852,14 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
             } else {
               groupFilters[field] = rawValue;
             }
+          }
+
+          // TMDB ignores a rating without a country; the picker shows US ratings
+          if (
+            !groupFilters.certification_country &&
+            Object.keys(groupFilters).some((k) => k.startsWith('certification'))
+          ) {
+            groupFilters.certification_country = 'US';
           }
 
           return groupFilters;
@@ -902,7 +954,7 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
                 }))
               );
 
-              if (data.results.length < 20) {
+              if (isLastTmdbPage(currentPage, data, data.results.length)) {
                 hasMorePages = false;
               }
               currentPage++;
@@ -925,7 +977,11 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
 
         const effectiveGroups: AdvancedDiscoverFilterGroup[] =
           groups.length > 0
-            ? (groups as AdvancedDiscoverFilterGroup[])
+            ? (groups as AdvancedDiscoverFilterGroup[]).filter(
+                // A later group with nothing to send would join the whole Discover list
+                (group, i) =>
+                  i === 0 || Object.keys(buildGroupFilters(group)).length > 0
+              )
             : ([{ filters: [] }] as unknown as AdvancedDiscoverFilterGroup[]);
 
         // Fetch each group separately and then AND/OR join results between groups
@@ -1074,10 +1130,6 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               return typeof item.vote_count === 'number'
                 ? item.vote_count
                 : undefined;
-            case 'revenue':
-              return typeof item.revenue === 'number'
-                ? item.revenue
-                : undefined;
             case 'release_date':
             case 'primary_release_date':
               return toTime(item.release_date);
@@ -1096,7 +1148,8 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
           }
         };
 
-        if (sortField && sortDirection) {
+        // Discover results carry no revenue, so a revenue sort keeps TMDB's order
+        if (sortField && sortDirection && sortField !== 'revenue') {
           combinedOrdered.sort((a, b) => {
             const av = getSortValue(a);
             const bv = getSortValue(b);
@@ -1408,7 +1461,12 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
     // Add placeholder items to the collection
     let finalItems = items;
     if (placeholderItems.length > 0) {
-      finalItems = [...items, ...placeholderItems];
+      finalItems = this.mergePlaceholders(
+        items,
+        placeholderItems,
+        missingItems,
+        config
+      );
     }
 
     if (finalItems.length === 0) return { created: 0, updated: 0 };

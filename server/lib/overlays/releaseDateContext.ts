@@ -55,7 +55,7 @@ export function movieReleaseInfoFromTmdb(
 }
 
 // Radarr is the source of truth for a placeholder's date: its digital or
-// physical date wins over TMDB's region-preferred guess.
+// physical date wins over TMDB's region-preferred guess, per type.
 export function preferRadarrReleaseDate(
   info: ReleaseDateInfo | undefined,
   radarr: RadarrReleaseDates
@@ -68,12 +68,15 @@ export function preferRadarrReleaseDate(
   return {
     ...info,
     ...fromRadarr,
-    digitalRelease: dateOnly(radarr.radarrDigitalRelease),
-    physicalRelease: dateOnly(radarr.radarrPhysicalRelease),
+    digitalRelease:
+      dateOnly(radarr.radarrDigitalRelease) ?? info?.digitalRelease,
+    physicalRelease:
+      dateOnly(radarr.radarrPhysicalRelease) ?? info?.physicalRelease,
     releaseSource: homeReleaseSource(
       radarr.radarrDigitalRelease,
       radarr.radarrPhysicalRelease
     ),
+    radarrHomeRelease: fromRadarr.releaseDate,
   };
 }
 
@@ -87,6 +90,37 @@ export function latestAiredSeasonDate(
     if (isDateInFuture(season.air_date)) continue;
     if (!latest || season.air_date > latest) {
       latest = season.air_date;
+    }
+  }
+  return latest;
+}
+
+/** S01E01 air instant in a Sonarr episode list. */
+export function seriesPremiereAirDate(
+  episodes: {
+    seasonNumber: number;
+    episodeNumber: number;
+    airDateUtc?: string;
+  }[]
+): string | undefined {
+  return episodes.find((e) => e.seasonNumber === 1 && e.episodeNumber === 1)
+    ?.airDateUtc;
+}
+
+/** Latest aired season-premiere instant in a Sonarr episode list; specials and undated episodes ignored. */
+export function latestAiredPremiere(
+  episodes: {
+    seasonNumber: number;
+    episodeNumber: number;
+    airDateUtc?: string;
+  }[]
+): string | undefined {
+  let latest: string | undefined;
+  for (const e of episodes) {
+    if (e.seasonNumber <= 0 || e.episodeNumber !== 1 || !e.airDateUtc) continue;
+    if (isAirDateUpcoming(e.airDateUtc)) continue;
+    if (!latest || new Date(e.airDateUtc) > new Date(latest)) {
+      latest = e.airDateUtc;
     }
   }
   return latest;
@@ -170,9 +204,15 @@ export function deriveReleaseDateContext(
   }
 
   // nextSeasonAirDate only holds a premiere until the pointer advances; lastSeasonAirDate outlives it.
-  const lastAiredSeasonDate = [pastSeasonAirDate, info.lastSeasonAirDate]
+  // A Sonarr premiere list replaces TMDB's bare dates but not a Sonarr instant that aired since the fetch.
+  const lastAiredSeasonDate = [
+    info.lastSeasonFromSonarr && !pastSeasonAirDate?.includes('T')
+      ? undefined
+      : pastSeasonAirDate,
+    info.lastSeasonAirDate,
+  ]
     .filter((d): d is string => !!d)
-    .sort()
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     .pop();
   if (lastAiredSeasonDate) {
     daysAgoNextSeason = calculateDaysSince(
@@ -182,9 +222,11 @@ export function deriveReleaseDateContext(
 
   const daysSinceDate = (d: string | undefined) =>
     d ? calculateDaysSince(toServerCalendarDate(d)) : undefined;
-  const homeDates = [info.digitalRelease, info.physicalRelease]
-    .filter((d): d is string => !!d)
-    .sort();
+  const homeDates = info.radarrHomeRelease
+    ? [info.radarrHomeRelease]
+    : [info.digitalRelease, info.physicalRelease]
+        .filter((d): d is string => !!d)
+        .sort();
 
   return {
     releaseDate: info.releaseDate,

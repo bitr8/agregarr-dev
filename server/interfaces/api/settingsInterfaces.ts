@@ -60,3 +60,7 @@ export interface StatusResponse {
   commitsBehind: number;
   restartRequired: boolean;
 }
+
+export interface TimezoneResponse {
+  tz: string;
+}

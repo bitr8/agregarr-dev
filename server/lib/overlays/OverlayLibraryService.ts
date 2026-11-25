@@ -12,6 +12,7 @@ import { OverlayTemplate } from '@server/entity/OverlayTemplate';
 import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isAirDateUpcoming } from '@server/utils/dateHelpers';
 import { scrubSecrets } from '@server/utils/logRedaction';
 import { mapWithConcurrency } from '@server/utils/mapWithConcurrency';
 import fs from 'fs/promises';
@@ -30,6 +31,7 @@ import {
   refreshRankCache,
   type RankCollectionConfig,
 } from './collectionRank';
+import { buildEpisodeAggregationContext } from './episodeAggregationContext';
 import type {
   AggregatedMediaInfo,
   EpisodeMediaInfo,
@@ -38,6 +40,7 @@ import {
   getEpisodeRatingEligibility,
   getUnratedEpisodeAction,
 } from './episodeRatingPolicy';
+import { UNKNOWN_RESOLUTION } from './episodeResolution';
 import { collectImdbPrefetchCandidates } from './imdbPrefetchCandidates';
 import {
   collectSeasonCandidateKeys,
@@ -48,8 +51,9 @@ import {
 import {
   buildRenderContext,
   checkMonitoringStatus,
-  daysSince,
   fetchReleaseDateInfo,
+  fetchSonarrEpisodeContext,
+  nextEpisodeTargets,
   type ReleaseDateInfo,
 } from './OverlayContextBuilder';
 import { getOverlayLibraryType } from './overlayLibraryType';
@@ -61,6 +65,7 @@ import {
   cloneOverlayTargetProgress,
   createOverlayTargetProgress,
   recordOverlayTargetOutcome,
+  retainOverlayItemOutcome,
   type OverlayTargetProgressMap,
 } from './overlayProgress';
 import {
@@ -77,6 +82,12 @@ import {
   evaluateCondition,
   overlayTemplateRenderer,
 } from './OverlayTemplateRenderer';
+import {
+  findPlaceholderShowKeys,
+  partitionPlaceholderSeasons,
+  PLACEHOLDER_SEASON_SKIP_MESSAGE,
+  plexPlaceholderShowResolver,
+} from './placeholderSeasons';
 import { resolveBasePosterSourceWithTrail } from './PlexBasePosterManager';
 import {
   deriveReleaseDateContext,
@@ -86,8 +97,11 @@ import {
   type RadarrReleaseDates,
 } from './releaseDateContext';
 import {
+  needsSonarrEpisodeList,
   RELEASE_DATE_CONTEXT_FIELDS,
   shouldSkipOnReleaseDateFetchFailure,
+  usesSonarrNextEpisode,
+  usesSonarrPremiere,
 } from './releaseDateFetchPolicy';
 import {
   classifySeasonCleanupAction,
@@ -273,8 +287,6 @@ class OverlayLibraryService {
   // These are shared across libraries since Radarr/Sonarr data is the same regardless of Plex library
   private radarrMoviesCache?: Map<string, RadarrMovie[]>;
   private sonarrSeriesCache?: Map<string, SonarrSeries[]>;
-  // Maps item ratingKey → array of collection IDs the item belongs to
-  private collectionMembershipCache?: Map<string, string[]>;
   private collectionRankCache = new Map<string, Map<string, number>>();
 
   // Aggregated episode media info for show libraries (per-library, keyed by show ratingKey)
@@ -318,6 +330,7 @@ class OverlayLibraryService {
   // Track running libraries with mutex-like behavior and detailed progress
   // Prevents concurrent processing of the same library
   private runningLibraries = new Map<string, LibraryProgress>();
+  private activeStandaloneBatches = 0;
 
   // Track libraries that have been requested to cancel
   private cancelledLibraries = new Set<string>();
@@ -415,24 +428,20 @@ class OverlayLibraryService {
     else progress.skippedCount++;
     recordOverlayTargetOutcome(progress.targetProgress, target, outcome);
 
-    progress.itemOutcomes.push({
-      title,
-      ratingKey: item.ratingKey,
-      target,
-      outcome,
-      processedAt: Date.now(),
-      ...(safeMessage ? { message: safeMessage } : {}),
-      ...(item.filePath ? { filePath: item.filePath } : {}),
-    });
-    if (progress.itemOutcomes.length > MAX_RETAINED_OVERLAY_ITEM_OUTCOMES) {
-      const removed = progress.itemOutcomes.splice(
-        0,
-        progress.itemOutcomes.length - MAX_RETAINED_OVERLAY_ITEM_OUTCOMES
-      );
-      for (const item of removed) {
-        progress.omittedOutcomeCounts[item.outcome]++;
-      }
-    }
+    const evicted = retainOverlayItemOutcome(
+      progress.itemOutcomes,
+      {
+        title,
+        ratingKey: item.ratingKey,
+        target,
+        outcome,
+        processedAt: Date.now(),
+        ...(safeMessage ? { message: safeMessage } : {}),
+        ...(item.filePath ? { filePath: item.filePath } : {}),
+      },
+      MAX_RETAINED_OVERLAY_ITEM_OUTCOMES
+    );
+    if (evicted) progress.omittedOutcomeCounts[evicted.outcome]++;
 
     if (outcome === 'error' && progress.itemErrors.length < 50) {
       progress.itemErrors.push({
@@ -558,9 +567,11 @@ class OverlayLibraryService {
    */
   private clearGlobalCachesIfIdle(): void {
     // Check if any library is currently running or cancelling
-    const hasActiveJobs = Array.from(this.runningLibraries.values()).some(
-      (p) => p.state === 'running' || p.state === 'cancelling'
-    );
+    const hasActiveJobs =
+      this.activeStandaloneBatches > 0 ||
+      Array.from(this.runningLibraries.values()).some(
+        (p) => p.state === 'running' || p.state === 'cancelling'
+      );
 
     if (!hasActiveJobs) {
       logger.debug('No active overlay jobs, clearing global caches', {
@@ -1310,7 +1321,10 @@ class OverlayLibraryService {
                   };
 
                   // Check for season premiere
-                  if (nextEpisode.episode_number === 1) {
+                  if (
+                    nextEpisode.episode_number === 1 &&
+                    nextEpisode.season_number > 0
+                  ) {
                     releaseDateInfo.nextSeasonAirDate = nextEpisode.air_date;
                   }
 
@@ -1512,7 +1526,7 @@ class OverlayLibraryService {
     if (!this.sonarrSeriesCache) {
       this.sonarrSeriesCache = new Map();
     }
-    // collectionMembershipCache and preloadedImdbRatings are initialized on-demand
+    // preloadedImdbRatings is initialized on-demand
     // (Maintainerr collections are fetched job-locally, not cached on the instance)
     // requiredContextFieldsByLibrary is already initialized as a Map
   }
@@ -2004,17 +2018,15 @@ class OverlayLibraryService {
 
       // Build collection membership map for condition evaluation
       // Only build if any enabled template uses a 'collection' condition field
-      const hasCollectionConditions = sortedTemplates.some((template) => {
-        const condition = template.getApplicationCondition();
-        return condition?.sections?.some((s) =>
-          s.rules.some((r) => r.field === 'collection')
-        );
-      });
-
-      if (hasCollectionConditions) {
-        this.collectionMembershipCache =
-          await this.buildCollectionMembershipMap(plexApi);
-      }
+      const { templatesReadContextField } = await import(
+        '@server/utils/metadataHashing'
+      );
+      const collectionMembership = templatesReadContextField(
+        sortedTemplates,
+        'collection'
+      )
+        ? await this.buildCollectionMembershipMap(plexApi)
+        : undefined;
 
       await this.refreshCollectionRanks(plexApi, sortedTemplates);
 
@@ -2049,7 +2061,7 @@ class OverlayLibraryService {
               (item) => item.type !== 'episode' && item.type !== 'season'
             )
           : [];
-      const [seasons, episodes] = await Promise.all([
+      const [allSeasons, episodes] = await Promise.all([
         syncSeasons
           ? plexApi.getLibraryItemsByType(libraryId, 3)
           : Promise.resolve([] as PlexLibraryItem[]),
@@ -2057,6 +2069,15 @@ class OverlayLibraryService {
           ? plexApi.getLibraryItemsByType(libraryId, 4)
           : Promise.resolve([] as PlexLibraryItem[]),
       ]);
+      const placeholderShowKeys = findPlaceholderShowKeys(allItems, allSeasons);
+      const { kept: seasons, skipped: skippedSeasons } =
+        await partitionPlaceholderSeasons(allSeasons, (showKey) =>
+          placeholderShowKeys.has(showKey)
+        );
+      const skippedSeasonItems = buildOverlaySyncItems(
+        skippedSeasons,
+        'season'
+      );
       let seasonItems = buildOverlaySyncItems(seasons, 'season');
       let fullSyncSeasonImdbRatings: Map<string, number> | undefined;
       const episodeItems = syncEpisodes
@@ -2068,10 +2089,28 @@ class OverlayLibraryService {
       // a root-only total for a TV full sync.
       this.updateProgress(libraryId, (p) => {
         p.targetProgress.main.totalItems = mainItems.length;
-        p.targetProgress.season.totalItems = seasonItems.length;
+        p.targetProgress.season.totalItems =
+          seasonItems.length + skippedSeasonItems.length;
         p.targetProgress.episode.totalItems = episodeItems.length;
-        p.totalItems = mainItems.length + childItems.length;
+        p.totalItems =
+          mainItems.length + childItems.length + skippedSeasonItems.length;
+        for (const item of skippedSeasonItems) {
+          this.recordProgressOutcome(
+            p,
+            item,
+            'skipped',
+            PLACEHOLDER_SEASON_SKIP_MESSAGE
+          );
+        }
       });
+
+      if (skippedSeasonItems.length > 0) {
+        logger.info('Skipped placeholder seasons without their own poster', {
+          label: 'OverlayLibrary',
+          libraryId,
+          skipped: skippedSeasonItems.length,
+        });
+      }
 
       logger.info('Processing library items', {
         label: 'OverlayLibrary',
@@ -2218,7 +2257,13 @@ class OverlayLibraryService {
             libraryId,
             config.libraryName,
             maintainerrCollections,
-            seasonFallbackFor(config)
+            seasonFallbackFor(config),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            false,
+            collectionMembership
           );
 
           this.updateProgress(libraryId, (p) => {
@@ -2389,7 +2434,8 @@ class OverlayLibraryService {
           sortedTemplates,
           maintainerrResult,
           fullSyncSeasonImdbRatings,
-          checkCancelled
+          checkCancelled,
+          collectionMembership
         );
 
         // Cancellation is checked BEFORE resolutionComplete: a run can resolve
@@ -2544,7 +2590,21 @@ class OverlayLibraryService {
           seasonNumber: input.seasonNumber,
         });
       } else {
-        if (syncSeasons) {
+        const skipSeason =
+          syncSeasons &&
+          (
+            await partitionPlaceholderSeasons(
+              [season as unknown as PlexLibraryItem],
+              plexPlaceholderShowResolver(plexApi)
+            )
+          ).skipped.length > 0;
+        if (skipSeason) {
+          logger.debug('Skipping placeholder season without its own poster', {
+            label: 'Posterizarr Trigger',
+            ratingKey: season.ratingKey,
+          });
+        }
+        if (syncSeasons && !skipSeason) {
           items.push({
             ratingKey: season.ratingKey,
             target: 'season',
@@ -2610,6 +2670,7 @@ class OverlayLibraryService {
     libraryId: string,
     options: OverlayBatchOptions = {}
   ): Promise<void> {
+    this.activeStandaloneBatches++;
     try {
       // Initialize caches at start of job (creates if needed, doesn't clear existing)
       this.initializeCachesIfNeeded();
@@ -2705,17 +2766,15 @@ class OverlayLibraryService {
       const plexApi = new PlexAPI({ plexToken: admin.plexToken });
 
       // Build collection membership map if any template uses collection conditions
-      const hasCollectionConditions = sortedTemplates.some((template) => {
-        const condition = template.getApplicationCondition();
-        return condition?.sections?.some((s) =>
-          s.rules.some((r) => r.field === 'collection')
-        );
-      });
-
-      if (hasCollectionConditions) {
-        this.collectionMembershipCache =
-          await this.buildCollectionMembershipMap(plexApi);
-      }
+      const { templatesReadContextField } = await import(
+        '@server/utils/metadataHashing'
+      );
+      const collectionMembership = templatesReadContextField(
+        sortedTemplates,
+        'collection'
+      )
+        ? await this.buildCollectionMembershipMap(plexApi)
+        : undefined;
 
       if (!options.skipRankRefresh) {
         await this.refreshCollectionRanks(plexApi, sortedTemplates);
@@ -2968,6 +3027,7 @@ class OverlayLibraryService {
           if (!fallbackMetadata) continue;
 
           const fallbackItem = {
+            ...fallbackMetadata,
             ratingKey: fallbackMetadata.ratingKey,
             title: fallbackMetadata.title,
             year: (fallbackMetadata as { year?: number }).year,
@@ -3073,6 +3133,7 @@ class OverlayLibraryService {
 
               // Convert to PlexLibraryItem format (cast to satisfy type requirements)
               const item = {
+                ...itemMetadata,
                 ratingKey: itemMetadata.ratingKey,
                 parentRatingKey: itemMetadata.parentRatingKey,
                 grandparentRatingKey: itemMetadata.grandparentRatingKey,
@@ -3163,7 +3224,8 @@ class OverlayLibraryService {
                 aggregatedMedia,
                 undefined,
                 contextFallbacks,
-                restoreMissingEpisodeRating
+                restoreMissingEpisodeRating,
+                collectionMembership
               );
               if (result.skipped) {
                 reportOutcome('skipped', outcomeItem);
@@ -3216,6 +3278,9 @@ class OverlayLibraryService {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      this.activeStandaloneBatches--;
+      this.clearGlobalCachesIfIdle();
     }
   }
 
@@ -3241,6 +3306,25 @@ class OverlayLibraryService {
    *   this service previously overlaid. Used by the episode-rating eligibility
    *   policy so unrated episodes stay clean without re-uploading every fresh card.
    */
+  private templateFieldCache = new WeakMap<OverlayTemplate[], Set<string>>();
+
+  private async templateFields(
+    templates: OverlayTemplate[]
+  ): Promise<Set<string>> {
+    let fields = this.templateFieldCache.get(templates);
+    if (!fields) {
+      const { extractUsedContextFields } = await import(
+        '@server/utils/metadataHashing'
+      );
+      fields = extractUsedContextFields(
+        templates.map((t) => t.getTemplateData()),
+        templates.map((t) => t.getApplicationCondition())
+      );
+      this.templateFieldCache.set(templates, fields);
+    }
+    return fields;
+  }
+
   private async applyOverlaysToItem(
     plexApi: PlexAPI,
     item: PlexLibraryItem,
@@ -3254,7 +3338,8 @@ class OverlayLibraryService {
     aggregatedMediaOverride?: Map<string, AggregatedMediaInfo>,
     requireOverlayMatch?: boolean,
     contextFallbacks?: Partial<OverlayRenderContext>,
-    restoreTrackedBaseForEmptyTemplates = false
+    restoreTrackedBaseForEmptyTemplates = false,
+    collectionMembership?: Map<string, string[]>
   ): Promise<OverlayApplyResult> {
     try {
       // CRITICAL: Derive actual media type from item.type, not library config
@@ -3374,6 +3459,14 @@ class OverlayLibraryService {
 
       const baseContext = contextResult.context;
 
+      // A show poster only pays for what the templates applied to it read; season and
+      // episode templates in the same library do not turn on the show's episode lists.
+      const libraryFields = this.requiredContextFieldsByLibrary.get(libraryId);
+      const gatingFields =
+        item.type === 'show' || item.type === 'movie'
+          ? await this.templateFields(templates)
+          : libraryFields;
+
       // Fetch release date information for ALL items with TMDB ID
       // Uses preloaded data from batch prefetch when available
       let releaseDateContext: Partial<OverlayRenderContext> = {};
@@ -3385,7 +3478,9 @@ class OverlayLibraryService {
           actualMediaType,
           this.sonarrSeriesCache,
           this.preloadedTmdbReleaseDates,
-          releaseDateFetch
+          releaseDateFetch,
+          usesSonarrPremiere(gatingFields),
+          usesSonarrNextEpisode(gatingFields)
         );
 
         // fork#35 (Mechanism 2): a transient TMDB/Sonarr failure returns
@@ -3397,9 +3492,7 @@ class OverlayLibraryService {
         // updates are not blocked by an unrelated date-API blip.
         if (
           releaseDateFetch.failed &&
-          shouldSkipOnReleaseDateFetchFailure(
-            this.requiredContextFieldsByLibrary.get(libraryId)
-          )
+          shouldSkipOnReleaseDateFetchFailure(gatingFields)
         ) {
           logger.info(
             'Skipping overlay application - release date fetch failed',
@@ -3430,6 +3523,37 @@ class OverlayLibraryService {
             serverTimezone: process.env.TZ,
             nowUtc: new Date().toISOString(),
           });
+        }
+      }
+
+      let sonarrEpisodeContext: Partial<OverlayRenderContext> = {};
+      if (
+        tmdbId &&
+        actualMediaType === 'show' &&
+        needsSonarrEpisodeList(
+          gatingFields,
+          !!releaseDateInfo?.nextEpisodeAirDate &&
+            isAirDateUpcoming(releaseDateInfo.nextEpisodeAirDate)
+        )
+      ) {
+        const episodeFetch = { failed: false };
+        sonarrEpisodeContext = await fetchSonarrEpisodeContext(
+          tmdbId,
+          releaseDateInfo?.tvdbId,
+          this.sonarrSeriesCache,
+          episodeFetch,
+          nextEpisodeTargets(releaseDateInfo)
+        );
+        if (episodeFetch.failed) {
+          logger.info(
+            'Skipping overlay application - Sonarr episode list fetch failed',
+            {
+              label: 'OverlayLibrary',
+              itemTitle: item.title,
+              ratingKey: item.ratingKey,
+            }
+          );
+          return { skipped: true };
         }
       }
 
@@ -3474,61 +3598,15 @@ class OverlayLibraryService {
         downloaded = true; // Real items not in *arr are assumed downloaded (they exist in Plex)
       }
 
-      // Merge aggregated episode media info if available for this show
-      let episodeAggregation: Partial<OverlayRenderContext> = {};
-      const aggregatedMap =
-        aggregatedMediaOverride ?? this.aggregatedMediaByLibrary.get(libraryId);
-      if (item.type === 'show') {
-        episodeAggregation.episodeMediaSource = 'show';
-      }
-      if (aggregatedMap && (item.type === 'show' || item.type === 'season')) {
-        const agg = aggregatedMap.get(item.ratingKey);
-        if (agg) {
-          episodeAggregation = {
-            ...(item.type === 'show'
-              ? {
-                  showResolution: baseContext.resolution,
-                  showHdr: baseContext.hdr,
-                  showDolbyVision: baseContext.dolbyVision,
-                  showDolbyVisionProfile: baseContext.dolbyVisionProfile,
-                  showAudioCodec: baseContext.audioCodec,
-                  showAudioChannels: baseContext.audioChannels,
-                  showVideoCodec: baseContext.videoCodec,
-                  showBitDepth: baseContext.bitDepth,
-                }
-              : {}),
-            resolution: agg.resolution,
-            hdr: agg.hdr,
-            dolbyVision: agg.dolbyVision,
-            dolbyVisionProfile: agg.dolbyVisionProfile,
-            hdr10Plus: agg.hdr10Plus,
-            videoCodec: agg.videoCodec,
-            audioCodec: agg.audioCodec,
-            audioProfile: agg.audioProfile,
-            audioChannels: agg.audioChannels,
-            bitDepth: agg.bitDepth,
-            episodeCount: agg.episodeCount,
-            episode4kCount: agg.episode4kCount,
-            episode4kPercent: agg.episode4kPercent,
-            episodeHdrCount: agg.episodeHdrCount,
-            episodeHdrPercent: agg.episodeHdrPercent,
-            episodeDvCount: agg.episodeDvCount,
-            episodeDvPercent: agg.episodeDvPercent,
-            episodeMediaSource: 'aggregated',
-          };
-          if (agg.lastEpisodeAddedAt !== undefined) {
-            episodeAggregation.lastEpisodeAddedDate = new Date(
-              agg.lastEpisodeAddedAt * 1000
-            );
-            episodeAggregation.daysSinceLastEpisodeAdded = daysSince(
-              agg.lastEpisodeAddedAt
-            );
-          }
-        }
-      }
+      const episodeAggregation = buildEpisodeAggregationContext(
+        item.type,
+        item.ratingKey,
+        baseContext,
+        aggregatedMediaOverride ?? this.aggregatedMediaByLibrary.get(libraryId)
+      );
 
       // Collection membership for condition evaluation
-      const collection = this.collectionMembershipCache?.get(item.ratingKey);
+      const collection = collectionMembership?.get(item.ratingKey);
 
       const context: OverlayRenderContext = {
         ...contextFallbacks,
@@ -3538,6 +3616,7 @@ class OverlayLibraryService {
         ...episodeAggregation,
         ...contextOverrides,
         ...releaseDateContext,
+        ...sonarrEpisodeContext,
         ...monitoringContext,
         ...(collection ? { collection } : {}),
         ...buildItemRankContext(item.ratingKey, this.collectionRankCache),
@@ -3992,7 +4071,8 @@ class OverlayLibraryService {
     sortedTemplates: OverlayTemplate[],
     maintainerrResult: MaintainerrFetchResult,
     fullSyncSeasonImdbRatings?: ReadonlyMap<string, number>,
-    checkCancelled?: () => boolean
+    checkCancelled?: () => boolean,
+    collectionMembership?: Map<string, string[]>
   ): Promise<SeasonSubpassResult> {
     // A Maintainerr outage tells us nothing about which seasons departed, so we
     // neither process nor clean up. Leaving existing season overlays untouched is
@@ -4265,7 +4345,10 @@ class OverlayLibraryService {
           undefined,
           // Maintainerr nominated this season; if no template condition matches it,
           // leave its poster alone.
-          true
+          true,
+          undefined,
+          false,
+          collectionMembership
         );
 
         this.updateProgress(libraryId, (p) => {
@@ -4507,9 +4590,16 @@ class OverlayLibraryService {
   ): Promise<void> {
     const { PlexEpisodeMediaScanner, resolveFetchedEpisodeDetail } =
       await import('./PlexEpisodeMediaScanner');
-    const { EpisodeMediaAggregator, mergedAddedAt, needsAddedAtResave } =
-      await import('./EpisodeMediaAggregator');
-    const { EpisodeMediaCacheService } = await import(
+    const {
+      EpisodeMediaAggregator,
+      mergedAddedAt,
+      mergedResolution,
+      mergedVersionCount,
+      needsAddedAtResave,
+      needsResolutionResave,
+      needsVersionCountResave,
+    } = await import('./EpisodeMediaAggregator');
+    const { EpisodeMediaCacheService, keepCachedDetail } = await import(
       './EpisodeMediaCacheService'
     );
 
@@ -4564,6 +4654,12 @@ class OverlayLibraryService {
     const freshAddedAtByKey = new Map(
       freshLightweight.map((ep) => [ep.ratingKey, ep.addedAt])
     );
+    const freshVersionCountByKey = new Map(
+      freshLightweight.map((ep) => [ep.ratingKey, ep.versionCount])
+    );
+    const freshResolutionByKey = new Map(
+      freshLightweight.map((ep) => [ep.ratingKey, ep.resolution])
+    );
     const withFreshAddedAt = (eps: EpisodeMediaInfo[]): EpisodeMediaInfo[] =>
       eps.map((ep) => ({
         ...ep,
@@ -4572,7 +4668,23 @@ class OverlayLibraryService {
           cachedByKey.get(ep.ratingKey)?.addedAt ?? ep.addedAt,
           freshAddedAtByKey
         ),
+        versionCount: mergedVersionCount(
+          ep.ratingKey,
+          ep.versionCount,
+          freshVersionCountByKey
+        ),
       }));
+    const refreshResolution = (
+      ep: EpisodeMediaInfo,
+      cached: EpisodeMediaInfo
+    ): EpisodeMediaInfo => ({
+      ...ep,
+      resolution: mergedResolution(
+        ep.ratingKey,
+        cached.resolution,
+        freshResolutionByKey
+      ),
+    });
 
     let episodes: EpisodeMediaInfo[];
 
@@ -4583,7 +4695,9 @@ class OverlayLibraryService {
     ) {
       // All episodes are cached and fresh — filter to current episodes only
       episodes = withFreshAddedAt(
-        cachedEpisodes.filter((c) => currentKeys.has(c.ratingKey))
+        cachedEpisodes
+          .filter((c) => currentKeys.has(c.ratingKey))
+          .map((c) => refreshResolution(c, c))
       );
       logger.info('Using cached episode media data', {
         label: 'EpisodeScanner',
@@ -4598,13 +4712,34 @@ class OverlayLibraryService {
       const mergedAddedAtByKey = new Map(
         episodes.map((e) => [e.ratingKey, e.addedAt])
       );
-      if (needsAddedAtResave(cachedEpisodes, mergedAddedAtByKey, currentKeys)) {
+      const mergedVersionCountByKey = new Map(
+        episodes.map((e) => [e.ratingKey, e.versionCount])
+      );
+      const mergedResolutionByKey = new Map(
+        episodes.map((e) => [e.ratingKey, e.resolution])
+      );
+      if (
+        needsAddedAtResave(cachedEpisodes, mergedAddedAtByKey, currentKeys) ||
+        needsResolutionResave(
+          cachedEpisodes,
+          mergedResolutionByKey,
+          currentKeys
+        ) ||
+        needsVersionCountResave(
+          cachedEpisodes,
+          mergedVersionCountByKey,
+          currentKeys
+        )
+      ) {
         await cacheService.saveEpisodes(serverId, libraryId, episodes);
-        logger.info('Resaved episode addedAt into cache', {
-          label: 'EpisodeScanner',
-          libraryId,
-          count: episodes.length,
-        });
+        logger.info(
+          'Resaved episode addedAt, resolution and version count into cache',
+          {
+            label: 'EpisodeScanner',
+            libraryId,
+            count: episodes.length,
+          }
+        );
       }
     } else if (detailKeys.size > 0) {
       const keysToFetch = [...detailKeys];
@@ -4625,24 +4760,41 @@ class OverlayLibraryService {
       episodes = withFreshAddedAt(
         freshLightweight.map((ep) => {
           if (!detailKeys.has(ep.ratingKey) && cachedByKey.has(ep.ratingKey)) {
-            return cachedByKey.get(ep.ratingKey)!;
+            const cached = cachedByKey.get(ep.ratingKey)!;
+            return refreshResolution(cached, cached);
           }
-          return resolveFetchedEpisodeDetail(
+          const resolved = resolveFetchedEpisodeDetail(
             ep,
             batchMetadata.get(ep.ratingKey)
           );
+          return resolved.resolution === UNKNOWN_RESOLUTION
+            ? refreshResolution(resolved, cachedByKey.get(ep.ratingKey) ?? ep)
+            : resolved;
         })
       );
 
       await cacheService.saveEpisodes(serverId, libraryId, episodes);
     } else {
       // No stream detail needed — use lightweight data
-      episodes = withFreshAddedAt(freshLightweight);
+      episodes = withFreshAddedAt(
+        keepCachedDetail(freshLightweight, cachedByKey, staleKeys).map((ep) => {
+          const cached = cachedByKey.get(ep.ratingKey);
+          return cached && !staleKeys.has(ep.ratingKey)
+            ? refreshResolution(ep, cached)
+            : ep;
+        })
+      );
       if (staleKeys.size > 0) {
         await cacheService.saveEpisodes(serverId, libraryId, episodes);
       }
     }
 
+    // Authoritative scan only, and only once the save above has succeeded.
+    await cacheService.deleteEpisodes(
+      serverId,
+      libraryId,
+      scanner.trailerRatingKeys ?? []
+    );
     await cacheService.cleanExpired(serverId, libraryId);
 
     const aggregator = new EpisodeMediaAggregator();
@@ -4683,7 +4835,7 @@ class OverlayLibraryService {
    * - Returns undefined when the cache is empty (e.g. before the first scan), in
    *   which case items fall back to base context exactly as before.
    */
-  private async getAggregatedMediaFromCache(
+  async getAggregatedMediaFromCache(
     libraryId: string
   ): Promise<Map<string, AggregatedMediaInfo> | undefined> {
     const memo = this.aggregatedMediaCacheMemo.get(libraryId);

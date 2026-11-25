@@ -1,4 +1,4 @@
-import type { OverlayRenderContext } from './OverlayTemplateRenderer';
+import type { OverlayRenderContext } from './overlayRenderContext';
 
 /**
  * Shared sample overlay context factory. Single source of truth for all preview locations:
@@ -26,6 +26,8 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   tvdbStatus: 'RETURNING',
 
   // Plex Media Info
+  versionCount: 2,
+  hasMultipleVersions: true,
   resolution: '4K',
   width: 3840,
   height: 2160,
@@ -92,7 +94,6 @@ const BASE_CONTEXT: Partial<OverlayRenderContext> = {
   // Episode information
   seasonNumber: 2,
   episodeNumber: 5,
-  episodeLabel: 'EPISODE 5',
 
   // Monitoring status
   isMonitored: true,
@@ -132,10 +133,16 @@ const EPISODE_AGGREGATION_FIELDS: Partial<OverlayRenderContext> = {
   episodeCount: 24,
   episode4kCount: 18,
   episode4kPercent: 75,
+  episodeHdCount: 6,
+  episodeHdPercent: 25,
+  episodeSdCount: 0,
+  episodeSdPercent: 0,
+  episodeUnknownResolutionCount: 0,
   episodeHdrCount: 16,
   episodeHdrPercent: 67,
   episodeDvCount: 12,
   episodeDvPercent: 50,
+  episodeMultiVersionCount: 3,
   episodeMediaSource: 'aggregated' as const,
 };
 
@@ -175,6 +182,11 @@ export function createSampleOverlayContext(
     context.streamingProviderId = tmdbOverrides.streamingProviderId;
   }
 
+  const daysBetween = (from: Date) =>
+    Math.floor((Date.now() - from.getTime()) / 86400000);
+  context.daysSinceAdded = daysBetween(context.dateAdded as Date);
+  context.daysSinceLastPlayed = daysBetween(context.lastPlayed as Date);
+
   if (mediaType === 'show') {
     Object.assign(context, EPISODE_AGGREGATION_FIELDS);
     // Computed per call (not in the static object above) so the preview's
@@ -185,6 +197,36 @@ export function createSampleOverlayContext(
     context.seasonsAvailable = 3;
     context.seasonsLeavingCount = 2;
     context.missingEpisodeCount = 0;
+    // S2E5 airs later today, S2E4 aired a week ago, season finale four weeks out.
+    context.episodesAiringToday = 1;
+    context.todaySeasonNumber = 2;
+    context.todayEpisodeNumber = 5;
+    context.lastAiredEpisodeDate = new Date(
+      Date.now() - 7 * 86400000
+    ).toISOString();
+    context.daysSinceLastAiredEpisode = 7;
+    context.lastAiredSeasonNumber = 2;
+    context.lastAiredEpisodeNumber = 4;
+    context.lastAiredEpisodeCount = 1;
+    context.nextEpisodeCount = 1;
+    context.nextFinaleType = 'season';
+    context.nextFinaleDate = new Date(Date.now() + 28 * 86400000).toISOString();
+    context.daysUntilNextFinale = 28;
+    context.nextFinaleSeasonNumber = 2;
+    context.nextFinaleEpisodeNumber = 10;
+    context.lastFinaleType = 'season';
+    context.lastFinaleDate = new Date(
+      Date.now() - 300 * 86400000
+    ).toISOString();
+    context.daysSinceLastFinale = 300;
+    context.nextEpisodeDownloaded = false;
+    context.nextSeasonDownloaded = false;
+    context.nextUndownloadedEpisodeDate = new Date(
+      Date.now() + 7 * 86400000
+    ).toISOString();
+    context.daysUntilNextUndownloadedEpisode = 7;
+    context.nextUndownloadedSeasonNumber = 2;
+    context.nextUndownloadedEpisodeNumber = 6;
     // Only movies get a theatrical+90 estimate, so deriveReleaseDateContext
     // leaves this undefined for shows. Previewing it as false would let a
     // condition match here and never match live.

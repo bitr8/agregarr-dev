@@ -1,4 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
+import { isPlexConflictError } from '@server/api/plexMetadataClassify';
+import { applyCollectionSuffix } from '@server/constants/sortTitle';
 import {
   buildPromotedSortTitle,
   buildSortTitleFromOverride,
@@ -6,6 +8,7 @@ import {
   isAgregarrOwnedSortTitle,
   normalizeSortTitleArticle,
 } from '@server/lib/collections/core/CollectionUtilities';
+import { clearRemovedCustomArtwork } from '@server/lib/collections/plex/customArtworkCleanup';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import type {
@@ -538,19 +541,16 @@ export class HubSyncService {
 
       try {
         if (!preExistingConfig.excludeFromOrdering) {
-          // Calculate current promotion status
+          // Evaluate first: promotion reads isActive, which may be stale
+          const effectiveVisibilityConfig =
+            this.evaluateAndUpdateTimeRestriction(
+              preExistingConfig,
+              'preExisting'
+            );
           const shouldBePromotedToHub =
             this.calculateIsPromotedToHub(preExistingConfig);
 
           if (shouldBePromotedToHub) {
-            // Collection should be in hub management - update visibility
-            // Evaluate time restrictions and get effective visibility config
-            const effectiveVisibilityConfig =
-              this.evaluateAndUpdateTimeRestriction(
-                preExistingConfig,
-                'preExisting'
-              );
-
             // Convert effective visibility config to Plex format
             const plexVisibility = {
               promotedToOwnHome:
@@ -616,26 +616,40 @@ export class HubSyncService {
             // Use the collection name from Plex
             const collectionName = preExistingConfig.name;
 
+            const defaultTemplate = preExistingConfig.autoPosterTemplate
+              ? null
+              : await (
+                  await import('@server/lib/posterGeneration')
+                ).getDefaultPosterTemplate();
+            const effectiveTemplateId =
+              preExistingConfig.autoPosterTemplate ??
+              defaultTemplate?.id ??
+              null;
+
             // Fetch collection items from Plex for content grid
             let posterItems: CollectionItemWithPoster[] | undefined;
+            let totalItemCount = 0;
 
             try {
               // Get template to determine how many items we need
               let maxItems = 12; // Default fallback
 
-              if (preExistingConfig.autoPosterTemplate) {
+              if (preExistingConfig.autoPosterTemplate || defaultTemplate) {
                 const { getRepository } = await import('@server/datasource');
                 const { PosterTemplate } = await import(
                   '@server/entity/PosterTemplate'
                 );
                 const templateRepository = getRepository(PosterTemplate);
 
-                const template = await templateRepository.findOne({
-                  where: {
-                    id: preExistingConfig.autoPosterTemplate,
-                    isActive: true,
-                  },
-                });
+                const explicitId = preExistingConfig.autoPosterTemplate;
+
+                const template =
+                  defaultTemplate ??
+                  (explicitId
+                    ? await templateRepository.findOne({
+                        where: { id: explicitId, isActive: true },
+                      })
+                    : null);
 
                 if (template) {
                   const templateData = template.getTemplateData();
@@ -679,6 +693,8 @@ export class HubSyncService {
                   itemCount: plexItems?.length || 0,
                 }
               );
+
+              totalItemCount = plexItems?.length ?? 0;
 
               // Convert Plex metadata to poster format
               if (plexItems && plexItems.length > 0) {
@@ -756,7 +772,9 @@ export class HubSyncService {
             try {
               // Fetch template data for accurate change detection
               let templateData: unknown = null;
-              if (preExistingConfig.autoPosterTemplate) {
+              if (defaultTemplate) {
+                templateData = defaultTemplate.templateData;
+              } else if (preExistingConfig.autoPosterTemplate) {
                 const { getRepository } = await import('@server/datasource');
                 const { PosterTemplate } = await import(
                   '@server/entity/PosterTemplate'
@@ -769,11 +787,14 @@ export class HubSyncService {
               }
 
               // Calculate input hash based on what determines the poster content
-              const { calculatePosterInputHash } = await import(
-                '@server/utils/metadataHashing'
-              );
+              const {
+                calculatePosterInputHash,
+                posterTemplateReadsField,
+                posterTemplateReadsCollectionType,
+              } = await import('@server/utils/metadataHashing');
+              const ruleTemplateData = templateData;
               posterInputHash = calculatePosterInputHash({
-                templateId: preExistingConfig.autoPosterTemplate || null,
+                templateId: effectiveTemplateId,
                 templateData, // Include template content for change detection
                 itemIds: (posterItems || [])
                   .map((item) => {
@@ -794,6 +815,12 @@ export class HubSyncService {
                 collectionName,
                 mediaType: preExistingConfig.mediaType,
                 collectionType: 'pre_existing',
+                ...(posterTemplateReadsField(ruleTemplateData, 'itemCount') && {
+                  itemCount: totalItemCount,
+                }),
+                ...(posterTemplateReadsCollectionType(ruleTemplateData) && {
+                  conditionCollectionType: 'plex',
+                }),
               });
 
               const metadataTrackingService = (
@@ -847,6 +874,8 @@ export class HubSyncService {
                     mediaType: preExistingConfig.mediaType,
                     items: posterItems,
                     autoPosterTemplate: preExistingConfig.autoPosterTemplate,
+                    itemCount: totalItemCount,
+                    conditionCollectionType: 'plex',
                   },
                   `Auto-generated: ${collectionName}`,
                   preExistingConfig.id
@@ -1207,6 +1236,15 @@ export class HubSyncService {
               // Don't fail the entire sync if theme upload fails
             }
           }
+        }
+
+        if (preExistingConfig.collectionRatingKey) {
+          await clearRemovedCustomArtwork(
+            plexClient,
+            preExistingConfig.collectionRatingKey,
+            preExistingConfig,
+            preExistingConfig.libraryId
+          );
         }
 
         // Mark pre-existing collection as successfully synced
@@ -1655,11 +1693,12 @@ export class HubSyncService {
   }
 
   /**
-   * Sync pre-existing collection sortTitles based on isLibraryPromoted status
-   * Only updates sortTitle when collections are in promoted state
+   * Sync pre-existing collection titles (" Collection" suffix) and sortTitles,
+   * all of them or just onlyConfigId
    */
   public async syncPreExistingCollectionSortTitles(
-    plexClient: PlexAPI
+    plexClient: PlexAPI,
+    onlyConfigId?: string
   ): Promise<void> {
     if (this.cancelled) return;
 
@@ -1668,8 +1707,21 @@ export class HubSyncService {
       const preExistingConfigs =
         settings.plex.preExistingCollectionConfigs || [];
 
+      // Every collection's name, even for a single-collection sync: Plex rejects a rename onto a taken name.
+      const namesByLibrary = new Map<string, Set<string>>();
+      const noteName = (libraryId: string, name: string) => {
+        const names = namesByLibrary.get(libraryId) ?? new Set<string>();
+        names.add(name);
+        namesByLibrary.set(libraryId, names);
+      };
+      preExistingConfigs.forEach((c) => noteName(c.libraryId, c.name));
+      (settings.plex.collectionConfigs || []).forEach((c) =>
+        [c.libraryId].flat().forEach((id) => noteName(id, c.name))
+      );
+
       for (const config of preExistingConfigs) {
         if (this.cancelled) return;
+        if (onlyConfigId && config.id !== onlyConfigId) continue;
 
         // A reset applies to this sync only, so clear it on the paths that skip the write.
         if (
@@ -1688,6 +1740,14 @@ export class HubSyncService {
           continue;
         }
 
+        // The title isn't ordering, so this runs even when ordering is excluded.
+        const name = await this.applyCollectionSuffixRename(
+          plexClient,
+          config,
+          namesByLibrary.get(config.libraryId)
+        );
+        const renamed = name !== config.name;
+
         if (config.excludeFromOrdering) {
           continue;
         }
@@ -1703,7 +1763,7 @@ export class HubSyncService {
           try {
             const overrideSortTitle = buildSortTitleFromOverride(
               config.sortTitleOverride,
-              config.name,
+              name,
               false,
               config.sortTitleOverrideIsFullTitle === true
             );
@@ -1749,6 +1809,7 @@ export class HubSyncService {
         const needsArticleReset = config.sortTitleArticleNormalized === true;
         if (
           !config.sortTitleResetRequested &&
+          !renamed &&
           config.everLibraryPromoted === false &&
           !articleHandlingEnabled &&
           !needsArticleReset
@@ -1761,17 +1822,17 @@ export class HubSyncService {
 
         if (isCurrentlyPromoted) {
           // Promoted: positional sortTitle (see buildPromotedSortTitle)
-          sortTitle = buildPromotedSortTitle(
-            config.name,
-            config.sortOrderLibrary
-          );
+          sortTitle = buildPromotedSortTitle(name, config.sortOrderLibrary);
         } else if (
           // A reset bypasses ownership: the hand-set value is the one being cleared.
           !config.sortTitleResetRequested &&
+          // Agregarr made the rename, so a sort title that was just the old name moves with it.
+          !(renamed && config.titleSort?.trim() === config.name.trim()) &&
           !isAgregarrOwnedSortTitle(
             config.titleSort,
-            config.name,
-            config.everLibraryPromoted
+            name,
+            config.everLibraryPromoted,
+            renamed ? config.name : undefined
           )
         ) {
           // A user-set sort title wins; discovery keeps the stored copy current.
@@ -1779,10 +1840,10 @@ export class HubSyncService {
         } else {
           // A-Z: the name, per leading-article handling.
           sortTitle = normalizeSortTitleArticle(
-            config.name,
+            name,
             settings.plex.sortTitleArticleHandling
           );
-          const isNormalized = sortTitle !== config.name;
+          const isNormalized = sortTitle !== name;
           if (isNormalized !== (config.sortTitleArticleNormalized === true)) {
             updateConfig.sortTitleArticleNormalized = isNormalized;
           }
@@ -1867,6 +1928,94 @@ export class HubSyncService {
     }
   }
 
+  /** The full sync's two pre-existing passes, for one collection; false when it isn't found. */
+  public async syncSinglePreExistingCollection(
+    plexClient: PlexAPI,
+    configId: string
+  ): Promise<boolean> {
+    const config = getSettings().plex.preExistingCollectionConfigs?.find(
+      (c) => c.id === configId
+    );
+    if (!config) return false;
+    await this.syncPreExistingCollections(plexClient, [config]);
+    await this.syncPreExistingCollectionSortTitles(plexClient, configId);
+    return true;
+  }
+
+  /** Renames the Plex collection per its suffix mode and returns the name it ends up with. */
+  private async applyCollectionSuffixRename(
+    plexClient: PlexAPI,
+    config: PreExistingCollectionConfig,
+    namesInLibrary: Set<string> | undefined
+  ): Promise<string> {
+    const target = applyCollectionSuffix(
+      config.name,
+      config.collectionSuffixMode
+    );
+    if (target === config.name) {
+      this.setSuffixRenameFailed(config, false);
+      return config.name;
+    }
+
+    const logMeta = {
+      label: 'Hub Sync Service',
+      collectionId: config.id,
+      collectionRatingKey: config.collectionRatingKey,
+      libraryId: config.libraryId,
+    };
+    if (namesInLibrary?.has(target)) {
+      logger.warn(
+        `Skipping " Collection" suffix change for "${config.name}": "${target}" already exists in this library`,
+        logMeta
+      );
+      this.setSuffixRenameFailed(config, true);
+      return config.name;
+    }
+
+    try {
+      await plexClient.updateCollectionTitle(
+        config.collectionRatingKey,
+        target,
+        config.libraryId,
+        config.name
+      );
+      this.updatePreExistingConfigField(config.id, {
+        name: target,
+        collectionSuffixRenameFailed: false,
+      });
+      namesInLibrary?.delete(config.name);
+      namesInLibrary?.add(target);
+      logger.debug(`Renamed "${config.name}" to "${target}"`, logMeta);
+      return target;
+    } catch (error) {
+      const message = extractErrorMessage(error);
+      // 409: a deleted collection still holds the name until the library's trash is emptied; retried every sync.
+      if (isPlexConflictError(message)) {
+        logger.warn(
+          `Plex refused to rename "${config.name}" to "${target}" (409). Empty the library's trash in Plex and it will apply on the next sync`,
+          logMeta
+        );
+      } else {
+        logger.error(
+          `Failed to rename "${config.name}" to "${target}": ${message}`,
+          logMeta
+        );
+      }
+      this.setSuffixRenameFailed(config, true);
+      return config.name;
+    }
+  }
+
+  private setSuffixRenameFailed(
+    config: PreExistingCollectionConfig,
+    failed: boolean
+  ): void {
+    if ((config.collectionSuffixRenameFailed ?? false) === failed) return;
+    this.updatePreExistingConfigField(config.id, {
+      collectionSuffixRenameFailed: failed,
+    });
+  }
+
   /**
    * Evaluate time restrictions and update isActive status for hubs/pre-existing collections
    * Returns the effective visibility config to use (main or inactive)
@@ -1886,6 +2035,7 @@ export class HubSyncService {
         timeRestrictionResult.isActive,
         configType
       );
+      config.isActive = timeRestrictionResult.isActive;
     }
 
     // For hubs and pre-existing collections, removeFromPlexWhenInactive is always false (safety)

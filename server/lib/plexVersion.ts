@@ -52,7 +52,7 @@ export function plexVersionAtLeast(
 ): boolean {
   if (!version) return false;
   const want = min.split('.').map(Number);
-  const parts = version.split(/[.-]/).slice(0, want.length);
+  const parts = version.split('-')[0].split('.');
   if (!parts.every((p) => /^\d+$/.test(p))) return false;
   for (let i = 0; i < want.length; i++) {
     const have = Number(parts[i] ?? 0);

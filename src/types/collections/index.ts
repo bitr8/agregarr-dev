@@ -3,6 +3,7 @@
  * Extracted from SettingsPlex.tsx to improve maintainability
  */
 // Types extracted from server to avoid importing server-side modules in client
+import type { CollectionSuffixMode } from '@server/constants/sortTitle';
 
 export enum CollectionType {
   DEFAULT_PLEX_HUB = 'default_plex_hub', // Built-in Plex algorithmic hubs
@@ -109,6 +110,8 @@ export interface PreExistingCollectionConfig {
   isLibraryPromoted: boolean; // true = promoted section (rank-prefixed sort title), false = A-Z section
   sortTitleResetRequested?: boolean; // One-shot: the user cleared the Sort Title field, asking Agregarr to take the sort title back. Consumed and cleared by the next sync
   sortTitleArticleNormalized?: boolean; // True while this collection's sortTitle is an article-normalized value Agregarr wrote
+  collectionSuffixMode?: CollectionSuffixMode; // " Collection" suffix on the Plex title: absent or 'leave' never renames
+  collectionSuffixRenameFailed?: boolean; // Set by the sync when the last rename was skipped or refused; the stored name is then what Plex has
   randomizeHomeOrder?: boolean; // If true, randomize position amongst other randomized items on home screen
   visibilityConfig: {
     usersHome: boolean;
@@ -317,9 +320,9 @@ export interface CollectionFormConfig {
   readonly tautulliStatType?: 'plays' | 'duration'; // Tautulli stat type
   // Placeholder settings (for createPlaceholdersForMissing feature - unified for all collection types)
   readonly createPlaceholdersForMissing?: boolean; // Create placeholder files for missing items
-  readonly placeholderReleasedDays?: number; // Days to keep orphaned placeholders after they fall off source list (from release date if released, otherwise from creation date) (default: 7)
+  readonly placeholderReleasedDays?: number; // Creation window in days for already-released items; 0 = unreleased only (default: 14)
   readonly placeholderSkipEstimatedDates?: boolean;
-  readonly placeholderDaysAhead?: number; // Days to look ahead for release dates (default: 360)
+  readonly placeholderDaysAhead?: number; // Days to look ahead for release dates (default: 90)
   readonly includeAllReleasedItems?: boolean; // If true, include all released items regardless of release date (default: true for new configs)
   // Placeholder filter settings (independent of auto-request filters)
   readonly placeholderMinimumYear?: number;

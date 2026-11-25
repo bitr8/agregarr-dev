@@ -1,5 +1,9 @@
 import type { CollectionFormConfig } from '@app/types/collections';
 import { isLibraryEssentialsPattern } from '@app/utils/collections/collectionUtils';
+import {
+  renderEssentialsTitle,
+  resolveSelectionMode,
+} from '@server/utils/essentialsSelection';
 import { useFormikContext } from 'formik';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,14 +29,10 @@ interface AttributeValue {
   fastKey: string;
 }
 
-interface ConflictInfo {
-  title: string;
-  ratingKey: string;
-}
-
 interface DiscoveryResponse {
   values: AttributeValue[];
-  conflicts: ConflictInfo[];
+  existingTitles: string[];
+  mediaType: 'movie' | 'tv';
 }
 
 function groupContentRatings(
@@ -68,26 +68,24 @@ const LibraryEssentialsPreview: React.FC = () => {
     (values.libraryIds?.length === 1 ? values.libraryIds[0] : undefined);
   const subtype = values.subtype;
   const configId = values.id;
-  const rawTemplate = values.template;
-  const mediaType = values.mediaType;
-  const effectiveTemplate =
-    rawTemplate === 'custom'
-      ? (mediaType === 'tv'
-          ? ((values as Record<string, unknown>).customTVTemplate as string)
-          : ((values as Record<string, unknown>)
-              .customMovieTemplate as string)) || '{value}'
-      : rawTemplate || '{value}';
-  const selectionMode = values.selectionMode || 'include';
+  const selectionMode = resolveSelectionMode(
+    values.selectionMode,
+    values.includeValues
+  );
   const excludeValues = values.excludeValues || [];
   const includeValues = values.includeValues || [];
 
   const shouldFetch =
     !!libraryId && isLibraryEssentialsPattern(values.type, subtype);
 
-  // Fetch values once per library+subtype; compute conflicts client-side
-  const configIdParam = configId ? `?configId=${configId}` : '';
+  // Fetch once per library+subtype; titles are matched client-side as the template changes
+  const queryParams = new URLSearchParams();
+  if (configId) queryParams.set('configId', String(configId));
+  const query = queryParams.toString();
   const swrKey = shouldFetch
-    ? `/api/v1/plex/library/${libraryId}/attributes/${subtype}${configIdParam}`
+    ? `/api/v1/plex/library/${libraryId}/attributes/${subtype}${
+        query ? `?${query}` : ''
+      }`
     : null;
 
   const { data, error, isLoading, mutate } = useSWR<DiscoveryResponse>(swrKey, {
@@ -95,9 +93,23 @@ const LibraryEssentialsPreview: React.FC = () => {
   });
 
   const allValues = data?.values || [];
-  const serverCollectionTitles = useMemo(
-    () => new Set((data?.conflicts || []).map((c) => c.title.toLowerCase())),
-    [data?.conflicts]
+  const libraryMediaType = data?.mediaType ?? 'movie';
+  const effectiveTemplate = useMemo(() => {
+    const raw = values.template;
+    const custom =
+      libraryMediaType === 'tv'
+        ? values.customTVTemplate
+        : values.customMovieTemplate;
+    return (raw === 'custom' ? custom : raw) || '{value}';
+  }, [
+    values.template,
+    values.customTVTemplate,
+    values.customMovieTemplate,
+    libraryMediaType,
+  ]);
+  const existingTitles = useMemo(
+    () => new Set((data?.existingTitles || []).map((t) => t.toLowerCase())),
+    [data?.existingTitles]
   );
 
   // Reset selection when library or subtype changes (not on template change)
@@ -106,7 +118,7 @@ const LibraryEssentialsPreview: React.FC = () => {
   useEffect(() => {
     if (resetKey !== prevResetKey) {
       setPrevResetKey(resetKey);
-      setFieldValue('selectionMode', 'include');
+      setFieldValue('selectionMode', 'exclude');
       setFieldValue('excludeValues', []);
       setFieldValue('includeValues', []);
     }
@@ -208,12 +220,13 @@ const LibraryEssentialsPreview: React.FC = () => {
   if (!allValues.length) return null;
 
   const renderCheckbox = (v: AttributeValue) => {
-    const renderedTitle = effectiveTemplate
-      ? effectiveTemplate.replace('{value}', v.title)
-      : v.title;
-    const hasConflict =
-      serverCollectionTitles.has(renderedTitle.toLowerCase()) ||
-      serverCollectionTitles.has(v.title.toLowerCase());
+    const renderedTitle = renderEssentialsTitle(
+      effectiveTemplate,
+      v.title,
+      libraryMediaType,
+      subtype
+    );
+    const hasConflict = existingTitles.has(renderedTitle.toLowerCase());
 
     return (
       <label

@@ -832,6 +832,8 @@ export interface CollectionSyncOptions {
   maxItemsPerCollection?: number;
   /** Timeout for external API calls in milliseconds */
   apiTimeout?: number;
+  /** Re-window and reorder only: no placeholder cleanup or creation, no overlays */
+  reorderOnly?: boolean;
 }
 
 /**

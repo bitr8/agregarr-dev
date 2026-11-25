@@ -1,7 +1,9 @@
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { useEffect, useRef, useState } from 'react';
-import { Group, Image, Rect } from 'react-konva';
+import { Group, Rect } from 'react-konva';
+import { FilteredImage } from './FilteredImage';
+import { containScale } from './imageFit';
 import type { OverlayElement, OverlayRasterElementProps } from './types';
 
 interface RasterElementComponentProps {
@@ -111,9 +113,11 @@ export const RasterElement: React.FC<RasterElementComponentProps> = ({
   }
 
   // Calculate scale to fit image within bounds (matching server-side logic)
-  const scale = Math.min(
-    element.width / image.width,
-    element.height / image.height
+  const scale = containScale(
+    element.width,
+    element.height,
+    image.width,
+    image.height
   );
 
   // Calculate scaled dimensions and centering offset (matching server-side logic)
@@ -184,7 +188,7 @@ export const RasterElement: React.FC<RasterElementComponentProps> = ({
         listening={true}
       />
 
-      <Image
+      <FilteredImage
         image={image}
         x={offsetX}
         y={offsetY}
@@ -192,6 +196,7 @@ export const RasterElement: React.FC<RasterElementComponentProps> = ({
         height={image.height}
         scaleX={scale}
         scaleY={scale}
+        opacity={(props.opacity ?? 100) / 100}
         listening={false}
       />
       {isSelected && (

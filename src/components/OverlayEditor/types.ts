@@ -226,6 +226,9 @@ export interface OverlayRenderContext {
   height?: number; // Video height in pixels
   aspectRatio?: number; // Aspect ratio (e.g., 2.35)
 
+  versionCount?: number;
+  hasMultipleVersions?: boolean;
+
   // Video specs
   videoCodec?: string; // 'hevc', 'h264', 'av1'
   videoProfile?: string; // 'main', 'high'
@@ -293,6 +296,29 @@ export interface OverlayRenderContext {
   nextSeasonAirDate?: string; // Raw date for SEASON PREMIERES only (episode 1)
   daysUntilNextSeason?: number; // Calculated days until next SEASON PREMIERE only
   daysAgoNextSeason?: number; // Days since the latest season premiered
+  episodesAiringToday?: number;
+  todaySeasonNumber?: number;
+  todayEpisodeNumber?: number;
+  lastAiredEpisodeDate?: string;
+  daysSinceLastAiredEpisode?: number;
+  lastAiredSeasonNumber?: number;
+  lastAiredEpisodeNumber?: number;
+  lastAiredEpisodeCount?: number;
+  nextEpisodeCount?: number;
+  nextFinaleType?: string;
+  nextFinaleDate?: string;
+  daysUntilNextFinale?: number;
+  nextFinaleSeasonNumber?: number;
+  nextFinaleEpisodeNumber?: number;
+  lastFinaleType?: string;
+  lastFinaleDate?: string;
+  daysSinceLastFinale?: number;
+  nextEpisodeDownloaded?: boolean;
+  nextSeasonDownloaded?: boolean;
+  nextUndownloadedEpisodeDate?: string;
+  daysUntilNextUndownloadedEpisode?: number;
+  nextUndownloadedSeasonNumber?: number;
+  nextUndownloadedEpisodeNumber?: number;
 
   totalSeasons?: number;
   seasonsAvailable?: number;
@@ -339,10 +365,16 @@ export interface OverlayRenderContext {
   episodeCount?: number;
   episode4kCount?: number;
   episode4kPercent?: number;
+  episodeHdCount?: number;
+  episodeHdPercent?: number;
+  episodeSdCount?: number;
+  episodeSdPercent?: number;
+  episodeUnknownResolutionCount?: number;
   episodeHdrCount?: number;
   episodeHdrPercent?: number;
   episodeDvCount?: number;
   episodeDvPercent?: number;
+  episodeMultiVersionCount?: number;
   episodeMediaSource?: 'aggregated' | 'show';
 
   // Item metadata
@@ -439,6 +471,7 @@ export const AVAILABLE_VARIABLES = {
     },
   ],
   video: [
+    { field: 'versionCount', label: 'Versions', example: '2' },
     { field: 'resolution', label: 'Resolution', example: '4K' },
     { field: 'width', label: 'Width (px)', example: '3840' },
     { field: 'height', label: 'Height (px)', example: '2160' },
@@ -608,15 +641,125 @@ export const AVAILABLE_VARIABLES = {
       label: 'Days Since Next Season Premiered (TV)',
       example: '7',
     },
+    {
+      field: 'episodesAiringToday',
+      label: 'Episodes Airing Today (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'todaySeasonNumber',
+      label: "Today's Season Number (TV) - Show Poster",
+      example: '4',
+    },
+    {
+      field: 'todayEpisodeNumber',
+      label: "Today's Episode Number (TV) - Show Poster",
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeDate',
+      label: 'Last Aired Episode Date (TV) - Show Poster',
+      example: 'NOV 23',
+    },
+    {
+      field: 'daysSinceLastAiredEpisode',
+      label: 'Days Since Last Episode Aired (TV) - Show Poster',
+      example: '0',
+    },
+    {
+      field: 'lastAiredSeasonNumber',
+      label: 'Last Aired Season Number (TV) - Show Poster',
+      example: '4',
+    },
+    {
+      field: 'lastAiredEpisodeNumber',
+      label: 'Last Aired Episode Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeCount',
+      label: 'Episodes on Last Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextEpisodeCount',
+      label: 'Episodes on Next Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextFinaleType',
+      label: 'Next Finale Type (TV) - Show Poster',
+      example: 'season',
+    },
+    {
+      field: 'nextFinaleDate',
+      label: 'Next Finale Date (TV) - Show Poster',
+      example: 'NOV 28',
+    },
+    {
+      field: 'daysUntilNextFinale',
+      label: 'Days Until Next Finale (TV) - Show Poster',
+      example: '6',
+    },
+    {
+      field: 'nextFinaleSeasonNumber',
+      label: 'Next Finale Season Number (TV) - Show Poster',
+      example: '2',
+    },
+    {
+      field: 'nextFinaleEpisodeNumber',
+      label: 'Next Finale Episode Number (TV) - Show Poster',
+      example: '10',
+    },
+    {
+      field: 'lastFinaleType',
+      label: 'Last Finale Type (TV) - Show Poster',
+      example: 'series',
+    },
+    {
+      field: 'lastFinaleDate',
+      label: 'Last Finale Date (TV) - Show Poster',
+      example: 'APR 14',
+    },
+    {
+      field: 'daysSinceLastFinale',
+      label: 'Days Since Last Finale (TV) - Show Poster',
+      example: '220',
+    },
+    {
+      field: 'nextEpisodeDownloaded',
+      label: 'Next Episode Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
+    {
+      field: 'nextSeasonDownloaded',
+      label: 'Next Season Premiere Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
+    {
+      field: 'nextUndownloadedEpisodeDate',
+      label: 'Next Undownloaded Episode Date (TV) - Show Poster',
+      example: 'DEC 07',
+    },
+    {
+      field: 'daysUntilNextUndownloadedEpisode',
+      label: 'Days Until Next Undownloaded Episode (TV) - Show Poster',
+      example: '11',
+    },
+    {
+      field: 'nextUndownloadedSeasonNumber',
+      label: 'Next Undownloaded Season Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'nextUndownloadedEpisodeNumber',
+      label: 'Next Undownloaded Episode Number (TV) - Show Poster',
+      example: '3',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
     { field: 'episodeNumber', label: 'Episode Number', example: '16' },
-    {
-      field: 'episodeLabel',
-      label: 'Episode Label',
-      example: 'SERIES FINALE',
-    },
   ],
   status: [
     {
@@ -645,10 +788,24 @@ export const AVAILABLE_VARIABLES = {
     { field: 'episodeCount', label: 'Episode Count', example: '24' },
     { field: 'episode4kCount', label: '4K Episode Count', example: '18' },
     { field: 'episode4kPercent', label: '4K Episode %', example: '75' },
+    { field: 'episodeHdCount', label: 'HD Episode Count', example: '6' },
+    { field: 'episodeHdPercent', label: 'HD Episode %', example: '25' },
+    { field: 'episodeSdCount', label: 'SD Episode Count', example: '0' },
+    { field: 'episodeSdPercent', label: 'SD Episode %', example: '0' },
+    {
+      field: 'episodeUnknownResolutionCount',
+      label: 'Unknown Resolution Episode Count',
+      example: '0',
+    },
     { field: 'episodeHdrCount', label: 'HDR Episode Count', example: '16' },
     { field: 'episodeHdrPercent', label: 'HDR Episode %', example: '67' },
     { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
     { field: 'episodeDvPercent', label: 'DV Episode %', example: '50' },
+    {
+      field: 'episodeMultiVersionCount',
+      label: 'Multi-Version Episode Count',
+      example: '3',
+    },
     {
       field: 'episodeMediaSource',
       label: 'Media Source',
@@ -733,6 +890,12 @@ export const CONDITION_FIELD_CATEGORIES = {
     },
   ],
   'Plex Data': [
+    { field: 'versionCount', label: 'Versions', example: '2' },
+    {
+      field: 'hasMultipleVersions',
+      label: 'Has Multiple Versions',
+      example: 'true',
+    },
     { field: 'resolution', label: 'Resolution', example: '4K' },
     { field: 'width', label: 'Width (px)', example: '3840' },
     { field: 'height', label: 'Height (px)', example: '2160' },
@@ -804,8 +967,6 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'filePath', label: 'File Path', example: '/movies/Inception.mkv' },
     { field: 'edition', label: 'Edition', example: 'Extended Cut' },
     { field: 'viewCount', label: 'View Count', example: '5' },
-    { field: 'lastPlayed', label: 'Last Played', example: '2024-01-15' },
-    { field: 'dateAdded', label: 'Date Added', example: '2024-01-01' },
     { field: 'daysSinceAdded', label: 'Days Since Added', example: '14' },
     {
       field: 'daysSinceLastPlayed',
@@ -917,11 +1078,125 @@ export const CONDITION_FIELD_CATEGORIES = {
       label: 'Days Since Next Season Premiered (TV)',
       example: '7',
     },
+    {
+      field: 'episodesAiringToday',
+      label: 'Episodes Airing Today (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'todaySeasonNumber',
+      label: "Today's Season Number (TV) - Show Poster",
+      example: '4',
+    },
+    {
+      field: 'todayEpisodeNumber',
+      label: "Today's Episode Number (TV) - Show Poster",
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeDate',
+      label: 'Last Aired Episode Date (TV) - Show Poster',
+      example: 'NOV 23',
+    },
+    {
+      field: 'daysSinceLastAiredEpisode',
+      label: 'Days Since Last Episode Aired (TV) - Show Poster',
+      example: '0',
+    },
+    {
+      field: 'lastAiredSeasonNumber',
+      label: 'Last Aired Season Number (TV) - Show Poster',
+      example: '4',
+    },
+    {
+      field: 'lastAiredEpisodeNumber',
+      label: 'Last Aired Episode Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'lastAiredEpisodeCount',
+      label: 'Episodes on Last Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextEpisodeCount',
+      label: 'Episodes on Next Air Day (TV) - Show Poster',
+      example: '8',
+    },
+    {
+      field: 'nextFinaleType',
+      label: 'Next Finale Type (TV) - Show Poster',
+      example: 'season',
+    },
+    {
+      field: 'nextFinaleDate',
+      label: 'Next Finale Date (TV) - Show Poster',
+      example: 'NOV 28',
+    },
+    {
+      field: 'daysUntilNextFinale',
+      label: 'Days Until Next Finale (TV) - Show Poster',
+      example: '6',
+    },
+    {
+      field: 'nextFinaleSeasonNumber',
+      label: 'Next Finale Season Number (TV) - Show Poster',
+      example: '2',
+    },
+    {
+      field: 'nextFinaleEpisodeNumber',
+      label: 'Next Finale Episode Number (TV) - Show Poster',
+      example: '10',
+    },
+    {
+      field: 'lastFinaleType',
+      label: 'Last Finale Type (TV) - Show Poster',
+      example: 'series',
+    },
+    {
+      field: 'lastFinaleDate',
+      label: 'Last Finale Date (TV) - Show Poster',
+      example: 'APR 14',
+    },
+    {
+      field: 'daysSinceLastFinale',
+      label: 'Days Since Last Finale (TV) - Show Poster',
+      example: '220',
+    },
+    {
+      field: 'nextEpisodeDownloaded',
+      label: 'Next Episode Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
+    {
+      field: 'nextSeasonDownloaded',
+      label: 'Next Season Premiere Already Downloaded (TV) - Show Poster',
+      example: 'false',
+    },
+    {
+      field: 'nextUndownloadedEpisodeDate',
+      label: 'Next Undownloaded Episode Date (TV) - Show Poster',
+      example: 'DEC 07',
+    },
+    {
+      field: 'daysUntilNextUndownloadedEpisode',
+      label: 'Days Until Next Undownloaded Episode (TV) - Show Poster',
+      example: '11',
+    },
+    {
+      field: 'nextUndownloadedSeasonNumber',
+      label: 'Next Undownloaded Season Number (TV) - Show Poster',
+      example: '1',
+    },
+    {
+      field: 'nextUndownloadedEpisodeNumber',
+      label: 'Next Undownloaded Episode Number (TV) - Show Poster',
+      example: '3',
+    },
     { field: 'totalSeasons', label: 'Total Seasons (TV)', example: '5' },
     { field: 'seasonsAvailable', label: 'Seasons in Plex (TV)', example: '2' },
     { field: 'seasonNumber', label: 'Season Number', example: '5' },
     { field: 'episodeNumber', label: 'Episode Number', example: '16' },
-    { field: 'episodeLabel', label: 'Episode Label', example: 'SERIES FINALE' },
     { field: 'isMonitored', label: 'Is Monitored', example: 'true' },
     { field: 'inRadarr', label: 'In Radarr', example: 'true' },
     { field: 'inSonarr', label: 'In Sonarr', example: 'true' },
@@ -944,19 +1219,28 @@ export const CONDITION_FIELD_CATEGORIES = {
     { field: 'episodeCount', label: 'Episode Count', example: '24' },
     { field: 'episode4kCount', label: '4K Episode Count', example: '18' },
     { field: 'episode4kPercent', label: '4K Episode %', example: '75' },
+    { field: 'episodeHdCount', label: 'HD Episode Count', example: '6' },
+    { field: 'episodeHdPercent', label: 'HD Episode %', example: '25' },
+    { field: 'episodeSdCount', label: 'SD Episode Count', example: '0' },
+    { field: 'episodeSdPercent', label: 'SD Episode %', example: '0' },
+    {
+      field: 'episodeUnknownResolutionCount',
+      label: 'Unknown Resolution Episode Count',
+      example: '0',
+    },
     { field: 'episodeHdrCount', label: 'HDR Episode Count', example: '16' },
     { field: 'episodeHdrPercent', label: 'HDR Episode %', example: '67' },
     { field: 'episodeDvCount', label: 'DV Episode Count', example: '12' },
     { field: 'episodeDvPercent', label: 'DV Episode %', example: '50' },
     {
+      field: 'episodeMultiVersionCount',
+      label: 'Multi-Version Episode Count',
+      example: '3',
+    },
+    {
       field: 'episodeMediaSource',
       label: 'Media Source (aggregated/show)',
       example: 'aggregated',
-    },
-    {
-      field: 'lastEpisodeAddedDate',
-      label: 'Last Episode Added Date',
-      example: '2024-01-01',
     },
     {
       field: 'daysSinceLastEpisodeAdded',
@@ -1096,6 +1380,8 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     container: 'mkv',
     bitrate: 15000,
     fileSize: 4500000000,
+    versionCount: 2,
+    hasMultipleVersions: true,
     viewCount: 5,
     daysSinceAdded: 14,
     daysSinceLastPlayed: 3,
@@ -1146,7 +1432,6 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     seasonsAvailable: 1,
     seasonNumber: 5,
     episodeNumber: 16,
-    episodeLabel: 'SERIES FINALE',
     network: 'AMC',
     genre: 'Drama',
     runtime: 47,
@@ -1193,6 +1478,29 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     nextSeasonAirDate: '2025-02-05', // Next SEASON premiere (episode 1 only)
     daysUntilNextSeason: 45, // Days until next season
     daysAgoNextSeason: undefined, // Not set when season hasn't aired yet
+    episodesAiringToday: 1,
+    todaySeasonNumber: 2,
+    todayEpisodeNumber: 5,
+    lastAiredEpisodeDate: '2025-01-08T01:00:00Z',
+    daysSinceLastAiredEpisode: 7,
+    lastAiredSeasonNumber: 2,
+    lastAiredEpisodeNumber: 4,
+    lastAiredEpisodeCount: 1,
+    nextEpisodeCount: 1,
+    nextFinaleType: 'season',
+    nextFinaleDate: '2025-02-12T01:00:00Z',
+    daysUntilNextFinale: 28,
+    nextFinaleSeasonNumber: 2,
+    nextFinaleEpisodeNumber: 10,
+    lastFinaleType: 'season',
+    lastFinaleDate: '2024-03-20T01:00:00Z',
+    daysSinceLastFinale: 300,
+    nextEpisodeDownloaded: false,
+    nextSeasonDownloaded: false,
+    nextUndownloadedEpisodeDate: '2025-02-19T01:00:00Z',
+    daysUntilNextUndownloadedEpisode: 11,
+    nextUndownloadedSeasonNumber: 1,
+    nextUndownloadedEpisodeNumber: 3,
     daysAgo: 0,
     isMonitored: true,
     inSonarr: true,
@@ -1220,10 +1528,17 @@ export const SAMPLE_PREVIEW_CONTEXTS: {
     episodeCount: 62,
     episode4kCount: 0,
     episode4kPercent: 0,
+    episodeHdCount: 62,
+    episodeHdPercent: 100,
+    episodeSdCount: 0,
+    episodeSdPercent: 0,
+    episodeUnknownResolutionCount: 0,
     episodeHdrCount: 0,
     episodeHdrPercent: 0,
     episodeDvCount: 0,
     episodeDvPercent: 0,
+    episodeMultiVersionCount: 3,
+    hasMultipleVersions: true,
     episodeMediaSource: 'aggregated',
   },
 };

@@ -2,6 +2,7 @@ import type { PlexHubConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { IdGenerator } from '@server/utils/idGenerator';
+import { withoutTargetUser } from '@server/utils/targetUserSupport';
 
 // Type for hub configs during discovery (before isActive is set server-side)
 type DiscoveredHubConfig = Omit<PlexHubConfig, 'isActive'>;
@@ -98,7 +99,7 @@ export class DefaultHubConfigService {
     const settings = getSettings();
 
     // Direct save since these are already in the correct format
-    settings.plex.hubConfigs = newConfigs;
+    settings.plex.hubConfigs = newConfigs.map(withoutTargetUser);
     settings.save();
 
     logger.info('Default hub configurations saved', {
@@ -151,7 +152,7 @@ export class DefaultHubConfigService {
       const configIndex = configs.findIndex((c) => c.id === configToUpdate.id);
 
       // Merge settings while preserving computed fields and library-specific fields
-      const updatedConfig: PlexHubConfig = {
+      const merged: PlexHubConfig = {
         ...configToUpdate, // Preserve all existing fields including computed ones
         ...settings, // Apply user changes (including undefined values to clear fields)
         // Ensure computed fields stay computed:
@@ -174,6 +175,7 @@ export class DefaultHubConfigService {
         needsSync: configToUpdate.needsSync, // Library-specific sync status
         // Note: isLinked, linkId, isUnlinked come from settings spread above
       };
+      const updatedConfig = withoutTargetUser(merged);
 
       // Update the config in place
       configs[configIndex] = updatedConfig;

@@ -1,3 +1,5 @@
+import { SONARR_EPISODE_SUMMARY_FIELDS } from './sonarrEpisodeSummary';
+
 /**
  * Context fields whose values are produced by fetchReleaseDateInfo (TMDB, with a
  * Sonarr fallback for TV). If a library's enabled overlays require any of these,
@@ -49,5 +51,70 @@ export function shouldSkipOnReleaseDateFetchFailure(
   if (!requiredFields) {
     return true;
   }
-  return RELEASE_DATE_CONTEXT_FIELDS.some((field) => requiredFields.has(field));
+  return [
+    ...RELEASE_DATE_CONTEXT_FIELDS,
+    ...SONARR_EPISODE_SUMMARY_FIELDS,
+  ].some((field) => requiredFields.has(field));
+}
+
+/** Whether Sonarr's premiere list should source daysAgoNextSeason and a show's releaseDate; undefined fields = could need it. */
+export function usesSonarrPremiere(
+  requiredFields: ReadonlySet<string> | undefined
+): boolean {
+  return (
+    !requiredFields ||
+    ['daysAgoNextSeason', 'releaseDate', 'daysUntilRelease', 'daysAgo'].some(
+      (field) => requiredFields.has(field)
+    )
+  );
+}
+
+/** Whether a library reads any Sonarr episode-list field; undefined fields = could need it. */
+export function usesSonarrEpisodeSummary(
+  requiredFields: ReadonlySet<string> | undefined
+): boolean {
+  return (
+    !requiredFields ||
+    SONARR_EPISODE_SUMMARY_FIELDS.some((field) => requiredFields.has(field))
+  );
+}
+
+const SONARR_NEXT_EPISODE_FIELDS = [
+  'nextEpisodeDownloaded',
+  'nextSeasonDownloaded',
+  'nextEpisodeAirDate',
+  'daysUntilNextEpisode',
+  'nextSeasonAirDate',
+  'daysUntilNextSeason',
+  'daysAgoNextSeason',
+  'seasonNumber',
+  'episodeNumber',
+  'releaseDate',
+  'daysUntilRelease',
+  'daysAgo',
+];
+
+/** Whether a library reads a field resolved from Sonarr's next-episode lookup; undefined fields = could need it. */
+export function usesSonarrNextEpisode(
+  requiredFields: ReadonlySet<string> | undefined
+): boolean {
+  return (
+    !requiredFields ||
+    SONARR_NEXT_EPISODE_FIELDS.some((field) => requiredFields.has(field))
+  );
+}
+
+const DOWNLOADED_FLAGS = ['nextEpisodeDownloaded', 'nextSeasonDownloaded'];
+
+/** Whether the per-show episode list is needed; the downloaded flags alone only need it for shows with an upcoming episode. */
+export function needsSonarrEpisodeList(
+  requiredFields: ReadonlySet<string> | undefined,
+  hasUpcomingEpisode: boolean
+): boolean {
+  if (!requiredFields) return true;
+  const used = SONARR_EPISODE_SUMMARY_FIELDS.filter((f) =>
+    requiredFields.has(f)
+  );
+  if (used.length === 0) return false;
+  return !used.every((f) => DOWNLOADED_FLAGS.includes(f)) || hasUpcomingEpisode;
 }

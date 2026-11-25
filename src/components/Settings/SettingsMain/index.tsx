@@ -55,9 +55,6 @@ const messages = defineMessages({
   overlayConcurrency: 'Parallel Items',
   overlayConcurrencyTip:
     'Number of items to process simultaneously during overlay application. Higher values are faster but use more memory.',
-  enableTmdbPosterCache: 'Enable TMDB Poster Cache',
-  enableTmdbPosterCacheTip:
-    'Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)',
   enableHealthChecks: 'Enable Health Checks',
   enableHealthChecksTip:
     'Run periodic health checks to detect connection issues and configuration problems',
@@ -175,7 +172,6 @@ const SettingsMain = () => {
             csrfProtection: data?.csrfProtection,
             locale: data?.locale ?? 'en',
             tmdbLanguage: data?.tmdbLanguage ?? 'en',
-            enableTmdbPosterCache: data?.enableTmdbPosterCache ?? true,
             healthChecksEnabled: data?.healthChecksEnabled ?? true,
             excludeFromOrderingLabel: data?.excludeFromOrderingLabel ?? '',
             watchProviderRegion: data?.watchProviderRegion ?? 'US',
@@ -193,7 +189,6 @@ const SettingsMain = () => {
                 csrfProtection: values.csrfProtection,
                 locale: values.locale,
                 tmdbLanguage: values.tmdbLanguage,
-                enableTmdbPosterCache: values.enableTmdbPosterCache,
                 healthChecksEnabled: values.healthChecksEnabled,
                 excludeFromOrderingLabel: values.excludeFromOrderingLabel || '',
                 watchProviderRegion: values.watchProviderRegion,
@@ -409,32 +404,6 @@ const SettingsMain = () => {
                         }}
                       />
                     </div>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <label
-                    htmlFor="enableTmdbPosterCache"
-                    className="checkbox-label"
-                  >
-                    <span className="mr-2">
-                      {intl.formatMessage(messages.enableTmdbPosterCache)}
-                    </span>
-                    <span className="label-tip">
-                      {intl.formatMessage(messages.enableTmdbPosterCacheTip)}
-                    </span>
-                  </label>
-                  <div className="form-input-area">
-                    <Field
-                      type="checkbox"
-                      id="enableTmdbPosterCache"
-                      name="enableTmdbPosterCache"
-                      onChange={() => {
-                        setFieldValue(
-                          'enableTmdbPosterCache',
-                          !values.enableTmdbPosterCache
-                        );
-                      }}
-                    />
                   </div>
                 </div>
                 <div className="form-row">

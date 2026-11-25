@@ -15,6 +15,20 @@ import {
   LEADING_PUNCTUATION_PATTERN,
 } from '@server/constants/sortTitle';
 
+import type { CollectionSuffixMode } from '@server/constants/sortTitle';
+import { applyCollectionSuffix } from '@server/constants/sortTitle';
+
+export { applyCollectionSuffix };
+
+/** The target name until a sync has tried the rename; the stored name once it was skipped or refused. */
+export function pendingCollectionName(
+  name: string,
+  mode: CollectionSuffixMode | undefined,
+  renameFailed: boolean | undefined
+): string {
+  return renameFailed ? name : applyCollectionSuffix(name, mode);
+}
+
 // Must match PROMOTED_SORT_TITLE_RANK_WIDTH in CollectionUtilities.ts. 3
 // digits matches Kometa's !010_/!020_ convention; see that constant for why
 // the width is an interop contract rather than cosmetics.
@@ -72,4 +86,25 @@ export function buildPromotedSortTitle(
   const clamped = Math.min(Math.max(0, sortOrderLibrary), maxRank);
   const rank = String(clamped).padStart(PROMOTED_SORT_TITLE_RANK_WIDTH, '0');
   return `!${rank}_${name}`;
+}
+
+/** The title template Plex gets in this library, as BaseCollectionSync picks it; undefined when it's just the name. */
+export function plexTitleTemplate(
+  config: {
+    name?: string;
+    template?: string;
+    customMovieTemplate?: string;
+    customTVTemplate?: string;
+  },
+  libraryType: 'movie' | 'show'
+): string | undefined {
+  // By the library's type, not config.mediaType, which can be stale.
+  const template =
+    config.template === 'custom'
+      ? libraryType === 'movie'
+        ? config.customMovieTemplate
+        : config.customTVTemplate
+      : config.template;
+  if (!template || template === config.name) return undefined;
+  return template.startsWith('DYNAMIC_') ? undefined : template;
 }

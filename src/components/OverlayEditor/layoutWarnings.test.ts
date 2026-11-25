@@ -347,3 +347,54 @@ describe('computeLayoutWarnings rotation and badges', () => {
     expect(w.some((x) => x.kind === 'text-outside-badge')).toBe(true);
   });
 });
+
+describe('mapped icon bounds', () => {
+  const mapped = (
+    x: number,
+    props: Record<string, unknown> = {}
+  ): OverlayElement => ({
+    id: 'm',
+    layerOrder: 1,
+    type: 'mapped-icon',
+    x,
+    y: 0,
+    width: 10,
+    height: 10,
+    properties: {
+      field: 'audioLanguageCodes',
+      mappings: [
+        { value: 'en', iconPath: '/a.png' },
+        { value: 'fr', iconPath: '/b.png' },
+        { value: 'de', iconPath: '/c.png' },
+      ],
+      layout: 'horizontal',
+      iconSize: 100,
+      spacingX: 10,
+      spacingY: 10,
+      ...props,
+    },
+  });
+
+  it('measures the icon layout, not the stored width and height', () => {
+    const w = computeLayoutWarnings({
+      ...base,
+      elements: [mapped(700)],
+    });
+    expect(w).toEqual([{ kind: 'out-of-bounds', elementId: 'm' }]);
+  });
+
+  it('is clean when the icon layout fits', () => {
+    expect(computeLayoutWarnings({ ...base, elements: [mapped(600)] })).toEqual(
+      []
+    );
+  });
+
+  it('respects Max Icons', () => {
+    expect(
+      computeLayoutWarnings({
+        ...base,
+        elements: [mapped(700, { maxIcons: 1 })],
+      })
+    ).toEqual([]);
+  });
+});

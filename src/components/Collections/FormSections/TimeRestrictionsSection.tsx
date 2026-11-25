@@ -3,6 +3,7 @@ import type {
   CustomSyncSchedule,
 } from '@app/types/collections';
 import { SYNC_SCHEDULE_PRESETS } from '@app/types/collections';
+import { getTimeRestrictionErrors } from '@app/utils/collections/timeRestrictionValidation';
 import { Field } from 'formik';
 import { defineMessages, useIntl } from 'react-intl';
 import VisibilitySection from './VisibilitySection';
@@ -61,6 +62,16 @@ interface WeeklySchedule {
   saturday: boolean;
   sunday: boolean;
 }
+
+const ALL_DAYS: WeeklySchedule = {
+  monday: true,
+  tuesday: true,
+  wednesday: true,
+  thursday: true,
+  friday: true,
+  saturday: true,
+  sunday: true,
+};
 
 interface TimeRestriction {
   alwaysActive?: boolean;
@@ -127,6 +138,8 @@ const TimeRestrictionsSection = ({
         },
       };
 
+  const timeRestrictionErrors = getTimeRestrictionErrors(timeRestriction);
+
   const updateTimeRestriction = (updates: Partial<TimeRestriction>) => {
     setFieldValue('timeRestriction', {
       ...timeRestriction,
@@ -170,15 +183,7 @@ const TimeRestrictionsSection = ({
     day: keyof WeeklySchedule,
     checked: boolean
   ) => {
-    const currentSchedule = timeRestriction.weeklySchedule || {
-      monday: true,
-      tuesday: true,
-      wednesday: true,
-      thursday: true,
-      friday: true,
-      saturday: true,
-      sunday: true,
-    };
+    const currentSchedule = timeRestriction.weeklySchedule || ALL_DAYS;
     updateTimeRestriction({
       alwaysActive: false,
       weeklySchedule: {
@@ -213,6 +218,11 @@ const TimeRestrictionsSection = ({
             onChange={(e) => {
               updateTimeRestriction({
                 alwaysActive: e.target.checked,
+                ...(!e.target.checked &&
+                  !timeRestriction.weeklySchedule &&
+                  !timeRestriction.dateRanges?.length && {
+                    weeklySchedule: { ...ALL_DAYS },
+                  }),
               });
             }}
             className="form-checkbox"
@@ -317,6 +327,9 @@ const TimeRestrictionsSection = ({
             >
               {intl.formatMessage(messages.addDateRange)}
             </button>
+            {timeRestrictionErrors.dateRanges && (
+              <div className="error">{timeRestrictionErrors.dateRanges}</div>
+            )}
             <p className="mt-2 text-xs text-gray-400">
               {intl.formatMessage(messages.dateRangesHelp)}
             </p>
@@ -345,6 +358,11 @@ const TimeRestrictionsSection = ({
                 </label>
               ))}
             </div>
+            {timeRestrictionErrors.weeklySchedule && (
+              <div className="error">
+                {timeRestrictionErrors.weeklySchedule}
+              </div>
+            )}
             <p className="mt-2 text-xs text-gray-400">
               {intl.formatMessage(messages.weeklyScheduleHelp)}
             </p>

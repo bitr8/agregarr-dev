@@ -1,4 +1,6 @@
 import type { CollectionFormConfig } from '@app/types/collections';
+import { resolveDisplayedPosterTemplateId } from '@app/utils/collections/collectionFormRules';
+import { isEpisodeHub } from '@app/utils/collections/collectionUtils';
 import { Menu, Transition } from '@headlessui/react';
 import { ChevronDownIcon, PlusIcon } from '@heroicons/react/24/solid';
 import { Fragment, useEffect, useState } from 'react';
@@ -123,15 +125,19 @@ const PosterUploadSection = ({
   const isPreExisting =
     values.collectionType === 'pre_existing' ||
     ('configType' in values && values.configType === 'preExisting');
+  const supportsAutoPoster = !isEpisodeHub(values);
   const isAutoPosterEnabled =
-    values.autoPoster ?? (isPreExisting ? false : true);
+    supportsAutoPoster && (values.autoPoster ?? (isPreExisting ? false : true));
 
   // Get current selected template - if none selected, use the default template
   const defaultTemplate =
     templates?.find((t) => t.isDefault) ||
     templates?.find((t) => t.name === 'Default Agregarr Template');
-  const selectedTemplateId =
-    values.autoPosterTemplate || defaultTemplate?.id || null;
+  const selectedTemplateId = resolveDisplayedPosterTemplateId(
+    values.autoPosterTemplate,
+    values.subtype === 'separator',
+    templates
+  );
   const selectedTemplate = templates?.find((t) => t.id === selectedTemplateId);
 
   const handleAutoPosterChange = (enabled: boolean) => {
@@ -226,7 +232,7 @@ const PosterUploadSection = ({
   return (
     <>
       {/* Auto-poster toggle - only for Agregarr collections */}
-      {isAgregarrCollection && (
+      {isAgregarrCollection && supportsAutoPoster && (
         <div className="mb-6">
           <div className="flex items-center">
             <input

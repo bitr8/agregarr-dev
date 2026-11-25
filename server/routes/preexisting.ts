@@ -49,6 +49,22 @@ preExistingRoutes.put('/:id/settings', isAuthenticated(), async (req, res) => {
       .find((c) => c.id === id);
     delete req.body.sortTitleOverrideIsFullTitle;
     delete req.body.sortTitleResetRequested;
+    delete req.body.collectionSuffixRenameFailed;
+    // The name comes from Plex and the suffix rename, so the form's loaded copy can be stale.
+    delete req.body.name;
+    if (
+      req.body.collectionSuffixMode !== undefined &&
+      !['leave', 'strip', 'add'].includes(req.body.collectionSuffixMode)
+    ) {
+      return res.status(400).json({ error: 'Invalid collection suffix mode' });
+    }
+    if (
+      req.body.collectionSuffixMode !== undefined &&
+      req.body.collectionSuffixMode !==
+        (existingConfig?.collectionSuffixMode ?? 'leave')
+    ) {
+      req.body.collectionSuffixRenameFailed = false;
+    }
     const { isSortTitleOverrideEdit, isSortTitleResetRequest } = await import(
       '@server/lib/collections/core/CollectionUtilities'
     );
@@ -515,6 +531,79 @@ preExistingRoutes.patch('/:id/demote', isAuthenticated(), async (req, res) => {
     return res
       .status(500)
       .json({ error: 'Failed to demote pre-existing collection' });
+  }
+});
+
+/**
+ * POST /api/v1/preexisting/:id/sync
+ * Sync one pre-existing collection now: visibility, artwork, title and sort title
+ */
+preExistingRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const collectionsSync = (await import('@server/lib/collectionsSync'))
+      .default;
+    if (collectionsSync.running || collectionsSync.pending) {
+      return res.status(409).json({
+        error: 'Sync in progress',
+        message:
+          'Cannot start individual collection sync while a full sync is running or queued. Please wait for the full sync to complete.',
+      });
+    }
+
+    const { getAdminUser } = await import(
+      '@server/lib/collections/core/CollectionUtilities'
+    );
+    const admin = await getAdminUser();
+    if (!admin) {
+      return res.status(500).json({ error: 'Admin user not found' });
+    }
+
+    const { default: PlexAPI } = await import('@server/api/plexapi');
+    const { getSettings } = await import('@server/lib/settings');
+    const plexClient = new PlexAPI({
+      plexToken: admin.plexToken,
+      plexSettings: getSettings().plex,
+    });
+
+    const { HubSyncService } = await import(
+      '@server/lib/collections/plex/HubSyncService'
+    );
+    const found = await new HubSyncService().syncSinglePreExistingCollection(
+      plexClient,
+      id
+    );
+    if (!found) {
+      return res.status(404).json({
+        error: 'Pre-existing collection not found',
+        message: `Pre-existing collection with id "${id}" not found`,
+      });
+    }
+
+    const updated = preExistingCollectionConfigService
+      .getConfigs()
+      .find((c) => c.id === id);
+    logger.info(`Individual sync completed for ${updated?.name ?? id}`, {
+      label: 'Pre-existing Collections API',
+      collectionId: id,
+    });
+
+    return res.status(200).json({
+      preExistingCollectionConfig: updated,
+      renameFailed: updated?.collectionSuffixRenameFailed === true,
+    });
+  } catch (error) {
+    logger.error('Failed to sync pre-existing collection', {
+      label: 'Pre-existing Collections API',
+      error: error instanceof Error ? error.message : String(error),
+      configId: id,
+    });
+
+    return res.status(500).json({
+      error: 'Failed to sync collection',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 });
 
