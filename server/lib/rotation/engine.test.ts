@@ -867,3 +867,84 @@ describe('sanitise', () => {
     expect(again.changed).toBe(false);
   });
 });
+
+describe('partial swap', () => {
+  const step = (g: RotationGroup, day: number) => {
+    const r = planRotation(
+      input(g, `2026-03-${String(day).padStart(2, '0')}T10:00:00Z`)
+    );
+    return { r, g: withState(g, r.state) };
+  };
+
+  it('6 members in 5 slots changes exactly one slot', () => {
+    let { g } = step(mkGroup(6, 5), 1);
+    const before = occupants(g.state);
+    const out = step(g, 2);
+    g = out.g;
+    const after = occupants(g.state);
+    const changed = after.filter((k, i) => k !== before[i]);
+    expect(changed).toHaveLength(1);
+    expect(after[0]).toBe(key(6));
+    expect(after.slice(1)).toEqual(before.slice(1));
+    expect(g.state.queue).toEqual([key(1)]);
+    const ev = out.r.events.find((e) => e.type === 'rotated');
+    expect(ev).toEqual({
+      type: 'rotated',
+      outgoing: [key(1)],
+      incoming: [key(6)],
+    });
+  });
+
+  it('10 members in 5 slots still changes every slot', () => {
+    let { g } = step(mkGroup(10, 5), 1);
+    const before = occupants(g.state);
+    g = step(g, 2).g;
+    const after = occupants(g.state);
+    expect(after.every((k, i) => k !== before[i])).toBe(true);
+  });
+
+  it('the longest-seated slot leaves first, ties by slot index', () => {
+    const g0 = mkGroup(7, 5);
+    const state: RotationState = {
+      ...emptyState(),
+      periodKey: '2026-03-01',
+      slots: [1, 2, 3, 4, 5].map((n) => ({
+        id: `s${n}`,
+        occupant: key(n),
+        sortOrderHome: n,
+        since:
+          n === 3 ? '2026-02-01T00:00:00.000Z' : '2026-02-10T00:00:00.000Z',
+      })),
+      queue: [key(6), key(7)],
+      shownThisCycle: [1, 2, 3, 4, 5].map(key),
+    };
+    const r = planRotation(input(withState(g0, state), '2026-03-02T10:00:00Z'));
+    expect(occupants(r.state)).toEqual([
+      key(6),
+      key(2),
+      key(7),
+      key(4),
+      key(5),
+    ]);
+    expect(r.state.queue).toEqual([key(3), key(1)]);
+  });
+
+  it('every member is shown before any repeats', () => {
+    let { g } = step(mkGroup(8, 5), 1);
+    const seen = new Set(occupants(g.state));
+    for (let day = 2; day <= 4; day++) {
+      g = step(g, day).g;
+      for (const k of occupants(g.state)) seen.add(k);
+    }
+    expect(seen.size).toBe(8);
+  });
+
+  it('shuffled order still rotates a partial swap', () => {
+    let { g } = step(mkGroup(6, 5, { order: 'shuffled' }), 1);
+    const before = occupants(g.state);
+    g = step(g, 2).g;
+    const after = occupants(g.state);
+    expect(after.filter((k, i) => k !== before[i])).toHaveLength(1);
+    expect(new Set([...after, ...g.state.queue]).size).toBe(6);
+  });
+});

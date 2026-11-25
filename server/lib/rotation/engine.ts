@@ -268,12 +268,21 @@ export function planRotation(input: PlanInput): PlanResult {
   const rotating = due && okSet.size > slotCount;
   if (rotating) {
     const outgoing: MemberKey[] = [];
-    for (const slot of slots) {
-      if (slot.occupant) {
-        outgoing.push(slot.occupant);
-        queue.push(slot.occupant);
-        slot.occupant = null;
-      }
+    const occupied = slots.filter((s) => s.occupant);
+    const unfit = occupied.filter((s) => !okSet.has(s.occupant as MemberKey));
+    const waiting = queue.filter((k) => okSet.has(k)).length;
+    const leaving = occupied
+      .filter((s) => okSet.has(s.occupant as MemberKey))
+      .map((s, i) => ({ s, i }))
+      .sort(
+        (a, b) => (a.s.since ?? '').localeCompare(b.s.since ?? '') || a.i - b.i
+      )
+      .slice(0, Math.max(0, waiting - unfit.length))
+      .map((x) => x.s);
+    for (const slot of leaving) {
+      outgoing.push(slot.occupant as MemberKey);
+      queue.push(slot.occupant as MemberKey);
+      slot.occupant = null;
     }
     events.push({ type: 'rotated', outgoing, incoming: [] });
   }
