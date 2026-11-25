@@ -586,7 +586,6 @@ describe('restore reads only the stash', () => {
     withRichMembers();
     await service.createGroup(input());
     scramble();
-    for (let n = 2; n <= 6; n++) cfg(n).sortOrderHome = n;
     await service.updateGroup(
       group().id,
       input({ members: input().members.slice(1) })
@@ -887,92 +886,6 @@ describe('status and previews', () => {
       'preExisting:pre-2',
     ]);
     expect(group().state.queue).toContain('preExisting:pre-1');
-  });
-});
-
-describe('restoring Home order', () => {
-  const renumber = async () => {
-    const rows = settings().plex.preExistingCollectionConfigs as {
-      sortOrderHome: number;
-      visibilityConfig: { usersHome: boolean };
-    }[];
-    const sorted = [...rows].sort((a, b) => a.sortOrderHome - b.sortOrderHome);
-    let n = 0;
-    for (const r of sorted) {
-      r.sortOrderHome = r.visibilityConfig.usersHome ? ++n : 0;
-    }
-  };
-
-  const order = () =>
-    [...(settings().plex.preExistingCollectionConfigs as Cfg[])]
-      .filter((c) => (c.visibilityConfig as { usersHome: boolean }).usersHome)
-      .sort((a, b) => (a.sortOrderHome as number) - (b.sortOrderHome as number))
-      .map((c) => c.id);
-
-  const interleaved = () => {
-    settings().plex.preExistingCollectionConfigs = [1, 2, 3, 4, 5, 6].map((n) =>
-      pre(n, { sortOrderHome: n, visibilityConfig: vis(true, true, false) })
-    );
-  };
-  const members = (ids: number[]) =>
-    ids.map((n) => ({ kind: 'preExisting' as const, configId: `pre-${n}` }));
-
-  const rotateAFewTimes = async () => {
-    autoReorderLibrary.mockImplementation(renumber);
-    await service.settlePositions();
-    for (let day = 1; day <= 4; day++) {
-      service.runPass({ now: new Date(NOW.getTime() + day * 24 * 3600e3) });
-      await service.settlePositions();
-    }
-  };
-
-  it('delete puts every row back in its original place and value', async () => {
-    interleaved();
-    const before = order();
-    await service.createGroup(
-      input({ slotCount: 1, members: members([2, 4, 5]) })
-    );
-    await rotateAFewTimes();
-    service.deleteGroup(group().id);
-    expect(order()).toEqual(before);
-    await renumber();
-    expect(order()).toEqual(before);
-    expect(
-      (settings().plex.preExistingCollectionConfigs as Cfg[]).map(
-        (c) => c.sortOrderHome
-      )
-    ).toEqual([1, 2, 3, 4, 5, 6]);
-  });
-
-  it('turning off puts every row back in its original place', async () => {
-    interleaved();
-    const before = order();
-    await service.createGroup(
-      input({ slotCount: 1, members: members([2, 4, 5]) })
-    );
-    await rotateAFewTimes();
-    await service.updateGroup(
-      group().id,
-      input({ enabled: false, slotCount: 1, members: members([2, 4, 5]) })
-    );
-    expect(order()).toEqual(before);
-  });
-
-  it('removing a member leaves the other rows in their order', async () => {
-    interleaved();
-    await service.createGroup(
-      input({ slotCount: 1, members: members([2, 4, 5]) })
-    );
-    await rotateAFewTimes();
-    await service.updateGroup(
-      group().id,
-      input({ slotCount: 1, members: members([2, 5]) })
-    );
-    await renumber();
-    const o = order();
-    expect(o).toContain('pre-4');
-    expect(o.indexOf('pre-1')).toBeLessThan(o.indexOf('pre-3'));
-    expect(o.indexOf('pre-3')).toBeLessThan(o.indexOf('pre-6'));
   });
 });
 

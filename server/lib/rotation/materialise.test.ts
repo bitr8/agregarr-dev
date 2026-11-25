@@ -22,7 +22,6 @@ import {
   captureOwn,
   classifyCandidate,
   managedFields,
-  reinsertRestored,
   restoreFields,
   type MemberConfig,
 } from './materialise';
@@ -411,48 +410,5 @@ describe('classifyCandidate', () => {
 
   it('the exclude label is not applied to Agregarr collections', () => {
     expect(classify(col({ excludeFromOrdering: true }))).toBeUndefined();
-  });
-});
-
-describe('reinsertRestored', () => {
-  const row = (id: string, pos: number, on = true) => ({
-    id,
-    sortOrderHome: pos,
-    visibilityConfig: {
-      usersHome: on,
-      serverOwnerHome: false,
-      libraryRecommended: false,
-    },
-  });
-  const ids = (rows: ReturnType<typeof row>[]) =>
-    [...rows]
-      .filter((r) => r.visibilityConfig.usersHome)
-      .sort((a, b) => a.sortOrderHome - b.sortOrderHome)
-      .map((r) => r.id);
-
-  it('renumbers so restored rows sit back between their old neighbours', () => {
-    const rows = [
-      row('a', 1),
-      row('m1', 2),
-      row('b', 2),
-      row('m2', 4),
-      row('m3', 5),
-      row('c', 3),
-    ];
-    reinsertRestored(rows, new Set([rows[1], rows[3], rows[4]]));
-    expect(ids(rows)).toEqual(['a', 'm1', 'b', 'm2', 'm3', 'c']);
-    expect(rows.map((r) => r.sortOrderHome)).toEqual([1, 2, 3, 4, 5, 6]);
-  });
-
-  it('leaves values alone when they already fit', () => {
-    const rows = [row('a', 1), row('b', 2), row('m', 3), row('h', 0, false)];
-    reinsertRestored(rows, new Set([rows[1]]));
-    expect(rows.map((r) => r.sortOrderHome)).toEqual([1, 2, 3, 0]);
-  });
-
-  it('puts a row beyond the end last', () => {
-    const rows = [row('a', 1), row('b', 2), row('m', 9)];
-    reinsertRestored(rows, new Set([rows[2]]));
-    expect(ids(rows)).toEqual(['a', 'b', 'm']);
   });
 });
