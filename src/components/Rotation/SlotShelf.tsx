@@ -36,7 +36,7 @@ const SlotShelf = ({ slots, caption, status, animate }: SlotShelfProps) => {
         </h4>
         {status}
       </div>
-      <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+      <div className="flex flex-wrap gap-3 pb-2">
         {slots.map((slot, i) => (
           <PosterTile
             key={`${slot.slotId}:${slot.occupant?.key ?? 'empty'}`}
