@@ -500,6 +500,50 @@ class RotationGroupService {
     getSettings().save();
   }
 
+  /** Restores each member's own settings; newly visible ones that are not in a slot go after the last row. */
+  private restoreMembers(
+    group: RotationGroup,
+    members: RotationMember[]
+  ): void {
+    const before = new Map<string, number>();
+    const restored: { member: RotationMember; config: MemberConfig }[] = [];
+    for (const member of members) {
+      const config = this.memberConfig(member);
+      if (!config) continue;
+      const slot = group.state?.slots?.find((x) => x.occupant === member.key);
+      before.set(
+        member.key,
+        slot ? config.sortOrderHome || slot.sortOrderHome || 0 : 0
+      );
+      this.restoreMember(group, member);
+      restored.push({ member, config });
+    }
+
+    const appended: Mutable<MemberConfig>[] = [];
+    for (const { member, config } of restored) {
+      const v = config.visibilityConfig;
+      if (!v || !(v.usersHome || v.serverOwnerHome || v.libraryRecommended)) {
+        continue;
+      }
+      const slotPosition = before.get(member.key) ?? 0;
+      const writable = config as Mutable<MemberConfig>;
+      if (slotPosition > 0) writable.sortOrderHome = slotPosition;
+      else appended.push(writable);
+    }
+    if (appended.length === 0) return;
+
+    const plex = getSettings().plex;
+    const skip = new Set<unknown>(appended);
+    let last = [
+      ...(plex.collectionConfigs ?? []),
+      ...(plex.hubConfigs ?? []),
+      ...(plex.preExistingCollectionConfigs ?? []),
+    ]
+      .filter((c) => !skip.has(c) && String(c.libraryId) === group.libraryId)
+      .reduce((max, c) => Math.max(max, c.sortOrderHome ?? 0), 0);
+    for (const config of appended) config.sortOrderHome = ++last;
+  }
+
   private restoreMember(group: RotationGroup, member: RotationMember): void {
     const config = this.memberConfig(member);
     if (!config) return;
@@ -838,7 +882,7 @@ class RotationGroupService {
     const { group, restore } = this.buildDraft(input, existing, configs, now);
     const settings = getSettings();
     this.transact(() => {
-      for (const member of restore) this.restoreMember(existing, member);
+      this.restoreMembers(existing, restore);
       const writes = group.enabled ? this.planConfigWrites(group, false) : [];
       this.replaceGroup(group);
       this.commitWrites(writes);
@@ -855,14 +899,15 @@ class RotationGroupService {
     const settings = getSettings();
     this.transact(() => {
       if (group.enabled && Array.isArray(group.members)) {
-        for (const member of group.members) {
-          if (typeof member?.configId !== 'string') continue;
-          if (!member.own && !isValidGroup(group)) continue;
-          if (member.kind !== 'collection' && member.kind !== 'preExisting') {
-            continue;
-          }
-          this.restoreMember(group, member);
-        }
+        this.restoreMembers(
+          group,
+          group.members.filter(
+            (member) =>
+              typeof member?.configId === 'string' &&
+              (member.own || isValidGroup(group)) &&
+              (member.kind === 'collection' || member.kind === 'preExisting')
+          )
+        );
       }
       const rest = groups.filter((g) => g !== group);
       if (rest.length === 0) delete settings.plex.rotationGroups;

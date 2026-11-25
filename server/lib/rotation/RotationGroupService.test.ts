@@ -187,7 +187,25 @@ describe('feature off', () => {
     await service.createGroup(input());
     expect(snapshot()).not.toBe(before);
     service.deleteGroup(group().id);
-    expect(snapshot()).toBe(before);
+    const homeOrder = () =>
+      settings()
+        .plex.preExistingCollectionConfigs.filter(
+          (c) => (c.sortOrderHome as number) > 0
+        )
+        .sort(
+          (a, b) => (a.sortOrderHome as number) - (b.sortOrderHome as number)
+        )
+        .map((c) => c.id);
+    expect(homeOrder()).toEqual(['pre-1', 'pre-3', 'pre-5']);
+    expect(
+      settings().plex.preExistingCollectionConfigs.map(
+        (c) => c.visibilityConfig
+      )
+    ).toEqual(
+      (JSON.parse(before) as Fixture['plex']).preExistingCollectionConfigs.map(
+        (c) => c.visibilityConfig
+      )
+    );
     expect(settings().plex.rotationGroups).toBeUndefined();
     expect('rotationGroups' in settings().plex).toBe(false);
   });
@@ -526,11 +544,11 @@ describe('restore reads only the stash', () => {
   };
 
   const LITERAL = [
-    { v: vis(true, true, false), s: 7, r: true, i: INACTIVE },
+    { v: vis(true, true, false), s: 42, r: true, i: INACTIVE },
     { v: vis(false, false, false), s: 0, r: undefined, i: undefined },
-    { v: vis(true, true, false), s: 3, r: undefined, i: undefined },
+    { v: vis(true, true, false), s: 43, r: undefined, i: undefined },
     { v: vis(false, false, false), s: 0, r: undefined, i: undefined },
-    { v: vis(true, true, false), s: 5, r: undefined, i: undefined },
+    { v: vis(true, true, false), s: 44, r: undefined, i: undefined },
     { v: vis(false, false, false), s: 0, r: undefined, i: undefined },
   ];
 
@@ -576,7 +594,7 @@ describe('restore reads only the stash', () => {
     expect(group().members[0].own).toMatchObject({
       visibilityConfig: vis(false, true, false),
       inactiveVisibilityConfig: INACTIVE,
-      sortOrderHome: 7,
+      sortOrderHome: 42,
       randomizeHomeOrder: true,
     });
     expect(group().state.slots.some((s) => s.occupant)).toBe(true);
@@ -738,7 +756,7 @@ describe('rebind', () => {
       (c) => c.id === 'pre-30'
     ) as Cfg;
     expect(rebound.visibilityConfig).toEqual(vis(true, true, false));
-    expect(rebound.sortOrderHome).toBe(3);
+    expect(rebound.sortOrderHome).toBeGreaterThan(0);
   });
 
   it('saving or turning off while a member is unbound keeps it so it can rejoin', async () => {
@@ -1088,7 +1106,7 @@ describe('hardening', () => {
     cfg(1).sortOrderHome = 42;
     service.deleteGroup(group().id);
     expect(cfg(1).visibilityConfig).toEqual(vis(true, true, false));
-    expect(cfg(1).sortOrderHome).toBe(1);
+    expect(cfg(1).sortOrderHome).toBe(42);
     expect(settings().plex.rotationGroups).toBeUndefined();
   });
 });
@@ -1265,5 +1283,121 @@ describe('everyWeeks anchor', () => {
     expect(new Date(status?.nextChange.notBefore as string).getMonth()).toBe(
       11
     );
+  });
+});
+
+describe('restored members and Home order', () => {
+  const memberIds = (ns: number[]) =>
+    ns.map((n) => ({ kind: 'preExisting' as const, configId: `pre-${n}` }));
+
+  const setup = async (hiddenMember?: number) => {
+    for (let n = 1; n <= 6; n++) {
+      cfg(n).visibilityConfig = vis(true, true, false);
+      cfg(n).sortOrderHome = n;
+    }
+    if (hiddenMember) {
+      cfg(hiddenMember).visibilityConfig = vis(false, false, false);
+      cfg(hiddenMember).sortOrderHome = 0;
+    }
+    await service.createGroup(
+      input({ slotCount: 1, members: memberIds([2, 4, 5]) })
+    );
+    service.rotateNow(group().id);
+    cfg(1).sortOrderHome = 7;
+    cfg(3).sortOrderHome = 8;
+  };
+
+  const homeOrder = () =>
+    settings()
+      .plex.preExistingCollectionConfigs.filter(
+        (c) => (c.sortOrderHome as number) > 0
+      )
+      .sort((a, b) => (a.sortOrderHome as number) - (b.sortOrderHome as number))
+      .map((c) => Number((c.id as string).slice(4)));
+
+  const nonMembers = (order: number[]) =>
+    order.filter((n) => ![2, 4, 5].includes(n));
+
+  const occupant = () =>
+    Number((group().state.slots[0].occupant as string).split('-')[1]);
+
+  const checkContract = (
+    before: number[],
+    slotN: number,
+    restoredInOrder: number[]
+  ) => {
+    const after = homeOrder();
+    expect(nonMembers(after)).toEqual(nonMembers(before));
+    expect(nonMembers(before)).toEqual([6, 1, 3]);
+    const slotPos = before.indexOf(slotN);
+    expect(after[slotPos]).toBe(slotN);
+    expect(after.slice(-restoredInOrder.length)).toEqual(restoredInOrder);
+    expect(after.length).toBe(before.length + restoredInOrder.length);
+  };
+
+  it('delete: other rows keep their order, slot occupant stays, other members go last in member order', async () => {
+    await setup();
+    const slotN = occupant();
+    const before = homeOrder();
+    service.deleteGroup(group().id);
+    checkContract(
+      before,
+      slotN,
+      [2, 4, 5].filter((n) => n !== slotN)
+    );
+    for (const n of [2, 4, 5]) {
+      expect(cfg(n).visibilityConfig).toEqual(vis(true, true, false));
+    }
+  });
+
+  it('turning the rotation off follows the same rules', async () => {
+    await setup();
+    const slotN = occupant();
+    const before = homeOrder();
+    await service.updateGroup(
+      group().id,
+      input({ enabled: false, slotCount: 1, members: memberIds([2, 4, 5]) })
+    );
+    checkContract(
+      before,
+      slotN,
+      [2, 4, 5].filter((n) => n !== slotN)
+    );
+  });
+
+  it('removing one member while running appends it and keeps the other rows in order', async () => {
+    await setup();
+    const slotN = occupant();
+    const removed = [2, 4, 5].find((n) => n !== slotN) as number;
+    const before = homeOrder();
+    await service.updateGroup(
+      group().id,
+      input({
+        slotCount: 1,
+        members: memberIds([2, 4, 5].filter((n) => n !== removed)),
+      })
+    );
+    const after = homeOrder();
+    expect(after[after.length - 1]).toBe(removed);
+    expect(after.filter((n) => n !== removed)).toEqual(
+      before.filter((n) => n !== removed)
+    );
+    expect(after.indexOf(slotN)).toBe(before.indexOf(slotN));
+  });
+
+  it('a member that was hidden gets its saved position back and is not placed', async () => {
+    await setup(4);
+    while (occupant() === 4) service.rotateNow(group().id);
+    const slotN = occupant();
+    const before = homeOrder();
+    expect(before).not.toContain(4);
+    service.deleteGroup(group().id);
+    expect(cfg(4).sortOrderHome).toBe(0);
+    expect(cfg(4).visibilityConfig).toEqual(vis(false, false, false));
+    const after = homeOrder();
+    expect(after).not.toContain(4);
+    expect(nonMembers(after)).toEqual([6, 1, 3]);
+    expect(after.indexOf(slotN)).toBe(before.indexOf(slotN));
+    expect(after.slice(-1)).toEqual([slotN === 5 ? 2 : 5]);
   });
 });
