@@ -1,7 +1,9 @@
-import type { CollectionItem } from '@server/lib/collections/core/types';
+import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
+import express from 'express';
+import type { AddressInfo } from 'net';
 import { describe, expect, it, vi } from 'vitest';
+import router, { processMultiSourcePreview } from './collections-preview';
 
-const captured: { items: CollectionItem[] } = { items: [] };
 const seen: { id: string; maxItems?: number }[] = [];
 const sync = vi.hoisted(() => ({ instance: undefined as unknown }));
 
@@ -22,21 +24,6 @@ vi.mock('@server/lib/collections/services/LibraryCacheService', () => ({
 vi.mock('@server/lib/collections/services/CollectionSyncService', () => ({
   collectionSyncService: { createSyncService: async () => sync.instance },
 }));
-vi.mock('@server/lib/collections/core/CollectionUtilities', async () => {
-  const actual = await vi.importActual<object>(
-    '@server/lib/collections/core/CollectionUtilities'
-  );
-  return {
-    ...actual,
-    capPreviewItemsToMaxItems: (items: CollectionItem[]) => {
-      captured.items = items;
-      throw new Error('stop');
-    },
-  };
-});
-
-import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
-import { processMultiSourcePreview } from './collections-preview';
 
 const LooseSyncBase = BaseCollectionSync as unknown as new (
   type: string
@@ -78,10 +65,55 @@ describe('multi-source preview per-source maxItems', () => {
       {} as never,
       {} as never,
       0
-    ).catch(() => undefined);
+    );
     expect(seen).toEqual([
       { id: 'preview-s1', maxItems: 7 },
       { id: 'preview-s2', maxItems: 0 },
     ]);
   });
+});
+
+it('reports the failed anime source in the preview status and continues to the next source', async () => {
+  seen.length = 0;
+  sync.instance = new TestSync();
+  await processMultiSourcePreview(
+    'partial',
+    [
+      { id: 'anime-list', type: 'anilist', priority: 1 },
+      { id: 'movie-list', type: 'tmdb', priority: 2 },
+    ],
+    'list_order',
+    undefined,
+    7,
+    '1',
+    'Movies',
+    'movie',
+    {} as never,
+    {},
+    0
+  );
+  const app = express();
+  app.use(router);
+  const server = app.listen(0, '127.0.0.1');
+  try {
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const { port } = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${port}/status/partial`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      completed: true,
+      result: {
+        sourceErrors: [
+          {
+            sourceId: 'anime-list',
+            sourceName: expect.stringMatching(/anilist/i),
+            message: 'Plex library 1 is missing from the library cache',
+          },
+        ],
+      },
+    });
+    expect(seen.map((source) => source.id)).toEqual(['preview-movie-list']);
+  } finally {
+    server.close();
+  }
 });

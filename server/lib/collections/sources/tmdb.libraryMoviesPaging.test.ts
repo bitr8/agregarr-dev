@@ -1,4 +1,6 @@
 import type PlexAPI from '@server/api/plexapi';
+import { prefetchAllLibraryItems } from '@server/lib/collections/core/CollectionUtilities';
+import type { CollectionConfig } from '@server/lib/settings';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@server/entity/CollectionMetadata', () => ({
@@ -24,6 +26,35 @@ vi.mock('@server/lib/settings', () => ({
 
 import PlexAPIClass from '@server/api/plexapi';
 import { TmdbCollectionSync } from './tmdb';
+
+it('retries a failed library prefetch before classifying a TMDB movie as missing', async () => {
+  const getLibraryContents = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce({
+      items: [
+        { ratingKey: 'owned', title: 'Movie', Guid: [{ id: 'tmdb://9' }] },
+      ],
+    });
+  const plex = {
+    getLibraries: async () => [{ key: '7', type: 'movie', title: 'Movies' }],
+    getLibraryContents,
+  } as unknown as PlexAPI;
+  const cache = await prefetchAllLibraryItems(plex);
+  const map = () =>
+    new TmdbCollectionSync().mapSourceDataToItems(
+      [{ id: 9, title: 'Movie' }],
+      { libraryId: '7' } as CollectionConfig,
+      plex,
+      cache
+    );
+  const { items, missingItems } = await map();
+  expect(getLibraryContents).toHaveBeenCalledTimes(2);
+  expect(items.map((item) => item.ratingKey)).toEqual(['owned']);
+  expect(missingItems).toEqual([]);
+  getLibraryContents.mockRejectedValueOnce(new Error('still offline'));
+  await expect(map()).rejects.toThrow('still offline');
+});
 
 describe('getLibraryMovies without a library cache', () => {
   it('returns every movie across all Plex pages', async () => {

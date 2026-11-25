@@ -16,6 +16,7 @@ import type {
   MissingItem,
 } from '@server/lib/collections/core/types';
 import { libraryCacheService } from '@server/lib/collections/services/LibraryCacheService';
+import { requireAnimeLibraryItems } from '@server/lib/collections/utils/AnimeProviderIndex';
 import type {
   CollectionConfig,
   CollectionSortOrder,
@@ -43,6 +44,7 @@ interface PreviewStatus {
     totalItems: number;
     matchedCount: number;
     missingCount: number;
+    sourceErrors?: { sourceId: string; sourceName: string; message: string }[];
   };
 }
 
@@ -385,6 +387,11 @@ export async function processMultiSourcePreview(
     progress: 20,
   });
 
+  const sourceErrors: {
+    sourceId: string;
+    sourceName: string;
+    message: string;
+  }[] = [];
   const allItemGroups: CollectionItem[][] = [];
   const allMissingItemGroups: MissingItem[][] = [];
 
@@ -398,6 +405,10 @@ export async function processMultiSourcePreview(
         currentStage: `Fetching from ${sourceDisplayName}...`,
         progress: 20 + (i / sourcesToFetch.length) * 20,
       });
+
+      if (source.type === 'anilist' || source.type === 'myanimelist') {
+        requireAnimeLibraryItems(libraryCache, libraryId);
+      }
 
       // Build temp config for this source
       const sourceConfigRecord: Record<string, unknown> = {
@@ -554,12 +565,19 @@ export async function processMultiSourcePreview(
         );
       }
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Source preview failed';
+      sourceErrors.push({
+        sourceId: source.id,
+        sourceName: sourceDisplayName,
+        message,
+      });
       logger.error(`Failed to fetch from ${sourceDisplayName}:`, {
         label: 'Collections Preview API - Multi-Source',
         sourceId: source.id,
         sourceType: source.type,
         sourceDisplayName,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
       // Continue with other sources
     }
@@ -941,6 +959,7 @@ export async function processMultiSourcePreview(
       totalItems: enrichedItems.length,
       matchedCount,
       missingCount,
+      ...(sourceErrors.length > 0 && { sourceErrors }),
     },
   });
 }
