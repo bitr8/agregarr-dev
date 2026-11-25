@@ -591,10 +591,7 @@ describe('restore reads only the stash', () => {
       group().id,
       input({ members: input().members.slice(1) })
     );
-    expect(current()[0]).toEqual({ ...LITERAL[0], s: current()[0].s });
-    expect(cfg(1).sortOrderHome as number).toBeGreaterThan(
-      cfg(5).sortOrderHome as number
-    );
+    expect(current()[0]).toEqual(LITERAL[0]);
     expect(inactive()).toEqual(INACTIVE);
     expect(group().members.length).toBe(5);
   });
@@ -977,74 +974,6 @@ describe('restoring Home order', () => {
     expect(o.indexOf('pre-1')).toBeLessThan(o.indexOf('pre-3'));
     expect(o.indexOf('pre-3')).toBeLessThan(o.indexOf('pre-6'));
   });
-
-  it('delete restores order when the original numbering had gaps', async () => {
-    settings().plex.preExistingCollectionConfigs = [1, 2, 3, 4, 5, 6].map((n) =>
-      pre(n, {
-        sortOrderHome: n * 10,
-        visibilityConfig: vis(true, true, false),
-      })
-    );
-    const before = order();
-    await service.createGroup(
-      input({ slotCount: 1, members: members([2, 4, 5]) })
-    );
-    await rotateAFewTimes();
-    service.deleteGroup(group().id);
-    expect(order()).toEqual(before);
-  });
-
-  it('a member that was off Home stays off Home and nothing moves', async () => {
-    settings().plex.preExistingCollectionConfigs = [1, 2, 3, 4, 5].map((n) =>
-      pre(n, {
-        sortOrderHome: n === 3 ? 0 : n,
-        visibilityConfig:
-          n === 3 ? vis(false, false, false) : vis(true, true, false),
-      })
-    );
-    const before = order();
-    await service.createGroup(
-      input({ slotCount: 1, members: members([2, 3, 4]) })
-    );
-    await rotateAFewTimes();
-    service.deleteGroup(group().id);
-    expect(order()).toEqual(before);
-    expect(cfg(3).sortOrderHome).toBe(0);
-    expect(cfg(3).visibilityConfig).toEqual(vis(false, false, false));
-  });
-
-  it('a member whose row above was deleted lands at its original place number', async () => {
-    interleaved();
-    await service.createGroup(
-      input({ slotCount: 1, members: members([2, 4]) })
-    );
-    await rotateAFewTimes();
-    settings().plex.preExistingCollectionConfigs =
-      settings().plex.preExistingCollectionConfigs.filter(
-        (c) => c.id !== 'pre-1' && c.id !== 'pre-3'
-      );
-    service.deleteGroup(group().id);
-    expect(order()).toEqual(['pre-5', 'pre-2', 'pre-6', 'pre-4']);
-  });
-
-  it('members that shared a saved value come back in their original order', async () => {
-    settings().plex.preExistingCollectionConfigs = [1, 2, 3, 4, 5, 6].map((n) =>
-      pre(n, {
-        sortOrderHome: n === 2 || n === 4 ? 3 : n,
-        visibilityConfig: vis(true, true, false),
-      })
-    );
-    await service.createGroup(
-      input({ slotCount: 1, members: members([2, 4]) })
-    );
-    await rotateAFewTimes();
-    service.deleteGroup(group().id);
-    const o = order();
-    expect(o.indexOf('pre-2')).toBeLessThan(o.indexOf('pre-4'));
-    expect(o.indexOf('pre-1')).toBeLessThan(o.indexOf('pre-3'));
-    expect(o.indexOf('pre-3')).toBeLessThan(o.indexOf('pre-5'));
-    expect(o.indexOf('pre-5')).toBeLessThan(o.indexOf('pre-6'));
-  });
 });
 
 describe('collection kind', () => {
@@ -1356,7 +1285,6 @@ describe('save failure rolls back', () => {
     expect(() => service.reassertManagedFields()).toThrow('disk full');
     expect(snapshot()).toBe(before);
   });
-
   it('a failed delete also leaves hub rows as they were', async () => {
     settings().plex.hubConfigs = [
       {

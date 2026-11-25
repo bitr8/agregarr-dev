@@ -22,8 +22,6 @@ export interface RotationOwnSettings {
   inactiveVisibilityConfig: Visibility | null;
   sortOrderHome: number | null;
   randomizeHomeOrder: boolean | null;
-  /** Home place when stashed: the row above it (null = top) and its 1-based ordinal. Absent on older stashes or when it was not on Home. */
-  homeAnchor?: { after: string | null; ordinal: number };
   capturedAt: string;
 }
 

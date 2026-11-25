@@ -45,8 +45,7 @@ const sameVis = (a: Visibility | undefined, b: Visibility): boolean =>
 
 export function captureOwn(
   config: MemberConfig,
-  now: Date,
-  homeAnchor?: RotationOwnSettings['homeAnchor']
+  now: Date
 ): RotationOwnSettings {
   const inactive = config.timeRestriction?.inactiveVisibilityConfig;
   return {
@@ -54,7 +53,6 @@ export function captureOwn(
     inactiveVisibilityConfig: inactive ? copyVis(inactive) : null,
     sortOrderHome: config.sortOrderHome ?? null,
     randomizeHomeOrder: config.randomizeHomeOrder ?? null,
-    ...(homeAnchor ? { homeAnchor: { ...homeAnchor } } : {}),
     capturedAt: now.toISOString(),
   };
 }
@@ -151,74 +149,36 @@ export interface OrderRow {
   sortOrderHome?: number;
 }
 
-export const onHome = (r: OrderRow): boolean =>
+const onHome = (r: OrderRow): boolean =>
   !!r.visibilityConfig &&
   (r.visibilityConfig.usersHome ||
     r.visibilityConfig.serverOwnerHome ||
     r.visibilityConfig.libraryRecommended);
 
-/** Visible rows in Home order (stable for equal values). */
-export function homeOrder<T extends OrderRow>(items: T[]): T[] {
-  return items
-    .map((r, i) => ({ r, i }))
-    .filter(({ r }) => onHome(r))
-    .sort(
-      (a, b) => (a.r.sortOrderHome ?? 0) - (b.r.sortOrderHome ?? 0) || a.i - b.i
-    )
-    .map(({ r }) => r);
-}
-
-export interface RestoreHint {
-  anchor?: { after: string | null; ordinal: number };
-}
-
-/**
- * Puts restored rows back where they were on Home: directly after the row that
- * was above them, else at their original ordinal. Rows that are not back on
- * Home are left alone. Renumbers the Home order densely when the saved values no
- * longer sort that way; other rows keep their relative order.
- */
+/** Puts restored rows back at their own place among the others, renumbering only when the saved values no longer sort that way. */
 export function reinsertRestored<T extends OrderRow>(
   items: T[],
-  restored: Map<T, RestoreHint>,
-  keyOf: (row: T) => string
+  restored: Set<T>
 ): void {
-  const back = [...restored.keys()].filter(onHome);
-  if (back.length === 0) return;
-  const backSet = new Set(back);
-  const order = homeOrder(items.filter((r) => !backSet.has(r)));
-  const memberIndex = new Map(back.map((r, i) => [r, i]));
-  const ordinalOf = (r: T): number =>
-    restored.get(r)?.anchor?.ordinal ??
-    ((r.sortOrderHome ?? 0) > 0 ? (r.sortOrderHome as number) : Infinity);
-  const pending = [...back].sort(
-    (a, b) =>
-      ordinalOf(a) - ordinalOf(b) ||
-      (memberIndex.get(a) as number) - (memberIndex.get(b) as number)
-  );
-  let lastByOrdinal: T | undefined;
-  for (const r of pending) {
-    const anchor = restored.get(r)?.anchor;
-    let at: number | undefined;
-    if (anchor) {
-      if (anchor.after === null) at = 0;
-      else {
-        const i = order.findIndex((o) => keyOf(o) === anchor.after);
-        if (i >= 0) at = i + 1;
-      }
-    }
-    if (at === undefined) {
-      const o = ordinalOf(r);
-      at = Number.isFinite(o)
-        ? Math.min(Math.max(o - 1, 0), order.length)
-        : order.length;
-      if (lastByOrdinal) at = Math.max(at, order.indexOf(lastByOrdinal) + 1);
-      lastByOrdinal = r;
-    }
-    order.splice(at, 0, r);
+  const others = items
+    .filter((r) => onHome(r) && !restored.has(r))
+    .sort((a, b) => (a.sortOrderHome ?? 0) - (b.sortOrderHome ?? 0));
+  const back = items
+    .filter((r) => restored.has(r) && onHome(r) && (r.sortOrderHome ?? 0) > 0)
+    .sort((a, b) => (a.sortOrderHome ?? 0) - (b.sortOrderHome ?? 0));
+  const order = [...others];
+  for (const r of back) {
+    order.splice(Math.min((r.sortOrderHome as number) - 1, order.length), 0, r);
   }
-  const value = (r: T) => r.sortOrderHome ?? 0;
-  if (order.every((r, i) => i === 0 || value(order[i - 1]) < value(r))) return;
+  const value = (r: OrderRow) => r.sortOrderHome ?? 0;
+  const fits = back.every((r) => {
+    const i = order.indexOf(r);
+    return (
+      (i === 0 || value(order[i - 1]) < value(r)) &&
+      (i === order.length - 1 || value(order[i + 1]) > value(r))
+    );
+  });
+  if (fits) return;
   order.forEach((r, i) => {
     r.sortOrderHome = i + 1;
   });
