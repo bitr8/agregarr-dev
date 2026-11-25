@@ -424,13 +424,18 @@ describe('reinsertRestored', () => {
       libraryRecommended: false,
     },
   });
-  const ids = (rows: ReturnType<typeof row>[]) =>
+  type Row = ReturnType<typeof row>;
+  const keyOf = (r: Row) => r.id;
+  const ids = (rows: Row[]) =>
     [...rows]
       .filter((r) => r.visibilityConfig.usersHome)
       .sort((a, b) => a.sortOrderHome - b.sortOrderHome)
       .map((r) => r.id);
+  const hints = (
+    ...entries: [Row, { after: string | null; ordinal: number }?][]
+  ) => new Map(entries.map(([r, anchor]) => [r, { anchor }]));
 
-  it('renumbers so restored rows sit back between their old neighbours', () => {
+  it('puts members back after the row that was above them', () => {
     const rows = [
       row('a', 1),
       row('m1', 2),
@@ -439,20 +444,60 @@ describe('reinsertRestored', () => {
       row('m3', 5),
       row('c', 3),
     ];
-    reinsertRestored(rows, new Set([rows[1], rows[3], rows[4]]));
+    reinsertRestored(
+      rows,
+      hints(
+        [rows[1], { after: 'a', ordinal: 2 }],
+        [rows[3], { after: 'b', ordinal: 4 }],
+        [rows[4], { after: 'm2', ordinal: 5 }]
+      ),
+      keyOf
+    );
     expect(ids(rows)).toEqual(['a', 'm1', 'b', 'm2', 'm3', 'c']);
     expect(rows.map((r) => r.sortOrderHome)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it('leaves values alone when they already fit', () => {
-    const rows = [row('a', 1), row('b', 2), row('m', 3), row('h', 0, false)];
-    reinsertRestored(rows, new Set([rows[1]]));
-    expect(rows.map((r) => r.sortOrderHome)).toEqual([1, 2, 3, 0]);
+  it('copes with gap-numbered originals', () => {
+    const rows = [row('a', 10), row('m', 20), row('b', 30), row('c', 40)];
+    reinsertRestored(rows, hints([rows[1], { after: 'a', ordinal: 2 }]), keyOf);
+    expect(ids(rows)).toEqual(['a', 'm', 'b', 'c']);
+    expect(rows.map((r) => r.sortOrderHome)).toEqual([10, 20, 30, 40]);
   });
 
-  it('puts a row beyond the end last', () => {
-    const rows = [row('a', 1), row('b', 2), row('m', 9)];
-    reinsertRestored(rows, new Set([rows[2]]));
-    expect(ids(rows)).toEqual(['a', 'b', 'm']);
+  it('old stashes with equal saved values keep their member order', () => {
+    const rows = [row('a', 1), row('b', 2), row('m1', 2), row('m2', 2)];
+    reinsertRestored(rows, hints([rows[2]], [rows[3]]), keyOf);
+    const o = ids(rows);
+    expect(o.indexOf('m1')).toBeLessThan(o.indexOf('m2'));
+    expect(o.indexOf('a')).toBeLessThan(o.indexOf('b'));
+  });
+
+  it('does not insert a member that is back off Home, and moves nothing', () => {
+    const rows = [row('a', 5), row('b', 9), row('h', 0, false)];
+    reinsertRestored(rows, hints([rows[2]]), keyOf);
+    expect(rows.map((r) => r.sortOrderHome)).toEqual([5, 9, 0]);
+  });
+
+  it('falls back to the ordinal when the anchor is gone', () => {
+    const rows = [row('a', 1), row('b', 2), row('c', 3), row('m', 7)];
+    reinsertRestored(
+      rows,
+      hints([rows[3], { after: 'gone', ordinal: 2 }]),
+      keyOf
+    );
+    expect(ids(rows)).toEqual(['a', 'm', 'b', 'c']);
+  });
+
+  it('honours an anchor that is itself a restored member', () => {
+    const rows = [row('a', 1), row('b', 2), row('m1', 0), row('m2', 0)];
+    reinsertRestored(
+      rows,
+      hints(
+        [rows[3], { after: 'm1', ordinal: 3 }],
+        [rows[2], { after: 'a', ordinal: 2 }]
+      ),
+      keyOf
+    );
+    expect(ids(rows)).toEqual(['a', 'm1', 'm2', 'b']);
   });
 });

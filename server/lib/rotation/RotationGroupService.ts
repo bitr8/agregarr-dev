@@ -25,11 +25,12 @@ import {
   planRotation,
   simulate,
 } from './engine';
-import type { ManagedFields, MemberConfig } from './materialise';
+import type { ManagedFields, MemberConfig, RestoreHint } from './materialise';
 import {
   applyManagedFields,
   captureOwn,
   classifyCandidate,
+  homeOrder,
   managedFields,
   reinsertRestored,
   restoreFields,
@@ -264,7 +265,11 @@ class RotationGroupService {
           member.ratingKey = found.collectionRatingKey;
           member.rebound = { at: iso, previousRatingKey };
           delete member.unboundSince;
-          member.own ??= captureOwn(found, now);
+          member.own ??= captureOwn(
+            found,
+            now,
+            this.homeAnchorOf(found, group.libraryId)
+          );
           const s = group.state;
           s.queue = s.queue.map((k) => (k === oldKey ? newKey : k));
           s.shownThisCycle = s.shownThisCycle.map((k) =>
@@ -534,23 +539,14 @@ class RotationGroupService {
     members: RotationMember[],
     draft?: RotationGroup
   ): void {
-    const restored = new Set<MemberConfig>();
+    const restored = new Map<MemberConfig, RestoreHint>();
     for (const member of members) {
       const config = this.restoreMember(group, member);
-      if (config) restored.add(config);
+      if (config) restored.set(config, { anchor: member.own?.homeAnchor });
     }
     if (restored.size === 0) return;
-    const plex = getSettings().plex;
-    const inLibrary = (c: { libraryId: string | string[] }) =>
-      Array.isArray(c.libraryId)
-        ? c.libraryId.includes(group.libraryId)
-        : String(c.libraryId) === group.libraryId;
-    const items = [
-      ...(plex.collectionConfigs ?? []),
-      ...(plex.hubConfigs ?? []),
-      ...(plex.preExistingCollectionConfigs ?? []),
-    ].filter(inLibrary) as MemberConfig[];
-    reinsertRestored(items, restored);
+    const { rows, keyOf } = this.libraryRows(group.libraryId);
+    reinsertRestored(rows, restored, keyOf);
     for (const g of this.validGroups()) {
       if (g.enabled && g.id !== group.id) this.adoptPositions(g);
     }
@@ -707,6 +703,38 @@ class RotationGroupService {
 
   // ---------------------------------------------------------------- build
 
+  private libraryRows(libraryId: string): {
+    rows: MemberConfig[];
+    keyOf: (row: MemberConfig) => string;
+  } {
+    const plex = getSettings().plex;
+    const keys = new Map<MemberConfig, string>();
+    const add = (list: MemberConfig[] | undefined, kind: string) => {
+      for (const c of list ?? []) {
+        const ids = Array.isArray(c.libraryId) ? c.libraryId : [c.libraryId];
+        if (ids.map(String).includes(libraryId)) keys.set(c, `${kind}:${c.id}`);
+      }
+    };
+    add(plex.collectionConfigs, 'collection');
+    add(plex.hubConfigs as unknown as MemberConfig[], 'hub');
+    add(plex.preExistingCollectionConfigs, 'preExisting');
+    return {
+      rows: [...keys.keys()],
+      keyOf: (row) => keys.get(row) as string,
+    };
+  }
+
+  private homeAnchorOf(
+    config: MemberConfig,
+    libraryId: string
+  ): RotationOwnSettings['homeAnchor'] {
+    const { rows, keyOf } = this.libraryRows(libraryId);
+    const order = homeOrder(rows);
+    const i = order.indexOf(config);
+    if (i < 0) return undefined;
+    return { after: i === 0 ? null : keyOf(order[i - 1]), ordinal: i + 1 };
+  }
+
   private libraryNextPosition(libraryId: string): number {
     const plex = getSettings().plex;
     const all = [
@@ -765,7 +793,12 @@ class RotationGroupService {
         const wasBoundAndEnabled =
           wasEnabled && prior?.members.some((p) => p.key === member.key);
         if (!wasBoundAndEnabled) {
-          member.own = captureOwn(configs.get(member.key) as MemberConfig, now);
+          const memberConfig = configs.get(member.key) as MemberConfig;
+          member.own = captureOwn(
+            memberConfig,
+            now,
+            this.homeAnchorOf(memberConfig, input.libraryId)
+          );
         }
       }
     }
