@@ -1430,12 +1430,21 @@ class RotationGroupService {
     return copy;
   }
 
-  public isMemberRatingKey(ratingKey: string): boolean {
-    return this.validGroups().some((g) =>
-      g.members.some(
-        (m) =>
-          m.ratingKey === ratingKey ||
-          this.memberConfig(m)?.collectionRatingKey === ratingKey
+  public isKnownRatingKey(ratingKey: string): boolean {
+    const plex = getSettings().plex;
+    const libraries = new Set((plex.libraries ?? []).map((l) => l.key));
+    const known = [
+      ...(plex.collectionConfigs ?? []),
+      ...(plex.preExistingCollectionConfigs ?? []),
+    ].some(
+      (c) =>
+        c.collectionRatingKey === ratingKey &&
+        libraries.has(String(c.libraryId))
+    );
+    return (
+      known ||
+      this.validGroups().some((g) =>
+        g.members.some((m) => m.ratingKey === ratingKey)
       )
     );
   }

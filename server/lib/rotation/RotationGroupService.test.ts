@@ -1011,7 +1011,24 @@ describe('hardening', () => {
         })
       )
     ).resolves.toBeDefined();
-    expect(service.isMemberRatingKey('rk-1')).toBe(true);
+    expect(service.isKnownRatingKey('rk-1')).toBe(true);
+  });
+
+  it('the poster proxy knows collections that are not in any rotation', async () => {
+    expect(service.isKnownRatingKey('rk-5')).toBe(true);
+    expect(service.isKnownRatingKey('rk-999')).toBe(false);
+    settings().plex.collectionConfigs.push({
+      id: 'c-1',
+      collectionRatingKey: 'rk-c',
+      libraryId: 'lib-1',
+    });
+    expect(service.isKnownRatingKey('rk-c')).toBe(true);
+    settings().plex.collectionConfigs.push({
+      id: 'c-2',
+      collectionRatingKey: 'rk-other',
+      libraryId: 'lib-gone',
+    });
+    expect(service.isKnownRatingKey('rk-other')).toBe(false);
   });
 
   it('deleting a group settles the library its members were restored in', async () => {

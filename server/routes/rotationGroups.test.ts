@@ -34,7 +34,7 @@ const svc = vi.hoisted(() => ({
   listCandidates: vi.fn(),
   getMembershipMap: vi.fn(),
   patchOwn: vi.fn(),
-  isMemberRatingKey: vi.fn(),
+  isKnownRatingKey: vi.fn(),
 }));
 const sync = vi.hoisted(() => ({
   collectionsStatus: { running: false, pending: false },
@@ -469,20 +469,20 @@ describe('rotation groups routes', () => {
       for (const k of ['abc', '12a', '1.5']) {
         expect((await call('GET', `/poster/${k}`)).status, k).toBe(404);
       }
-      expect(svc.isMemberRatingKey).not.toHaveBeenCalled();
+      expect(svc.isKnownRatingKey).not.toHaveBeenCalled();
     });
 
-    it('404 for rating keys that are not members', async () => {
-      svc.isMemberRatingKey.mockReturnValue(false);
+    it('404 for rating keys that are not known collections', async () => {
+      svc.isKnownRatingKey.mockReturnValue(false);
       expect((await call('GET', '/poster/123')).status).toBe(404);
-      expect(svc.isMemberRatingKey).toHaveBeenCalledWith('123');
+      expect(svc.isKnownRatingKey).toHaveBeenCalledWith('123');
     });
 
     describe('proxy', () => {
       const okUrl =
         'http://plex.test:32400/library/metadata/1/thumb?X-Plex-Token=tok';
       beforeEach(() => {
-        svc.isMemberRatingKey.mockReturnValue(true);
+        svc.isKnownRatingKey.mockReturnValue(true);
         axiosGet.mockReset();
         plexMock.posterUrl = okUrl;
       });

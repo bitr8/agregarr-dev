@@ -323,7 +323,7 @@ rotationGroupsRoutes.patch('/membership/:kind/:configId', (req, res) => {
 rotationGroupsRoutes.get('/poster/:ratingKey', async (req, res) => {
   const { ratingKey } = req.params;
   try {
-    if (!/^\d+$/.test(ratingKey) || !service.isMemberRatingKey(ratingKey)) {
+    if (!/^\d+$/.test(ratingKey) || !service.isKnownRatingKey(ratingKey)) {
       return res.status(404).end();
     }
     const plex = await getPlexClient();
