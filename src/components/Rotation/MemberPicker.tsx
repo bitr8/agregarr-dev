@@ -223,23 +223,6 @@ const MemberPicker = ({
                 library: libraryName,
               })}
             </p>
-            <div className="mt-3">
-              {lookResult && (
-                <p className="mb-2 text-gray-300" role="status">
-                  {lookResult}
-                </p>
-              )}
-              <Button
-                buttonSize="sm"
-                className={touch}
-                disabled={looking}
-                onClick={onLookInPlex}
-              >
-                {intl.formatMessage(
-                  looking ? messages.lookingInPlex : messages.lookInPlex
-                )}
-              </Button>
-            </div>
           </>
         ) : (
           <p>{intl.formatMessage(messages.nothingSelected)}</p>
@@ -412,6 +395,27 @@ const MemberPicker = ({
         </div>
       </div>
       {list}
+      <div className="border-t border-gray-800 p-3 text-center">
+        {lookResult && (
+          <p className="mb-2 text-sm text-gray-300" role="status">
+            {lookResult}
+          </p>
+        )}
+        <Button
+          buttonSize="sm"
+          className={touch}
+          disabled={looking || actionsLocked}
+          title={actionsLocked ? lockTip : undefined}
+          onClick={onLookInPlex}
+        >
+          {intl.formatMessage(
+            looking ? messages.lookingInPlex : messages.lookInPlex
+          )}
+        </Button>
+        {actionsLocked && (
+          <p className="mt-2 text-xs text-gray-400">{lockTip}</p>
+        )}
+      </div>
     </div>
   );
 };
