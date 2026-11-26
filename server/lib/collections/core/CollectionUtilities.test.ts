@@ -814,6 +814,17 @@ describe('combinePreviewMissingItems', () => {
     ).toEqual([first, second, movie, show]);
   });
 
+  it('keeps the first missing show when TMDB splits one TVDB series', () => {
+    const first = {
+      mediaType: 'tv',
+      tmdbId: 71,
+      tvdbId: 42,
+      originalPosition: 1,
+    };
+    const second = { ...first, tmdbId: 72, originalPosition: 2 };
+    expect(combinePreviewMissingItems([[first, second]])).toEqual([first]);
+  });
+
   it.each(['tv', 'movie'])(
     'keeps separate %s entries when neither provider identifies them',
     (mediaType) => {

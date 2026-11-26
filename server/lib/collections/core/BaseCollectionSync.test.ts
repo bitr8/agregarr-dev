@@ -32,7 +32,6 @@ vi.mock('@server/logger', () => ({
 const save = vi.fn();
 const settings = {
   clientId: 'test-client',
-  globalExclusions: { movies: [], shows: [{ type: 'tvdb', id: 42 }] },
   main: {},
   plex: {
     collectionConfigs: [] as CollectionConfig[],
@@ -40,7 +39,10 @@ const settings = {
   },
   save,
 };
-vi.mock('@server/lib/settings', () => ({ getSettings: () => settings }));
+const getTestSettings = vi.fn(() => settings);
+vi.mock('@server/lib/settings', () => ({
+  getSettings: () => getTestSettings(),
+}));
 
 import { getRepository } from '@server/datasource';
 import logger from '@server/logger';
@@ -83,6 +85,10 @@ const config = (overrides: Partial<CollectionConfig> = {}): CollectionConfig =>
   } as CollectionConfig);
 
 it('applies a TVDB exclusion to a top-level series ID and falls back to legacy metadata', () => {
+  getTestSettings.mockImplementationOnce(() => ({
+    ...settings,
+    globalExclusions: { movies: [], shows: [{ type: 'tvdb', id: 42 }] },
+  }));
   const show: CollectionItem = {
     type: 'tv',
     ratingKey: 'top-level',
