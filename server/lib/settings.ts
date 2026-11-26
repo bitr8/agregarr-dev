@@ -836,9 +836,38 @@ const parseSettings = (raw: string): AllSettings | undefined => {
   }
 };
 
-const writeAndSync = (file: string, contents: string): void => {
+// The temp file can't be created here (read-only directory); ENOSPC or EIO must not fall back and truncate
+const CANNOT_CREATE_TMP = new Set(['EACCES', 'EROFS', 'EPERM', 'EBUSY']);
+
+let backupWarned = false;
+
+type FileAttrs = { mode: number; uid: number; gid: number };
+
+const fileAttrs = (file: string): FileAttrs | undefined => {
+  try {
+    const { mode, uid, gid } = fs.statSync(file);
+    return { mode: mode & 0o7777, uid, gid };
+  } catch {
+    return undefined;
+  }
+};
+
+const writeAndSync = (
+  file: string,
+  contents: string,
+  attrs?: FileAttrs
+): void => {
   const fd = fs.openSync(file, 'w');
   try {
+    if (attrs) {
+      // Keep the mode and owner; a new file would belong to the process user (root without PUID)
+      try {
+        fs.fchmodSync(fd, attrs.mode);
+        fs.fchownSync(fd, attrs.uid, attrs.gid);
+      } catch {
+        /* best effort */
+      }
+    }
     fs.writeFileSync(fd, contents);
     fs.fsyncSync(fd);
   } finally {
@@ -847,17 +876,40 @@ const writeAndSync = (file: string, contents: string): void => {
 };
 
 // A plain write truncates first, so an interrupted save used to leave an empty file
-const writeFileDurably = (file: string, contents: string): void => {
+const writeFileDurably = (
+  target: string,
+  contents: string,
+  attrs = fileAttrs(target)
+): void => {
+  // Write beside a symlink's target so the link itself is kept
+  const file = fs.existsSync(target) ? fs.realpathSync(target) : target;
   const tmpPath = `${file}.tmp`;
   try {
-    writeAndSync(tmpPath, contents);
-    fs.renameSync(tmpPath, file);
+    writeAndSync(tmpPath, contents, attrs);
   } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code !== 'EBUSY' && code !== 'EXDEV' && code !== 'EACCES') throw e;
-    // A bind-mounted file or read-only directory: the file can be rewritten, not replaced
+    fs.rmSync(tmpPath, { force: true });
+    if (!CANNOT_CREATE_TMP.has((e as NodeJS.ErrnoException).code ?? '')) {
+      throw e;
+    }
+    writeAndSync(file, contents);
+    return;
+  }
+  try {
+    fs.renameSync(tmpPath, file);
+  } catch {
+    // The file can be rewritten but not replaced (single-file bind mount, some network shares)
     fs.rmSync(tmpPath, { force: true });
     writeAndSync(file, contents);
+    return;
+  }
+  let dir: number | undefined;
+  try {
+    dir = fs.openSync(path.dirname(file), 'r');
+    fs.fsyncSync(dir);
+  } catch {
+    /* not every platform can fsync a directory */
+  } finally {
+    if (dir !== undefined) fs.closeSync(dir);
   }
 };
 
@@ -1354,22 +1406,28 @@ class Settings {
       return this;
     }
 
-    if (!fs.existsSync(SETTINGS_PATH)) {
-      this.save();
-    }
-    const data = fs.readFileSync(SETTINGS_PATH, 'utf-8');
+    const exists = fs.existsSync(SETTINGS_PATH);
+    const data = exists ? fs.readFileSync(SETTINGS_PATH, 'utf-8') : '';
     let parsed = parseSettings(data);
 
     if (!parsed && this.loaded) {
       // Memory is current after the first load; never merge an older copy into it
       logger.warn(
-        'settings.json is empty or unreadable - rewriting it from memory',
+        'settings.json is missing, empty or unreadable - rewriting it from memory',
         { label: 'Settings' }
       );
       this.save();
       return this;
     }
-    if (!parsed && fs.existsSync(SETTINGS_BACKUP_PATH)) {
+    if (!parsed && !exists && fs.existsSync(SETTINGS_BACKUP_PATH)) {
+      // Deleting settings.json is how people reset; keep the old settings instead of overwriting them
+      const kept = `${SETTINGS_PATH}.before-reset-${Date.now()}`;
+      fs.renameSync(SETTINGS_BACKUP_PATH, kept);
+      logger.warn('settings.json is missing - starting with defaults', {
+        label: 'Settings',
+        previousSettings: kept,
+      });
+    } else if (!parsed && fs.existsSync(SETTINGS_BACKUP_PATH)) {
       parsed = parseSettings(fs.readFileSync(SETTINGS_BACKUP_PATH, 'utf-8'));
       if (!parsed) {
         throw new Error(
@@ -1384,7 +1442,11 @@ class Settings {
       }
       logger.error(
         'settings.json is empty or unreadable - restoring the last good copy',
-        { label: 'Settings', backup: SETTINGS_BACKUP_PATH }
+        {
+          label: 'Settings',
+          backup: SETTINGS_BACKUP_PATH,
+          backupSavedAt: fs.statSync(SETTINGS_BACKUP_PATH).mtime.toISOString(),
+        }
       );
     } else if (!parsed && data.trim()) {
       throw new Error(
@@ -1394,9 +1456,9 @@ class Settings {
 
     if (parsed) {
       this.data = merge(this.data, parsed);
-      this.save();
-      this.loaded = true;
     }
+    this.save();
+    this.loaded = true;
     return this;
   }
 
@@ -1404,12 +1466,21 @@ class Settings {
     const contents = JSON.stringify(this.data, undefined, ' ');
     writeFileDurably(SETTINGS_PATH, contents);
     try {
-      writeFileDurably(SETTINGS_BACKUP_PATH, contents);
+      // The backup holds the same secrets, so it gets the same owner and permissions
+      writeFileDurably(
+        SETTINGS_BACKUP_PATH,
+        contents,
+        fileAttrs(SETTINGS_PATH)
+      );
+      backupWarned = false;
     } catch (e) {
-      logger.warn('Could not write the settings backup copy', {
-        label: 'Settings',
-        error: e instanceof Error ? e.message : String(e),
-      });
+      if (!backupWarned) {
+        backupWarned = true;
+        logger.warn('Could not write the settings backup copy', {
+          label: 'Settings',
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
     }
     registerLogSecrets(collectSecretValues(this.data));
   }
