@@ -38,6 +38,7 @@ dev.log
 config/db/*.sqlite3*
 config/settings.json
 config/*.json
+config/settings.json.*
 
 # youtube cookies
 config/youtube-cookies.txt

@@ -6,7 +6,11 @@ export interface AnimeProviderIds {
 
 export type MediaType = 'movie' | 'tv';
 // An absent media type has no target. A null target has conflicting provider IDs.
-export type AnimeMapping = Partial<Record<MediaType, AnimeProviderIds | null>>;
+export type AnimeMapping = Partial<
+  Record<MediaType, AnimeProviderIds | null>
+> & {
+  anilistIds?: string[];
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -30,16 +34,25 @@ function parseProviderTarget(target: string) {
   return { mediaType, provider: provider as keyof AnimeProviderIds, id };
 }
 
-function parseEpisodeMappings(targets: Record<string, unknown>): AnimeMapping {
+function parseEpisodeMappings(
+  targets: Record<string, unknown>,
+  isMalRow: boolean
+): AnimeMapping {
   const mapping: AnimeMapping = {};
   for (const [target, ranges] of Object.entries(targets)) {
-    const parsed = parseProviderTarget(target);
-    if (!parsed || !isRecord(ranges)) continue;
+    if (!isRecord(ranges)) continue;
     const hasEpisodes = Object.values(ranges).some(
       (range) => typeof range === 'string' && range.length > 0
     );
     if (!hasEpisodes) continue;
 
+    const alias = isMalRow && /^anilist:([1-9]\d*)$/.exec(target);
+    if (alias) {
+      (mapping.anilistIds ??= []).push(alias[1]);
+      continue;
+    }
+    const parsed = parseProviderTarget(target);
+    if (!parsed) continue;
     const { mediaType, provider, id } = parsed;
     const ids = mapping[mediaType];
     if (ids === null) continue;
@@ -75,7 +88,7 @@ export function parseMappings(data: unknown): Map<string, AnimeMapping> {
       continue;
     }
 
-    const mapping = parseEpisodeMappings(targets);
+    const mapping = parseEpisodeMappings(targets, source.startsWith('mal:'));
     if (!Object.keys(mapping).length) continue;
     result.set(source, mapping);
     if (mapping.tv || mapping.movie) {

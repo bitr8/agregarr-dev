@@ -17,6 +17,9 @@ import {
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
+import RotationBadge from '@app/components/Rotation/RotationBadge';
+import { homeRowAction } from '@app/components/Rotation/utils';
+import useRotationMembership from '@app/hooks/rotation/useRotationMembership';
 import type {
   CollectionFormConfig,
   FormConfigType,
@@ -59,6 +62,7 @@ import type {
 } from '@server/lib/settings';
 import { ArrowsCrossingIcon } from '@sidekickicons/react/24/solid';
 import axios from 'axios';
+import Link from 'next/link';
 import React, { useEffect, useMemo, useState } from 'react';
 import { defineMessages, FormattedMessage, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
@@ -71,6 +75,9 @@ const messages = defineMessages({
   itemCount: '{count} {count, plural, one {item} other {items}}',
   bulkEdit: 'Bulk Edit',
   collectionSyncStarted: 'Sync started',
+  slotRowTitle: '{group}, slot {index} of {total}',
+  slotRowNow: 'Showing now: {name}',
+  manageRotation: 'Manage rotation',
   collectionSynced: 'Collection synced',
   collectionSyncedRenameFailed:
     'Collection synced, but the title was not renamed. Check the logs for details.',
@@ -262,6 +269,18 @@ const SortableItem = ({
   const isPreExisting = configType === 'preExisting';
   const isCollection = configType === 'collection';
 
+  const { map: rotationMap } = useRotationMembership();
+  const membership = isHub
+    ? undefined
+    : rotationMap[`${configType}:${config.id}`];
+  const isSlotRow = Boolean(membership?.showing);
+  const rowAction = homeRowAction(
+    configType,
+    isSlotRow,
+    Boolean(membership),
+    activeTab
+  );
+
   // Check actual linking status for all config types
   const isLinked = Boolean(config.isLinked);
   const isUnlinked = Boolean(config.isUnlinked);
@@ -325,7 +344,7 @@ const SortableItem = ({
     // Use consistent hub styling for both hubs and collections
     return `${baseClasses} border-gray-800 bg-stone-900/60 ${
       isDragging ? 'border-orange-500 bg-stone-800/60' : 'hover:bg-stone-900/80'
-    }`;
+    }${isSlotRow ? ' border-l-2 border-l-orange-500' : ''}`;
   };
 
   return (
@@ -361,7 +380,13 @@ const SortableItem = ({
                 isExcludedFromOrdering ? 'text-gray-500' : 'text-white'
               }`}
             >
-              {config.name === 'DYNAMIC_RANDOM_TITLE' ? (
+              {membership && isSlotRow ? (
+                intl.formatMessage(messages.slotRowTitle, {
+                  group: membership.groupName,
+                  index: (membership.slotIndex ?? 0) + 1,
+                  total: membership.slotCount,
+                })
+              ) : config.name === 'DYNAMIC_RANDOM_TITLE' ? (
                 <em>{intl.formatMessage(messages.titleWillUpdate)}</em>
               ) : isCollection &&
                 (config as CollectionFormConfig).type === 'tmdb' &&
@@ -422,11 +447,18 @@ const SortableItem = ({
               ) : null;
             })()}
 
+          {membership && isSlotRow && (
+            <div className="mb-2 text-sm text-gray-400">
+              {intl.formatMessage(messages.slotRowNow, { name: config.name })}
+            </div>
+          )}
+
           {/* Enhanced Badges - native type implementation */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Collection Type Badge - Removed for Agregarr collections */}
             {isHub && <PlexDefaultBadge />}
             {isPreExisting && <PreExistingBadge />}
+            {membership && <RotationBadge membership={membership} />}
             {isPreExisting &&
               (config as PreExistingCollectionConfig)
                 .collectionSuffixRenameFailed && (
@@ -675,8 +707,7 @@ const SortableItem = ({
             </>
           )}
 
-        {isCollection ? (
-          // Full delete for Agregarr collections
+        {rowAction === 'delete' && (
           <ConfirmButton
             confirmText="Delete"
             buttonSize="sm"
@@ -685,18 +716,26 @@ const SortableItem = ({
           >
             <TrashIcon className="h-4 w-4" />
           </ConfirmButton>
-        ) : (
-          // Hide button for hubs and pre-existing collections
-          activeTab !== 'inactive' && (
-            <ConfirmButton
-              confirmText="Hide"
-              buttonSize="sm"
-              buttonType="primary"
-              onClick={() => onHide(config)}
-            >
-              <TrashIcon className="h-4 w-4" />
-            </ConfirmButton>
-          )
+        )}
+        {rowAction === 'manage' && membership && (
+          <Link
+            href={`/rotation/edit?id=${encodeURIComponent(membership.groupId)}`}
+            legacyBehavior
+          >
+            <a className="whitespace-nowrap text-sm text-orange-400 hover:text-orange-300">
+              {intl.formatMessage(messages.manageRotation)}
+            </a>
+          </Link>
+        )}
+        {rowAction === 'hide' && (
+          <ConfirmButton
+            confirmText="Hide"
+            buttonSize="sm"
+            buttonType="primary"
+            onClick={() => onHide(config)}
+          >
+            <TrashIcon className="h-4 w-4" />
+          </ConfirmButton>
         )}
       </div>
     </div>

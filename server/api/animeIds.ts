@@ -104,6 +104,10 @@ export function lookupByMal(id: number, type: MediaType) {
   return mappings.get(`mal:${id}`)?.[type];
 }
 
+export function aniListIdsForMal(id: number) {
+  return mappings.get(`mal:${id}`)?.anilistIds ?? [];
+}
+
 export function lookupByAniDB(id: number, type: MediaType) {
   return mappings.get(`anidb:${id}:R`)?.[type];
 }

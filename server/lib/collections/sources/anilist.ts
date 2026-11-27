@@ -207,6 +207,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     for (const entry of media) {
       const ids = lookupByAniList(entry.id, mediaType, entry.idMal);
       const ratingKey =
+        libraryIndex.anilist.get(String(entry.id))?.ratingKey ||
         findMappedAnime(libraryIndex, ids)?.ratingKey ||
         this.matchExternalLinks(libraryIndex, entry.externalLinks, mediaType)
           .hit?.ratingKey;
@@ -662,7 +663,9 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
       const ids = anilistId
         ? lookupByAniList(anilistId, mediaType, raw?.idMal)
         : undefined;
-      const hit = findMappedAnime(libraryIndex, ids);
+      const hit =
+        libraryIndex.anilist.get(String(anilistId)) ??
+        findMappedAnime(libraryIndex, ids);
       const tvdbId =
         mediaType === 'tv' && ids?.tvdb ? Number(ids.tvdb) : undefined;
       const posterUrl =

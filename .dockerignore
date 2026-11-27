@@ -17,6 +17,7 @@
 config/db/*
 config/logs/*
 config/*.json
+config/settings.json.*
 dist
 Dockerfile*
 docker-compose.yml
