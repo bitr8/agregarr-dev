@@ -2376,7 +2376,7 @@ export async function prefetchAllLibraryItems(
             libraryKey: library.key,
           }
         );
-        return { libraryKey: library.key, items: [] };
+        throw error;
       }
     });
 
@@ -2444,11 +2444,17 @@ export async function findPlexItemsByTmdbIds(
     return results;
   }
 
+  const retrySelectedLibrary = Boolean(
+    libraryCache &&
+      targetLibraryId &&
+      !libraryCache[targetLibraryId] &&
+      !forDuplicateDetection
+  );
   try {
     // OPTIMIZATION: Use cached library data if available, otherwise fetch fresh data
     let libraries: { key: string; title: string; type: string }[];
 
-    if (libraryCache) {
+    if (libraryCache && !retrySelectedLibrary) {
       // Use cached data - no API calls needed!
       libraries = Object.keys(libraryCache).map((key) => ({
         key,
@@ -2472,7 +2478,14 @@ export async function findPlexItemsByTmdbIds(
       libraries = allLibraries.filter(
         (library) => library.type === 'movie' || library.type === 'show'
       );
-      // No library cache available, fetching fresh data
+      if (
+        retrySelectedLibrary &&
+        !libraries.some((lib) => lib.key === targetLibraryId)
+      ) {
+        throw new Error(
+          `Plex library ${targetLibraryId} was not found during the live lookup`
+        );
+      }
     }
 
     // Organize lookups by media type for efficient querying
@@ -2484,7 +2497,7 @@ export async function findPlexItemsByTmdbIds(
     // Query movie libraries
     if (movieLookups.length > 0) {
       let movieLibraries = libraries.filter(
-        (lib) => lib.type === 'movie' || libraryCache
+        (lib) => lib.type === 'movie' || lib.type === 'unknown'
       );
 
       // If targetLibraryId is specified and we're NOT doing duplicate detection, filter to target library
@@ -2594,7 +2607,7 @@ export async function findPlexItemsByTmdbIds(
     // Query TV libraries
     if (tvLookups.length > 0) {
       let tvLibraries = libraries.filter(
-        (lib) => lib.type === 'show' || libraryCache
+        (lib) => lib.type === 'show' || lib.type === 'unknown'
       );
 
       // If targetLibraryId is specified and we're NOT doing duplicate detection, filter to target library
@@ -2828,6 +2841,7 @@ export async function findPlexItemsByTmdbIds(
       error: error instanceof Error ? error.message : 'Unknown error',
       totalLookups: tmdbLookups.length,
     });
+    if (retrySelectedLibrary) throw error;
   }
 
   return results;
@@ -2988,7 +3002,10 @@ export async function findPlexItemsByTitle(
 /**
  * Get the current sync counter for a multi-source collection
  */
-export function getCollectionSyncCounter(configId: string): number {
+export function getCollectionSyncCounter(
+  configId: string,
+  initialValue = 0
+): number {
   try {
     const settings = getSettings();
     const collectionConfigs = settings.plex.collectionConfigs || [];
@@ -2999,19 +3016,19 @@ export function getCollectionSyncCounter(configId: string): number {
         label: 'Collection Utilities',
         configId,
       });
-      return 0;
+      return initialValue;
     }
 
     // Get sync counter from config (with type assertion for extended properties)
     const extendedConfig = config as typeof config & { syncCounter?: number };
-    return extendedConfig.syncCounter || 0;
+    return extendedConfig.syncCounter ?? initialValue;
   } catch (error) {
     logger.error(`Failed to get sync counter for ${configId}: ${error}`, {
       label: 'Collection Utilities',
       configId,
       error: error instanceof Error ? error.message : String(error),
     });
-    return 0;
+    return initialValue;
   }
 }
 

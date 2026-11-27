@@ -173,3 +173,22 @@ export function buildProviderIndex(
 
   return { imdb, tmdb, tvdb };
 }
+
+export function requireAnimeLibraryItems(
+  libraryCache: LibraryItemsCache | undefined,
+  libraryId: string | string[]
+) {
+  const key = Array.isArray(libraryId) ? libraryId[0] : libraryId;
+  const items = libraryCache?.[key];
+  if (!items) {
+    throw new Error(`Plex library ${key} is missing from the library cache`);
+  }
+  return { [key]: items };
+}
+
+export function buildLibraryProviderIndex(
+  libraryCache: LibraryItemsCache | undefined,
+  libraryId: string | string[]
+): ProviderIndex {
+  return buildProviderIndex(requireAnimeLibraryItems(libraryCache, libraryId));
+}

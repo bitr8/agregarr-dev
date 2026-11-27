@@ -27,9 +27,13 @@ vi.mock('@server/lib/collections/utils/TemplateEngine', () => ({
 vi.mock('@server/logger', () => ({
   default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+const storedConfigs: { id: string; syncCounter: number }[] = [];
 vi.mock('@server/lib/settings', () => ({
   getSettings: () => ({
-    plex: { libraries: [{ key: '4', type: 'movie' }], collectionConfigs: [] },
+    plex: {
+      libraries: [{ key: '4', type: 'movie' }],
+      collectionConfigs: storedConfigs,
+    },
     save: vi.fn(),
   }),
 }));
@@ -147,6 +151,55 @@ describe('multi-source run with failing sources', () => {
 
     await run(['ok', 'ok']);
     expect(handlePlaceholderCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops all sources before cleanup or Plex writes when the anime library is unavailable', async () => {
+    const o = internals();
+    const fetch = vi
+      .spyOn(o, 'fetchItemsFromSource')
+      .mockResolvedValue({ items: [item] });
+    const write = vi.spyOn(o, 'createOrUpdatePlexCollection');
+    handlePlaceholderCleanup.mockClear();
+    const result = await o.processMultiSourceCollection(
+      config({
+        sources: [sources[0], { id: 'anime', type: 'anilist' }],
+        combineMode: 'list_order',
+      } as never),
+      {},
+      [],
+      undefined,
+      { other: [] }
+    );
+    expect(result.error).toContain(
+      'Plex library 4 is missing from the library cache'
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    expect(handlePlaceholderCleanup).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('keeps the next anime turn when its library is missing from the cache', async () => {
+    const cfg = config({
+      combineMode: 'cycle_lists',
+      sources: [
+        { id: 'a', type: 'trakt', subtype: 'popular', priority: 1 },
+        { id: 'b', type: 'anilist', subtype: 'trending', priority: 2 },
+      ],
+    });
+    storedConfigs.push({ id: cfg.id, syncCounter: 0 });
+    try {
+      const result = await internals().processMultiSourceCollection(
+        cfg,
+        {},
+        [],
+        undefined,
+        {}
+      );
+      expect(result.error).toContain('missing from the library cache');
+      expect(storedConfigs[0].syncCounter).toBe(0);
+    } finally {
+      storedConfigs.length = 0;
+    }
   });
 
   it('reports the failure when every source fails', async () => {

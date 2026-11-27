@@ -47,6 +47,7 @@ import { TmdbCollectionSync } from '@server/lib/collections/sources/tmdb';
 import { TracearrStatsCollectionSync } from '@server/lib/collections/sources/tracearrStats';
 import { TraktCollectionSync } from '@server/lib/collections/sources/trakt';
 import { TvdbCollectionSync } from '@server/lib/collections/sources/tvdb';
+import { requireAnimeLibraryItems } from '@server/lib/collections/utils/AnimeProviderIndex';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import type { CollectionItemWithPoster } from '@server/lib/posterGeneration';
 import { generatePoster } from '@server/lib/posterStorage';
@@ -224,6 +225,29 @@ export class MultiSourceOrchestrator {
         return { created: 0, updated: 0 };
       }
 
+      const itemGroups: CollectionItem[][] = [];
+      const missingItemGroups: MissingItem[][] = [];
+
+      // For cycle_lists mode, only fetch from the active source
+      // For other modes, fetch from all sources
+      const sourcesToFetch =
+        config.combineMode === 'cycle_lists'
+          ? [
+              config.sources[
+                (getCollectionSyncCounter(config.id, -1) + 1) %
+                  config.sources.length
+              ],
+            ]
+          : config.sources;
+
+      if (
+        sourcesToFetch.some(
+          (source) => source.type === 'anilist' || source.type === 'myanimelist'
+        )
+      ) {
+        requireAnimeLibraryItems(libraryCache, config.libraryId);
+      }
+
       // Increment sync counter for cycle_lists mode
       if (config.combineMode === 'cycle_lists') {
         const newCounter = incrementCollectionSyncCounter(config.id);
@@ -237,20 +261,6 @@ export class MultiSourceOrchestrator {
           }
         );
       }
-
-      const itemGroups: CollectionItem[][] = [];
-      const missingItemGroups: MissingItem[][] = [];
-
-      // For cycle_lists mode, only fetch from the active source
-      // For other modes, fetch from all sources
-      const sourcesToFetch =
-        config.combineMode === 'cycle_lists'
-          ? [
-              config.sources[
-                getCollectionSyncCounter(config.id) % config.sources.length
-              ],
-            ]
-          : config.sources;
 
       logger.debug(
         `Fetching from ${sourcesToFetch.length} source(s) for ${config.combineMode} mode`,
