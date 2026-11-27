@@ -797,6 +797,46 @@ describe('capPreviewItemsToMaxItems', () => {
 });
 
 describe('combinePreviewMissingItems', () => {
+  it('keeps distinct TVDB-only shows and typed TMDB IDs at their first source position', () => {
+    const first = {
+      mediaType: 'tv',
+      tmdbId: 0,
+      tvdbId: 20,
+      originalPosition: 1,
+    };
+    const second = { ...first, tvdbId: 21, originalPosition: 2 };
+    const movie = { mediaType: 'movie', tmdbId: 20, originalPosition: 3 };
+    const show = { mediaType: 'tv', tmdbId: 20, originalPosition: 4 };
+    expect(
+      combinePreviewMissingItems([
+        [first, second, movie, show, { ...first, originalPosition: 5 }],
+      ])
+    ).toEqual([first, second, movie, show]);
+  });
+
+  it('keeps the first missing show when TMDB splits one TVDB series', () => {
+    const first = {
+      mediaType: 'tv',
+      tmdbId: 71,
+      tvdbId: 42,
+      originalPosition: 1,
+    };
+    const second = { ...first, tmdbId: 72, originalPosition: 2 };
+    expect(combinePreviewMissingItems([[first, second]])).toEqual([first]);
+  });
+
+  it.each(['tv', 'movie'])(
+    'keeps separate %s entries when neither provider identifies them',
+    (mediaType) => {
+      const first = { mediaType, tmdbId: 0, originalPosition: 1 };
+      const second = { ...first, originalPosition: 2 };
+      expect(combinePreviewMissingItems([[first, second]])).toEqual([
+        first,
+        second,
+      ]);
+    }
+  );
+
   it('position-filters each source before dedupe so an in-cap duplicate survives', () => {
     const a = [{ tmdbId: 1, mediaType: 'movie', originalPosition: 40 }];
     const b = [
