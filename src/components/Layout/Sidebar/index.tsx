@@ -5,6 +5,7 @@ import type { Permission } from '@app/hooks/useUser';
 import { useUser } from '@app/hooks/useUser';
 import { Transition } from '@headlessui/react';
 import {
+  ArrowPathRoundedSquareIcon,
   ChartBarIcon,
   CogIcon,
   HomeIcon,
@@ -25,6 +26,7 @@ export const menuMessages = defineMessages({
   recommended: 'Recommended',
   library: 'Library',
   allcollections: 'All Collections',
+  rotation: 'Rotation',
   posters: 'Posters',
   settings: 'Settings',
 });
@@ -85,6 +87,13 @@ const SidebarLinks: SidebarLinkProps[] = [
     svgIcon: <QueueListIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/allcollections$/,
     dataTestId: 'sidebar-menu-allcollections',
+  },
+  {
+    href: '/rotation',
+    messagesKey: 'rotation',
+    svgIcon: <ArrowPathRoundedSquareIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/rotation/,
+    dataTestId: 'sidebar-menu-rotation',
   },
   {
     href: '/posters',

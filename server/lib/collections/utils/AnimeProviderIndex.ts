@@ -36,6 +36,7 @@ export interface ProviderIndexEntry {
  * Provider index containing maps for IMDb, TMDB, and TVDB lookups
  */
 export interface ProviderIndex {
+  anilist: Map<string, ProviderIndexEntry>;
   imdb: Map<string, ProviderIndexEntry>;
   tmdb: Map<string, ProviderIndexEntry>;
   tvdb: Map<string, ProviderIndexEntry>;
@@ -53,11 +54,12 @@ export function buildProviderIndex(
   mediaType?: 'movie' | 'tv',
   mappingVersion: 'v2' | 'v3' = 'v2'
 ): ProviderIndex {
+  const anilist = new Map<string, ProviderIndexEntry>();
   const imdb = new Map<string, ProviderIndexEntry>();
   const tmdb = new Map<string, ProviderIndexEntry>();
   const tvdb = new Map<string, ProviderIndexEntry>();
 
-  if (!libraryCache) return { imdb, tmdb, tvdb };
+  if (!libraryCache) return { anilist, imdb, tmdb, tvdb };
 
   const extractGuidString = (g: string | PlexGuid | undefined): string | null =>
     typeof g === 'string' ? g : g && typeof g.id === 'string' ? g.id : null;
@@ -150,6 +152,15 @@ export function buildProviderIndex(
           }
           const map = lookupByMal(malId);
           if (map) {
+            if (map.anilist_id) {
+              anilist.set(String(map.anilist_id), {
+                ratingKey: it.ratingKey,
+                title: it.title,
+                libraryKey: libKey,
+                tvdbId:
+                  mediaType === 'tv' ? itemTvdbId ?? map.tvdb_id : undefined,
+              });
+            }
             // Add all available IDs from PlexAniBridge mapping
             if (mediaType !== 'movie' && map.tvdb_id) {
               tvdb.set(String(map.tvdb_id), {
@@ -197,7 +208,7 @@ export function buildProviderIndex(
     }
   }
 
-  return { imdb, tmdb, tvdb };
+  return { anilist, imdb, tmdb, tvdb };
 }
 
 export function requireAnimeLibraryItems(

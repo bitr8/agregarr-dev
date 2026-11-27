@@ -1,5 +1,7 @@
 import Alert from '@app/components/Common/Alert';
 import Modal from '@app/components/Common/Modal';
+import RotationMemberNotice from '@app/components/Rotation/RotationMemberNotice';
+import useRotationMembership from '@app/hooks/rotation/useRotationMembership';
 import globalMessages from '@app/i18n/globalMessages';
 import type {
   CollectionConfigFormProps,
@@ -17,6 +19,8 @@ import { SMART_COLLECTION_SORT_OPTIONS } from '@app/types/collections';
 import { Transition } from '@headlessui/react';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
+import type { Membership } from '@server/interfaces/api/rotationInterfaces';
+import axios from 'axios';
 import {
   Field,
   Formik,
@@ -25,7 +29,7 @@ import {
   type FormikTouched,
 } from 'formik';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { defineMessages, FormattedMessage, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
@@ -98,6 +102,12 @@ const SourceRankResetGuard = () => {
     }
   }, [isTraktAnticipated, values.sortOrder, setFieldValue]);
   return null;
+};
+
+const ROTATION_DEFAULT_INACTIVE_VISIBILITY = {
+  usersHome: false,
+  serverOwnerHome: false,
+  libraryRecommended: true,
 };
 
 const messages = defineMessages({
@@ -327,6 +337,8 @@ const messages = defineMessages({
   filteredPlexHubDescription:
     'Create Filtered Plex Hub collection type to replace default Plex hubs (Recently Added, Recently Released, Recently Released Episodes) with filtered versions that automatically exclude placeholder items. You can also Enable Collection Exclusion on other collections to exclude placeholders from them.',
   randomizeHomeOrder: 'Randomize Home Order',
+  rotationOwnSaveFailed:
+    "Couldn't save this collection's own visibility setting. The rotation keeps using the previous one.",
   shuffleHubCollectionHelp:
     "When enabled, this {itemType}'s position will be randomly shuffled with other collections that have this option enabled during each sync. Custom scheduling for shuffling can be set on the Jobs page.",
   targetUser: 'Target User',
@@ -482,6 +494,44 @@ const CollectionFormConfigForm = ({
 
   // Get current user data which includes Plex Pass status
   const { data: currentUser } = useSWR('/api/v1/auth/me');
+  const {
+    map: rotationMap,
+    revalidate: revalidateRotation,
+    isLoading: rotationLoading,
+  } = useRotationMembership();
+  const [rotationKind] = useState<'collection' | 'preExisting' | null>(() => {
+    if (
+      config?.collectionType === 'default_plex_hub' ||
+      (config as CollectionFormConfig | undefined)?.configType === 'hub'
+    ) {
+      return null;
+    }
+    return config?.collectionType === 'pre_existing' ||
+      (config as CollectionFormConfig | undefined)?.configType === 'preExisting'
+      ? 'preExisting'
+      : 'collection';
+  });
+  // Frozen once the request settles so the overlay, notice and PATCH agree.
+  const frozenMembership = useRef<{ value: Membership | undefined } | null>(
+    null
+  );
+  if (!rotationLoading && !frozenMembership.current) {
+    frozenMembership.current = {
+      value:
+        rotationKind && config?.id
+          ? rotationMap[`${rotationKind}:${config.id}`]
+          : undefined,
+    };
+  }
+  const membership = frozenMembership.current?.value;
+  const rotationInitial = membership?.own
+    ? {
+        inactiveVisibilityConfig:
+          membership.own.inactiveVisibilityConfig ??
+          ROTATION_DEFAULT_INACTIVE_VISIBILITY,
+        randomizeHomeOrder: membership.own.randomizeHomeOrder ?? false,
+      }
+    : null;
   // Mirrors what the sync will write - see normalizeSortTitleArticle.
   const { data: plexSortSettings } = useSWR<{
     sortTitleArticleHandling?: SortTitleArticleMode;
@@ -1221,7 +1271,7 @@ const CollectionFormConfigForm = ({
   });
 
   // Safety check for undefined config
-  if (!config) {
+  if (!config || rotationLoading) {
     return null;
   }
 
@@ -2329,12 +2379,29 @@ const CollectionFormConfigForm = ({
           ),
           excludeValues: (config as CollectionFormConfig).excludeValues ?? [],
           includeValues: (config as CollectionFormConfig).includeValues ?? [],
+          ...(membership?.own
+            ? {
+                visibilityConfig: { ...membership.own.visibilityConfig },
+                randomizeHomeOrder:
+                  rotationInitial?.randomizeHomeOrder ?? false,
+                timeRestriction: {
+                  alwaysActive: true,
+                  removeFromPlexWhenInactive: false,
+                  ...config.timeRestriction,
+                  inactiveVisibilityConfig: {
+                    ...(rotationInitial?.inactiveVisibilityConfig ??
+                      ROTATION_DEFAULT_INACTIVE_VISIBILITY),
+                  },
+                },
+              }
+            : {}),
         }}
         validationSchema={CollectionFormConfigSchema}
         enableReinitialize={false}
         validateOnChange={true}
         validateOnBlur={true}
         onSubmit={async (values, { setFieldError }) => {
+          const ownStash = membership?.own;
           // Final validation before submission
           // Only validate template for regular collections, not hubs or pre-existing
           if (
@@ -2859,6 +2926,37 @@ const CollectionFormConfigForm = ({
             // Remove UI-only fields from the final config
             enableGrabMissingItems: undefined,
           };
+
+          if (membership && ownStash && rotationKind) {
+            try {
+              await axios.patch(
+                `/api/v1/rotation-groups/membership/${rotationKind}/${config.id}`,
+                {
+                  visibilityConfig: values.visibilityConfig,
+                  ...(rotationInitial &&
+                  JSON.stringify(
+                    values.timeRestriction?.inactiveVisibilityConfig
+                  ) !== JSON.stringify(rotationInitial.inactiveVisibilityConfig)
+                    ? {
+                        inactiveVisibilityConfig:
+                          values.timeRestriction?.inactiveVisibilityConfig,
+                      }
+                    : {}),
+                  ...(rotationInitial &&
+                  Boolean(values.randomizeHomeOrder) !==
+                    rotationInitial.randomizeHomeOrder
+                    ? { randomizeHomeOrder: Boolean(values.randomizeHomeOrder) }
+                    : {}),
+                }
+              );
+              await revalidateRotation();
+            } catch {
+              addToast(intl.formatMessage(messages.rotationOwnSaveFailed), {
+                appearance: 'warning',
+                autoDismiss: true,
+              });
+            }
+          }
 
           onSave(configToSave);
         }}
@@ -3913,6 +4011,11 @@ const CollectionFormConfigForm = ({
                                 {intl.formatMessage(messages.visibility)}
                               </div>
                               <div className="form-input-area">
+                                {membership && (
+                                  <RotationMemberNotice
+                                    membership={membership}
+                                  />
+                                )}
                                 <VisibilitySection
                                   values={typedValues as CollectionFormConfig}
                                   setFieldValue={setFieldValue}
@@ -5416,6 +5519,11 @@ const CollectionFormConfigForm = ({
                                 {intl.formatMessage(messages.visibility)}
                               </div>
                               <div className="form-input-area">
+                                {membership && (
+                                  <RotationMemberNotice
+                                    membership={membership}
+                                  />
+                                )}
                                 <VisibilitySection
                                   values={typedValues as CollectionFormConfig}
                                   setFieldValue={setFieldValue}
@@ -5454,6 +5562,9 @@ const CollectionFormConfigForm = ({
                               {intl.formatMessage(messages.visibility)}
                             </div>
                             <div className="form-input-area">
+                              {membership && (
+                                <RotationMemberNotice membership={membership} />
+                              )}
                               <VisibilitySection
                                 values={typedValues as CollectionFormConfig}
                                 setFieldValue={setFieldValue}

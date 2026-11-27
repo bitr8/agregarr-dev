@@ -10,6 +10,7 @@ import {
 } from '@server/api/anilist';
 import {
   ensureAnimeIdsLoaded,
+  getAllValues,
   getFirstValue,
   lookupByAniList,
   lookupByMal,
@@ -249,6 +250,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     const tmdb =
       mediaType === 'tv' ? row.tmdb_show_id : getFirstValue(row.tmdb_movie_id);
     return {
+      anilist: row.anilist_id?.toString(),
       tmdb: tmdb != null ? String(tmdb) : undefined,
       tvdb:
         mediaType === 'tv' && row.tvdb_id != null
@@ -265,7 +267,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
     index: ProviderIndex,
     ids: Partial<Record<keyof ProviderIndex, string>>
   ) {
-    for (const provider of ['tvdb', 'tmdb', 'imdb'] as const) {
+    for (const provider of ['anilist', 'tvdb', 'tmdb', 'imdb'] as const) {
       const id = ids[provider];
       const hit = id ? index[provider].get(id) : undefined;
       if (hit) return hit;
@@ -792,6 +794,7 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
       // Try to get TMDB ID from anime mapping or external links
       let tmdbId = 0;
       let tvdbId: number | undefined;
+      let movieIds: number[] = [];
 
       if (anilistId) {
         let map = lookupByAniList(anilistId);
@@ -805,8 +808,9 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
           // PRIORITY 1: Check if PlexAniBridge mapping has TMDB IDs directly (instant, free)
           if (mediaType === 'tv' && map.tmdb_show_id) {
             tmdbId = Number(map.tmdb_show_id);
-          } else if (mediaType === 'movie' && map.tmdb_movie_id) {
-            tmdbId = Number(map.tmdb_movie_id);
+          } else if (mediaType === 'movie') {
+            movieIds = [...new Set(getAllValues(map.tmdb_movie_id))];
+            if (movieIds.length === 1) tmdbId = movieIds[0];
           }
 
           // PRIORITY 2: Only if PlexAniBridge doesn't have TMDB ID, try TVDB → TMDB API lookup
@@ -825,7 +829,12 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
               });
               const candidates =
                 mediaType === 'tv' ? resp.tv_results : resp.movie_results;
-              if (candidates?.length === 1) tmdbId = candidates[0].id;
+              if (
+                candidates?.length === 1 &&
+                (!movieIds.length || movieIds.includes(candidates[0].id))
+              ) {
+                tmdbId = candidates[0].id;
+              }
             } catch (e) {
               // TVDB → TMDB lookup failed, continue with TVDB only
             }
@@ -834,8 +843,19 @@ export class AnilistCollectionSync extends BaseCollectionSync<'anilist'> {
       }
 
       // Fallback to external links if no mapping found
-      if (tmdbId === 0) {
-        tmdbId = linkedTmdbId ?? 0;
+      if (
+        movieIds.length > 1 &&
+        tmdbId &&
+        linkedTmdbId &&
+        tmdbId !== linkedTmdbId
+      )
+        continue;
+      if (
+        tmdbId === 0 &&
+        linkedTmdbId &&
+        (!movieIds.length || movieIds.includes(linkedTmdbId))
+      ) {
+        tmdbId = linkedTmdbId;
       }
 
       // Use anime's actual format to determine mediaType (not collection-level mediaType)
