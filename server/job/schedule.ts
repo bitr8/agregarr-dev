@@ -4,6 +4,7 @@ import { JobRunHistory } from '@server/entity/JobRunHistory';
 import collectionsQuickSync from '@server/lib/collectionsQuickSync';
 import collectionsSync from '@server/lib/collectionsSync';
 import { healthCheckRunning, runHealthChecks } from '@server/lib/healthcheck';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 // ImageProxy removed - not needed for collections-only app
 import overlayApplication from '@server/lib/overlayApplication';
 import overlaysQuickSync from '@server/lib/overlaysQuickSync';
@@ -239,7 +240,7 @@ export const startJobs = (): void => {
           settings.plex.collectionConfigs &&
           settings.plex.collectionConfigs.length > 0;
 
-        if (!hasCollections) {
+        if (!hasCollections && !rotationGroupService.hasEnabledGroups()) {
           logger.debug(
             'Skipping scheduled Plex Collections Sync: No collections configured',
             { label: 'Jobs' }

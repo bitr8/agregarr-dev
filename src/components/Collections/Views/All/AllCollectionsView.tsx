@@ -22,8 +22,10 @@ import Button from '@app/components/Common/Button';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import RotationBadge from '@app/components/Rotation/RotationBadge';
 import { useCollectionEdit } from '@app/hooks/collections/useCollectionEdit';
 import { useCollectionExport } from '@app/hooks/collections/useCollectionExport';
+import useRotationMembership from '@app/hooks/rotation/useRotationMembership';
 import type { CollectionFormConfig, Library } from '@app/types/collections';
 import {
   linkCollectionConfig,
@@ -138,6 +140,7 @@ const AllCollectionsView: React.FC = () => {
     error: preExistingError,
     mutate: revalidatePreExisting,
   } = useSWR('/api/v1/preexisting');
+  const { map: rotationMap } = useRotationMembership();
 
   // Local state for linking operations
   const [localCollectionConfigs, setLocalCollectionConfigs] = useState<
@@ -675,6 +678,11 @@ const AllCollectionsView: React.FC = () => {
             const isHub = collection.type === 'hub';
             const isCollection = collection.type === 'collection';
             const isPreExisting = collection.type === 'preExisting';
+            const membership = isHub
+              ? undefined
+              : rotationMap[
+                  `${collection.type}:${collection.originalConfig?.id}`
+                ];
 
             // Handle different config types - work with native types directly
             let visibilityConfig:
@@ -759,6 +767,7 @@ const AllCollectionsView: React.FC = () => {
                       {/* Collection Type Badge - Removed for Agregarr collections */}
                       {isHub && <PlexDefaultBadge />}
                       {isPreExisting && <PreExistingBadge withBorder={true} />}
+                      {membership && <RotationBadge membership={membership} />}
 
                       {/* Enhanced Source & Subtype Badge (for regular collections only) */}
                       {isCollection &&

@@ -1495,6 +1495,82 @@ async function scanNewPlaceholderDirectories(
   }
 }
 
+type PlaceholderRecord = Pick<
+  ComingSoonItem,
+  'mediaType' | 'plexRatingKey' | 'title'
+>;
+
+/**
+ * The collection's placeholder items in source order: the ones discovered this run,
+ * plus items skipped because a placeholder record already exists (often another
+ * collection's) whose ratingKey is in this library right now.
+ */
+export function assemblePlaceholderResult({
+  discovered,
+  items,
+  recordsByTmdbId,
+  sourceMap,
+  libraryRatingKeys,
+  exclude,
+}: {
+  discovered: Map<number, { ratingKey: string; title: string }>;
+  items: MissingItem[];
+  recordsByTmdbId: Map<number, PlaceholderRecord[]>;
+  sourceMap: Map<number, Pick<ComingSoonSourceData, 'mediaType'>>;
+  libraryRatingKeys: Set<string>;
+  exclude: Set<number>;
+}): CollectionItem[] {
+  const result: CollectionItem[] = [];
+  const seen = new Set(exclude);
+  for (const [tmdbId, plexItem] of discovered) {
+    const sourceItem = sourceMap.get(tmdbId);
+    if (seen.has(tmdbId) || !sourceItem) continue;
+    seen.add(tmdbId);
+    result.push({
+      ratingKey: plexItem.ratingKey,
+      title: plexItem.title,
+      type: sourceItem.mediaType,
+      tmdbId,
+    });
+  }
+  for (const item of items) {
+    const sourceItem = sourceMap.get(item.tmdbId);
+    if (seen.has(item.tmdbId) || !sourceItem) continue;
+    const record = recordsByTmdbId
+      .get(item.tmdbId)
+      ?.find(
+        (r) =>
+          r.mediaType === sourceItem.mediaType &&
+          !!r.plexRatingKey &&
+          libraryRatingKeys.has(r.plexRatingKey)
+      );
+    if (!record?.plexRatingKey) continue;
+    seen.add(item.tmdbId);
+    result.push({
+      ratingKey: record.plexRatingKey,
+      title: record.title,
+      type: sourceItem.mediaType,
+      tmdbId: item.tmdbId,
+    });
+  }
+
+  const positions = new Map(
+    items
+      .filter((item) => item.originalPosition !== undefined)
+      .map((item) => [item.tmdbId, item.originalPosition as number])
+  );
+  const positionOf = (item: CollectionItem) =>
+    item.tmdbId !== undefined ? positions.get(item.tmdbId) : undefined;
+  return result.sort((a, b) => {
+    const posA = positionOf(a);
+    const posB = positionOf(b);
+    if (posA === undefined && posB === undefined) return 0;
+    if (posA === undefined) return 1;
+    if (posB === undefined) return -1;
+    return posA - posB;
+  });
+}
+
 /**
  * Create placeholders for missing items
  * Strategy: Create ALL files first, then trigger scoped scans, then apply overlays
@@ -1615,6 +1691,14 @@ async function createPlaceholders(
   const placeholderRepository = getRepository(ComingSoonItem);
   const existingRecords = await placeholderRepository.find();
   const existingByTmdbId = new Map(existingRecords.map((r) => [r.tmdbId, r]));
+  const recordsByTmdbId = new Map<number, PlaceholderRecord[]>();
+  for (const record of existingRecords) {
+    recordsByTmdbId.set(record.tmdbId, [
+      ...(recordsByTmdbId.get(record.tmdbId) ?? []),
+      record,
+    ]);
+  }
+  const libraryRatingKeys = new Set(libraryItems.map((item) => item.ratingKey));
 
   // Deletion safety: this scan only knows the CURRENT config's source items,
   // so a record-less placeholder that isn't in sourceMap may still belong to
@@ -2260,23 +2344,14 @@ async function createPlaceholders(
 
   // Check if we have any work to do (created or orphaned placeholders)
   if (createdPlaceholders.length === 0 && orphanedPlaceholders.length === 0) {
-    // No new placeholders to create, but existing DB records may have valid Plex items
-    // Return CollectionItems for items that already have placeholders with rating keys
-    const existingCollectionItems: CollectionItem[] = [];
-    for (const item of itemsWithPosters) {
-      const existingRecord = existingByTmdbId.get(item.tmdbId);
-      if (existingRecord?.plexRatingKey) {
-        const sourceItem = sourceMap.get(item.tmdbId);
-        if (sourceItem) {
-          existingCollectionItems.push({
-            ratingKey: existingRecord.plexRatingKey,
-            title: existingRecord.title,
-            type: sourceItem.mediaType,
-            tmdbId: item.tmdbId,
-          });
-        }
-      }
-    }
+    const existingCollectionItems = assemblePlaceholderResult({
+      discovered: new Map(),
+      items: missingItems,
+      recordsByTmdbId,
+      sourceMap,
+      libraryRatingKeys,
+      exclude: new Set(),
+    });
 
     if (existingCollectionItems.length > 0) {
       logger.info(
@@ -2535,49 +2610,15 @@ async function createPlaceholders(
     }
   }
 
-  // Step 6: Convert discovered items to CollectionItem format
-  // Create a map of tmdbId -> originalPosition to preserve source order
-  const positionMap = new Map<number, number>(
-    missingItems
-      .filter((item) => item.originalPosition !== undefined)
-      .map((item) => [item.tmdbId, item.originalPosition as number])
-  );
-
-  const collectionItems: CollectionItem[] = [];
-  for (const [tmdbId, plexItem] of discoveredItemsMap) {
-    if (adoptedFromFullSourceOnly.has(tmdbId)) {
-      continue; // Already in the sync's own `items` - don't duplicate.
-    }
-    const sourceItem = sourceMap.get(tmdbId);
-    if (sourceItem) {
-      collectionItems.push({
-        ratingKey: plexItem.ratingKey,
-        title: plexItem.title,
-        type: sourceItem.mediaType,
-        tmdbId: tmdbId,
-      });
-    }
-  }
-
-  // Sort by original position to preserve source list order
-  // This ensures placeholder items appear in the same order as they were in the source
-  // Items without originalPosition will appear at the end
-  if (positionMap.size > 0) {
-    collectionItems.sort((a, b) => {
-      // Get positions, handling undefined tmdbId
-      const posA =
-        a.tmdbId !== undefined ? positionMap.get(a.tmdbId) : undefined;
-      const posB =
-        b.tmdbId !== undefined ? positionMap.get(b.tmdbId) : undefined;
-
-      // Items without position go to the end
-      if (posA === undefined && posB === undefined) return 0;
-      if (posA === undefined) return 1;
-      if (posB === undefined) return -1;
-
-      return posA - posB;
-    });
-  }
+  // Step 6: discovered items plus ones another collection already has a placeholder for
+  const collectionItems = assemblePlaceholderResult({
+    discovered: discoveredItemsMap,
+    items: missingItems,
+    recordsByTmdbId,
+    sourceMap,
+    libraryRatingKeys,
+    exclude: new Set([...adoptedFromFullSourceOnly, ...excludedUnmatchedSet]),
+  });
 
   logger.info('Returning discovered placeholder items in source order', {
     label: 'PlaceholderService',
