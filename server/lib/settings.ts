@@ -836,7 +836,7 @@ const parseSettings = (raw: string): AllSettings | undefined => {
   }
 };
 
-// The temp file can't be created here (read-only directory); ENOSPC or EIO must not fall back and truncate
+// The temp file can't be created here (read-only directory); ENOSPC or EIO must not fall back
 const CANNOT_CREATE_TMP = new Set(['EACCES', 'EROFS', 'EPERM', 'EBUSY']);
 
 let backupWarned = false;
@@ -852,28 +852,19 @@ const fileAttrs = (file: string): FileAttrs | undefined => {
   }
 };
 
-const writeAndSync = (
-  file: string,
-  contents: string,
-  attrs?: FileAttrs
-): void => {
-  const fd = fs.openSync(file, 'w');
+const writeAndSync = (fd: number, contents: string): void => {
   try {
-    if (attrs) {
-      // Keep the mode and owner; a new file would belong to the process user (root without PUID)
-      try {
-        fs.fchmodSync(fd, attrs.mode);
-        fs.fchownSync(fd, attrs.uid, attrs.gid);
-      } catch {
-        /* best effort */
-      }
-    }
     fs.writeFileSync(fd, contents);
+    fs.ftruncateSync(fd, Buffer.byteLength(contents));
     fs.fsyncSync(fd);
   } finally {
     fs.closeSync(fd);
   }
 };
+
+// Overwrite without truncating first, so a failed write can't leave an empty file
+const writeInPlace = (file: string, contents: string): void =>
+  writeAndSync(fs.openSync(file, fs.existsSync(file) ? 'r+' : 'wx'), contents);
 
 // A plain write truncates first, so an interrupted save used to leave an empty file
 const writeFileDurably = (
@@ -884,22 +875,37 @@ const writeFileDurably = (
   // Write beside a symlink's target so the link itself is kept
   const file = fs.existsSync(target) ? fs.realpathSync(target) : target;
   const tmpPath = `${file}.tmp`;
+  let fd: number;
   try {
-    writeAndSync(tmpPath, contents, attrs);
+    fd = fs.openSync(tmpPath, 'w');
   } catch (e) {
-    fs.rmSync(tmpPath, { force: true });
     if (!CANNOT_CREATE_TMP.has((e as NodeJS.ErrnoException).code ?? '')) {
       throw e;
     }
-    writeAndSync(file, contents);
+    writeInPlace(file, contents);
     return;
+  }
+  try {
+    if (attrs) {
+      // Keep the mode and owner; a new file would belong to the process user (root without PUID)
+      try {
+        fs.fchmodSync(fd, attrs.mode);
+        fs.fchownSync(fd, attrs.uid, attrs.gid);
+      } catch {
+        /* best effort */
+      }
+    }
+    writeAndSync(fd, contents);
+  } catch (e) {
+    fs.rmSync(tmpPath, { force: true });
+    throw e;
   }
   try {
     fs.renameSync(tmpPath, file);
   } catch {
     // The file can be rewritten but not replaced (single-file bind mount, some network shares)
     fs.rmSync(tmpPath, { force: true });
-    writeAndSync(file, contents);
+    writeInPlace(file, contents);
     return;
   }
   let dir: number | undefined;
@@ -1406,8 +1412,11 @@ class Settings {
       return this;
     }
 
-    const exists = fs.existsSync(SETTINGS_PATH);
-    const data = exists ? fs.readFileSync(SETTINGS_PATH, 'utf-8') : '';
+    // lstat so a broken symlink counts as unreadable, not as deleted
+    const exists = !!fs.lstatSync(SETTINGS_PATH, { throwIfNoEntry: false });
+    const data = fs.existsSync(SETTINGS_PATH)
+      ? fs.readFileSync(SETTINGS_PATH, 'utf-8')
+      : '';
     let parsed = parseSettings(data);
 
     if (!parsed && this.loaded) {
@@ -1422,7 +1431,7 @@ class Settings {
     if (!parsed && !exists && fs.existsSync(SETTINGS_BACKUP_PATH)) {
       // Deleting settings.json is how people reset; keep the old settings instead of overwriting them
       const kept = `${SETTINGS_PATH}.before-reset-${Date.now()}`;
-      fs.renameSync(SETTINGS_BACKUP_PATH, kept);
+      fs.copyFileSync(SETTINGS_BACKUP_PATH, kept);
       logger.warn('settings.json is missing - starting with defaults', {
         label: 'Settings',
         previousSettings: kept,

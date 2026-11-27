@@ -81,19 +81,40 @@ describe('Settings.save', () => {
     expect(fs.existsSync(`${settingsPath}.tmp`)).toBe(false);
   });
 
-  it('rewrites the file in place when no temp file can be created (read-only directory)', async () => {
+  it.each(['EACCES', 'EROFS', 'EPERM', 'EBUSY'])(
+    'rewrites the file in place when the temp file cannot be created (%s)',
+    async (code) => {
+      fs.writeFileSync(settingsPath, saved);
+      const settings = await loadSettings();
+      const open = fs.openSync;
+      vi.spyOn(fs, 'openSync').mockImplementation((file, ...rest) => {
+        if (String(file).endsWith('.tmp')) throw errno(code);
+        return open(file, ...(rest as [fs.OpenMode]));
+      });
+      setCollections(settings, ['c']);
+
+      settings.save();
+
+      expect(fileCollectionIds(settingsPath)).toEqual(['c']);
+    }
+  );
+
+  it('keeps settings.json intact when the in-place rewrite fails too', async () => {
     fs.writeFileSync(settingsPath, saved);
     const settings = await loadSettings();
-    const open = fs.openSync;
-    vi.spyOn(fs, 'openSync').mockImplementation((file, ...rest) => {
-      if (String(file).endsWith('.tmp')) throw errno('EROFS');
-      return open(file, ...(rest as [fs.OpenMode]));
+    vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw errno('EIO');
     });
-    setCollections(settings, ['c']);
+    const write = fs.writeFileSync;
+    let calls = 0;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
+      // The first write is the temp file; fail the in-place one after it
+      if (++calls === 2) throw errno('ENOSPC');
+      return write(...(args as Parameters<typeof fs.writeFileSync>));
+    });
 
-    settings.save();
-
-    expect(fileCollectionIds(settingsPath)).toEqual(['c']);
+    expect(() => settings.save()).toThrow('ENOSPC');
+    expect(fileCollectionIds(settingsPath)).toEqual(['a', 'b']);
   });
 
   it('leaves the live file alone when the disk is full', async () => {
@@ -236,6 +257,20 @@ describe('Settings.load', () => {
     expect(kept).toHaveLength(1);
     expect(fileCollectionIds(path.join(dir, kept[0]))).toEqual(['a', 'b']);
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'restores the last good copy when settings.json is a broken symlink',
+    async () => {
+      fs.writeFileSync(settingsPath, saved);
+      await loadSettings();
+      fs.rmSync(settingsPath);
+      fs.symlinkSync('missing.json', settingsPath);
+
+      const settings = await loadSettings();
+
+      expect(collectionIds(settings)).toEqual(['a', 'b']);
+    }
+  );
 
   it('starts with defaults when there is no settings.json', async () => {
     const settings = await loadSettings();
