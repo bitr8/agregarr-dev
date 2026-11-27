@@ -373,14 +373,13 @@ export class DiscoveryService {
             );
 
             if (existingIndex !== -1) {
-              // Preserve missing flag when updating with enhanced data
-              const existingMissing =
-                currentPreExistingConfigs[existingIndex].missing;
+              // The copy was taken before awaits; only hub data is written back.
+              const current = currentPreExistingConfigs[existingIndex];
               currentPreExistingConfigs[existingIndex] = {
-                ...enhancedConfig,
-                ...(existingMissing !== undefined && {
-                  missing: existingMissing,
-                }),
+                ...current,
+                sortOrderHome:
+                  current.sortOrderHome || enhancedConfig.sortOrderHome,
+                isPromotedToHub: true,
               };
             }
           }

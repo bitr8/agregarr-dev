@@ -3,6 +3,10 @@ import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgre
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
 import { ensureSeerrIgnorePatterns } from '@server/lib/placeholders/seerrIgnorePatterns';
 import posterizarrTriggerJob from '@server/lib/posterizarrTrigger';
+import rotationApply, {
+  markVerified,
+} from '@server/lib/rotation/rotationApply';
+import rotationGroupService from '@server/lib/rotation/RotationGroupService';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { CollectionCleanupService } from './collections/services/CollectionCleanupService';
@@ -310,6 +314,28 @@ class CollectionsSync {
       return;
     }
 
+    if (rotationGroupService.hasGroups() && rotationApply.status.running) {
+      logger.info('Rotation apply is running, waiting for completion...', {
+        label: 'Rotation',
+      });
+      const waitStart = Date.now();
+      while (rotationApply.status.running && !this.cancelled) {
+        if (Date.now() - waitStart > 120000) {
+          logger.warn(
+            'Rotation apply is still running after 120s, continuing with the sync',
+            { label: 'Rotation' }
+          );
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    if (this.cancelled) {
+      this.pending = false;
+      return;
+    }
+
     // Wait for any running individual collection syncs to complete
     const { IndividualCollectionScheduler } = await import(
       '@server/lib/collections/services/IndividualCollectionScheduler'
@@ -407,6 +433,23 @@ class CollectionsSync {
       collectionSyncProgress.setDetail('Refreshing external data...');
       await this.refreshExternalData(plexClient);
 
+      let rotationSeqs: Record<string, number> | undefined;
+      if (rotationGroupService.hasEnabledGroups()) {
+        try {
+          const pass = rotationGroupService.runPass({
+            syncRunId: new Date(startTime).toISOString(),
+          });
+          if (pass.saved) await rotationGroupService.settlePositions();
+          rotationSeqs = rotationGroupService.captureSeqs();
+        } catch (error) {
+          logger.error('Rotation pass failed, continuing the sync', {
+            label: 'Rotation',
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       // Transition to processing phase — total set by syncAllConfigurations
       collectionSyncProgress.setPhase('processing');
 
@@ -455,6 +498,17 @@ class CollectionsSync {
         this.setStage(stage);
       });
       plexClient.recordPhaseTime('ordering', Date.now() - orderingPhaseStart);
+      if (!this.cancelled && rotationSeqs) {
+        try {
+          await markVerified(plexClient, rotationSeqs);
+        } catch (error) {
+          logger.warn('Could not verify rotation in Plex', {
+            label: 'Rotation',
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       // Clean up orphaned collections after sync completes
       this.setStage('Cleaning up orphaned collections...');

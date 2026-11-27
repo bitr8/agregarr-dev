@@ -57,6 +57,8 @@ const overgeared = {
 };
 const data = {
   $meta: { schema_version: '3.0.3' },
+  'mal:20505': { 'anilist:20480': episodes, 'tmdb_movie:726213': episodes },
+  'anilist:20480': { 'tmdb_movie:726213': episodes },
   'anilist:212888': overgeared,
   'mal:64340': { ...overgeared, 'anilist:212888': episodes },
   'anilist:2': {
@@ -115,7 +117,9 @@ describe('AniList external links', () => {
     raw: { format: 'TV', externalLinks: [{ site: 'TMDB', url }] },
   });
 
-  it('continues past a foreign library hit and stops after finding the selected show', async () => {
+  it.each(['1', '2'])('pages through library %s', async (libraryId) => {
+    const format = libraryId === '1' ? 'TV' : 'MOVIE';
+    const kind = libraryId === '1' ? 'tv' : 'movie';
     const mappings = await import('@server/api/animeIds');
     const ready = vi
       .spyOn(mappings, 'ensureAnimeIdsLoaded')
@@ -136,13 +140,15 @@ describe('AniList external links', () => {
             {
               id: [4, 212888, 6, 5][page - 1],
               title: { english: 'Series' },
-              format: 'TV',
+              format,
               externalLinks: [
                 {
                   id: page,
                   site: 'TMDB',
                   url:
-                    'https://www.themoviedb.org/tv/' +
+                    'https://www.themoviedb.org/' +
+                    kind +
+                    '/' +
                     (page === 1 ? 20 : 324502),
                 },
               ],
@@ -152,17 +158,17 @@ describe('AniList external links', () => {
       }));
     try {
       const rows = await new AnilistCollectionSync().fetchSourceData(
-        { ...config, maxItems: 1 },
+        { ...config, libraryId, maxItems: 1 },
         undefined,
         {
-          '1': [
+          [libraryId]: [
             {
               ratingKey: 'owned',
               title: 'Overgeared',
               Guid: [{ id: 'tmdb://324502' }],
             },
           ],
-          '2': [
+          [libraryId === '1' ? '2' : '1']: [
             {
               ratingKey: 'foreign',
               title: 'Series',
@@ -218,6 +224,19 @@ describe('AniList external links', () => {
     );
     expect(owned.items.map((item) => item.ratingKey)).toEqual(['owned']);
     expect(owned.missingItems).toEqual([]);
+    const ambiguous = await sync.mapSourceDataToItems(
+      entries.slice(0, 1),
+      config,
+      undefined,
+      {
+        '1': [20, 21].map((id) => ({
+          ratingKey: String(id),
+          title: 'Show',
+          Guid: [{ id: 'tmdb://' + id }],
+        })),
+      }
+    );
+    expect(ambiguous).toEqual({ items: [], missingItems: [] });
   });
 
   it('stops before missing-item processing when prefetch fails, and processes a successful empty read', async () => {
@@ -292,6 +311,32 @@ describe('AniBridge collection matching', () => {
     anilistId,
     title: 'Source title',
     raw: { format: 'TV', idMal },
+  });
+
+  it('matches a MAL-agent show by its AniList alias when the row has only a movie ID', async () => {
+    const result = await new AnilistCollectionSync().mapSourceDataToItems(
+      [entry(20480)],
+      config,
+      undefined,
+      {
+        '1': [
+          {
+            ratingKey: 'agent',
+            title: 'Kimi to Boku',
+            guid: 'com.plexapp.agents.myanimelist://20505',
+          },
+          {
+            ratingKey: 'other',
+            title: 'Unrelated show',
+            Guid: [{ id: 'tmdb://726213' }],
+          },
+        ],
+      }
+    );
+    expect(result.items.map((item) => [item.ratingKey, item.tmdbId])).toEqual([
+      ['agent', undefined],
+    ]);
+    expect(result.missingItems).toEqual([]);
   });
 
   it.each([
