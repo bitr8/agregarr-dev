@@ -64,6 +64,8 @@ import collectionsQuickSync from './collectionsQuickSync';
 const plex = {
   removeLabelFromItem: vi.fn(),
   getCollectionItemsOrThrow: vi.fn(),
+  getCollectionItems: vi.fn(async () => []),
+  getRatingKeysWithLabel: vi.fn(async () => new Set<string>()),
   addItemsToCollection: vi.fn(),
 };
 
@@ -270,5 +272,26 @@ describe('quick sync swap keeps collection membership', () => {
     const res = await cleanup();
     expect(res.deletedCount).toBe(1);
     expect(res.itemsAdded).toBe(0);
+  });
+
+  it('does not add when the label exclusion lookup fails', async () => {
+    cfg.configs = [config({ excludeLabels: ['keep-out'] })];
+    plex.getRatingKeysWithLabel.mockRejectedValueOnce(new Error('plex down'));
+    const res = await cleanup();
+    expect(plex.addItemsToCollection).not.toHaveBeenCalled();
+    expect(res.deletedCount).toBe(1);
+  });
+
+  it('does not add when an excluded collection cannot be read', async () => {
+    cfg.configs = [
+      config({ excludeFromCollections: ['cfg-x'] }),
+      config({ id: 'cfg-x', collectionRatingKey: 'ex-1' }),
+    ];
+    plex.getCollectionItemsOrThrow.mockImplementation(async (k: string) => {
+      if (k === 'ex-1') throw new Error('plex down');
+      return ['ph-1'];
+    });
+    await cleanup();
+    expect(plex.addItemsToCollection).not.toHaveBeenCalled();
   });
 });

@@ -807,12 +807,14 @@ class CollectionsQuickSync {
           ...(await this.resolveCollectionExcludedKeys(
             config,
             plexClient,
-            exclusionCache
+            exclusionCache,
+            true
           )),
           ...(await this.resolveLabelExcludedKeys(
             config,
             plexClient,
-            exclusionCache
+            exclusionCache,
+            true
           )),
         ];
         if (excluded.includes(realItem.ratingKey)) continue;
@@ -1172,7 +1174,8 @@ class CollectionsQuickSync {
   private async resolveCollectionExcludedKeys(
     config: CollectionConfig,
     plexClient: PlexAPI,
-    cache: Map<string, Set<string>>
+    cache: Map<string, Set<string>>,
+    strict = false
   ): Promise<Set<string>> {
     const excludedRatingKeys = new Set<string>();
     if (!config.excludeFromCollections?.length) return excludedRatingKeys;
@@ -1198,13 +1201,16 @@ class CollectionsQuickSync {
         }
 
         try {
-          const itemKeys = await plexClient.getCollectionItems(cacheKey);
+          const itemKeys = strict
+            ? await plexClient.getCollectionItemsOrThrow(cacheKey)
+            : await plexClient.getCollectionItems(cacheKey);
           const keySet = new Set(itemKeys);
           cache.set(cacheKey, keySet);
           for (const key of keySet) {
             excludedRatingKeys.add(key);
           }
         } catch (error) {
+          if (strict) throw error;
           logger.warn(
             `Failed to fetch items from excluded collection "${excludedConfig.name}"`,
             {
@@ -1217,6 +1223,7 @@ class CollectionsQuickSync {
         }
       }
     } catch (error) {
+      if (strict) throw error;
       logger.warn('Failed to apply collection exclusions in quick sync', {
         label: 'Collections Quick Sync',
         configId: config.id,
@@ -1230,7 +1237,8 @@ class CollectionsQuickSync {
   private async resolveLabelExcludedKeys(
     config: CollectionConfig,
     plexClient: PlexAPI,
-    cache: Map<string, Set<string>>
+    cache: Map<string, Set<string>>,
+    strict = false
   ): Promise<Set<string>> {
     const excludedRatingKeys = new Set<string>();
     const labels = (config.excludeLabels ?? [])
@@ -1256,6 +1264,7 @@ class CollectionsQuickSync {
         }
       }
     } catch (error) {
+      if (strict) throw error;
       logger.warn('Failed to apply label exclusions in quick sync', {
         label: 'Collections Quick Sync',
         configId: config.id,
