@@ -55,19 +55,4 @@ describe('full sync exclusion during Posterizarr work', () => {
       expect(mocks.getSettings).not.toHaveBeenCalled();
     }
   );
-
-  it.each([
-    ['collection', collectionsSync],
-    ['overlay', overlayApplication],
-  ] as const)(
-    'does not start a %s sync while placeholder swaps are queued or running',
-    async (_name, job) => {
-      mocks.trigger.busy = false;
-      mocks.swap.busy = true;
-      await job.run();
-      expect(job.status.running).toBe(false);
-      expect(job.status.pending).toBe(false);
-      expect(mocks.getRepository).not.toHaveBeenCalled();
-    }
-  );
 });

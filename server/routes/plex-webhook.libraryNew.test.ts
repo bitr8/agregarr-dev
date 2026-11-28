@@ -166,4 +166,32 @@ describe('Plex webhook library.new placeholder swap', () => {
     await send(bad);
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
+
+  it('turns a burst of unrelated announcements into one lookup each and no swaps', async () => {
+    mocks.findOne.mockResolvedValue(null);
+    for (let i = 0; i < 90; i++) {
+      await send({
+        ...showEvent,
+        Metadata: {
+          ...showEvent.Metadata,
+          ratingKey: String(100000 + i),
+          Guid: [
+            { id: `tmdb://${900000 + i}` },
+            { id: `tvdb://${800000 + i}` },
+          ],
+        },
+      });
+    }
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(mocks.findOne.mock.calls.length).toBeLessThanOrEqual(90 * 2);
+    expect(mocks.findOne.mock.calls.length).toBeGreaterThanOrEqual(90);
+  });
+
+  it('ignores an announcement whose Guid is not a list', async () => {
+    await send({
+      ...showEvent,
+      Metadata: { ...showEvent.Metadata, Guid: { id: 'tmdb://1' } },
+    });
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
 });

@@ -104,7 +104,8 @@ function isPlaceholderMetadata(metadata: PlexWebhookMetadata): boolean {
 function guidIds(metadata: PlexWebhookMetadata, scheme: 'tmdb' | 'tvdb') {
   const ids: number[] = [];
   const pattern = new RegExp(`^${scheme}://(\\d+)$`);
-  for (const g of metadata.Guid ?? []) {
+  if (!Array.isArray(metadata.Guid)) return ids;
+  for (const g of metadata.Guid) {
     const match = pattern.exec(g?.id ?? '');
     if (match) ids.push(Number(match[1]));
   }
