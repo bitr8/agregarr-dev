@@ -865,7 +865,7 @@ const CollectionSettings = ({
         usersHome: true,
         serverOwnerHome: true,
         libraryRecommended: true,
-      }, // Default to Users and Server Owner Home
+      }, // Default to Users Home, Server Owner Home and Library Recommended
       isActive: true, // Placeholder for TypeScript - backend will compute actual value
       maxItems: 30,
       libraryId: '', // Start with no selection to show "Select Libraries..."

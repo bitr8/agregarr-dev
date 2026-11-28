@@ -720,7 +720,7 @@ const CollectionTypeSection = ({
                 setFieldValue('visibilityConfig', {
                   usersHome: true,
                   serverOwnerHome: true,
-                  libraryRecommended: false,
+                  libraryRecommended: true,
                 });
                 setFieldValue('selectionMode', undefined);
                 setFieldValue('excludeValues', undefined);
