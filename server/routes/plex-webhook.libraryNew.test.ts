@@ -100,7 +100,7 @@ describe('Plex webhook library.new placeholder swap', () => {
     await send(showEvent);
     expect(mocks.findOne).toHaveBeenCalledTimes(1);
     expect(mocks.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ ratingKey: '227026' })
+      expect.objectContaining({ ratingKey: '5001' })
     );
   });
 
@@ -126,11 +126,11 @@ describe('Plex webhook library.new placeholder swap', () => {
     await send(episodeEvent);
     const { where } = mocks.findOne.mock.calls[0][0];
     expect(where).toEqual([
-      { mediaType: 'tv', plexRatingKey: '132504' },
-      { mediaType: 'tv', pendingRealRatingKey: '132504' },
+      { mediaType: 'tv', plexRatingKey: '5005' },
+      { mediaType: 'tv', pendingRealRatingKey: '5005' },
     ]);
     expect(mocks.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ ratingKey: '132504' })
+      expect.objectContaining({ ratingKey: '5005' })
     );
   });
 
