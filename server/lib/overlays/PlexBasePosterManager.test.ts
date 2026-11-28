@@ -648,3 +648,26 @@ describe('downloadAllBasePosterForLibrary overlay guard', () => {
     expect(store.mock.calls[0][2]).toBe('2');
   });
 });
+
+describe('downloadAllBasePosterForLibrary progress', () => {
+  it('reports items without a poster to the progress callback', async () => {
+    const plexApi = {
+      getLibraryContents: vi.fn().mockResolvedValue({
+        items: [{ ratingKey: '1', title: 'No poster' }],
+        totalSize: 1,
+      }),
+      getPreferredBasePosterUrl: vi.fn().mockResolvedValue(null),
+    } as unknown as PlexAPI;
+    const onProgress = vi.fn();
+
+    const result = await plexBasePosterManager.downloadAllBasePosterForLibrary(
+      plexApi,
+      'lib-1',
+      onProgress
+    );
+
+    expect(result.failed).toBe(1);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenLastCalledWith(1, 1, 1, 0);
+  });
+});

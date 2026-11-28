@@ -1421,28 +1421,27 @@ class PlexBasePosterManager {
             ratingKey: item.ratingKey,
           });
           failedCount++;
-          continue;
-        }
-
-        const posterBuffer = await this.downloadFromPlex(
-          plexApi,
-          preferredPosterUrl,
-          item.ratingKey
-        );
-
-        if (hasAgregarrOverlayMarker(posterBuffer)) {
-          logger.warn(
-            'Current Plex poster is an Agregarr overlay - not saving it as a base',
-            {
-              label: 'PlexBasePosterManager',
-              title: item.title,
-              ratingKey: item.ratingKey,
-            }
-          );
-          skippedOverlaidCount++;
         } else {
-          await this.storeBasePoster(posterBuffer, libraryId, item.ratingKey);
-          successCount++;
+          const posterBuffer = await this.downloadFromPlex(
+            plexApi,
+            preferredPosterUrl,
+            item.ratingKey
+          );
+
+          if (hasAgregarrOverlayMarker(posterBuffer)) {
+            logger.warn(
+              'Current Plex poster is an Agregarr overlay - not saving it as a base',
+              {
+                label: 'PlexBasePosterManager',
+                title: item.title,
+                ratingKey: item.ratingKey,
+              }
+            );
+            skippedOverlaidCount++;
+          } else {
+            await this.storeBasePoster(posterBuffer, libraryId, item.ratingKey);
+            successCount++;
+          }
         }
       } catch (error) {
         logger.error('Failed to download base poster', {

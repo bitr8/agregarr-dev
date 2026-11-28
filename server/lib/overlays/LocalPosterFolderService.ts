@@ -3,6 +3,7 @@ import logger from '@server/logger';
 import { sanitizeForFilename } from '@server/utils/fileSystemHelpers';
 import fs from 'fs/promises';
 import path from 'path';
+import { hasAgregarrOverlayMarker } from './posterOwnershipMetadata';
 
 const BASE_POSTERS_DIR = path.join(
   process.cwd(),
@@ -26,6 +27,7 @@ class LocalPosterFolderService {
       total: number;
       failed: number;
       skipped: number; // Items without TMDB ID
+      skippedOverlaid: number; // Posters that already carry an Agregarr overlay
     };
   } = {};
 
@@ -35,6 +37,10 @@ class LocalPosterFolderService {
     const totalItems = libraries.reduce((sum, lib) => sum + lib.total, 0);
     const totalFailed = libraries.reduce((sum, lib) => sum + lib.failed, 0);
     const totalSkipped = libraries.reduce((sum, lib) => sum + lib.skipped, 0);
+    const totalSkippedOverlaid = libraries.reduce(
+      (sum, lib) => sum + lib.skippedOverlaid,
+      0
+    );
 
     return {
       running: this.running,
@@ -45,6 +51,7 @@ class LocalPosterFolderService {
         total: totalItems,
         failed: totalFailed,
         skipped: totalSkipped,
+        skippedOverlaid: totalSkippedOverlaid,
         percentage:
           totalItems > 0 ? Math.round((totalCurrent / totalItems) * 100) : 0,
       },
@@ -140,6 +147,7 @@ class LocalPosterFolderService {
         total: items.length,
         failed: 0,
         skipped: 0,
+        skippedOverlaid: 0,
       };
     }
 
@@ -293,7 +301,12 @@ class LocalPosterFolderService {
     plexApi: PlexAPI,
     libraryId: string,
     libraryName: string
-  ): Promise<{ downloaded: number; skipped: number; failed: number }> {
+  ): Promise<{
+    downloaded: number;
+    skipped: number;
+    skippedOverlaid: number;
+    failed: number;
+  }> {
     logger.info('Populating folders with Plex posters for library', {
       label: 'LocalPosterFolderService',
       libraryId,
@@ -318,7 +331,7 @@ class LocalPosterFolderService {
     }
 
     const items = allItems;
-    const stats = { downloaded: 0, skipped: 0, failed: 0 };
+    const stats = { downloaded: 0, skipped: 0, skippedOverlaid: 0, failed: 0 };
 
     // Initialize progress tracking
     if (!this.libraryProgress[libraryId]) {
@@ -328,6 +341,7 @@ class LocalPosterFolderService {
         total: items.length,
         failed: 0,
         skipped: 0,
+        skippedOverlaid: 0,
       };
     }
 
@@ -434,13 +448,26 @@ class LocalPosterFolderService {
             );
           }
 
-          await fs.writeFile(posterPath, posterBuffer);
+          if (hasAgregarrOverlayMarker(posterBuffer)) {
+            logger.warn(
+              'Current Plex poster is an Agregarr overlay - not saving it as a local poster',
+              {
+                label: 'LocalPosterFolderService',
+                itemTitle: item.title,
+                ratingKey: item.ratingKey,
+              }
+            );
+            stats.skippedOverlaid++;
+            this.libraryProgress[libraryId].skippedOverlaid++;
+          } else {
+            await fs.writeFile(posterPath, posterBuffer);
 
-          stats.downloaded++;
-          logger.debug('Downloaded and saved Plex poster', {
-            label: 'LocalPosterFolderService',
-            posterPath,
-          });
+            stats.downloaded++;
+            logger.debug('Downloaded and saved Plex poster', {
+              label: 'LocalPosterFolderService',
+              posterPath,
+            });
+          }
         }
       } catch (error) {
         logger.error('Failed to populate folder with Plex poster', {

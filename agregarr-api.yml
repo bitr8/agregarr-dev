@@ -17116,6 +17116,9 @@ paths:
                             type: number
                           failed:
                             type: number
+                          skipped:
+                            type: number
+                            description: Posters skipped because they already show Agregarr overlays
                           percentage:
                             type: number
         '401':
@@ -17154,6 +17157,9 @@ paths:
                           type: number
                         failed:
                           type: number
+                        skipped:
+                          type: number
+                          description: Posters skipped because they already show Agregarr overlays
                   overallProgress:
                     type: object
                     properties:
@@ -17163,6 +17169,9 @@ paths:
                         type: number
                       failed:
                         type: number
+                      skipped:
+                        type: number
+                        description: Posters skipped because they already show Agregarr overlays
                       percentage:
                         type: number
         '401':
@@ -17458,6 +17467,9 @@ paths:
                           skipped:
                             type: number
                             description: Items skipped due to missing TMDB ID or poster URL
+                          skippedOverlaid:
+                            type: number
+                            description: Posters skipped because they already show Agregarr overlays
                           percentage:
                             type: number
         '409':
@@ -17498,6 +17510,8 @@ paths:
                           type: number
                         skipped:
                           type: number
+                        skippedOverlaid:
+                          type: number
                   overallProgress:
                     type: object
                     properties:
@@ -17508,6 +17522,8 @@ paths:
                       failed:
                         type: number
                       skipped:
+                        type: number
+                      skippedOverlaid:
                         type: number
                       percentage:
                         type: number

@@ -89,6 +89,7 @@ interface OperationStatus {
       total: number;
       failed: number;
       skipped?: number;
+      skippedOverlaid?: number;
     };
   };
   overallProgress: {
@@ -96,6 +97,7 @@ interface OperationStatus {
     total: number;
     failed: number;
     skipped?: number;
+    skippedOverlaid?: number;
     percentage: number;
   };
 }
@@ -134,6 +136,9 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [showRedownloadConfirm, setShowRedownloadConfirm] = useState(false);
   const [redownloadConfirmText, setRedownloadConfirmText] = useState('');
+  const [confirmPurpose, setConfirmPurpose] = useState<'download' | 'populate'>(
+    'download'
+  );
 
   // Reset to current saved value when modal opens
   useEffect(() => {
@@ -151,13 +156,15 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
     currentPosterizarrIntegrationEnabled,
   ]);
 
-  // Close re-download confirmation when switching away from Plex
+  // Close the confirmation when switching away from the source it belongs to
   useEffect(() => {
-    if (selectedSource !== 'plex') {
+    const owner = confirmPurpose === 'populate' ? 'local' : 'plex';
+    if (selectedSource !== owner) {
       setShowRedownloadConfirm(false);
       setRedownloadConfirmText('');
+      setConfirmPurpose('download');
     }
-  }, [selectedSource]);
+  }, [selectedSource, confirmPurpose]);
 
   // Poll download status
   useEffect(() => {
@@ -254,6 +261,7 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
   }, [isPopulatingFromPlex, addToast, intl]);
 
   const startDownload = async () => {
+    setDownloadStatus(null);
     try {
       const downloadResponse = await fetch(
         '/api/v1/overlay-settings/download-base-posters',
@@ -300,6 +308,7 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
   };
 
   const startPopulateFromPlex = async () => {
+    setPopulateFromPlexStatus(null);
     try {
       const response = await fetch(
         '/api/v1/overlay-settings/populate-local-from-plex',
@@ -371,6 +380,14 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
         appearance: 'error',
         autoDismiss: true,
       });
+      return;
+    }
+
+    if (confirmPurpose === 'populate') {
+      setShowRedownloadConfirm(false);
+      setRedownloadConfirmText('');
+      setConfirmPurpose('download');
+      await startPopulateFromPlex();
       return;
     }
 
@@ -668,6 +685,7 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
                   onClick={() => {
                     setShowRedownloadConfirm(false);
                     setRedownloadConfirmText('');
+                    setConfirmPurpose('download');
                   }}
                 >
                   {intl.formatMessage(messages.cancel)}
@@ -773,7 +791,10 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
                 <div>
                   <Button
                     buttonType="primary"
-                    onClick={startPopulateFromPlex}
+                    onClick={() => {
+                      setConfirmPurpose('populate');
+                      setShowRedownloadConfirm(true);
+                    }}
                     className="w-full"
                     disabled={isGeneratingFolders || isPopulatingFromPlex}
                   >
@@ -791,6 +812,19 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
                   <p className="mt-1 text-xs text-gray-400">
                     {intl.formatMessage(messages.populateFromPlexDescription)}
                   </p>
+
+                  {populateFromPlexStatus &&
+                    !populateFromPlexStatus.running &&
+                    (populateFromPlexStatus.overallProgress.skippedOverlaid ??
+                      0) > 0 && (
+                      <p className="mt-2 text-sm text-yellow-500">
+                        {intl.formatMessage(messages.itemsSkippedOverlaid, {
+                          count:
+                            populateFromPlexStatus.overallProgress
+                              .skippedOverlaid,
+                        })}
+                      </p>
+                    )}
 
                   {/* Inline progress for Plex population */}
                   {isPopulatingFromPlex && populateFromPlexStatus && (
