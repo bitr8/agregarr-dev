@@ -44,9 +44,7 @@ const MAX_RESPONSE_SIZE = 50 * 1024 * 1024;
 // Request timeout (30 seconds)
 const FETCH_TIMEOUT_MS = 30000;
 
-export async function loadAnimeIds(
-  url = 'https://raw.githubusercontent.com/eliasbenb/PlexAniBridge-Mappings/refs/heads/v2/mappings.json'
-): Promise<void> {
+export async function fetchAnimeMappingData(url: string): Promise<unknown> {
   // Create abort controller for timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -106,48 +104,54 @@ export async function loadAnimeIds(
     }
     const text = new TextDecoder().decode(combined);
 
-    const json = JSON.parse(text) as RawAnimeIds;
-
-    const byAniList = new Map<number, AnimeIdsRow>();
-    const byAniDB = new Map<number, AnimeIdsRow>();
-    const byMal = new Map<number, AnimeIdsRow>();
-
-    // Build indices - keys are now AniList IDs directly!
-    for (const [anilistIdStr, row] of Object.entries(json)) {
-      // Skip metadata keys like "$includes"
-      if (anilistIdStr.startsWith('$')) continue;
-
-      const anilistId = parseInt(anilistIdStr);
-      if (!anilistId || !Number.isFinite(anilistId)) continue;
-
-      // Store the row as-is (already well-structured)
-      const normalized: AnimeIdsRow = {
-        ...row,
-        anilist_id: anilistId, // Add the key as a field for completeness
-      };
-
-      // Store by AniList ID (primary key)
-      byAniList.set(anilistId, normalized);
-
-      // Also index by AniDB ID if present
-      if (row.anidb_id) {
-        byAniDB.set(row.anidb_id, normalized);
-      }
-
-      // Also index by MAL ID(s) if present
-      const malIds = normalizeToArray(row.mal_id);
-      for (const malId of malIds) {
-        byMal.set(malId, normalized);
-      }
-    }
-
-    _byAniList = byAniList;
-    _byAniDB = byAniDB;
-    _byMal = byMal;
-    _loadedAt = Date.now();
+    return JSON.parse(text);
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+export async function loadAnimeIds(
+  url = 'https://raw.githubusercontent.com/eliasbenb/PlexAniBridge-Mappings/refs/heads/v2/mappings.json'
+): Promise<void> {
+  const json = (await fetchAnimeMappingData(url)) as RawAnimeIds;
+
+  const byAniList = new Map<number, AnimeIdsRow>();
+  const byAniDB = new Map<number, AnimeIdsRow>();
+  const byMal = new Map<number, AnimeIdsRow>();
+
+  // Build indices - keys are now AniList IDs directly!
+  for (const [anilistIdStr, row] of Object.entries(json)) {
+    // Skip metadata keys like "$includes"
+    if (anilistIdStr.startsWith('$')) continue;
+
+    const anilistId = parseInt(anilistIdStr);
+    if (!anilistId || !Number.isFinite(anilistId)) continue;
+
+    // Store the row as-is (already well-structured)
+    const normalized: AnimeIdsRow = {
+      ...row,
+      anilist_id: anilistId, // Add the key as a field for completeness
+    };
+
+    // Store by AniList ID (primary key)
+    byAniList.set(anilistId, normalized);
+
+    // Also index by AniDB ID if present
+    if (row.anidb_id) {
+      byAniDB.set(row.anidb_id, normalized);
+    }
+
+    // Also index by MAL ID(s) if present
+    const malIds = normalizeToArray(row.mal_id);
+    for (const malId of malIds) {
+      byMal.set(malId, normalized);
+    }
+  }
+
+  _byAniList = byAniList;
+  _byAniDB = byAniDB;
+  _byMal = byMal;
+  _loadedAt = Date.now();
 }
 
 export async function ensureAnimeIdsLoaded(
