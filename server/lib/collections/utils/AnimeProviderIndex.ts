@@ -32,6 +32,7 @@ export interface ProviderIndexEntry {
  * Provider index containing maps for IMDb, TMDB, and TVDB lookups
  */
 export interface ProviderIndex {
+  anilist: Map<string, ProviderIndexEntry>;
   imdb: Map<string, ProviderIndexEntry>;
   tmdb: Map<string, ProviderIndexEntry>;
   tvdb: Map<string, ProviderIndexEntry>;
@@ -45,13 +46,15 @@ export interface ProviderIndex {
  * and also resolves MyAnimeList agent GUIDs via the PlexAniBridge mapping.
  */
 export function buildProviderIndex(
-  libraryCache?: LibraryItemsCache
+  libraryCache?: LibraryItemsCache,
+  mediaType?: 'movie' | 'tv'
 ): ProviderIndex {
+  const anilist = new Map<string, ProviderIndexEntry>();
   const imdb = new Map<string, ProviderIndexEntry>();
   const tmdb = new Map<string, ProviderIndexEntry>();
   const tvdb = new Map<string, ProviderIndexEntry>();
 
-  if (!libraryCache) return { imdb, tmdb, tvdb };
+  if (!libraryCache) return { anilist, imdb, tmdb, tvdb };
 
   const extractGuidString = (g: string | PlexGuid | undefined): string | null =>
     typeof g === 'string' ? g : g && typeof g.id === 'string' ? g.id : null;
@@ -126,8 +129,17 @@ export function buildProviderIndex(
           const malId = parseInt(mMalAgent[1]);
           const map = lookupByMal(malId);
           if (map) {
+            if (map.anilist_id) {
+              anilist.set(String(map.anilist_id), {
+                ratingKey: it.ratingKey,
+                title: it.title,
+                libraryKey: libKey,
+                tvdbId:
+                  mediaType === 'tv' ? itemTvdbId ?? map.tvdb_id : undefined,
+              });
+            }
             // Add all available IDs from PlexAniBridge mapping
-            if (map.tvdb_id) {
+            if (mediaType !== 'movie' && map.tvdb_id) {
               tvdb.set(String(map.tvdb_id), {
                 ratingKey: it.ratingKey,
                 title: it.title,
@@ -135,7 +147,7 @@ export function buildProviderIndex(
                 tvdbId: itemTvdbId ?? Number(map.tvdb_id),
               });
             }
-            if (map.tmdb_show_id) {
+            if (mediaType !== 'movie' && map.tmdb_show_id) {
               tmdb.set(String(map.tmdb_show_id), {
                 ratingKey: it.ratingKey,
                 title: it.title,
@@ -145,7 +157,8 @@ export function buildProviderIndex(
               });
             }
             // tmdb_movie_id can be array - add all values
-            const tmdbMovieIds = getAllValues(map.tmdb_movie_id);
+            const tmdbMovieIds =
+              mediaType === 'tv' ? [] : getAllValues(map.tmdb_movie_id);
             for (const mid of tmdbMovieIds) {
               tmdb.set(String(mid), {
                 ratingKey: it.ratingKey,
@@ -155,7 +168,8 @@ export function buildProviderIndex(
               });
             }
             // imdb_id can be array - add all values
-            const imdbIds = getAllValues(map.imdb_id);
+            const imdbIds =
+              mediaType === 'movie' ? [] : getAllValues(map.imdb_id);
             for (const iid of imdbIds) {
               imdb.set(iid.toLowerCase(), {
                 ratingKey: it.ratingKey,
@@ -171,7 +185,7 @@ export function buildProviderIndex(
     }
   }
 
-  return { imdb, tmdb, tvdb };
+  return { anilist, imdb, tmdb, tvdb };
 }
 
 export function requireAnimeLibraryItems(
@@ -188,7 +202,11 @@ export function requireAnimeLibraryItems(
 
 export function buildLibraryProviderIndex(
   libraryCache: LibraryItemsCache | undefined,
-  libraryId: string | string[]
+  libraryId: string | string[],
+  mediaType?: 'movie' | 'tv'
 ): ProviderIndex {
-  return buildProviderIndex(requireAnimeLibraryItems(libraryCache, libraryId));
+  return buildProviderIndex(
+    requireAnimeLibraryItems(libraryCache, libraryId),
+    mediaType
+  );
 }
