@@ -781,9 +781,11 @@ class CollectionsQuickSync {
 
     for (const config of configs) {
       if (this.needsResync(config)) continue;
-      const collectionKeys =
-        config.collectionRatingKeys ??
-        (config.collectionRatingKey ? [config.collectionRatingKey] : []);
+      const collectionKeys = config.collectionRatingKeys?.length
+        ? config.collectionRatingKeys
+        : config.collectionRatingKey
+        ? [config.collectionRatingKey]
+        : [];
 
       for (const collectionRatingKey of collectionKeys) {
         try {

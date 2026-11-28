@@ -176,4 +176,12 @@ describe('quick sync swap keeps collection membership', () => {
     await cleanup();
     expect(plex.addItemsToCollection).toHaveBeenCalledTimes(2);
   });
+
+  it('falls back to the single collection key when the key list is empty', async () => {
+    cfg.configs = [config({ collectionRatingKeys: [] })];
+    await cleanup();
+    expect(plex.addItemsToCollection).toHaveBeenCalledWith('col-1', [
+      { ratingKey: 'real-1', title: 'Film' },
+    ]);
+  });
 });
