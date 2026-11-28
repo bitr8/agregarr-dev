@@ -17,6 +17,7 @@ vi.mock('@server/lib/collections/core/CollectionUtilities', () => ({
 vi.mock('@server/lib/placeholders/seerrIgnorePatterns', () => ({
   ensureSeerrIgnorePatterns: vi.fn(),
 }));
+vi.mock('@server/lib/placeholderSwapTrigger', () => ({ default: {} }));
 vi.mock('@server/lib/posterizarrTrigger', () => ({ default: {} }));
 vi.mock('./collections/services/CollectionCleanupService', () => ({
   CollectionCleanupService: class {},

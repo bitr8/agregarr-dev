@@ -120,6 +120,10 @@ const messages = defineMessages({
     'The webhook now requires a token, so the URL is different. If you registered this webhook in Plex before updating, copy the new URL below and paste it into Plex under Settings, Webhooks. The old URL will be rejected.',
   plexWebhookTokenWarning:
     'This URL contains a secret that authenticates the webhook. Treat it like a password and do not share it.',
+  placeholderSwapOnPlexWebhook:
+    'Swap placeholders when Plex announces the new item',
+  placeholderSwapOnPlexWebhookDescription:
+    'When the real movie or show arrives in Plex, swap out its trailer placeholder as soon as Plex sends the new-item webhook instead of waiting for the next Collections Quick Sync. Requires the Plex webhook below to be registered in Plex (Plex Pass).',
   plexWebhookDescription:
     'Automatically resets the Plex watched status when a placeholder trailer is played. Effective for tools that sync watched state from Plex. Cannot prevent real-time scrobbles already sent to external services — exclude placeholder items in your scrobbler settings for full coverage. Requires Plex Pass. Register the webhook in Plex under Settings → Webhooks.',
 });
@@ -1280,6 +1284,45 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
           <LoadingSpinner />
         ) : (
           <div className="space-y-2 text-sm text-stone-400">
+            <div className="form-row">
+              <label
+                htmlFor="placeholderSwapOnPlexWebhook"
+                className="checkbox-label"
+              >
+                <span className="mr-2">
+                  {intl.formatMessage(messages.placeholderSwapOnPlexWebhook)}
+                </span>
+                <span className="label-tip">
+                  {intl.formatMessage(
+                    messages.placeholderSwapOnPlexWebhookDescription
+                  )}
+                </span>
+              </label>
+              <div className="form-input-area">
+                <input
+                  type="checkbox"
+                  id="placeholderSwapOnPlexWebhook"
+                  name="placeholderSwapOnPlexWebhook"
+                  checked={dataMain.placeholderSwapOnPlexWebhook ?? false}
+                  onChange={async (e) => {
+                    try {
+                      await axios.post('/api/v1/settings/main', {
+                        placeholderSwapOnPlexWebhook: e.target.checked,
+                      });
+                    } catch (error) {
+                      addToast(
+                        intl.formatMessage(
+                          messages.toastPlaceholderSettingsFailure
+                        ),
+                        { appearance: 'error', autoDismiss: true }
+                      );
+                    } finally {
+                      revalidateMain();
+                    }
+                  }}
+                />
+              </div>
+            </div>
             <p>
               Webhook path:{' '}
               <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">

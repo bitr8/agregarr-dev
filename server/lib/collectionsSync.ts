@@ -2,6 +2,7 @@ import PlexAPI from '@server/api/plexapi';
 import collectionSyncProgress from '@server/lib/collections/CollectionSyncProgress';
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
 import { ensureSeerrIgnorePatterns } from '@server/lib/placeholders/seerrIgnorePatterns';
+import placeholderSwapJob from '@server/lib/placeholderSwapTrigger';
 import posterizarrTriggerJob from '@server/lib/posterizarrTrigger';
 import rotationApply, {
   markVerified,
@@ -276,9 +277,9 @@ class CollectionsSync {
     // This check and the pending claim below are deliberately synchronous.
     // Posterizarr enqueue performs the inverse check, so only one side can win
     // before either path reaches its first await.
-    if (posterizarrTriggerJob.busy) {
+    if (posterizarrTriggerJob.busy || placeholderSwapJob.busy) {
       logger.warn(
-        'Posterizarr item triggers are running or queued, skipping this Collections Sync; retry manually or wait for the next scheduled run',
+        'Posterizarr or placeholder swap triggers are running or queued, skipping this Collections Sync; retry manually or wait for the next scheduled run',
         { label: 'Collections Sync' }
       );
       return 'skipped';

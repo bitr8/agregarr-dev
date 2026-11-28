@@ -86,6 +86,9 @@ vi.mock('@server/lib/collectionsQuickSync', () => ({
 vi.mock('@server/lib/overlayApplication', () => ({
   default: { status: { running: false } },
 }));
+vi.mock('@server/lib/placeholderSwapTrigger', () => ({
+  default: { busy: false },
+}));
 vi.mock('@server/lib/posterizarrTrigger', () => ({
   default: { busy: false },
 }));

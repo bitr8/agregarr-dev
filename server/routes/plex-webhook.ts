@@ -3,12 +3,14 @@ import PlexTvAPI from '@server/api/plextv';
 import { getRepository } from '@server/datasource';
 import { PlaceholderItem } from '@server/entity/PlaceholderItem';
 import { getAdminUser } from '@server/lib/collections/core/CollectionUtilities';
+import placeholderSwapJob from '@server/lib/placeholderSwapTrigger';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { timingSafeEqual } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { Router } from 'express';
 import multer, { MulterError } from 'multer';
+import { In } from 'typeorm';
 
 const router = Router();
 
@@ -66,7 +68,9 @@ function requireWebhookToken(
 
 interface PlexWebhookMetadata {
   ratingKey?: string;
+  parentRatingKey?: string;
   grandparentRatingKey?: string;
+  Guid?: { id?: string }[];
   type?: string;
   title?: string;
   editionTitle?: string;
@@ -95,6 +99,65 @@ function isPlaceholderMetadata(metadata: PlexWebhookMetadata): boolean {
     return true;
   }
   return false;
+}
+
+function guidIds(metadata: PlexWebhookMetadata, scheme: 'tmdb' | 'tvdb') {
+  const ids: number[] = [];
+  const pattern = new RegExp(`^${scheme}://(\\d+)$`);
+  for (const g of metadata.Guid ?? []) {
+    const match = pattern.exec(g?.id ?? '');
+    if (match) ids.push(Number(match[1]));
+  }
+  return ids;
+}
+
+// Returns the movie/show ratingKey to swap, or null (with a debug log) when the
+// event cannot be for a held placeholder. One DB query, no Plex calls.
+async function resolveSwapTarget(
+  metadata: PlexWebhookMetadata,
+  ratingKey: string
+): Promise<string | null> {
+  const skip = (reason: string) => {
+    logger.debug(`Skipping library.new for placeholder swap: ${reason}`, {
+      label: 'PlexWebhook',
+      ratingKey,
+    });
+    return null;
+  };
+
+  if (isPlaceholderMetadata(metadata)) return skip('placeholder item');
+
+  let target = ratingKey;
+  if (metadata.type === 'episode') target = metadata.grandparentRatingKey ?? '';
+  else if (metadata.type === 'season') target = metadata.parentRatingKey ?? '';
+  else if (metadata.type !== 'movie' && metadata.type !== 'show')
+    return skip(`unsupported type ${metadata.type}`);
+  if (!/^\d+$/.test(target)) return skip('no usable target ratingKey');
+
+  const repo = getRepository(PlaceholderItem);
+  let row: PlaceholderItem | null;
+  if (metadata.type === 'movie' || metadata.type === 'show') {
+    const tmdbIds = guidIds(metadata, 'tmdb');
+    const tvdbIds = guidIds(metadata, 'tvdb');
+    const mediaType = metadata.type === 'movie' ? 'movie' : 'tv';
+    const where: Record<string, unknown>[] = [];
+    if (tmdbIds.length) where.push({ mediaType, tmdbId: In(tmdbIds) });
+    if (mediaType === 'tv' && tvdbIds.length)
+      where.push({ mediaType, tvdbId: In(tvdbIds) });
+    if (!where.length) return skip('no tmdb/tvdb ids');
+    row = await repo.findOne({ where });
+  } else {
+    // Season/episode Guids are their own ids, not the show's, so match the show
+    // by ratingKey against rows already pointing at it.
+    row = await repo.findOne({
+      where: [
+        { mediaType: 'tv', plexRatingKey: target },
+        { mediaType: 'tv', pendingRealRatingKey: target },
+      ],
+    });
+  }
+  if (!row) return skip('no held placeholder matches');
+  return target;
 }
 
 async function getPlexClient(): Promise<{
@@ -249,6 +312,39 @@ router.post('/', requireWebhookToken, upload.any(), async (req, res) => {
       editionTitle: metadata?.editionTitle,
       ratingKey: metadata?.ratingKey,
     });
+
+    if (event === 'library.new') {
+      if (!getSettings().main.placeholderSwapOnPlexWebhook) return;
+      if (!metadata?.ratingKey) return;
+      const newKey = String(metadata.ratingKey);
+      if (!/^\d+$/.test(newKey)) {
+        logger.warn('Webhook payload had a non-numeric ratingKey', {
+          label: 'PlexWebhook',
+        });
+        return;
+      }
+      const target = await resolveSwapTarget(metadata, newKey);
+      if (!target) return;
+      const result = placeholderSwapJob.enqueue({
+        ratingKey: target,
+        title: metadata.title,
+      });
+      if (result.queued) {
+        logger.info('Queued placeholder swap for new Plex item', {
+          label: 'PlexWebhook',
+          ratingKey: target,
+          title: metadata.title,
+        });
+      } else {
+        logger.debug('Placeholder swap not queued', {
+          label: 'PlexWebhook',
+          ratingKey: target,
+          deduplicated: result.deduplicated,
+          rejected: result.rejected,
+        });
+      }
+      return;
+    }
 
     // Act on play, stop, and scrobble events
     // media.scrobble is fired by Plex when an item is marked as watched (~90% completion)

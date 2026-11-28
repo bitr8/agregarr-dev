@@ -2001,6 +2001,8 @@
   "components.Settings.placeholderFolderTvdbIdDescription": "Name new TV placeholder folders for shows that are not in Sonarr like Title (Year) '{'tvdb-12345'}'. Shows already in Sonarr keep Sonarr's folder name. Existing folders are not renamed.",
   "components.Settings.placeholderSettings": "Placeholder Root Folders",
   "components.Settings.placeholderSettingsDescription": "Configure root folders for placeholder files for each library. These paths should match the mounted Plex library paths inside the Agregarr container.",
+  "components.Settings.placeholderSwapOnPlexWebhook": "Swap placeholders when Plex announces the new item",
+  "components.Settings.placeholderSwapOnPlexWebhookDescription": "When the real movie or show arrives in Plex, swap out its trailer placeholder as soon as Plex sends the new-item webhook instead of waiting for the next Collections Quick Sync. Requires the Plex webhook below to be registered in Plex (Plex Pass).",
   "components.Settings.plex": "Plex",
   "components.Settings.plexWebhookDescription": "Automatically resets the Plex watched status when a placeholder trailer is played. Effective for tools that sync watched state from Plex. Cannot prevent real-time scrobbles already sent to external services — exclude placeholder items in your scrobbler settings for full coverage. Requires Plex Pass. Register the webhook in Plex under Settings → Webhooks.",
   "components.Settings.plexWebhookTitle": "Plex Webhook",

@@ -707,6 +707,7 @@ export interface MainSettings {
   apiKey: string;
   // Gates the unauthenticated /plex-webhook route; not the admin apiKey, which grants full API access
   plexWebhookToken: string;
+  placeholderSwapOnPlexWebhook?: boolean;
   applicationTitle: string;
   applicationUrl: string;
   csrfProtection: boolean;
@@ -929,6 +930,7 @@ class Settings {
       main: {
         apiKey: '',
         plexWebhookToken: '',
+        placeholderSwapOnPlexWebhook: false,
         applicationTitle: 'Agregarr',
         applicationUrl: '',
         csrfProtection: false,

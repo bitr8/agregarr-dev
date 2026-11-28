@@ -325,6 +325,10 @@ components:
           type: string
           description: Secret in the Plex webhook URL. Auto-generated; not the admin apiKey.
           readOnly: true
+        placeholderSwapOnPlexWebhook:
+          type: boolean
+          description: If true, a Plex library.new webhook for the real version of a held placeholder swaps it straight away instead of waiting for the next Collections Quick Sync. Requires the Plex webhook.
+          example: false
         appLanguage:
           type: string
           example: en

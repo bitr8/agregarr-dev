@@ -30,7 +30,7 @@ export const MAX_POSTERIZARR_TRIGGER_QUEUE_SIZE = 100;
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
-async function waitForConflictingJobs(
+export async function waitForConflictingJobs(
   libraryId?: string,
   timeoutMs = 15 * 60 * 1000
 ): Promise<void> {
@@ -66,12 +66,9 @@ async function waitForConflictingJobs(
   throw new Error('Timed out waiting for another collection/overlay job');
 }
 
-async function processTriggeredItem(
-  input: PosterizarrTriggerInput
+export async function runCollectionsQuickSyncForItem(
+  ratingKey: string
 ): Promise<ItemQuickSyncResult> {
-  // Collection membership is updated first. Overlay templates that contain a
-  // collection condition will then see the new membership during this same job.
-  let collectionResult: ItemQuickSyncResult | undefined;
   let lastBusyError: Error | undefined;
 
   for (let attempt = 1; attempt <= 5; attempt++) {
@@ -81,8 +78,7 @@ async function processTriggeredItem(
     ).default;
 
     try {
-      collectionResult = await collectionsQuickSync.runForItem(input.ratingKey);
-      break;
+      return await collectionsQuickSync.runForItem(ratingKey);
     } catch (error) {
       const candidate =
         error instanceof Error ? error : new Error(String(error));
@@ -94,11 +90,17 @@ async function processTriggeredItem(
     }
   }
 
-  if (!collectionResult) {
-    throw (
-      lastBusyError ?? new Error('Could not start targeted collection sync')
-    );
-  }
+  throw lastBusyError ?? new Error('Could not start targeted collection sync');
+}
+
+async function processTriggeredItem(
+  input: PosterizarrTriggerInput
+): Promise<ItemQuickSyncResult> {
+  // Collection membership is updated first. Overlay templates that contain a
+  // collection condition will then see the new membership during this same job.
+  const collectionResult = await runCollectionsQuickSyncForItem(
+    input.ratingKey
+  );
 
   await waitForConflictingJobs(collectionResult.libraryId);
   const { overlayLibraryService } = await import(
@@ -130,7 +132,9 @@ export class PosterizarrTriggerJob {
   constructor(
     private readonly processor: TriggerProcessor = processTriggeredItem,
     private readonly dedupeWindowMs = 60_000,
-    private readonly maxQueueSize = MAX_POSTERIZARR_TRIGGER_QUEUE_SIZE
+    private readonly maxQueueSize = MAX_POSTERIZARR_TRIGGER_QUEUE_SIZE,
+    private readonly logName = 'Posterizarr item trigger',
+    private readonly logLabel = 'Posterizarr Trigger'
   ) {}
 
   private fingerprint(input: PosterizarrTriggerInput): string {
@@ -211,8 +215,8 @@ export class PosterizarrTriggerJob {
       const startedAt = new Date().toISOString();
 
       try {
-        logger.info('Starting Posterizarr item trigger', {
-          label: 'Posterizarr Trigger',
+        logger.info(`Starting ${this.logName}`, {
+          label: this.logLabel,
           ...input,
         });
         const collectionResult = await this.processor(input);
@@ -226,8 +230,8 @@ export class PosterizarrTriggerJob {
           completedAt: new Date().toISOString(),
           collectionResult,
         };
-        logger.info('Posterizarr item trigger completed', {
-          label: 'Posterizarr Trigger',
+        logger.info(`${this.logName} completed`, {
+          label: this.logLabel,
           ...this.lastResult,
         });
       } catch (error) {
@@ -242,8 +246,8 @@ export class PosterizarrTriggerJob {
           completedAt: new Date().toISOString(),
           error: message,
         };
-        logger.error('Posterizarr item trigger failed', {
-          label: 'Posterizarr Trigger',
+        logger.error(`${this.logName} failed`, {
+          label: this.logLabel,
           ...this.lastResult,
         });
       } finally {

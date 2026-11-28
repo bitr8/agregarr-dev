@@ -2,6 +2,7 @@ import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { getOverlayLibraryType } from '@server/lib/overlays/overlayLibraryType';
 import { normalizeOverlaySyncTargets } from '@server/lib/overlays/overlayTargets';
+import placeholderSwapJob from '@server/lib/placeholderSwapTrigger';
 import posterizarrTriggerJob from '@server/lib/posterizarrTrigger';
 import logger from '@server/logger';
 
@@ -73,9 +74,9 @@ class OverlayApplication {
     // This check and the pending claim below are deliberately synchronous.
     // Posterizarr enqueue performs the inverse check, so only one side can win
     // before either path reaches its first await.
-    if (posterizarrTriggerJob.busy) {
+    if (posterizarrTriggerJob.busy || placeholderSwapJob.busy) {
       logger.warn(
-        'Posterizarr item triggers are running or queued, skipping this Overlay Application; retry manually or wait for the next scheduled run',
+        'Posterizarr or placeholder swap triggers are running or queued, skipping this Overlay Application; retry manually or wait for the next scheduled run',
         { label: 'Overlay Application' }
       );
       return;

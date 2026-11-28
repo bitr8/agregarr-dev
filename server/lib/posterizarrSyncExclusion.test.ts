@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   trigger: { busy: true },
+  swap: { busy: false },
   getRepository: vi.fn(),
   getSettings: vi.fn(),
 }));
 
 vi.mock('@server/lib/posterizarrTrigger', () => ({ default: mocks.trigger }));
+vi.mock('@server/lib/placeholderSwapTrigger', () => ({ default: mocks.swap }));
 vi.mock('@server/datasource', () => ({ getRepository: mocks.getRepository }));
 vi.mock('@server/lib/settings', () => ({ getSettings: mocks.getSettings }));
 vi.mock('@server/api/plexapi', () => ({ default: vi.fn() }));
@@ -36,6 +38,8 @@ describe('full sync exclusion during Posterizarr work', () => {
     collectionsSync.pending = false;
     overlayApplication.running = false;
     overlayApplication.pending = false;
+    mocks.trigger.busy = true;
+    mocks.swap.busy = false;
   });
 
   it.each([
@@ -49,6 +53,21 @@ describe('full sync exclusion during Posterizarr work', () => {
       expect(job.status.pending).toBe(false);
       expect(mocks.getRepository).not.toHaveBeenCalled();
       expect(mocks.getSettings).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['collection', collectionsSync],
+    ['overlay', overlayApplication],
+  ] as const)(
+    'does not start a %s sync while placeholder swaps are queued or running',
+    async (_name, job) => {
+      mocks.trigger.busy = false;
+      mocks.swap.busy = true;
+      await job.run();
+      expect(job.status.running).toBe(false);
+      expect(job.status.pending).toBe(false);
+      expect(mocks.getRepository).not.toHaveBeenCalled();
     }
   );
 });
