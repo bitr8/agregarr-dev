@@ -1139,7 +1139,7 @@ export class CollectionSyncService {
       const oldRk = row.plexRatingKey;
       if (!oldRk) {
         logger.info(
-          'Edition re-point: edition ratingKey unknown, cleaning up without collection removal',
+          'Edition re-point: edition ratingKey unknown, cleaning up only once every owning config synced this run',
           {
             label: 'Edition Re-point',
             title: row.title,
@@ -1186,7 +1186,13 @@ export class CollectionSyncService {
 
         // Remove edition from collections once the real show is in them or the owning config synced this run
         let allRepointed = true;
-        if (oldRk) {
+        if (!oldRk) {
+          allRepointed = owningConfigs.every(
+            (c) =>
+              !!c.lastSyncedAt &&
+              Date.parse(c.lastSyncedAt) >= Date.parse(runStartedAt)
+          );
+        } else {
           for (const config of owningConfigs) {
             const collectionRks = config.collectionRatingKeys?.length
               ? config.collectionRatingKeys

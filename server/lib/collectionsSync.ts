@@ -219,6 +219,12 @@ class CollectionsSync {
     // This check and the pending claim below are deliberately synchronous.
     // Posterizarr enqueue performs the inverse check, so only one side can win
     // before either path reaches its first await.
+    if (this.running || this.pending) {
+      logger.warn('Collections Sync is already running, skipping this run', {
+        label: 'Collections Sync',
+      });
+      return;
+    }
     if (posterizarrTriggerJob.busy) {
       logger.warn(
         'Posterizarr item triggers are running or queued, skipping this Collections Sync; retry manually or wait for the next scheduled run',

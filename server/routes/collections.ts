@@ -2100,6 +2100,13 @@ collectionsRoutes.post('/sync/cancel', isAuthenticated(), (_req, res) => {
  */
 collectionsRoutes.post('/sync', isAuthenticated(), async (req, res) => {
   try {
+    if (collectionsSync.status.running || collectionsSync.status.pending) {
+      return res.status(409).json({
+        status: 'error',
+        message: 'A collections sync is already running.',
+      });
+    }
+
     // Start collection sync immediately in background with proper error handling
     collectionsSync.run().catch((error) => {
       logger.error('Background collections sync failed:', error);

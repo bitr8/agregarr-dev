@@ -204,3 +204,18 @@ it('stops before removing or cleaning up when cancelled mid-pass', async () => {
   expect(plex.removeItemFromCollection).not.toHaveBeenCalled();
   expect(cleanup).not.toHaveBeenCalled();
 });
+
+it('waits when the edition ratingKey is unknown and a config has not synced this run', async () => {
+  state.rows[0].plexRatingKey = null;
+  state.configs[0].lastSyncedAt = '2026-11-27T00:00:00.000Z';
+  const plex = plexWith([]);
+  await run(plex);
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('cleans up an unknown-ratingKey edition once every config synced this run', async () => {
+  state.rows[0].plexRatingKey = null;
+  const plex = plexWith([]);
+  await run(plex);
+  expect(cleanup).toHaveBeenCalled();
+});
