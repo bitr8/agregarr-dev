@@ -121,6 +121,15 @@ it('defers when the pending real show has the wrong tmdb id', async () => {
   expect(cleanup).not.toHaveBeenCalled();
 });
 
+it('accepts a real show whose matching tmdb id is not its first', async () => {
+  const plex = plexWith([], {
+    type: 'show',
+    Guid: [{ id: 'tmdb://999' }, { id: 'tmdb://1' }],
+  });
+  await run(plex);
+  expect(cleanup).toHaveBeenCalled();
+});
+
 it('defers when the pending real show is itself an edition', async () => {
   const plex = plexWith([], { ...REAL, editionTitle: 'Trailer' });
   await run(plex);

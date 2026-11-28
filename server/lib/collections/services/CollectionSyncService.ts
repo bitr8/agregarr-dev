@@ -1313,10 +1313,10 @@ export class CollectionSyncService {
       );
       if (new PlaceholderContextService().isPlaceholderItem(meta)) return false;
       const guids = (meta.Guid || []).map((g) => g.id);
-      const tmdb = guids.find((g) => g.startsWith('tmdb://'));
-      if (tmdb) return tmdb === `tmdb://${row.tmdbId}`;
-      const tvdb = guids.find((g) => g.startsWith('tvdb://'));
-      return !!tvdb && !!row.tvdbId && tvdb === `tvdb://${row.tvdbId}`;
+      if (guids.some((g) => g.startsWith('tmdb://'))) {
+        return guids.includes(`tmdb://${row.tmdbId}`);
+      }
+      return !!row.tvdbId && guids.includes(`tvdb://${row.tvdbId}`);
     } catch {
       return false;
     }
