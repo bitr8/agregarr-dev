@@ -102,6 +102,17 @@ describe('pre-existing suffix and individual sync routes', () => {
     expect(updateSettings.mock.calls[0][1]).not.toHaveProperty('name');
   });
 
+  it('turns a bulk reset into a cleared override and a reset request', async () => {
+    const res = await put({ resetSortTitle: true, sortTitleOverride: 'ZZZ' });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const saved = updateSettings.mock.calls[0][1];
+    expect(saved).toMatchObject({
+      sortTitleOverride: '',
+      sortTitleResetRequested: true,
+    });
+    expect(saved).not.toHaveProperty('resetSortTitle');
+  });
+
   it('syncs one collection', async () => {
     syncSingle.mockResolvedValue(true);
     const res = await sync(stored.id);

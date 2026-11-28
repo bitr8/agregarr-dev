@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import ConfirmButton from '@app/components/Common/ConfirmButton';
 import Modal from '@app/components/Common/Modal';
 import RotationBadge from '@app/components/Rotation/RotationBadge';
 import useRotationMembership from '@app/hooks/rotation/useRotationMembership';
@@ -9,6 +10,7 @@ import type {
   PreExistingCollectionConfig,
 } from '@app/types/collections';
 import { CollectionType } from '@app/types/collections';
+import { pendingCollectionName } from '@app/utils/collections/sortTitle';
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -16,12 +18,15 @@ import {
   FunnelIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import type { CollectionSuffixMode } from '@server/constants/sortTitle';
 import type { Membership } from '@server/interfaces/api/rotationInterfaces';
 import axios from 'axios';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
+import type { ColumnFit } from './useColumnWidths';
+import { useColumnWidths } from './useColumnWidths';
 
 const messages = defineMessages({
   bulkEditTitle: 'Bulk Edit Collections',
@@ -79,7 +84,30 @@ const messages = defineMessages({
   noCollectionsSelected: 'No collections selected',
   rotationOwnSaveFailed:
     "Couldn't save this collection's own visibility setting. The rotation keeps using the previous one.",
+  collectionSuffix: 'Collection Suffix',
+  collectionSuffixLeave: 'Leave As Is',
+  collectionSuffixStrip: 'Remove " Collection"',
+  collectionSuffixAdd: 'Add " Collection"',
+  resetSortTitles: 'Reset Sort Titles ({count})',
+  resetSortTitlesConfirm: 'Reset {count}?',
+  resetSortTitlesToast:
+    'Sort titles reset for {count} collection(s). Plex updates on the next sync.',
+  suffixCellLeave: 'Leave',
+  suffixCellStrip: 'Remove',
+  suffixCellAdd: 'Add',
+  resetColumnWidths: 'Reset Column Widths',
+  resizeColumn: 'Drag to resize, double-click to fit',
 });
+
+// Short forms keep the column narrow; the edit row's dropdown spells them out.
+const suffixCellMessages: Record<
+  CollectionSuffixMode,
+  (typeof messages)[keyof typeof messages]
+> = {
+  leave: messages.suffixCellLeave,
+  strip: messages.suffixCellStrip,
+  add: messages.suffixCellAdd,
+};
 
 interface BulkEditModalProps {
   collections: CollectionFormConfig[];
@@ -123,6 +151,7 @@ type UnifiedCollection = {
   showUnwatchedOnly?: boolean;
   createPlaceholdersForMissing?: boolean;
   membership?: Membership;
+  collectionSuffixMode?: CollectionSuffixMode;
   // Original config for saving
   originalConfig:
     | CollectionFormConfig
@@ -176,10 +205,13 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
     minimumRottenTomatoesAudienceRating?: number | '';
     showUnwatchedOnly?: boolean;
     createPlaceholdersForMissing?: boolean;
+    collectionSuffixMode?: CollectionSuffixMode | '';
   }>({});
 
   // Saving state
   const [isSaving, setIsSaving] = useState(false);
+  // Remounts the reset button so each reset asks for its own confirmation.
+  const [resetRound, setResetRound] = useState(0);
 
   // Transform all collections into unified format
   const unifiedCollections = useMemo((): UnifiedCollection[] => {
@@ -242,7 +274,11 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
       const membership = rotationMap[`preExisting:${pre.id}`];
       unified.push({
         id: `preExisting-${pre.id}`,
-        name: pre.name,
+        name: pendingCollectionName(
+          pre.name,
+          pre.collectionSuffixMode,
+          pre.collectionSuffixRenameFailed
+        ),
         type: 'preExisting',
         collectionType: CollectionType.PRE_EXISTING,
         libraryName: pre.libraryName,
@@ -252,6 +288,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
         randomizeHomeOrder:
           membership?.own?.randomizeHomeOrder ?? pre.randomizeHomeOrder,
         membership,
+        collectionSuffixMode: pre.collectionSuffixMode,
         originalConfig: pre,
       });
     });
@@ -387,6 +424,11 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
             (a.createPlaceholdersForMissing ? 1 : 0) -
             (b.createPlaceholdersForMissing ? 1 : 0);
           break;
+        case 'collectionSuffixMode':
+          comparison = (a.collectionSuffixMode || '').localeCompare(
+            b.collectionSuffixMode || ''
+          );
+          break;
         default:
           comparison = 0;
       }
@@ -488,6 +530,15 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
     if (collectionOnlyFields.includes(field)) {
       return type === 'collection';
+    }
+
+    if (field === 'collectionSuffixMode') {
+      return type === 'preExisting';
+    }
+
+    // Plex hubs have no sort title of Agregarr's to reset.
+    if (field === 'sortTitle') {
+      return type !== 'hub';
     }
 
     return false;
@@ -697,6 +748,13 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
             editValues.createPlaceholdersForMissing;
         }
 
+        if (
+          editValues.collectionSuffixMode &&
+          isFieldApplicable('collectionSuffixMode', collection.type)
+        ) {
+          updatedFields.collectionSuffixMode = editValues.collectionSuffixMode;
+        }
+
         // Merge updated fields into the base config
         const updatedConfig = { ...baseConfig, ...updatedFields };
 
@@ -806,6 +864,149 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
     }
   };
 
+  const sortTitleResetTargets = unifiedCollections.filter(
+    (c) => selectedIds.has(c.id) && isFieldApplicable('sortTitle', c.type)
+  );
+
+  // Agregarr collections get the form's cleared Sort Title request; pre-existing ones resetSortTitle, which also covers a title set in Plex.
+  const handleResetSortTitles = async () => {
+    setIsSaving(true);
+    let resetCount = 0;
+    for (const collection of sortTitleResetTargets) {
+      const config = collection.originalConfig;
+      try {
+        if (collection.type === 'collection') {
+          await axios.put(`/api/v1/collections/${config.id}/settings`, {
+            ...config,
+            isActive: undefined,
+            missing: undefined,
+            sortTitleOverride: '',
+            groupSortTitleOptIn: false,
+          });
+        } else {
+          await axios.put(`/api/v1/preexisting/${config.id}/settings`, {
+            ...config,
+            isActive: undefined,
+            collectionType: undefined,
+            missing: undefined,
+            resetSortTitle: true,
+          });
+        }
+        resetCount++;
+      } catch (error) {
+        addToast(
+          intl.formatMessage(messages.errorToast, {
+            name: collection.name,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          }),
+          { appearance: 'error', autoDismiss: true }
+        );
+      }
+    }
+    setIsSaving(false);
+    setResetRound((round) => round + 1);
+    if (resetCount > 0) {
+      addToast(
+        intl.formatMessage(messages.resetSortTitlesToast, {
+          count: resetCount,
+        }),
+        { appearance: 'success', autoDismiss: true }
+      );
+      onSave();
+    }
+  };
+
+  const suffixLabels: Record<CollectionSuffixMode, string> = {
+    leave: intl.formatMessage(messages.collectionSuffixLeave),
+    strip: intl.formatMessage(messages.collectionSuffixStrip),
+    add: intl.formatMessage(messages.collectionSuffixAdd),
+  };
+
+  // Header order matches the cells in each row. Widths fit every collection, not just the filtered ones, so filtering doesn't shift them.
+  const columns = useMemo((): (ColumnFit & { center: boolean })[] => {
+    const text = (key: keyof typeof messages) =>
+      intl.formatMessage(messages[key]);
+    const centered = (
+      key: string,
+      label: keyof typeof messages,
+      cells?: string[]
+    ) => ({ key, header: text(label), center: true, cells });
+    return [
+      {
+        key: 'name',
+        header: text('collectionName'),
+        cells: unifiedCollections.map((c) => c.name),
+        min: 192,
+        max: 360,
+        center: false,
+      },
+      {
+        key: 'library',
+        header: text('library'),
+        cells: unifiedCollections.map((c) => c.libraryName),
+        // Frozen, so kept narrow: longer names truncate with a tooltip.
+        max: 128,
+        center: false,
+      },
+      {
+        key: 'type',
+        header: text('type'),
+        cells: ['Agregarr', 'Plex Hub', 'Pre-existing'],
+        center: false,
+      },
+      centered('usersHome', 'usersHome'),
+      centered('serverOwnerHome', 'serverOwnerHome'),
+      centered('libraryRecommended', 'libraryRecommended'),
+      centered('maxItems', 'maxItems'),
+      centered('randomizeHomeOrder', 'randomizeHomeOrder'),
+      {
+        ...centered(
+          'sortOrder',
+          'sortOrder',
+          unifiedCollections.map((c) => c.sortOrder || 'default')
+        ),
+        max: 128,
+      },
+      centered(
+        'downloadMode',
+        'downloadMode',
+        unifiedCollections.map((c) => c.downloadMode || '-')
+      ),
+      centered('searchMissingMovies', 'searchMissingMovies'),
+      centered('searchMissingTV', 'searchMissingTV'),
+      centered('autoApproveMovies', 'autoApproveMovies'),
+      centered('autoApproveTV', 'autoApproveTV'),
+      centered('maxSeasonsToRequest', 'maxSeasonsToRequest'),
+      centered('seasonsPerShowLimit', 'seasonsPerShowLimit'),
+      centered('seasonGrabOrder', 'seasonGrabOrder'),
+      centered('maxPositionToProcess', 'maxPositionToProcess'),
+      centered('minimumYear', 'minimumYear'),
+      centered('minimumImdbRating', 'minimumImdbRating'),
+      centered('minimumRottenTomatoesRating', 'minimumRottenTomatoesRating'),
+      centered(
+        'minimumRottenTomatoesAudienceRating',
+        'minimumRottenTomatoesAudienceRating'
+      ),
+      centered('showUnwatchedOnly', 'showUnwatchedOnly'),
+      centered('createPlaceholdersForMissing', 'createPlaceholders'),
+      centered(
+        'collectionSuffixMode',
+        'collectionSuffix',
+        unifiedCollections.map((c) =>
+          intl.formatMessage(
+            suffixCellMessages[c.collectionSuffixMode ?? 'leave']
+          )
+        )
+      ),
+    ];
+  }, [intl, unifiedCollections]);
+  const { widthOf, startResize, nudgeWidth, resetWidths, hasResized } =
+    useColumnWidths(columns);
+  const editCell =
+    'sticky bottom-0 z-20 bg-stone-800 px-3 py-2 shadow-[inset_0_2px_0_rgb(249,115,22)]';
+  // The frozen Name and Library columns sit after the 48px checkbox column.
+  const libraryLeft = 48 + widthOf('name');
+
   return (
     <Modal
       title={intl.formatMessage(messages.bulkEditTitle)}
@@ -819,7 +1020,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
       okDisabled={isSaving || selectedIds.size === 0}
       cancelText={intl.formatMessage(messages.close)}
       backgroundClickable={false}
-      customMaxWidth="sm:max-w-7xl"
+      customMaxWidth="sm:max-w-[96vw]"
     >
       <div className="space-y-4">
         <p className="text-sm text-gray-400">
@@ -842,9 +1043,30 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 count: selectedIds.size,
               })}
             </span>
+            {sortTitleResetTargets.length > 0 && !isSaving && (
+              <ConfirmButton
+                key={resetRound}
+                buttonSize="sm"
+                buttonType="warning"
+                onClick={handleResetSortTitles}
+                confirmText={intl.formatMessage(
+                  messages.resetSortTitlesConfirm,
+                  { count: sortTitleResetTargets.length }
+                )}
+              >
+                {intl.formatMessage(messages.resetSortTitles, {
+                  count: sortTitleResetTargets.length,
+                })}
+              </ConfirmButton>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
+            {hasResized && (
+              <Button buttonSize="sm" onClick={() => resetWidths()}>
+                {intl.formatMessage(messages.resetColumnWidths)}
+              </Button>
+            )}
             <FunnelIcon className="h-4 w-4 text-gray-400" />
 
             {/* Type Filter */}
@@ -885,12 +1107,23 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
           </div>
         </div>
 
-        {/* Table container with horizontal scroll */}
-        <div className="overflow-x-auto rounded-lg border border-gray-700">
-          <table className="w-full min-w-max table-fixed">
-            <thead className="sticky top-0 z-10 bg-stone-800">
-              <tr className="border-b border-gray-700">
-                <th className="sticky left-0 z-20 w-12 bg-stone-800 px-3 py-2 text-left text-xs font-medium text-gray-400 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+        {/* Scrolls inside itself so the headers, the edit row and the horizontal scrollbar stay in view. */}
+        <div className="max-h-[calc(100vh-20rem)] min-h-[16rem] overflow-auto rounded-lg border border-gray-700">
+          <table
+            className="table-fixed"
+            style={{
+              width: 48 + columns.reduce((sum, c) => sum + widthOf(c.key), 0),
+            }}
+          >
+            <colgroup>
+              <col style={{ width: 48 }} />
+              {columns.map((column) => (
+                <col key={column.key} style={{ width: widthOf(column.key) }} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                <th className="sticky left-0 top-0 z-30 bg-stone-800 px-3 py-2 text-left text-xs font-medium text-gray-400 shadow-[inset_0_-1px_0_rgb(55,65,81),2px_0_4px_rgba(0,0,0,0.3)]">
                   <input
                     type="checkbox"
                     checked={
@@ -908,189 +1141,58 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     className="h-4 w-4 rounded border-gray-600 bg-stone-700 text-orange-500 focus:ring-orange-500"
                   />
                 </th>
-                <th
-                  className="sticky left-12 z-20 min-w-48 cursor-pointer select-none bg-stone-800 px-3 py-2 text-left text-xs font-medium text-gray-400 shadow-[2px_0_4px_rgba(0,0,0,0.3)] hover:text-gray-300"
-                  onClick={() => handleColumnSort('name')}
-                >
-                  {intl.formatMessage(messages.collectionName)}
-                  {renderSortIndicator('name')}
-                </th>
-                <th
-                  className="sticky left-60 z-20 w-32 cursor-pointer select-none bg-stone-800 px-3 py-2 text-left text-xs font-medium text-gray-400 shadow-[2px_0_0_0_rgb(75,85,99)] hover:text-gray-300"
-                  onClick={() => handleColumnSort('library')}
-                >
-                  {intl.formatMessage(messages.library)}
-                  {renderSortIndicator('library')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-left text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('type')}
-                >
-                  {intl.formatMessage(messages.type)}
-                  {renderSortIndicator('type')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('usersHome')}
-                >
-                  {intl.formatMessage(messages.usersHome)}
-                  {renderSortIndicator('usersHome')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('serverOwnerHome')}
-                >
-                  {intl.formatMessage(messages.serverOwnerHome)}
-                  {renderSortIndicator('serverOwnerHome')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('libraryRecommended')}
-                >
-                  {intl.formatMessage(messages.libraryRecommended)}
-                  {renderSortIndicator('libraryRecommended')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('maxItems')}
-                >
-                  {intl.formatMessage(messages.maxItems)}
-                  {renderSortIndicator('maxItems')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('randomizeHomeOrder')}
-                >
-                  {intl.formatMessage(messages.randomizeHomeOrder)}
-                  {renderSortIndicator('randomizeHomeOrder')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('sortOrder')}
-                >
-                  {intl.formatMessage(messages.sortOrder)}
-                  {renderSortIndicator('sortOrder')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('downloadMode')}
-                >
-                  {intl.formatMessage(messages.downloadMode)}
-                  {renderSortIndicator('downloadMode')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('searchMissingMovies')}
-                >
-                  {intl.formatMessage(messages.searchMissingMovies)}
-                  {renderSortIndicator('searchMissingMovies')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('searchMissingTV')}
-                >
-                  {intl.formatMessage(messages.searchMissingTV)}
-                  {renderSortIndicator('searchMissingTV')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('autoApproveMovies')}
-                >
-                  {intl.formatMessage(messages.autoApproveMovies)}
-                  {renderSortIndicator('autoApproveMovies')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('autoApproveTV')}
-                >
-                  {intl.formatMessage(messages.autoApproveTV)}
-                  {renderSortIndicator('autoApproveTV')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('maxSeasonsToRequest')}
-                >
-                  {intl.formatMessage(messages.maxSeasonsToRequest)}
-                  {renderSortIndicator('maxSeasonsToRequest')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('seasonsPerShowLimit')}
-                >
-                  {intl.formatMessage(messages.seasonsPerShowLimit)}
-                  {renderSortIndicator('seasonsPerShowLimit')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('seasonGrabOrder')}
-                >
-                  {intl.formatMessage(messages.seasonGrabOrder)}
-                  {renderSortIndicator('seasonGrabOrder')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('maxPositionToProcess')}
-                >
-                  {intl.formatMessage(messages.maxPositionToProcess)}
-                  {renderSortIndicator('maxPositionToProcess')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('minimumYear')}
-                >
-                  {intl.formatMessage(messages.minimumYear)}
-                  {renderSortIndicator('minimumYear')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('minimumImdbRating')}
-                >
-                  {intl.formatMessage(messages.minimumImdbRating)}
-                  {renderSortIndicator('minimumImdbRating')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() =>
-                    handleColumnSort('minimumRottenTomatoesRating')
-                  }
-                >
-                  {intl.formatMessage(messages.minimumRottenTomatoesRating)}
-                  {renderSortIndicator('minimumRottenTomatoesRating')}
-                </th>
-                <th
-                  className="w-24 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() =>
-                    handleColumnSort('minimumRottenTomatoesAudienceRating')
-                  }
-                >
-                  {intl.formatMessage(
-                    messages.minimumRottenTomatoesAudienceRating
-                  )}
-                  {renderSortIndicator('minimumRottenTomatoesAudienceRating')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() => handleColumnSort('showUnwatchedOnly')}
-                >
-                  {intl.formatMessage(messages.showUnwatchedOnly)}
-                  {renderSortIndicator('showUnwatchedOnly')}
-                </th>
-                <th
-                  className="w-32 cursor-pointer select-none px-3 py-2 text-center text-xs font-medium text-gray-400 hover:text-gray-300"
-                  onClick={() =>
-                    handleColumnSort('createPlaceholdersForMissing')
-                  }
-                >
-                  {intl.formatMessage(messages.createPlaceholders)}
-                  {renderSortIndicator('createPlaceholdersForMissing')}
-                </th>
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    className={`sticky top-0 cursor-pointer select-none bg-stone-800 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-300 ${
+                      column.center ? 'text-center' : 'text-left'
+                    } ${
+                      column.key === 'name'
+                        ? 'left-12 z-30 shadow-[inset_0_-1px_0_rgb(55,65,81),2px_0_4px_rgba(0,0,0,0.3)]'
+                        : column.key === 'library'
+                        ? 'z-30 shadow-[inset_0_-1px_0_rgb(55,65,81),2px_0_0_0_rgb(75,85,99)]'
+                        : 'z-20 shadow-[inset_0_-1px_0_rgb(55,65,81)]'
+                    }`}
+                    style={
+                      column.key === 'library'
+                        ? { left: libraryLeft }
+                        : undefined
+                    }
+                    onClick={() => handleColumnSort(column.key)}
+                  >
+                    {column.header}
+                    {renderSortIndicator(column.key)}
+                    <button
+                      type="button"
+                      aria-label={intl.formatMessage(messages.resizeColumn)}
+                      title={intl.formatMessage(messages.resizeColumn)}
+                      onPointerDown={startResize(column.key, column.min)}
+                      onDoubleClick={() => resetWidths(column.key)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                          e.preventDefault();
+                          nudgeWidth(
+                            column.key,
+                            e.key === 'ArrowLeft' ? -16 : 16,
+                            column.min
+                          );
+                        }
+                      }}
+                      className="group absolute -right-1 top-0 z-10 flex h-full w-2.5 cursor-col-resize touch-none justify-center focus:outline-none"
+                    >
+                      {/* Always-visible divider, so columns read as resizable */}
+                      <span className="h-full w-px bg-gray-600 group-hover:w-1 group-hover:bg-orange-500 group-focus:w-1 group-focus:bg-orange-500" />
+                    </button>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {filteredAndSortedCollections.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={24}
+                    colSpan={columns.length + 1}
                     className="px-3 py-8 text-center text-sm text-gray-500"
                   >
                     {intl.formatMessage(messages.noCollections)}
@@ -1121,6 +1223,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         />
                       </td>
                       <td
+                        title={collection.name}
                         className={`sticky left-12 z-10 truncate px-3 py-2 text-sm text-white transition-colors ${
                           selectedIds.has(collection.id)
                             ? 'bg-stone-800/30 group-hover:bg-stone-800/40'
@@ -1138,7 +1241,9 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         )}
                       </td>
                       <td
-                        className={`sticky left-60 z-10 truncate px-3 py-2 text-sm text-gray-400 shadow-[2px_0_0_0_rgb(75,85,99)] transition-colors ${
+                        title={collection.libraryName}
+                        style={{ left: libraryLeft }}
+                        className={`sticky z-10 truncate px-3 py-2 text-sm text-gray-400 shadow-[2px_0_0_0_rgb(75,85,99)] transition-colors ${
                           selectedIds.has(collection.id)
                             ? 'bg-stone-800/30 group-hover:bg-stone-800/40'
                             : 'bg-stone-800 group-hover:bg-stone-700'
@@ -1146,7 +1251,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                       >
                         {collection.libraryName}
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-400">
+                      <td className="truncate px-3 py-2 text-sm text-gray-400">
                         {collection.type === 'collection'
                           ? 'Agregarr'
                           : collection.type === 'hub'
@@ -1229,7 +1334,8 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         />
                       </td>
                       <td
-                        className={`px-3 py-2 text-center text-sm ${
+                        title={collection.sortOrder || 'default'}
+                        className={`truncate px-3 py-2 text-center text-sm ${
                           !isFieldApplicable('sortOrder', collection.type)
                             ? 'text-gray-600 opacity-30'
                             : 'text-gray-300'
@@ -1441,21 +1547,42 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                           }`}
                         />
                       </td>
+                      <td
+                        className={`truncate px-3 py-2 text-center text-sm ${
+                          !isFieldApplicable(
+                            'collectionSuffixMode',
+                            collection.type
+                          )
+                            ? 'text-gray-600 opacity-30'
+                            : 'text-gray-300'
+                        }`}
+                      >
+                        {isFieldApplicable(
+                          'collectionSuffixMode',
+                          collection.type
+                        )
+                          ? intl.formatMessage(
+                              suffixCellMessages[
+                                collection.collectionSuffixMode ?? 'leave'
+                              ]
+                            )
+                          : '-'}
+                      </td>
                     </tr>
                   ))}
 
-                  {/* Edit row at bottom */}
-                  <tr className="sticky bottom-0 border-t-2 border-orange-500 bg-stone-800">
+                  {/* Edit row: its cells stick to the bottom, above the horizontal scrollbar */}
+                  <tr>
                     <td
-                      className="sticky left-0 z-10 bg-stone-800 px-3 py-3 shadow-[2px_0_0_0_rgb(75,85,99)]"
+                      className="sticky bottom-0 left-0 z-30 bg-stone-800 px-3 py-3 shadow-[inset_0_2px_0_rgb(249,115,22),2px_0_0_0_rgb(75,85,99)]"
                       colSpan={3}
                     >
                       <div className="text-xs font-medium text-orange-400">
                         {intl.formatMessage(messages.editValues)}
                       </div>
                     </td>
-                    <td className="px-3 py-3"></td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}></td>
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.visibilityConfig?.usersHome === undefined
@@ -1487,7 +1614,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.visibilityConfig?.serverOwnerHome ===
@@ -1520,7 +1647,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.visibilityConfig?.libraryRecommended ===
@@ -1553,7 +1680,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={editValues.maxItems || ''}
@@ -1571,7 +1698,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         min={1}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.randomizeHomeOrder === undefined
@@ -1600,7 +1727,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={editValues.sortOrder || ''}
                         onChange={(e) =>
@@ -1628,7 +1755,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         <option value="imdb_rating_asc">IMDb ↑</option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={editValues.downloadMode || ''}
                         onChange={(e) =>
@@ -1651,7 +1778,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.searchMissingMovies === undefined
@@ -1680,7 +1807,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.searchMissingTV === undefined
@@ -1709,7 +1836,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.autoApproveMovies === undefined
@@ -1738,7 +1865,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.autoApproveTV === undefined
@@ -1767,7 +1894,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={editValues.maxSeasonsToRequest || ''}
@@ -1785,7 +1912,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         min={0}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={editValues.seasonsPerShowLimit || ''}
@@ -1803,7 +1930,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         min={0}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={editValues.seasonGrabOrder || ''}
                         onChange={(e) =>
@@ -1830,7 +1957,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={editValues.maxPositionToProcess || ''}
@@ -1848,7 +1975,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         min={0}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={editValues.minimumYear || ''}
@@ -1867,7 +1994,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         max={2100}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={editValues.minimumImdbRating || ''}
@@ -1887,7 +2014,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         step={0.1}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={editValues.minimumRottenTomatoesRating || ''}
@@ -1906,7 +2033,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         max={100}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <input
                         type="number"
                         value={
@@ -1927,7 +2054,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         max={100}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.showUnwatchedOnly === undefined
@@ -1956,7 +2083,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={editCell}>
                       <select
                         value={
                           editValues.createPlaceholdersForMissing === undefined
@@ -1983,6 +2110,27 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         <option value="false">
                           {intl.formatMessage(messages.no)}
                         </option>
+                      </select>
+                    </td>
+                    <td className={editCell}>
+                      <select
+                        value={editValues.collectionSuffixMode || ''}
+                        onChange={(e) =>
+                          setEditValues({
+                            ...editValues,
+                            collectionSuffixMode: e.target.value as
+                              | CollectionSuffixMode
+                              | '',
+                          })
+                        }
+                        className="w-full rounded border border-gray-600 bg-stone-700 px-2 py-1 text-xs text-white"
+                      >
+                        <option value="">-</option>
+                        {(['leave', 'strip', 'add'] as const).map((mode) => (
+                          <option key={mode} value={mode}>
+                            {suffixLabels[mode]}
+                          </option>
+                        ))}
                       </select>
                     </td>
                   </tr>
