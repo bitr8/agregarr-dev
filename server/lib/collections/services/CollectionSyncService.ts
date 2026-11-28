@@ -43,6 +43,7 @@ import { getStatisticsProvider } from '@server/lib/statistics/provider';
 import logger from '@server/logger';
 import { targetedConfigs } from '@server/utils/targetUserSupport';
 import path from 'path';
+import { editionRepointAction } from './editionRepointAction';
 import { syncCacheService } from './SyncCacheService';
 
 /**
@@ -624,6 +625,7 @@ export class CollectionSyncService {
     ) => void
   ): Promise<SyncResult & { processedCollectionKeys: Set<string> }> {
     this.cancelled = false;
+    const runStartedAt = new Date().toISOString();
     const settings = getSettings();
     const collectionConfigs = settings.plex.collectionConfigs || [];
 
@@ -1068,7 +1070,7 @@ export class CollectionSyncService {
 
     // Post-sync: re-point collections for edition placeholders whose real content arrived
     try {
-      await this.processEditionRepoints(plexClient);
+      await this.processEditionRepoints(plexClient, runStartedAt);
     } catch (error) {
       logger.warn('Edition re-point pass failed', {
         label: 'Collection Sync Service',
@@ -1106,7 +1108,10 @@ export class CollectionSyncService {
    * from collections (the normal sync already added the real show), then
    * clean up the edition files and DB rows.
    */
-  private async processEditionRepoints(plexClient: PlexAPI): Promise<void> {
+  private async processEditionRepoints(
+    plexClient: PlexAPI,
+    runStartedAt: string
+  ): Promise<void> {
     const repository = (await import('@server/datasource')).getRepository(
       PlaceholderItem
     );
@@ -1159,7 +1164,7 @@ export class CollectionSyncService {
           continue;
         }
 
-        // Remove edition from collections, but only if real show is already in them
+        // Remove edition from collections once the real show is in them or the owning config synced this run
         let allRepointed = true;
         if (oldRk) {
           for (const config of owningConfigs) {
@@ -1172,15 +1177,22 @@ export class CollectionSyncService {
             for (const collRk of collectionRks) {
               try {
                 const memberRks = await plexClient.getCollectionItems(collRk);
-                if (
-                  !row.pendingRealRatingKey ||
-                  !memberRks.includes(row.pendingRealRatingKey)
-                ) {
-                  logger.warn('Real show not in collection yet, deferring', {
-                    label: 'Edition Re-point',
-                    collectionRk: collRk,
-                    realRk: row.pendingRealRatingKey,
-                  });
+                const action = editionRepointAction({
+                  editionInCollection: memberRks.includes(oldRk),
+                  realInCollection:
+                    !!row.pendingRealRatingKey &&
+                    memberRks.includes(row.pendingRealRatingKey),
+                  lastSyncedAt: config.lastSyncedAt,
+                  runStartedAt,
+                });
+                logger.info(`Edition re-point decision: ${action}`, {
+                  label: 'Edition Re-point',
+                  title: row.title,
+                  collectionRk: collRk,
+                  realRk: row.pendingRealRatingKey,
+                });
+                if (action === 'done') continue;
+                if (action === 'defer') {
                   allRepointed = false;
                   continue;
                 }
