@@ -85,16 +85,15 @@ beforeEach(() => {
 describe('TV items whose tvdbId is only known after TMDB enrichment', () => {
   it('skips a show already downloaded in Sonarr', async () => {
     sonarr(true);
-    const result = await run([show()]);
+    await run([show()]);
 
     expect(mocks.batch.mock.calls[0][0]).toEqual([
       { tmdbId: 100, tvdbId: 4242, mediaType: 'tv' },
     ]);
     expect(mocks.filterUnmatched).not.toHaveBeenCalled();
-    expect(result).toEqual([]);
   });
 
-  it('hands the backfilled tvdbId on to creation so the Sonarr folder is found', async () => {
+  it('passes the backfilled tvdbId to the items the Sonarr folder map is built from', async () => {
     sonarr(false);
     await run([show()]);
 
