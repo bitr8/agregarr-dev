@@ -211,9 +211,20 @@ export async function processPlaceholdersForMissingItems(
   const tmdbIdsWithSourceData = new Set(
     filteredSourceData.map((s) => s.tmdbId)
   );
-  const filteredMissingItems = missingItems.filter((item) =>
-    tmdbIdsWithSourceData.has(item.tmdbId)
+  const enrichedTvdbIds = new Map(
+    filteredSourceData
+      .filter((s) => s.mediaType === 'tv' && s.tvdbId)
+      .map((s) => [s.tmdbId, s.tvdbId])
   );
+  const filteredMissingItems = missingItems
+    .filter((item) => tmdbIdsWithSourceData.has(item.tmdbId))
+    .map((item) =>
+      item.mediaType === 'tv' &&
+      !item.tvdbId &&
+      enrichedTvdbIds.has(item.tmdbId)
+        ? { ...item, tvdbId: enrichedTvdbIds.get(item.tmdbId) }
+        : item
+    );
 
   // Check *arr download status before creating placeholders
   // This prevents re-creating placeholders when content has been downloaded
