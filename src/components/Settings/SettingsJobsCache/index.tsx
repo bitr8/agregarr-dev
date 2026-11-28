@@ -43,6 +43,8 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages({
   cacheDescription:
     'Agregarr caches requests to external API endpoints to optimize performance and avoid making unnecessary API calls.',
   cacheflushed: '{cachename} cache flushed.',
+  cacheflushfailed:
+    'Something went wrong while flushing the {cachename} cache.',
   cachename: 'Cache Name',
   cachehits: 'Hits',
   cachemisses: 'Misses',
@@ -331,15 +333,27 @@ const SettingsJobs = () => {
   };
 
   const flushCache = async (cache: CacheItem) => {
-    await axios.post(`/api/v1/settings/cache/${cache.id}/flush`);
-    addToast(
-      intl.formatMessage(messages.cacheflushed, { cachename: cache.name }),
-      {
-        appearance: 'success',
-        autoDismiss: true,
-      }
-    );
-    cacheRevalidate();
+    try {
+      await axios.post(`/api/v1/settings/cache/${cache.id}/flush`);
+      addToast(
+        intl.formatMessage(messages.cacheflushed, { cachename: cache.name }),
+        {
+          appearance: 'success',
+          autoDismiss: true,
+        }
+      );
+      cacheRevalidate();
+    } catch (e) {
+      addToast(
+        intl.formatMessage(messages.cacheflushfailed, {
+          cachename: cache.name,
+        }),
+        {
+          appearance: 'error',
+          autoDismiss: true,
+        }
+      );
+    }
   };
 
   const scheduleJob = async () => {

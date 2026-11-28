@@ -1725,6 +1725,7 @@
   "components.Settings.SettingsJobsCache.cache": "Cache",
   "components.Settings.SettingsJobsCache.cacheDescription": "Agregarr caches requests to external API endpoints to optimize performance and avoid making unnecessary API calls.",
   "components.Settings.SettingsJobsCache.cacheflushed": "{cachename} cache flushed.",
+  "components.Settings.SettingsJobsCache.cacheflushfailed": "Something went wrong while flushing the {cachename} cache.",
   "components.Settings.SettingsJobsCache.cachehits": "Hits",
   "components.Settings.SettingsJobsCache.cachekeys": "Total Keys",
   "components.Settings.SettingsJobsCache.cacheksize": "Key Size",
