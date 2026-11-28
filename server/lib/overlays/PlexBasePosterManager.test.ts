@@ -530,7 +530,7 @@ describe('getBasePosterForOverlay driven by resolveBasePosterSource (fork#110)',
         {}
       )
     ).rejects.toThrow(
-      'it appears to be our own overlay and no original poster is tracked'
+      /no original poster is tracked\. Reset this poster in Plex/
     );
 
     expect(storeBasePoster).not.toHaveBeenCalled();
@@ -635,12 +635,15 @@ describe('downloadAllBasePosterForLibrary overlay guard', () => {
       .spyOn(plexBasePosterManager, 'storeBasePoster')
       .mockResolvedValue('x.jpg');
 
+    const onProgress = vi.fn();
     const result = await plexBasePosterManager.downloadAllBasePosterForLibrary(
       bulkPlexApi(),
-      'lib-1'
+      'lib-1',
+      onProgress
     );
 
     expect(result).toEqual({ success: 1, failed: 0, skippedOverlaid: 1 });
+    expect(onProgress).toHaveBeenLastCalledWith(2, 2, 0, 1);
     expect(store).toHaveBeenCalledTimes(1);
     expect(store.mock.calls[0][2]).toBe('2');
   });

@@ -1191,7 +1191,7 @@ class PlexBasePosterManager {
         if (!trackedOriginal) {
           throw new Error(
             withTried(
-              'Cannot use the current Plex poster as base - it appears to be our own overlay and no original poster is tracked. Please re-download base posters.',
+              'Cannot use the current Plex poster as base - it appears to be our own overlay and no original poster is tracked. Reset this poster in Plex to its original artwork, then try again.',
               tried
             )
           );
@@ -1234,7 +1234,7 @@ class PlexBasePosterManager {
 
         throw new Error(
           withTried(
-            'Cannot use the current Plex poster as base - it appears to be our own overlay, and the original could not be recovered. Please re-download base posters.',
+            'Cannot use the current Plex poster as base - it appears to be our own overlay, and the original could not be recovered. Reset this poster in Plex to its original artwork, then try again.',
             tried
           )
         );
@@ -1370,7 +1370,12 @@ class PlexBasePosterManager {
   async downloadAllBasePosterForLibrary(
     plexApi: PlexAPI,
     libraryId: string,
-    onProgress?: (current: number, total: number, failed: number) => void
+    onProgress?: (
+      current: number,
+      total: number,
+      failed: number,
+      skipped: number
+    ) => void
   ): Promise<{ success: number; failed: number; skippedOverlaid: number }> {
     logger.info('Starting bulk base poster download', {
       label: 'PlexBasePosterManager',
@@ -1450,7 +1455,7 @@ class PlexBasePosterManager {
       }
 
       if (onProgress) {
-        onProgress(i + 1, allItems.length, failedCount);
+        onProgress(i + 1, allItems.length, failedCount, skippedOverlaidCount);
       }
     }
 

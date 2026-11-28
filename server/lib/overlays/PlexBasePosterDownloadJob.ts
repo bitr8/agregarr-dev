@@ -15,6 +15,7 @@ class PlexBasePosterDownloadJob {
       current: number;
       total: number;
       failed: number;
+      skipped: number;
     };
   } = {};
 
@@ -23,6 +24,7 @@ class PlexBasePosterDownloadJob {
     const totalCurrent = libraries.reduce((sum, lib) => sum + lib.current, 0);
     const totalItems = libraries.reduce((sum, lib) => sum + lib.total, 0);
     const totalFailed = libraries.reduce((sum, lib) => sum + lib.failed, 0);
+    const totalSkipped = libraries.reduce((sum, lib) => sum + lib.skipped, 0);
 
     return {
       running: this.running,
@@ -32,6 +34,7 @@ class PlexBasePosterDownloadJob {
         current: totalCurrent,
         total: totalItems,
         failed: totalFailed,
+        skipped: totalSkipped,
         percentage:
           totalItems > 0 ? Math.round((totalCurrent / totalItems) * 100) : 0,
       },
@@ -122,6 +125,7 @@ class PlexBasePosterDownloadJob {
           current: 0,
           total: 0,
           failed: 0,
+          skipped: 0,
         };
 
         try {
@@ -129,12 +133,13 @@ class PlexBasePosterDownloadJob {
             await plexBasePosterManager.downloadAllBasePosterForLibrary(
               plexApi,
               config.libraryId,
-              (current, total, failed) => {
+              (current, total, failed, skipped) => {
                 this.libraryProgress[config.libraryId] = {
                   libraryName: config.libraryName,
                   current,
                   total,
                   failed,
+                  skipped,
                 };
               }
             );

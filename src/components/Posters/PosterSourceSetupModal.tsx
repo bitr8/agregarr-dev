@@ -5,6 +5,7 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { useEffect, useState } from 'react';
 import { defineMessages, useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
+import { getPlexContinueAction } from './posterSetupGuard';
 
 const messages = defineMessages({
   title: 'Overlay Output Settings',
@@ -57,6 +58,9 @@ const messages = defineMessages({
   cancelDownload: 'Cancel Download',
   runInBackground: 'Run in Background',
   itemsFailed: '{count} items failed (no poster available)',
+  itemsSkippedOverlaid:
+    '{count} posters skipped: they already show Agregarr overlays. Reset them in Plex, then download again.',
+  done: 'Done',
   settingsSaved: 'Settings saved successfully',
   settingsFailed: 'Failed to save settings',
   confirm: 'Confirm',
@@ -103,7 +107,7 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
   onClose,
   onComplete,
   isInitialSetup = false,
-  // TODO: Change default to 'plex' before release to latest (currently 'tmdb' to protect existing develop users)
+  // Plex can't safely be pre-selected: there is no reliable way to tell whether existing posters carry overlays
   currentPosterSource = 'tmdb',
   currentJpegQuality = 95,
   currentPosterizarrIntegrationEnabled = false,
@@ -168,6 +172,11 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
         setDownloadStatus(status);
 
         if (!status.running) {
+          clearInterval(interval);
+          if (!status.cancelled && (status.overallProgress.skipped ?? 0) > 0) {
+            // Stay open so the skipped posters are visible
+            return;
+          }
           setIsDownloading(false);
           if (!status.cancelled) {
             addToast(intl.formatMessage(messages.downloadComplete), {
@@ -312,7 +321,17 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
     }
   };
 
+  const plexContinueAction = getPlexContinueAction({
+    isInitialSetup,
+    selectedSource,
+  });
+
   const handleContinue = async () => {
+    if (plexContinueAction === 'confirm') {
+      // Nothing is saved or downloaded until the typed confirmation
+      setShowRedownloadConfirm(true);
+      return;
+    }
     setIsSaving(true);
 
     try {
@@ -331,26 +350,11 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
         throw new Error('Failed to save settings');
       }
 
-      if (selectedSource === 'plex') {
-        // Only auto-download on initial setup
-        if (isInitialSetup) {
-          await startDownload();
-        } else {
-          // If not initial setup, just save the setting
-          addToast(intl.formatMessage(messages.settingsSaved), {
-            appearance: 'success',
-            autoDismiss: true,
-          });
-          onComplete();
-        }
-      } else {
-        // TMDB or Local source - no download needed
-        addToast(intl.formatMessage(messages.settingsSaved), {
-          appearance: 'success',
-          autoDismiss: true,
-        });
-        onComplete();
-      }
+      addToast(intl.formatMessage(messages.settingsSaved), {
+        appearance: 'success',
+        autoDismiss: true,
+      });
+      onComplete();
     } catch (error) {
       addToast(intl.formatMessage(messages.settingsFailed), {
         appearance: 'error',
@@ -908,6 +912,29 @@ const PosterSourceSetupModal: React.FC<PosterSourceSetupModalProps> = ({
                   })}
                 </p>
               )}
+            </div>
+          )}
+
+          {downloadStatus &&
+            (downloadStatus.overallProgress.skipped ?? 0) > 0 && (
+              <p className="text-sm text-yellow-500">
+                {intl.formatMessage(messages.itemsSkippedOverlaid, {
+                  count: downloadStatus.overallProgress.skipped,
+                })}
+              </p>
+            )}
+
+          {downloadStatus && !downloadStatus.running && (
+            <div className="flex justify-end">
+              <Button
+                buttonType="primary"
+                onClick={() => {
+                  setIsDownloading(false);
+                  onComplete();
+                }}
+              >
+                {intl.formatMessage(messages.done)}
+              </Button>
             </div>
           )}
 
