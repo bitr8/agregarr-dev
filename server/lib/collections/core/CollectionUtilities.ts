@@ -2306,6 +2306,7 @@ async function getAllLibraryItems(
       return {
         ratingKey: item.ratingKey,
         title: item.title,
+        type: item.type,
         addedAt: item.addedAt,
         releaseDate,
         editionTitle: item.editionTitle,
@@ -2332,6 +2333,7 @@ export interface LibraryItemsCache {
   [libraryKey: string]: {
     ratingKey: string;
     title: string;
+    type?: 'movie' | 'show' | 'season' | 'episode';
     addedAt?: number;
     releaseDate?: number; // Converted from originallyAvailableAt string to Unix timestamp
     editionTitle?: string;

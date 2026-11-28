@@ -1281,9 +1281,7 @@ https://letterboxd.com/dave/list/imdb-top-250/
       const movieTmdbIds = new Set<number>();
       for (const libraryKey of Object.keys(libraryCache)) {
         for (const item of libraryCache[libraryKey]) {
-          if (!item.Guid) continue;
-          const hasTvdb = item.Guid.some((g) => g.id.startsWith('tvdb://'));
-          if (hasTvdb) continue;
+          if (!item.Guid || item.type !== 'movie') continue;
           for (const guid of item.Guid) {
             if (guid.id.startsWith('tmdb://')) {
               const id = parseInt(guid.id.replace('tmdb://', ''), 10);

@@ -55,6 +55,18 @@ vi.mock('@server/logger', () => ({
   },
 }));
 
+const tmdbMock = vi.hoisted(() => ({
+  getMovie: vi.fn(),
+  getCollection: vi.fn(),
+}));
+
+vi.mock('@server/api/themoviedb', () => ({
+  default: class {
+    getMovie = tmdbMock.getMovie;
+    getCollection = tmdbMock.getCollection;
+  },
+}));
+
 import { normalizeListUrl, RandomListManager } from './RandomListManager';
 
 const manager = RandomListManager as unknown as {
@@ -291,5 +303,47 @@ describe('random list exclusions', () => {
       vi.restoreAllMocks();
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('buildTmdbCollectionsFromLibrary media type', () => {
+  const builder = RandomListManager as unknown as {
+    buildTmdbCollectionsFromLibrary(
+      cache: Record<string, unknown[]>,
+      now: number
+    ): Promise<string[]>;
+  };
+
+  it('looks up only movies, never a TV show that has no tvdb guid', async () => {
+    tmdbMock.getMovie.mockReset();
+    tmdbMock.getCollection.mockReset();
+    tmdbMock.getMovie.mockResolvedValue({ belongs_to_collection: null });
+
+    await builder.buildTmdbCollectionsFromLibrary(
+      {
+        shows: [
+          {
+            type: 'show',
+            Guid: [{ id: 'imdb://tt0000001' }, { id: 'tmdb://2002' }],
+          },
+          {
+            type: 'show',
+            Guid: [{ id: 'tmdb://2003' }, { id: 'tvdb://3003' }],
+          },
+        ],
+        movies: [
+          {
+            type: 'movie',
+            Guid: [{ id: 'imdb://tt0000002' }, { id: 'tmdb://1001' }],
+          },
+        ],
+      },
+      Date.now()
+    );
+
+    const looked = tmdbMock.getMovie.mock.calls.map(
+      (c: { movieId: number }[]) => c[0].movieId
+    );
+    expect(looked).toEqual([1001]);
   });
 });
