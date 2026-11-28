@@ -47,4 +47,19 @@ describe('full collections sync re-entry', () => {
     expect(mocks.getRepository).not.toHaveBeenCalled();
     expect(mocks.getSettings).not.toHaveBeenCalled();
   });
+
+  it('releases pending when the pre-flight throws, so a later sync can start', async () => {
+    const spy = vi
+      .spyOn(
+        collectionsSync as unknown as { runClaimed: () => Promise<void> },
+        'runClaimed'
+      )
+      .mockImplementationOnce(async () => {
+        collectionsSync.pending = true;
+        throw new Error('import failed');
+      });
+    await expect(collectionsSync.run()).rejects.toThrow('import failed');
+    expect(collectionsSync.pending).toBe(false);
+    spy.mockRestore();
+  });
 });
