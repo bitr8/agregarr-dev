@@ -452,6 +452,30 @@ export function isLibraryEssentialsPattern(
   );
 }
 
+export interface VisibilityFlags {
+  usersHome: boolean;
+  serverOwnerHome: boolean;
+  libraryRecommended: boolean;
+}
+
+/** Visibility to apply when a form moves into or out of Library Essentials; undefined means leave it alone */
+export function getEssentialsVisibilityChange(
+  from: { type?: string; subtype?: string },
+  to: { type?: string; subtype?: string }
+): VisibilityFlags | undefined {
+  if (isLibraryEssentialsPattern(to.type, to.subtype)) {
+    return {
+      usersHome: false,
+      serverOwnerHome: false,
+      libraryRecommended: false,
+    };
+  }
+  if (isLibraryEssentialsPattern(from.type, from.subtype)) {
+    return { usersHome: true, serverOwnerHome: true, libraryRecommended: true };
+  }
+  return undefined;
+}
+
 /** Individual episode hubs: the server skips auto posters and exclusions for them */
 export function isEpisodeHub(config: {
   type?: string;

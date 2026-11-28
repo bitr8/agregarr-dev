@@ -1,6 +1,7 @@
 import type { CollectionFormConfig } from '@app/types/collections';
 import { validateApiKeysForCollectionType } from '@app/utils/apiKeyValidation';
 import {
+  getEssentialsVisibilityChange,
   getLibraryEssentialsLabel,
   isLibraryEssentialsPattern,
 } from '@app/utils/collections/collectionUtils';
@@ -631,6 +632,20 @@ const CollectionTypeSection = ({
             if (newType !== oldType) {
               setFieldValue('subtype', ''); // Reset subtype when type changes
 
+              if (isLibraryEssentialsPattern(oldType, values.subtype)) {
+                setFieldValue('autoPoster', true);
+                setFieldValue(
+                  'visibilityConfig',
+                  getEssentialsVisibilityChange(values, {
+                    type: newType,
+                    subtype: '',
+                  })
+                );
+                setFieldValue('selectionMode', undefined);
+                setFieldValue('excludeValues', undefined);
+                setFieldValue('includeValues', undefined);
+              }
+
               // Handle multi-source type selection
               if (newType === 'multi-source') {
                 setFieldValue('isMultiSource', true);
@@ -702,11 +717,13 @@ const CollectionTypeSection = ({
               // Set defaults for Library Essentials subtypes
               if (isLibraryEssentialsPattern(values.type, newSubtype)) {
                 setFieldValue('autoPoster', false);
-                setFieldValue('visibilityConfig', {
-                  usersHome: false,
-                  serverOwnerHome: false,
-                  libraryRecommended: false,
-                });
+                setFieldValue(
+                  'visibilityConfig',
+                  getEssentialsVisibilityChange(values, {
+                    type: values.type,
+                    subtype: newSubtype,
+                  })
+                );
                 setFieldValue('selectionMode', 'exclude');
                 setFieldValue('excludeValues', []);
                 setFieldValue('includeValues', []);
@@ -717,11 +734,13 @@ const CollectionTypeSection = ({
               ) {
                 // Restore defaults when leaving essentials
                 setFieldValue('autoPoster', true);
-                setFieldValue('visibilityConfig', {
-                  usersHome: true,
-                  serverOwnerHome: true,
-                  libraryRecommended: true,
-                });
+                setFieldValue(
+                  'visibilityConfig',
+                  getEssentialsVisibilityChange(values, {
+                    type: values.type,
+                    subtype: newSubtype,
+                  })
+                );
                 setFieldValue('selectionMode', undefined);
                 setFieldValue('excludeValues', undefined);
                 setFieldValue('includeValues', undefined);
