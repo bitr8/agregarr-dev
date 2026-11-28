@@ -521,7 +521,8 @@ export async function buildRenderContext(
         !requiredContextFields ||
         requiredContextFields.has('rtCriticsScore') ||
         requiredContextFields.has('rtAudienceScore') ||
-        requiredContextFields.has('rtCertifiedFresh');
+        requiredContextFields.has('rtCertifiedFresh') ||
+        requiredContextFields.has('rtVerifiedHot');
 
       if (needsRtRatings && tmdbId) {
         // Use TMDb title for RT lookup — Plex titles may include year suffixes
@@ -575,6 +576,7 @@ export async function buildRenderContext(
                 context.rtAudienceScore = rtRating.audienceScore;
                 context.rtCertifiedFresh =
                   rtRating.criticsRating === 'Certified Fresh';
+                context.rtVerifiedHot = rtRating.verifiedHot ?? false;
               }
               logger.debug('Used in-flight RT request result', {
                 label: 'OverlayContextBuilder',
@@ -613,6 +615,7 @@ export async function buildRenderContext(
                 context.rtAudienceScore = rtRating.audienceScore;
                 context.rtCertifiedFresh =
                   rtRating.criticsRating === 'Certified Fresh';
+                context.rtVerifiedHot = rtRating.verifiedHot ?? false;
                 // Cache the rating with adaptive TTL
                 rtCache.data.set(rtCacheKey, rtRating, ttl);
                 logger.debug('Fetched and cached RT ratings', {
