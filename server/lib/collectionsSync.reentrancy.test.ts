@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@server/lib/posterizarrTrigger', () => ({ default: mocks.trigger }));
+vi.mock('@server/lib/placeholderSwapTrigger', () => ({
+  default: { busy: false },
+}));
 vi.mock('@server/datasource', () => ({ getRepository: mocks.getRepository }));
 vi.mock('@server/lib/settings', () => ({ getSettings: mocks.getSettings }));
 vi.mock('@server/api/plexapi', () => ({ default: vi.fn() }));
