@@ -145,6 +145,7 @@ class PlexBasePosterDownloadJob {
             libraryName: config.libraryName,
             success: result.success,
             failed: result.failed,
+            skippedOverlaid: result.skippedOverlaid,
           });
         } catch (error) {
           logger.error('Failed to download base posters for library', {

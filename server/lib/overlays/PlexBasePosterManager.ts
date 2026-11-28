@@ -1371,7 +1371,7 @@ class PlexBasePosterManager {
     plexApi: PlexAPI,
     libraryId: string,
     onProgress?: (current: number, total: number, failed: number) => void
-  ): Promise<{ success: number; failed: number }> {
+  ): Promise<{ success: number; failed: number; skippedOverlaid: number }> {
     logger.info('Starting bulk base poster download', {
       label: 'PlexBasePosterManager',
       libraryId,
@@ -1399,6 +1399,7 @@ class PlexBasePosterManager {
 
     let successCount = 0;
     let failedCount = 0;
+    let skippedOverlaidCount = 0;
 
     for (let i = 0; i < allItems.length; i++) {
       const item = allItems[i];
@@ -1423,9 +1424,21 @@ class PlexBasePosterManager {
           preferredPosterUrl,
           item.ratingKey
         );
-        await this.storeBasePoster(posterBuffer, libraryId, item.ratingKey);
 
-        successCount++;
+        if (hasAgregarrOverlayMarker(posterBuffer)) {
+          logger.warn(
+            'Current Plex poster is an Agregarr overlay - not saving it as a base',
+            {
+              label: 'PlexBasePosterManager',
+              title: item.title,
+              ratingKey: item.ratingKey,
+            }
+          );
+          skippedOverlaidCount++;
+        } else {
+          await this.storeBasePoster(posterBuffer, libraryId, item.ratingKey);
+          successCount++;
+        }
       } catch (error) {
         logger.error('Failed to download base poster', {
           label: 'PlexBasePosterManager',
@@ -1446,9 +1459,14 @@ class PlexBasePosterManager {
       libraryId,
       successCount,
       failedCount,
+      skippedOverlaidCount,
     });
 
-    return { success: successCount, failed: failedCount };
+    return {
+      success: successCount,
+      failed: failedCount,
+      skippedOverlaid: skippedOverlaidCount,
+    };
   }
 
   /**

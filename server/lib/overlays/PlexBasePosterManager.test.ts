@@ -605,3 +605,43 @@ describe('getBasePosterForOverlay driven by resolveBasePosterSource (fork#110)',
     expect(axiosGet).not.toHaveBeenCalled();
   });
 });
+
+describe('downloadAllBasePosterForLibrary overlay guard', () => {
+  function bulkPlexApi(): PlexAPI {
+    return {
+      getLibraryContents: vi.fn().mockResolvedValue({
+        items: [
+          { ratingKey: '1', title: 'Overlaid' },
+          { ratingKey: '2', title: 'Clean' },
+        ],
+        totalSize: 2,
+      }),
+      getPreferredBasePosterUrl: vi
+        .fn()
+        .mockImplementation(async (rk: string) => `http://plex/thumb/${rk}`),
+    } as unknown as PlexAPI;
+  }
+
+  it('skips items whose Plex poster is an Agregarr overlay and saves clean ones', async () => {
+    vi.spyOn(
+      plexBasePosterManager as any,
+      'downloadFromPlex'
+    ).mockImplementation(async (...args: unknown[]) =>
+      args[2] === '1'
+        ? Buffer.from('fake jpeg bytes overlay applied by Agregarr trailer')
+        : Buffer.from('plain poster bytes')
+    );
+    const store = vi
+      .spyOn(plexBasePosterManager, 'storeBasePoster')
+      .mockResolvedValue('x.jpg');
+
+    const result = await plexBasePosterManager.downloadAllBasePosterForLibrary(
+      bulkPlexApi(),
+      'lib-1'
+    );
+
+    expect(result).toEqual({ success: 1, failed: 0, skippedOverlaid: 1 });
+    expect(store).toHaveBeenCalledTimes(1);
+    expect(store.mock.calls[0][2]).toBe('2');
+  });
+});
