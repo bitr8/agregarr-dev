@@ -51,10 +51,15 @@ const plexWith = (
       if (m instanceof Error) throw m;
       return m;
     }),
-    getMetadata: vi.fn(async () => {
-      if (real instanceof Error) throw real;
-      return real;
-    }),
+    getMetadata: vi.fn(
+      async (_rk: string, opts?: { includeChildren?: boolean }) => {
+        if (real instanceof Error) throw real;
+        if (opts?.includeChildren) return real;
+        const rest = { ...(real as Record<string, unknown>) };
+        delete rest.Children;
+        return rest;
+      }
+    ),
     removeItemFromCollection: vi.fn(async () => undefined),
   } as unknown as PlexAPI & {
     removeItemFromCollection: ReturnType<typeof vi.fn>;
@@ -165,5 +170,37 @@ it('skips the re-point pass when the sync was cancelled', async () => {
     svc.cancelled = false;
   }
   expect(plex.getCollectionItemsOrThrow).not.toHaveBeenCalled();
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('defers when the pending real show only has a Season 00', async () => {
+  const plex = plexWith([], {
+    ...REAL,
+    Children: { Metadata: [{ index: 0 }] },
+  });
+  await run(plex);
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('defers when the pending real item is not a show', async () => {
+  const plex = plexWith([], { ...REAL, type: 'movie' });
+  await run(plex);
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('stops before removing or cleaning up when cancelled mid-pass', async () => {
+  const plex = plexWith(['100', '200']);
+  (
+    plex.getCollectionItemsOrThrow as ReturnType<typeof vi.fn>
+  ).mockImplementation(async () => {
+    collectionSyncService['cancelled'] = true;
+    return ['100', '200'];
+  });
+  try {
+    await run(plex);
+  } finally {
+    collectionSyncService['cancelled'] = false;
+  }
+  expect(plex.removeItemFromCollection).not.toHaveBeenCalled();
   expect(cleanup).not.toHaveBeenCalled();
 });

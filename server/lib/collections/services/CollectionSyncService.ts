@@ -1132,6 +1132,7 @@ export class CollectionSyncService {
 
     const handledPaths = new Set<string>();
     for (const row of rows) {
+      if (this.cancelled) return;
       // Rows sharing a placeholder file are re-pointed and cleaned up together
       if (handledPaths.has(row.placeholderPath)) continue;
       handledPaths.add(row.placeholderPath);
@@ -1217,6 +1218,7 @@ export class CollectionSyncService {
                   allRepointed = false;
                   continue;
                 }
+                if (this.cancelled) return;
                 await plexClient.removeItemFromCollection(collRk, oldRk);
                 logger.info('Removed edition from collection', {
                   label: 'Edition Re-point',
@@ -1255,6 +1257,7 @@ export class CollectionSyncService {
         const root = rootOf(row.configId, 'tv');
         if (!root) continue;
         const absPath = resolveRecordPath(root, row.placeholderPath);
+        if (this.cancelled) return;
         const fileDeleted = await cleanupPlaceholderForRealContent(
           row.tmdbId,
           absPath,
@@ -1306,8 +1309,10 @@ export class CollectionSyncService {
   ): Promise<boolean> {
     if (!realRk) return false;
     try {
-      const meta = await plexClient.getMetadata(realRk);
-      if (!meta || meta.editionTitle) return false;
+      const meta = await plexClient.getMetadata(realRk, {
+        includeChildren: true,
+      });
+      if (!meta || meta.type !== 'show' || meta.editionTitle) return false;
       const { PlaceholderContextService } = await import(
         '@server/lib/placeholders/services/PlaceholderContextService'
       );
