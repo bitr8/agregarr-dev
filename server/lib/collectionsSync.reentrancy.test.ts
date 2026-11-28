@@ -62,4 +62,24 @@ describe('full collections sync re-entry', () => {
     expect(collectionsSync.pending).toBe(false);
     spy.mockRestore();
   });
+
+  it('reports a guarded run as skipped', async () => {
+    collectionsSync.running = true;
+    await expect(collectionsSync.run()).resolves.toBe('skipped');
+  });
+
+  it('starts one more run after the current one when asked', async () => {
+    const spy = vi
+      .spyOn(
+        collectionsSync as unknown as { runClaimed: () => Promise<void> },
+        'runClaimed'
+      )
+      .mockResolvedValue(undefined);
+    collectionsSync.requestRunAfterCurrent();
+    await collectionsSync.run();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
+  });
 });

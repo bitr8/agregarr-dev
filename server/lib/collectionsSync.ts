@@ -215,12 +215,18 @@ class CollectionsSync {
     }
   }
 
-  public async run(): Promise<void> {
+  private rerunRequested = false;
+
+  public requestRunAfterCurrent(): void {
+    this.rerunRequested = true;
+  }
+
+  public async run(): Promise<void | 'skipped'> {
     if (this.running || this.pending) {
       logger.warn('Collections Sync is already running, skipping this run', {
         label: 'Collections Sync',
       });
-      return;
+      return 'skipped';
     }
     try {
       await this.runClaimed();
@@ -228,6 +234,18 @@ class CollectionsSync {
       // A throw before the running claim would otherwise leave pending stuck and block every later sync
       this.pending = false;
       throw error;
+    } finally {
+      if (this.rerunRequested) {
+        this.rerunRequested = false;
+        setImmediate(() => {
+          this.run().catch((error) => {
+            logger.error('Queued collections sync failed', {
+              label: 'Collections Sync',
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        });
+      }
     }
   }
 

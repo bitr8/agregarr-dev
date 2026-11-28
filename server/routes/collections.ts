@@ -2101,9 +2101,11 @@ collectionsRoutes.post('/sync/cancel', isAuthenticated(), (_req, res) => {
 collectionsRoutes.post('/sync', isAuthenticated(), async (req, res) => {
   try {
     if (collectionsSync.status.running || collectionsSync.status.pending) {
-      return res.status(409).json({
-        status: 'error',
-        message: 'A collections sync is already running.',
+      collectionsSync.requestRunAfterCurrent();
+      return res.status(202).json({
+        status: 'queued',
+        message:
+          'A collections sync is already running; another will start when it finishes.',
       });
     }
 

@@ -1187,11 +1187,14 @@ export class CollectionSyncService {
         // Remove edition from collections once the real show is in them or the owning config synced this run
         let allRepointed = true;
         if (!oldRk) {
-          allRepointed = owningConfigs.every(
-            (c) =>
-              !!c.lastSyncedAt &&
-              Date.parse(c.lastSyncedAt) >= Date.parse(runStartedAt)
-          );
+          // Custom-scheduled configs are skipped by full syncs, so they cannot be required here
+          allRepointed = owningConfigs
+            .filter((c) => !c.customSyncSchedule?.enabled)
+            .every(
+              (c) =>
+                !!c.lastSyncedAt &&
+                Date.parse(c.lastSyncedAt) >= Date.parse(runStartedAt)
+            );
         } else {
           for (const config of owningConfigs) {
             const collectionRks = config.collectionRatingKeys?.length

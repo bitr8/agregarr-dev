@@ -219,3 +219,12 @@ it('cleans up an unknown-ratingKey edition once every config synced this run', a
   await run(plex);
   expect(cleanup).toHaveBeenCalled();
 });
+
+it('does not let a custom-scheduled owner block an unknown-ratingKey edition', async () => {
+  state.rows[0].plexRatingKey = null;
+  state.configs[0].lastSyncedAt = '2026-11-27T00:00:00.000Z';
+  state.configs[0].customSyncSchedule = { enabled: true };
+  const plex = plexWith([]);
+  await run(plex);
+  expect(cleanup).toHaveBeenCalled();
+});
