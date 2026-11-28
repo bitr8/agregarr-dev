@@ -14,6 +14,8 @@ import { collectionSyncService } from './collections/services/CollectionSyncServ
 
 // MAIN COLLECTIONS SYNC SERVICE
 
+const INDIVIDUAL_SYNC_WAIT_MS = 2 * 60 * 60 * 1000;
+
 class CollectionsSync {
   public running = false;
   // Set while waiting for other jobs to finish, before real work begins.
@@ -64,6 +66,11 @@ class CollectionsSync {
 
   public cancel(): void {
     this.cancelled = true;
+    this.rerunRequested = false;
+    if (this.queuedRunTimer) {
+      clearTimeout(this.queuedRunTimer);
+      this.queuedRunTimer = null;
+    }
     collectionSyncService.cancel();
   }
 
@@ -216,6 +223,7 @@ class CollectionsSync {
   }
 
   private rerunRequested = false;
+  private queuedRunTimer: NodeJS.Timeout | null = null;
 
   public requestRunAfterCurrent(): void {
     this.rerunRequested = true;
@@ -233,15 +241,23 @@ class CollectionsSync {
     try {
       result = await this.runClaimed();
     } catch (error) {
-      // A throw before the running claim would otherwise leave pending stuck and block every later sync
+      // A throw before the try/finally in runClaimed would otherwise leave the claim stuck and block every later sync
       this.pending = false;
+      if (this.running) {
+        this.running = false;
+        const { IndividualCollectionScheduler } = await import(
+          '@server/lib/collections/services/IndividualCollectionScheduler'
+        );
+        IndividualCollectionScheduler.setFullSyncRunning(false);
+      }
       throw error;
     } finally {
-      const retryLater = queued && result === 'skipped';
+      const retryLater = queued && result === 'skipped' && !this.cancelled;
       if (this.rerunRequested || retryLater) {
         this.rerunRequested = false;
-        setTimeout(
+        this.queuedRunTimer = setTimeout(
           () => {
+            this.queuedRunTimer = null;
             this.run(true).catch((error) => {
               logger.error('Queued collections sync failed', {
                 label: 'Collections Sync',
@@ -274,6 +290,8 @@ class CollectionsSync {
     // Overlay Application, which waits on collectionsSync.status.running.
     this.pending = true;
     this.cancelled = false;
+    // This run satisfies any request made before it claimed
+    this.rerunRequested = false;
 
     // Check if discovery is running to prevent race conditions
     const { discoveryService } = await import(
@@ -402,7 +420,19 @@ class CollectionsSync {
         }
       );
 
-      await IndividualCollectionScheduler.waitForIndividualSyncsToComplete();
+      const cleared =
+        await IndividualCollectionScheduler.waitForIndividualSyncsToComplete(
+          () => this.cancelled,
+          INDIVIDUAL_SYNC_WAIT_MS
+        );
+      if (!cleared && !this.cancelled) {
+        logger.warn(
+          'Individual collection syncs did not finish in time, skipping this Collections Sync',
+          { label: 'Collections Sync' }
+        );
+        this.pending = false;
+        return 'skipped';
+      }
     }
 
     if (this.cancelled) {

@@ -1098,13 +1098,18 @@ export class IndividualCollectionScheduler {
    * No timeout - waits indefinitely (consistent with main sync behavior)
    * Main sync flag will cause individual syncs to exit their processing loops
    */
-  public static async waitForIndividualSyncsToComplete(): Promise<void> {
+  public static async waitForIndividualSyncsToComplete(
+    shouldStop: () => boolean = () => false,
+    timeoutMs = Infinity
+  ): Promise<boolean> {
     const checkInterval = 1000; // Check every second
     let lastLogTime = Date.now();
     const logIntervalMs = 10000; // Log status every 10 seconds to avoid spam
+    const deadline = Date.now() + timeoutMs;
 
     let anyRunning = true;
     while (anyRunning) {
+      if (shouldStop() || Date.now() >= deadline) return false;
       anyRunning = Array.from(this.libraryQueues.values()).some(
         (queue) => queue.running || queue.queue.length > 0
       );
@@ -1113,7 +1118,7 @@ export class IndividualCollectionScheduler {
         logger.debug('All individual collection syncs have completed', {
           label: 'Individual Collection Scheduler',
         });
-        return;
+        return true;
       }
 
       // Log status periodically (not every second to avoid spam)
@@ -1135,6 +1140,7 @@ export class IndividualCollectionScheduler {
 
       await new Promise((resolve) => setTimeout(resolve, checkInterval));
     }
+    return true;
   }
 
   /**

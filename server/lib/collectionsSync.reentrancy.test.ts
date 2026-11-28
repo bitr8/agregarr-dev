@@ -23,7 +23,7 @@ vi.mock('@server/lib/collections/services/CollectionCleanupService', () => ({
   CollectionCleanupService: class {},
 }));
 vi.mock('@server/lib/collections/services/CollectionSyncService', () => ({
-  collectionSyncService: {},
+  collectionSyncService: { cancel: vi.fn() },
 }));
 
 import collectionsSync from './collectionsSync';
@@ -112,5 +112,42 @@ describe('full collections sync re-entry', () => {
     ).toBe(true);
     (collectionsSync as unknown as { rerunRequested: boolean }).rerunRequested =
       false;
+  });
+
+  it('drops a queued run when the sync is stopped', async () => {
+    const spy = vi
+      .spyOn(
+        collectionsSync as unknown as { runClaimed: () => Promise<void> },
+        'runClaimed'
+      )
+      .mockImplementation(async () => {
+        collectionsSync.cancel();
+      });
+    collectionsSync.requestRunAfterCurrent();
+    await collectionsSync.run();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it('clears a pending 30s retry when the sync is stopped', async () => {
+    vi.useFakeTimers();
+    const spy = vi
+      .spyOn(
+        collectionsSync as unknown as {
+          runClaimed: () => Promise<void | 'skipped'>;
+        },
+        'runClaimed'
+      )
+      .mockResolvedValue('skipped');
+    try {
+      await collectionsSync.run(true);
+      collectionsSync.cancel();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });
