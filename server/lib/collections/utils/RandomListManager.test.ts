@@ -67,6 +67,7 @@ vi.mock('@server/api/themoviedb', () => ({
   },
 }));
 
+import { prefetchAllLibraryItems } from '@server/lib/collections/core/CollectionUtilities';
 import { normalizeListUrl, RandomListManager } from './RandomListManager';
 
 const manager = RandomListManager as unknown as {
@@ -319,25 +320,41 @@ describe('buildTmdbCollectionsFromLibrary media type', () => {
     tmdbMock.getCollection.mockReset();
     tmdbMock.getMovie.mockResolvedValue({ belongs_to_collection: null });
 
+    const contents: Record<string, unknown[]> = {
+      '1': [
+        {
+          ratingKey: '11',
+          title: 'Show A',
+          type: 'show',
+          Guid: [{ id: 'imdb://tt0000001' }, { id: 'tmdb://2002' }],
+        },
+        {
+          ratingKey: '12',
+          title: 'Show B',
+          type: 'show',
+          Guid: [{ id: 'tmdb://2003' }, { id: 'tvdb://3003' }],
+        },
+      ],
+      '2': [
+        {
+          ratingKey: '21',
+          title: 'Film',
+          type: 'movie',
+          Guid: [{ id: 'imdb://tt0000002' }, { id: 'tmdb://1001' }],
+        },
+      ],
+    };
+    const plex = {
+      getLibraries: async () => [
+        { key: '1', type: 'show' },
+        { key: '2', type: 'movie' },
+      ],
+      getLibraryContents: async (key: string) => ({ items: contents[key] }),
+    };
+    const cache = await prefetchAllLibraryItems(plex as never);
+
     await builder.buildTmdbCollectionsFromLibrary(
-      {
-        shows: [
-          {
-            type: 'show',
-            Guid: [{ id: 'imdb://tt0000001' }, { id: 'tmdb://2002' }],
-          },
-          {
-            type: 'show',
-            Guid: [{ id: 'tmdb://2003' }, { id: 'tvdb://3003' }],
-          },
-        ],
-        movies: [
-          {
-            type: 'movie',
-            Guid: [{ id: 'imdb://tt0000002' }, { id: 'tmdb://1001' }],
-          },
-        ],
-      },
+      cache as unknown as Record<string, unknown[]>,
       Date.now()
     );
 
