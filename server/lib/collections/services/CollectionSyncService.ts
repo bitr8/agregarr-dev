@@ -1112,6 +1112,7 @@ export class CollectionSyncService {
     plexClient: PlexAPI,
     runStartedAt: string
   ): Promise<void> {
+    if (this.cancelled) return;
     const repository = (await import('@server/datasource')).getRepository(
       PlaceholderItem
     );
@@ -1164,6 +1165,24 @@ export class CollectionSyncService {
           continue;
         }
 
+        if (
+          !(await this.isGenuineRealShow(
+            plexClient,
+            row.pendingRealRatingKey,
+            row
+          ))
+        ) {
+          logger.warn(
+            'Edition re-point: pending real show failed verification, deferring',
+            {
+              label: 'Edition Re-point',
+              title: row.title,
+              realRk: row.pendingRealRatingKey,
+            }
+          );
+          continue;
+        }
+
         // Remove edition from collections once the real show is in them or the owning config synced this run
         let allRepointed = true;
         if (oldRk) {
@@ -1176,7 +1195,9 @@ export class CollectionSyncService {
 
             for (const collRk of collectionRks) {
               try {
-                const memberRks = await plexClient.getCollectionItems(collRk);
+                const memberRks = await plexClient.getCollectionItemsOrThrow(
+                  collRk
+                );
                 const action = editionRepointAction({
                   editionInCollection: memberRks.includes(oldRk),
                   realInCollection:
@@ -1275,6 +1296,29 @@ export class CollectionSyncService {
           error: extractErrorMessage(error),
         });
       }
+    }
+  }
+
+  private async isGenuineRealShow(
+    plexClient: PlexAPI,
+    realRk: string | undefined,
+    row: PlaceholderItem
+  ): Promise<boolean> {
+    if (!realRk) return false;
+    try {
+      const meta = await plexClient.getMetadata(realRk);
+      if (!meta || meta.editionTitle) return false;
+      const { PlaceholderContextService } = await import(
+        '@server/lib/placeholders/services/PlaceholderContextService'
+      );
+      if (new PlaceholderContextService().isPlaceholderItem(meta)) return false;
+      const guids = (meta.Guid || []).map((g) => g.id);
+      const tmdb = guids.find((g) => g.startsWith('tmdb://'));
+      if (tmdb) return tmdb === `tmdb://${row.tmdbId}`;
+      const tvdb = guids.find((g) => g.startsWith('tvdb://'));
+      return !!tvdb && !!row.tvdbId && tvdb === `tvdb://${row.tvdbId}`;
+    } catch {
+      return false;
     }
   }
 

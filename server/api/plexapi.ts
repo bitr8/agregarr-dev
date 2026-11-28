@@ -1395,7 +1395,12 @@ class PlexAPI {
         'X-Plex-Container-Size': `0`,
       },
     });
-    const items = response.MediaContainer?.Metadata || [];
+    if (!response?.MediaContainer) {
+      throw new Error(
+        `Plex returned no MediaContainer for collection ${collectionRatingKey}`
+      );
+    }
+    const items = response.MediaContainer.Metadata || [];
     return items.map((item: PlexCollectionItem) => item.ratingKey);
   }
 

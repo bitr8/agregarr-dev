@@ -1,20 +1,24 @@
 import { expect, it } from 'vitest';
 import { editionRepointAction } from './editionRepointAction';
 
+const RUN = '2026-11-28T00:00:00.000Z';
+const OLD = '2026-11-27T00:00:00.000Z';
+
 it.each([
-  [false, false, false, 'done'],
-  [false, true, true, 'done'],
-  [true, true, false, 'remove'],
-  [true, false, true, 'remove'],
-  [true, false, false, 'defer'],
+  [false, false, OLD, 'done'],
+  [false, true, RUN, 'done'],
+  [true, true, OLD, 'remove'],
+  [true, false, RUN, 'remove'],
+  [true, false, OLD, 'defer'],
 ])(
-  'edition=%s real=%s synced=%s -> %s',
-  (editionInCollection, realInCollection, configSyncedThisRun, expected) => {
+  'edition=%s real=%s lastSyncedAt=%s -> %s',
+  (editionInCollection, realInCollection, lastSyncedAt, expected) => {
     expect(
       editionRepointAction({
         editionInCollection,
         realInCollection,
-        configSyncedThisRun,
+        lastSyncedAt,
+        runStartedAt: RUN,
       })
     ).toBe(expected);
   }

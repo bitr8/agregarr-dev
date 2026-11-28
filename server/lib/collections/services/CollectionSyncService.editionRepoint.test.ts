@@ -33,9 +33,28 @@ vi.mock('@server/lib/placeholders/helpers/placeholderPathHelpers', () => ({
 
 const RUN_START = '2026-11-28T00:00:00.000Z';
 
-const plexWith = (members: string[]) =>
+const REAL = {
+  type: 'show',
+  Guid: [{ id: 'tmdb://1' }],
+};
+
+const plexWith = (
+  members: string[] | Error | Record<string, string[] | Error>,
+  real: unknown = REAL
+) =>
   ({
-    getCollectionItems: vi.fn(async () => members),
+    getCollectionItemsOrThrow: vi.fn(async (rk: string) => {
+      const m =
+        Array.isArray(members) || members instanceof Error
+          ? members
+          : members[rk];
+      if (m instanceof Error) throw m;
+      return m;
+    }),
+    getMetadata: vi.fn(async () => {
+      if (real instanceof Error) throw real;
+      return real;
+    }),
     removeItemFromCollection: vi.fn(async () => undefined),
   } as unknown as PlexAPI & {
     removeItemFromCollection: ReturnType<typeof vi.fn>;
@@ -86,5 +105,56 @@ it('defers when the config did not sync this run', async () => {
   const plex = plexWith(['100']);
   await run(plex);
   expect(plex.removeItemFromCollection).not.toHaveBeenCalled();
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('defers when the collection read throws', async () => {
+  const plex = plexWith(new Error('plex down'));
+  await run(plex);
+  expect(plex.removeItemFromCollection).not.toHaveBeenCalled();
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('defers when the pending real show has the wrong tmdb id', async () => {
+  const plex = plexWith([], { type: 'show', Guid: [{ id: 'tmdb://999' }] });
+  await run(plex);
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('defers when the pending real show is itself an edition', async () => {
+  const plex = plexWith([], { ...REAL, editionTitle: 'Trailer' });
+  await run(plex);
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('defers when the pending real show cannot be fetched', async () => {
+  const plex = plexWith([], new Error('404'));
+  await run(plex);
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('does not clean up when one of two collections defers', async () => {
+  state.configs[0] = {
+    id: 'cfg',
+    collectionRatingKeys: ['9', '10'],
+    libraryId: '1',
+    lastSyncedAt: '2026-11-27T00:00:00.000Z',
+  };
+  const plex = plexWith({ '9': ['100', '200'], '10': ['100'] });
+  await run(plex);
+  expect(plex.removeItemFromCollection).toHaveBeenCalledTimes(1);
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it('skips the re-point pass when the sync was cancelled', async () => {
+  const svc = collectionSyncService as unknown as { cancelled: boolean };
+  svc.cancelled = true;
+  const plex = plexWith(['100']);
+  try {
+    await run(plex);
+  } finally {
+    svc.cancelled = false;
+  }
+  expect(plex.getCollectionItemsOrThrow).not.toHaveBeenCalled();
   expect(cleanup).not.toHaveBeenCalled();
 });
