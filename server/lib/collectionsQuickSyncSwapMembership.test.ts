@@ -39,8 +39,9 @@ vi.mock('@server/lib/placeholders/placeholderManager', () => ({
   removePlaceholder,
   resolveRecordPath: (root: string, p: string) => `${root}/${p}`,
 }));
+const root = vi.hoisted(() => ({ value: '/lib' as string | undefined }));
 vi.mock('@server/lib/placeholders/services/PlaceholderCleanup', () => ({
-  rootOf: () => '/lib',
+  rootOf: () => root.value,
   cleanupPlaceholderRemnants: vi.fn(),
 }));
 vi.mock('@server/lib/placeholders/services/PlaceholderContextService', () => ({
@@ -115,6 +116,7 @@ const record = (over: Record<string, unknown> = {}) => ({
 describe('quick sync swap keeps collection membership', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    root.value = '/lib';
     cfg.configs = [config()];
     db.records = [record()];
     plex.getCollectionItemsOrThrow.mockResolvedValue(['ph-1', 'other']);
@@ -183,5 +185,90 @@ describe('quick sync swap keeps collection membership', () => {
     expect(plex.addItemsToCollection).toHaveBeenCalledWith('col-1', [
       { ratingKey: 'real-1', title: 'Film' },
     ]);
+  });
+
+  it('ignores a config on another library', async () => {
+    cfg.configs = [
+      config({ id: 'cfg-1', collectionRatingKey: 'col-1' }),
+      config({ id: 'cfg-x', libraryId: '2', collectionRatingKey: 'col-x' }),
+    ];
+    db.records = [
+      record({ id: 1, configId: 'cfg-1', plexRatingKey: 'ph-1' }),
+      record({ id: 2, configId: 'cfg-x', plexRatingKey: 'ph-x' }),
+    ];
+    plex.getCollectionItemsOrThrow.mockResolvedValue(['ph-1', 'ph-x']);
+    await cleanup();
+    expect(plex.addItemsToCollection).toHaveBeenCalledTimes(1);
+    expect(plex.addItemsToCollection.mock.calls[0][0]).toBe('col-1');
+  });
+
+  it('only counts the placeholder key owned by that config', async () => {
+    cfg.configs = [
+      config({ id: 'cfg-a', collectionRatingKey: 'col-a' }),
+      config({ id: 'cfg-b', collectionRatingKey: 'col-b' }),
+    ];
+    db.records = [
+      record({ id: 1, configId: 'cfg-a', plexRatingKey: 'ph-a' }),
+      record({ id: 2, configId: 'cfg-b', plexRatingKey: 'ph-b' }),
+    ];
+    plex.getCollectionItemsOrThrow.mockImplementation(async (k: string) =>
+      k === 'col-a' ? ['ph-a'] : ['ph-a']
+    );
+    await cleanup();
+    expect(plex.addItemsToCollection).toHaveBeenCalledTimes(1);
+    expect(plex.addItemsToCollection.mock.calls[0][0]).toBe('col-a');
+  });
+
+  it('does not add a collection-excluded real item', async () => {
+    const spy = vi
+      .spyOn(
+        collectionsQuickSync as unknown as Record<string, () => unknown>,
+        'resolveCollectionExcludedKeys'
+      )
+      .mockResolvedValue(new Set(['real-1']) as never);
+    await cleanup();
+    spy.mockRestore();
+    expect(plex.addItemsToCollection).not.toHaveBeenCalled();
+  });
+
+  it('does not add a label-excluded real item', async () => {
+    const spy = vi
+      .spyOn(
+        collectionsQuickSync as unknown as Record<string, () => unknown>,
+        'resolveLabelExcludedKeys'
+      )
+      .mockResolvedValue(new Set(['real-1']) as never);
+    await cleanup();
+    spy.mockRestore();
+    expect(plex.addItemsToCollection).not.toHaveBeenCalled();
+  });
+
+  it('never touches a smart (unwatched-only) collection', async () => {
+    cfg.configs = [config({ showUnwatchedOnly: true })];
+    await cleanup();
+    expect(plex.getCollectionItemsOrThrow).not.toHaveBeenCalled();
+    expect(plex.addItemsToCollection).not.toHaveBeenCalled();
+  });
+
+  it('adds nothing when the file deletion is refused', async () => {
+    removePlaceholder.mockRejectedValueOnce(
+      Object.assign(new Error('nope'), { code: 'EOWNERSHIP' })
+    );
+    const res = await cleanup();
+    expect(plex.addItemsToCollection).not.toHaveBeenCalled();
+    expect(res.deletedCount).toBe(0);
+  });
+
+  it('adds nothing when the library root is missing', async () => {
+    root.value = undefined;
+    await cleanup();
+    expect(plex.addItemsToCollection).not.toHaveBeenCalled();
+  });
+
+  it('still cleans up when the add itself fails', async () => {
+    plex.addItemsToCollection.mockRejectedValue(new Error('plex down'));
+    const res = await cleanup();
+    expect(res.deletedCount).toBe(1);
+    expect(res.itemsAdded).toBe(0);
   });
 });

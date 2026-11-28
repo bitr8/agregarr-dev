@@ -16,6 +16,11 @@ interface MissingItemMatch {
   missingItem: CollectionMissingItems;
 }
 
+interface SwapTarget {
+  config: CollectionConfig;
+  collectionRatingKey: string;
+}
+
 export interface ItemQuickSyncResult {
   libraryId: string;
   title: string;
@@ -477,6 +482,7 @@ class CollectionsQuickSync {
     let collectionsUpdated = 0;
     const affectedLibraries = new Set<string>();
     const cleanedEntries: GhostDeletion[] = [];
+    const exclusionCache = new Map<string, Set<string>>();
 
     // Get all placeholders for this library
     const settings = getSettings();
@@ -622,15 +628,16 @@ class CollectionsQuickSync {
         continue;
       }
 
-      if (libraryMediaType === 'movie') {
-        const swapped = await this.addRealItemToPlaceholderCollections(
-          allPlaceholderRecords,
-          recentItem,
-          plexClient
-        );
-        itemsAdded += swapped.itemsAdded;
-        collectionsUpdated += swapped.collectionsUpdated;
-      }
+      const swapTargets =
+        libraryMediaType === 'movie'
+          ? await this.planRealItemAdds(
+              allPlaceholderRecords,
+              recentItem,
+              collectionsForLibrary,
+              plexClient,
+              exclusionCache
+            )
+          : [];
 
       // Resolve the file from a record whose config is on THIS library (C2/§7),
       // not allPlaceholderRecords[0] blindly (its root may differ).
@@ -717,6 +724,15 @@ class CollectionsQuickSync {
 
       // Delete ALL database records for this placeholder across ALL collections
       if (fileDeleted) {
+        if (swapTargets.length > 0) {
+          const swapped = await this.applyRealItemAdds(
+            swapTargets,
+            recentItem,
+            plexClient
+          );
+          itemsAdded += swapped.itemsAdded;
+          collectionsUpdated += swapped.collectionsUpdated;
+        }
         try {
           await placeholderRepository.remove(allPlaceholderRecords);
           deletedCount += allPlaceholderRecords.length;
@@ -758,34 +774,56 @@ class CollectionsQuickSync {
     };
   }
 
-  // Appended at the end; the next full sync restores order
-  private async addRealItemToPlaceholderCollections(
+  // Reads only; the adds happen once the placeholder file is actually gone
+  private async planRealItemAdds(
     records: ComingSoonItem[],
     realItem: PlexLibraryItem,
-    plexClient: PlexAPI
-  ): Promise<{ itemsAdded: number; collectionsUpdated: number }> {
-    let itemsAdded = 0;
-    let collectionsUpdated = 0;
-    const placeholderKeys = new Set(
-      records.map((r) => r.plexRatingKey).filter((k): k is string => !!k)
-    );
-    if (placeholderKeys.size === 0) {
-      return { itemsAdded, collectionsUpdated };
-    }
-    const ownerIds = new Set(
-      records.map((r) => r.configId.replace(/-source-\d+$/, ''))
-    );
-    const configs = (getSettings().plex.collectionConfigs ?? []).filter((c) =>
-      ownerIds.has(c.id)
-    );
-
-    for (const config of configs) {
-      if (this.needsResync(config)) continue;
+    libraryConfigs: CollectionConfig[],
+    plexClient: PlexAPI,
+    exclusionCache: Map<string, Set<string>>
+  ): Promise<SwapTarget[]> {
+    const targets: SwapTarget[] = [];
+    for (const config of libraryConfigs) {
+      const placeholderKeys = new Set(
+        records
+          .filter((r) => r.configId.replace(/-source-\d+$/, '') === config.id)
+          .map((r) => r.plexRatingKey)
+          .filter((k): k is string => !!k)
+      );
+      if (placeholderKeys.size === 0 || this.needsResync(config)) continue;
+      const isSmart =
+        config.showUnwatchedOnly &&
+        !(config.type === 'overseerr' && config.subtype === 'users');
+      if (isSmart) continue;
       const collectionKeys = config.collectionRatingKeys?.length
         ? config.collectionRatingKeys
         : config.collectionRatingKey
         ? [config.collectionRatingKey]
         : [];
+      if (collectionKeys.length === 0) continue;
+
+      try {
+        const excluded = [
+          ...(await this.resolveCollectionExcludedKeys(
+            config,
+            plexClient,
+            exclusionCache
+          )),
+          ...(await this.resolveLabelExcludedKeys(
+            config,
+            plexClient,
+            exclusionCache
+          )),
+        ];
+        if (excluded.includes(realItem.ratingKey)) continue;
+      } catch (error) {
+        logger.warn('Could not check exclusions for placeholder swap', {
+          label: 'Collections Quick Sync',
+          configId: config.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
 
       for (const collectionRatingKey of collectionKeys) {
         try {
@@ -793,36 +831,54 @@ class CollectionsQuickSync {
             collectionRatingKey
           );
           if (
-            members.includes(realItem.ratingKey) ||
-            !members.some((m) => placeholderKeys.has(m))
+            !members.includes(realItem.ratingKey) &&
+            members.some((m) => placeholderKeys.has(m))
           ) {
-            continue;
-          }
-          const { successful } = await plexClient.addItemsToCollection(
-            collectionRatingKey,
-            [{ ratingKey: realItem.ratingKey, title: realItem.title }]
-          );
-          if (successful > 0) {
-            itemsAdded += successful;
-            collectionsUpdated++;
-            logger.info(
-              'Added real item to collection its placeholder was in',
-              {
-                label: 'Collections Quick Sync',
-                title: realItem.title,
-                collectionName: config.name,
-                collectionRatingKey,
-              }
-            );
+            targets.push({ config, collectionRatingKey });
           }
         } catch (error) {
-          logger.warn('Could not add real item to placeholder collection', {
+          logger.warn('Could not read collection for placeholder swap', {
             label: 'Collections Quick Sync',
-            title: realItem.title,
             collectionRatingKey,
             error: error instanceof Error ? error.message : String(error),
           });
         }
+      }
+    }
+    return targets;
+  }
+
+  // Appended at the end; the next full sync restores order
+  private async applyRealItemAdds(
+    targets: SwapTarget[],
+    realItem: PlexLibraryItem,
+    plexClient: PlexAPI
+  ): Promise<{ itemsAdded: number; collectionsUpdated: number }> {
+    let itemsAdded = 0;
+    let collectionsUpdated = 0;
+    for (const { config, collectionRatingKey } of targets) {
+      try {
+        const { successful } = await plexClient.addItemsToCollection(
+          collectionRatingKey,
+          [{ ratingKey: realItem.ratingKey, title: realItem.title }]
+        );
+        if (successful > 0) {
+          itemsAdded += successful;
+          collectionsUpdated++;
+          logger.info('Added real item to collection its placeholder was in', {
+            label: 'Collections Quick Sync',
+            title: realItem.title,
+            collectionName: config.name,
+            collectionRatingKey,
+          });
+        }
+      } catch (error) {
+        logger.warn('Could not add real item to placeholder collection', {
+          label: 'Collections Quick Sync',
+          title: realItem.title,
+          collectionRatingKey,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
     return { itemsAdded, collectionsUpdated };
