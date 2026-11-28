@@ -86,4 +86,31 @@ describe('plex search reason filter', () => {
       res.data.results.map((r: { ratingKey: string }) => r.ratingKey)
     ).toEqual(['1', '2']);
   });
+
+  it('keeps originalTitle hits and lists a ratingKey once across hubs', async () => {
+    const hit = (ratingKey: string, reason?: string) => ({
+      ratingKey,
+      title: `Item ${ratingKey}`,
+      type: 'movie',
+      librarySectionTitle: 'Movies',
+      librarySectionID: 1,
+      ...(reason ? { reason } : {}),
+    });
+    mocks.query.mockResolvedValue({
+      MediaContainer: {
+        Hub: [
+          { Metadata: [hit('10', 'originalTitle'), hit('11', 'section')] },
+          { Metadata: [hit('11', 'section'), hit('12', 'actor')] },
+        ],
+      },
+    });
+
+    const res = await axios.get(`${baseURL}/plex/search`, {
+      params: { query: 'x' },
+    });
+
+    expect(
+      res.data.results.map((r: { ratingKey: string }) => r.ratingKey)
+    ).toEqual(['10', '11']);
+  });
 });

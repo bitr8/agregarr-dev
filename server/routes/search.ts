@@ -122,10 +122,12 @@ searchRouter.get('/search', async (req, res) => {
     if (searchResults.MediaContainer?.Hub) {
       for (const hub of searchResults.MediaContainer.Hub) {
         if (hub.Metadata) {
-          // "section" tags a direct hit in a library; other reasons (actor, director) are related matches
+          // Direct hits carry no reason, "section" or "originalTitle"; other reasons are related matches
           const directMatches = hub.Metadata.filter((item) => {
             const reason = (item as { reason?: string }).reason;
-            return !reason || reason === 'section';
+            return (
+              !reason || reason === 'section' || reason === 'originalTitle'
+            );
           });
           rawResults.push(...directMatches);
         }
@@ -134,8 +136,14 @@ searchRouter.get('/search', async (req, res) => {
 
     // Keep every artwork type supported by the overlay system.
     const filteredResults: PlexSearchResult[] = [];
+    const seenRatingKeys = new Set<string>();
 
     for (const item of rawResults) {
+      if (seenRatingKeys.has(item.ratingKey)) {
+        continue;
+      }
+      seenRatingKeys.add(item.ratingKey);
+
       if (
         item.type !== 'movie' &&
         item.type !== 'show' &&
