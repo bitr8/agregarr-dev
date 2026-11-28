@@ -77,9 +77,40 @@ describe('full collections sync re-entry', () => {
       .mockResolvedValue(undefined);
     collectionsSync.requestRunAfterCurrent();
     await collectionsSync.run();
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 5));
     expect(spy).toHaveBeenCalledTimes(2);
     spy.mockRestore();
+  });
+
+  it('retries a queued run that was skipped behind Posterizarr work', async () => {
+    vi.useFakeTimers();
+    const spy = vi
+      .spyOn(
+        collectionsSync as unknown as {
+          runClaimed: () => Promise<void | 'skipped'>;
+        },
+        'runClaimed'
+      )
+      .mockResolvedValueOnce('skipped')
+      .mockResolvedValue(undefined);
+    try {
+      await collectionsSync.run(true);
+      expect(spy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a queued request when it lands while another sync holds the claim', async () => {
+    collectionsSync.running = true;
+    await collectionsSync.run(true);
+    expect(
+      (collectionsSync as unknown as { rerunRequested: boolean }).rerunRequested
+    ).toBe(true);
+    (collectionsSync as unknown as { rerunRequested: boolean }).rerunRequested =
+      false;
   });
 });

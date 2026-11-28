@@ -166,11 +166,17 @@ const CollectionSyncCard: React.FC = () => {
     if (isStarting) return;
     setIsStarting(true);
     try {
-      await axios.post('/api/v1/collections/sync');
-      addToast('Collection sync started', {
-        appearance: 'success',
-        autoDismiss: true,
-      });
+      const response = await axios.post('/api/v1/collections/sync');
+      const queued = response.status === 202;
+      addToast(
+        queued
+          ? 'A sync is already running; another will start when it finishes'
+          : 'Collection sync started',
+        {
+          appearance: 'success',
+          autoDismiss: true,
+        }
+      );
       await mutate();
     } catch {
       addToast('Failed to start collection sync', {

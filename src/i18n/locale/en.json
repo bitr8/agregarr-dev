@@ -726,6 +726,7 @@
   "components.Collections.Views.collectionMovedToAlphabetical": "Collection moved to alphabetical section successfully!",
   "components.Collections.Views.collectionNotFound": "Collection not found",
   "components.Collections.Views.collectionPromoted": "Collection promoted to top section successfully!",
+  "components.Collections.Views.collectionsSyncQueued": "A collections sync is already running; another will start when it finishes.",
   "components.Collections.Views.collectionsSyncStarted": "Collections sync started successfully!",
   "components.Collections.Views.createFilteredHub": "Create a <strong>{filteredHubType}</strong> filtered hub to exclude placeholders",
   "components.Collections.Views.disableVisibilityFilteredHub": "Disable visibility on this default hub (you have a <strong>{filteredHubType}</strong> filtered hub)",

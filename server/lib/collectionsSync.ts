@@ -221,35 +221,42 @@ class CollectionsSync {
     this.rerunRequested = true;
   }
 
-  public async run(): Promise<void | 'skipped'> {
+  public async run(queued = false): Promise<void | 'skipped'> {
     if (this.running || this.pending) {
+      if (queued) this.rerunRequested = true;
       logger.warn('Collections Sync is already running, skipping this run', {
         label: 'Collections Sync',
       });
       return 'skipped';
     }
+    let result: void | 'skipped';
     try {
-      await this.runClaimed();
+      result = await this.runClaimed();
     } catch (error) {
       // A throw before the running claim would otherwise leave pending stuck and block every later sync
       this.pending = false;
       throw error;
     } finally {
-      if (this.rerunRequested) {
+      const retryLater = queued && result === 'skipped';
+      if (this.rerunRequested || retryLater) {
         this.rerunRequested = false;
-        setImmediate(() => {
-          this.run().catch((error) => {
-            logger.error('Queued collections sync failed', {
-              label: 'Collections Sync',
-              error: error instanceof Error ? error.message : String(error),
+        setTimeout(
+          () => {
+            this.run(true).catch((error) => {
+              logger.error('Queued collections sync failed', {
+                label: 'Collections Sync',
+                error: error instanceof Error ? error.message : String(error),
+              });
             });
-          });
-        });
+          },
+          retryLater ? 30_000 : 0
+        );
       }
     }
+    return result;
   }
 
-  private async runClaimed(): Promise<void> {
+  private async runClaimed(): Promise<void | 'skipped'> {
     // This check and the pending claim below are deliberately synchronous.
     // Posterizarr enqueue performs the inverse check, so only one side can win
     // before either path reaches its first await.
@@ -258,7 +265,7 @@ class CollectionsSync {
         'Posterizarr item triggers are running or queued, skipping this Collections Sync; retry manually or wait for the next scheduled run',
         { label: 'Collections Sync' }
       );
-      return;
+      return 'skipped';
     }
 
     // Mark pending (not running) so the UI shows the waiting state without the

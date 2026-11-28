@@ -89,6 +89,8 @@ const messages = defineMessages({
     'Failed to load Plex libraries. Please check your Plex connection.',
   noCollectionsFound: 'No Collections found. Click Discover to get started!',
   collectionsSyncStarted: 'Collections sync started successfully!',
+  collectionsSyncQueued:
+    'A collections sync is already running; another will start when it finishes.',
   failedStartSync: 'Failed to start collections sync. Please try again.',
   hubConfigSaved: 'Hub configuration saved successfully!',
   failedSaveHubConfig: 'Failed to save hub configuration.',
@@ -912,14 +914,18 @@ const CollectionSettings = ({
     setSyncing(true);
     setSyncStarting(true);
     try {
-      await axios.post('/api/v1/collections/sync');
+      const response = await axios.post('/api/v1/collections/sync');
 
       // Immediately refresh sync status to see backend changes
       if (refreshSyncStatus && typeof refreshSyncStatus === 'function') {
         refreshSyncStatus();
       }
 
-      addToast(intl.formatMessage(messages.collectionsSyncStarted), {
+      const message =
+        response.status === 202
+          ? messages.collectionsSyncQueued
+          : messages.collectionsSyncStarted;
+      addToast(intl.formatMessage(message), {
         autoDismiss: true,
         appearance: 'success',
       });
