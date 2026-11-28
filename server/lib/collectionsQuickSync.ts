@@ -242,6 +242,8 @@ class CollectionsQuickSync {
           );
 
           placeholdersDeleted += cleanupResult.deletedCount;
+          collectionsUpdated += cleanupResult.collectionsUpdated;
+          itemsAdded += cleanupResult.itemsAdded;
           if (cleanupResult.cleanedEntries.length > 0) {
             const existing = foldersNeedingScanByLibrary.get(library.key) || [];
             foldersNeedingScanByLibrary.set(library.key, [
@@ -416,8 +418,10 @@ class CollectionsQuickSync {
         libraryId,
         title: metadata.title,
         itemsMatched: collectionResult.matched,
-        collectionsUpdated: collectionResult.collectionsUpdated,
-        itemsAdded: collectionResult.itemsAdded,
+        collectionsUpdated:
+          collectionResult.collectionsUpdated +
+          cleanupResult.collectionsUpdated,
+        itemsAdded: collectionResult.itemsAdded + cleanupResult.itemsAdded,
         placeholdersDeleted: cleanupResult.deletedCount,
       };
 
@@ -454,6 +458,8 @@ class CollectionsQuickSync {
     deletedCount: number;
     affectedLibraries: Set<string>;
     cleanedEntries: GhostDeletion[];
+    itemsAdded: number;
+    collectionsUpdated: number;
   }> {
     const placeholderRepository = getRepository(ComingSoonItem);
     const { placeholderContextService } = await import(
@@ -467,6 +473,8 @@ class CollectionsQuickSync {
     );
 
     let deletedCount = 0;
+    let itemsAdded = 0;
+    let collectionsUpdated = 0;
     const affectedLibraries = new Set<string>();
     const cleanedEntries: GhostDeletion[] = [];
 
@@ -482,7 +490,13 @@ class CollectionsQuickSync {
     );
 
     if (!collectionsForLibrary || collectionsForLibrary.length === 0) {
-      return { deletedCount: 0, affectedLibraries, cleanedEntries };
+      return {
+        deletedCount: 0,
+        affectedLibraries,
+        cleanedEntries,
+        itemsAdded: 0,
+        collectionsUpdated: 0,
+      };
     }
 
     const configIds = collectionsForLibrary.map((c) => c.id);
@@ -493,7 +507,13 @@ class CollectionsQuickSync {
       .getMany();
 
     if (placeholders.length === 0) {
-      return { deletedCount: 0, affectedLibraries, cleanedEntries };
+      return {
+        deletedCount: 0,
+        affectedLibraries,
+        cleanedEntries,
+        itemsAdded: 0,
+        collectionsUpdated: 0,
+      };
     }
 
     logger.info('Checking recently added items against placeholders', {
@@ -600,6 +620,16 @@ class CollectionsQuickSync {
 
       if (allPlaceholderRecords.length === 0) {
         continue;
+      }
+
+      if (libraryMediaType === 'movie') {
+        const swapped = await this.addRealItemToPlaceholderCollections(
+          allPlaceholderRecords,
+          recentItem,
+          plexClient
+        );
+        itemsAdded += swapped.itemsAdded;
+        collectionsUpdated += swapped.collectionsUpdated;
       }
 
       // Resolve the file from a record whose config is on THIS library (C2/§7),
@@ -719,7 +749,81 @@ class CollectionsQuickSync {
       });
     }
 
-    return { deletedCount, affectedLibraries, cleanedEntries };
+    return {
+      deletedCount,
+      affectedLibraries,
+      cleanedEntries,
+      itemsAdded,
+      collectionsUpdated,
+    };
+  }
+
+  // Appended at the end; the next full sync restores order
+  private async addRealItemToPlaceholderCollections(
+    records: ComingSoonItem[],
+    realItem: PlexLibraryItem,
+    plexClient: PlexAPI
+  ): Promise<{ itemsAdded: number; collectionsUpdated: number }> {
+    let itemsAdded = 0;
+    let collectionsUpdated = 0;
+    const placeholderKeys = new Set(
+      records.map((r) => r.plexRatingKey).filter((k): k is string => !!k)
+    );
+    if (placeholderKeys.size === 0) {
+      return { itemsAdded, collectionsUpdated };
+    }
+    const ownerIds = new Set(
+      records.map((r) => r.configId.replace(/-source-\d+$/, ''))
+    );
+    const configs = (getSettings().plex.collectionConfigs ?? []).filter((c) =>
+      ownerIds.has(c.id)
+    );
+
+    for (const config of configs) {
+      if (this.needsResync(config)) continue;
+      const collectionKeys =
+        config.collectionRatingKeys ??
+        (config.collectionRatingKey ? [config.collectionRatingKey] : []);
+
+      for (const collectionRatingKey of collectionKeys) {
+        try {
+          const members = await plexClient.getCollectionItemsOrThrow(
+            collectionRatingKey
+          );
+          if (
+            members.includes(realItem.ratingKey) ||
+            !members.some((m) => placeholderKeys.has(m))
+          ) {
+            continue;
+          }
+          const { successful } = await plexClient.addItemsToCollection(
+            collectionRatingKey,
+            [{ ratingKey: realItem.ratingKey, title: realItem.title }]
+          );
+          if (successful > 0) {
+            itemsAdded += successful;
+            collectionsUpdated++;
+            logger.info(
+              'Added real item to collection its placeholder was in',
+              {
+                label: 'Collections Quick Sync',
+                title: realItem.title,
+                collectionName: config.name,
+                collectionRatingKey,
+              }
+            );
+          }
+        } catch (error) {
+          logger.warn('Could not add real item to placeholder collection', {
+            label: 'Collections Quick Sync',
+            title: realItem.title,
+            collectionRatingKey,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+    return { itemsAdded, collectionsUpdated };
   }
 
   /**

@@ -132,6 +132,8 @@ describe('collectionsQuickSync.runForItem', () => {
       cleanupPlaceholdersForRecentItems: (...args: unknown[]) => Promise<{
         deletedCount: number;
         cleanedEntries: unknown[];
+        itemsAdded: number;
+        collectionsUpdated: number;
       }>;
       processRecentItems: (...args: unknown[]) => Promise<{
         matched: number;
@@ -165,7 +167,12 @@ describe('collectionsQuickSync.runForItem', () => {
       .mockResolvedValue(client);
     const cleanup = vi
       .spyOn(service, 'cleanupPlaceholdersForRecentItems')
-      .mockResolvedValue({ deletedCount: 1, cleanedEntries: [] });
+      .mockResolvedValue({
+        deletedCount: 1,
+        cleanedEntries: [],
+        itemsAdded: 0,
+        collectionsUpdated: 0,
+      });
     const process = vi
       .spyOn(service, 'processRecentItems')
       .mockResolvedValue({ matched: 2, collectionsUpdated: 2, itemsAdded: 2 });
